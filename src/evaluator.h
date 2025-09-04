@@ -5,6 +5,9 @@
 #include "environment.h"
 #include <stdbool.h>
 
+// Forward declaration for plugin system
+typedef struct ModuleRegistry ModuleRegistry;
+
 // Error categories for better reporting
 typedef enum {
     ERROR_RUNTIME,      // General runtime errors
@@ -49,6 +52,11 @@ EvalResult evaluate_expr(Expr* expr, Environment* env);
 EvalResult evaluate_stmt(Stmt* stmt, Environment* env);
 EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env);
 
+// Plugin-aware evaluation
+EvalResult evaluate_expr_with_registry(Expr* expr, Environment* env, ModuleRegistry* registry);
+EvalResult evaluate_stmt_with_registry(Stmt* stmt, Environment* env, ModuleRegistry* registry);
+EvalResult evaluate_program_with_registry(Stmt** statements, size_t count, Environment* env, ModuleRegistry* registry);
+
 // Expression evaluation
 EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env);
 EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env);
@@ -56,6 +64,7 @@ EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env);
 EvalResult eval_variable_expr(VariableExpr* expr, Environment* env);
 EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env);
 EvalResult eval_call_expr(CallExpr* expr, Environment* env);
+EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, ModuleRegistry* registry);
 EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env);
 
 // Statement evaluation
@@ -68,8 +77,16 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env);
 
 // Note: Built-in functions moved to stdlib.h/stdlib.c
 
-// Built-in function management (now handled by stdlib)
+// Plugin-aware function management
 BuiltinFunction lookup_builtin(const char* name);
+BuiltinFunction lookup_plugin_function(ModuleRegistry* registry, const char* name);
+BuiltinFunction lookup_qualified_plugin_function(ModuleRegistry* registry, 
+                                                const char* module_name, 
+                                                const char* function_name);
+
+// Global module registry management
+void set_global_module_registry(ModuleRegistry* registry);
+ModuleRegistry* get_global_module_registry(void);
 
 // Utility functions
 EvalResult make_success(Value value);

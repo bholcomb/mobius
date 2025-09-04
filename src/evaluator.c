@@ -1,5 +1,6 @@
 #include "evaluator.h"
 #include "stdlib.h"
+#include "module_registry.h"
 #include "token.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -618,10 +619,47 @@ EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env) {
 
 // Built-in functions now implemented in stdlib.c
 
-// Built-in function lookup now handled by standard library
+// Global module registry (will be initialized by main.c)
+static ModuleRegistry* global_registry = NULL;
 
+void set_global_module_registry(ModuleRegistry* registry) {
+    global_registry = registry;
+}
+
+ModuleRegistry* get_global_module_registry(void) {
+    return global_registry;
+}
+
+// Built-in function lookup - first checks plugins, then falls back to stdlib
 BuiltinFunction lookup_builtin(const char* name) {
+    // First try plugin system if available
+    if (global_registry) {
+        PluginFunction* plugin_func = lookup_function(global_registry, name);
+        if (plugin_func) {
+            return plugin_func->function;
+        }
+    }
+    
+    // Fall back to stdlib for backward compatibility
     return lookup_stdlib_function(name);
+}
+
+// Plugin-aware function lookup
+BuiltinFunction lookup_plugin_function(ModuleRegistry* registry, const char* name) {
+    if (!registry) return NULL;
+    
+    PluginFunction* plugin_func = lookup_function(registry, name);
+    return plugin_func ? plugin_func->function : NULL;
+}
+
+// Qualified function lookup (module.function)
+BuiltinFunction lookup_qualified_plugin_function(ModuleRegistry* registry, 
+                                                const char* module_name, 
+                                                const char* function_name) {
+    if (!registry) return NULL;
+    
+    PluginFunction* plugin_func = lookup_qualified_function(registry, module_name, function_name);
+    return plugin_func ? plugin_func->function : NULL;
 }
 
 void register_builtins(Environment* env) {
@@ -631,37 +669,74 @@ void register_builtins(Environment* env) {
 }
 
 EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
+    return eval_call_expr_with_registry(expr, env, global_registry);
+}
+
+EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, ModuleRegistry* registry) {
     // Only support variable expressions as callees for now
     if (expr->callee->type != EXPR_VARIABLE) {
         return make_error("Only variable function calls supported", 0, 0);
     }
     
     VariableExpr* var_expr = &expr->callee->as.variable;
-    char name[256];
-    snprintf(name, sizeof(name), "%.*s", var_expr->name.length, var_expr->name.start);
+    char full_name[256];
+    snprintf(full_name, sizeof(full_name), "%.*s", var_expr->name.length, var_expr->name.start);
     
-    // First check if it's a user-defined function
-    bool found = false;
-    Value func_value = get_variable(env, name, &found);
-    if (found && func_value.type == VAL_FUNCTION && func_value.as.function) {
-        return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
-    }
+    // Parse qualified name (module.function)
+    char module_name[128] = {0};
+    char function_name[128] = {0};
+    bool is_qualified = parse_qualified_name(full_name, module_name, function_name);
     
-    // Fall back to built-in function lookup
-    BuiltinFunction builtin = lookup_builtin(name);
-    if (!builtin) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", name);
+    BuiltinFunction builtin = NULL;
+    
+    if (is_qualified) {
+        // Qualified function call: module.function()
+        if (registry) {
+            builtin = lookup_qualified_plugin_function(registry, module_name, function_name);
+        }
         
-        return make_error_detailed(
-            error_msg,
-            "Check the function name spelling or make sure it's declared before use",
-            ERROR_UNDEFINED,
-            var_expr->name.line,
-            var_expr->name.column,
-            NULL,
-            NULL
-        );
+        if (!builtin) {
+            char error_msg[512];
+            snprintf(error_msg, sizeof(error_msg), "Unknown function '%s' in module '%s'", 
+                    function_name, module_name);
+            
+            return make_error_detailed(
+                error_msg,
+                "Check if the module is loaded and the function name is correct",
+                ERROR_UNDEFINED,
+                var_expr->name.line,
+                var_expr->name.column,
+                NULL,
+                NULL
+            );
+        }
+    } else {
+        // Regular function call: function()
+        
+        // First check if it's a user-defined function
+        bool found = false;
+        Value func_value = get_variable(env, full_name, &found);
+        if (found && func_value.type == VAL_FUNCTION && func_value.as.function) {
+            return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+        }
+        
+        // Then check plugins, falling back to stdlib
+        builtin = lookup_builtin(full_name);
+        
+        if (!builtin) {
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
+            
+            return make_error_detailed(
+                error_msg,
+                "Check the function name spelling or make sure it's declared before use",
+                ERROR_UNDEFINED,
+                var_expr->name.line,
+                var_expr->name.column,
+                NULL,
+                NULL
+            );
+        }
     }
     
     // Evaluate arguments
@@ -682,7 +757,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
         }
     }
     
-    // Call the built-in function
+    // Call the function
     EvalResult result = builtin(args, expr->arg_count);
     
     free(args);

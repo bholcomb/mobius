@@ -24,6 +24,7 @@ EvalResult builtin_pow(Value* args, size_t arg_count);
 EvalResult builtin_sqrt(Value* args, size_t arg_count);
 EvalResult builtin_floor(Value* args, size_t arg_count);
 EvalResult builtin_ceil(Value* args, size_t arg_count);
+
 EvalResult builtin_round(Value* args, size_t arg_count);
 
 // String manipulation functions
