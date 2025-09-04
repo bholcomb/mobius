@@ -478,10 +478,18 @@ Stmt* parse_statement(Parser* parser) {
         return parse_for_statement(parser);
     }
     
+    if (parser_match(parser, TOKEN_RETURN)) {
+        return parse_return_statement(parser);
+    }
+    
     return parse_expression_statement(parser);
 }
 
 Stmt* parse_declaration(Parser* parser) {
+    if (parser_match(parser, TOKEN_FUNC)) {
+        return parse_function_declaration(parser);
+    }
+    
     if (parser_match(parser, TOKEN_VAR)) {
         return parse_var_declaration(parser);
     }
@@ -527,6 +535,120 @@ ParseResult parse(TokenArray tokens) {
     result.had_error = parser.had_error;
     
     return result;
+}
+
+// Function declaration parsing: func name(param1, param2) { ... }
+Stmt* parse_function_declaration(Parser* parser) {
+    // Parse function name
+    if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+        parser_error_at_current(parser, "Expected function name");
+        return NULL;
+    }
+    
+    Token name = parser_advance(parser);
+    
+    // Parse parameter list
+    consume(parser, TOKEN_LEFT_PAREN, "Expected '(' after function name");
+    
+    Token* params = NULL;
+    size_t param_count = 0;
+    size_t param_capacity = 0;
+    
+    // Parse parameters
+    if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+        do {
+            if (param_count >= param_capacity) {
+                size_t new_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
+                Token* new_params = realloc(params, new_capacity * sizeof(Token));
+                if (!new_params) {
+                    free(params);
+                    parser_error_at_current(parser, "Memory allocation failed");
+                    return NULL;
+                }
+                params = new_params;
+                param_capacity = new_capacity;
+            }
+            
+            if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+                parser_error_at_current(parser, "Expected parameter name");
+                free(params);
+                return NULL;
+            }
+            
+            params[param_count++] = parser_advance(parser);
+            
+            if (param_count >= 255) {
+                parser_error_at_current(parser, "Cannot have more than 255 parameters");
+                free(params);
+                return NULL;
+            }
+        } while (parser_match(parser, TOKEN_COMMA));
+    }
+    
+    consume(parser, TOKEN_RIGHT_PAREN, "Expected ')' after parameters");
+    
+    // Parse function body
+    consume(parser, TOKEN_LEFT_BRACE, "Expected '{' before function body");
+    
+    Stmt** body = NULL;
+    size_t body_count = 0;
+    size_t body_capacity = 0;
+    
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        // Skip newlines in function body
+        if (parser_match(parser, TOKEN_NEWLINE)) {
+            continue;
+        }
+        
+        Stmt* stmt = parse_declaration(parser);
+        if (!stmt) {
+            // Error occurred, clean up and return
+            for (size_t i = 0; i < body_count; i++) {
+                free_stmt(body[i]);
+            }
+            free(body);
+            free(params);
+            return NULL;
+        }
+        
+        // Add statement to body
+        if (body_count >= body_capacity) {
+            size_t new_capacity = body_capacity == 0 ? 8 : body_capacity * 2;
+            Stmt** new_body = realloc(body, new_capacity * sizeof(Stmt*));
+            if (!new_body) {
+                free_stmt(stmt);
+                for (size_t i = 0; i < body_count; i++) {
+                    free_stmt(body[i]);
+                }
+                free(body);
+                free(params);
+                parser_error_at_current(parser, "Memory allocation failed");
+                return NULL;
+            }
+            body = new_body;
+            body_capacity = new_capacity;
+        }
+        
+        body[body_count++] = stmt;
+    }
+    
+    consume(parser, TOKEN_RIGHT_BRACE, "Expected '}' after function body");
+    
+    return make_function_stmt(name, params, param_count, body, body_count);
+}
+
+// Return statement parsing: return [expression];
+Stmt* parse_return_statement(Parser* parser) {
+    Token keyword = parser_previous(parser);
+    
+    Expr* value = NULL;
+    if (!parser_check(parser, TOKEN_SEMICOLON) && !parser_check(parser, TOKEN_NEWLINE)) {
+        value = parse_expression(parser);
+    }
+    
+    consume(parser, TOKEN_SEMICOLON, "Expected ';' after return value");
+    
+    return make_return_stmt(keyword, value);
 }
 
 void free_parse_result(ParseResult* result) {

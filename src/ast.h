@@ -40,8 +40,12 @@ typedef enum {
     VAL_INTEGER,
     VAL_FLOAT,
     VAL_STRING,
-    VAL_CHAR
+    VAL_CHAR,
+    VAL_FUNCTION
 } ValueType;
+
+// Forward declaration for function reference
+typedef struct MobiusFunction MobiusFunction;
 
 // Runtime value representation
 typedef struct {
@@ -60,8 +64,19 @@ typedef struct {
         double float_val;
         char* string;
         char character;
+        MobiusFunction* function;
     } as;
 } Value;
+
+// Function representation for runtime
+typedef struct MobiusFunction {
+    Token name;
+    Token* params;
+    size_t param_count;
+    Stmt** body;
+    size_t body_count;
+    struct Environment* closure;  // Lexical scope
+} MobiusFunction;
 
 // Expression structures
 typedef struct {
@@ -216,6 +231,7 @@ Value make_integer_value(NumericType type, int64_t value);
 Value make_float_value(double value);
 Value make_string_value(char* string);
 Value make_char_value(char value);
+Value make_function_value(MobiusFunction* function);
 
 // Value utility functions
 bool is_truthy(Value value);

@@ -579,15 +579,23 @@ void register_builtins(Environment* env) {
 }
 
 EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
-    // For now, only support built-in function calls
+    // Only support variable expressions as callees for now
     if (expr->callee->type != EXPR_VARIABLE) {
-        return make_error("Only built-in function calls supported", 0, 0);
+        return make_error("Only variable function calls supported", 0, 0);
     }
     
     VariableExpr* var_expr = &expr->callee->as.variable;
     char name[256];
     snprintf(name, sizeof(name), "%.*s", var_expr->name.length, var_expr->name.start);
     
+    // First check if it's a user-defined function
+    bool found = false;
+    Value func_value = get_variable(env, name, &found);
+    if (found && func_value.type == VAL_FUNCTION && func_value.as.function) {
+        return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+    }
+    
+    // Fall back to built-in function lookup
     BuiltinFunction builtin = lookup_builtin(name);
     if (!builtin) {
         return make_error("Unknown function", var_expr->name.line, var_expr->name.column);
@@ -637,6 +645,10 @@ EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
             return eval_while_stmt(&stmt->as.while_stmt, env);
         case STMT_FOR:
             return eval_for_stmt(&stmt->as.for_stmt, env);
+        case STMT_FUNCTION:
+            return eval_function_stmt(&stmt->as.function, env);
+        case STMT_RETURN:
+            return eval_return_stmt(&stmt->as.return_stmt, env);
         default:
             return make_error("Unknown statement type", 0, 0);
     }
@@ -693,6 +705,106 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
     }
     
     free_environment(for_env);
+    return result;
+}
+
+// Function statement evaluation: func name(params) { body }
+EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
+    // Create a function object
+    MobiusFunction* function = malloc(sizeof(MobiusFunction));
+    if (!function) {
+        return make_error("Memory allocation failed", 0, 0);
+    }
+    
+    function->name = stmt->name;
+    function->params = stmt->params;
+    function->param_count = stmt->param_count;
+    function->body = stmt->body;
+    function->body_count = stmt->body_count;
+    function->closure = env;  // Capture current environment as closure
+    
+    // Create function value
+    Value func_value = make_function_value(function);
+    
+    // Define the function in the current environment
+    char* func_name = malloc(stmt->name.length + 1);
+    if (!func_name) {
+        free(function);
+        return make_error("Memory allocation failed", 0, 0);
+    }
+    
+    strncpy(func_name, stmt->name.start, stmt->name.length);
+    func_name[stmt->name.length] = '\0';
+    
+    define_variable(env, func_name, func_value);
+    free(func_name);
+    
+    return make_success(make_nil_value());
+}
+
+// Return statement evaluation: return [expression]
+EvalResult eval_return_stmt(ReturnStmt* stmt, Environment* env) {
+    Value return_value = make_nil_value();
+    
+    if (stmt->value) {
+        EvalResult result = evaluate_expr(stmt->value, env);
+        if (is_error(result)) {
+            return result;
+        }
+        return_value = result.value;
+    }
+    
+    // TODO: Implement proper return handling with unwinding
+    // For now, just return the value
+    return make_success(return_value);
+}
+
+// Call a user-defined function
+EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t arg_count, Environment* env) {
+    // Check argument count
+    if (arg_count != function->param_count) {
+        return make_error("Wrong number of arguments", 0, 0);
+    }
+    
+    // Create new environment for function execution (with closure as parent)
+    Environment* func_env = create_environment(function->closure);
+    
+    // Evaluate and bind arguments to parameters
+    for (size_t i = 0; i < arg_count; i++) {
+        EvalResult arg_result = evaluate_expr(arguments[i], env);
+        if (is_error(arg_result)) {
+            free_environment(func_env);
+            return arg_result;
+        }
+        
+        // Extract parameter name
+        char* param_name = malloc(function->params[i].length + 1);
+        if (!param_name) {
+            free_environment(func_env);
+            return make_error("Memory allocation failed", 0, 0);
+        }
+        
+        strncpy(param_name, function->params[i].start, function->params[i].length);
+        param_name[function->params[i].length] = '\0';
+        
+        // Bind parameter
+        define_variable(func_env, param_name, arg_result.value);
+        free(param_name);
+    }
+    
+    // Execute function body
+    EvalResult result = make_success(make_nil_value());
+    for (size_t i = 0; i < function->body_count; i++) {
+        result = evaluate_stmt(function->body[i], func_env);
+        if (is_error(result)) {
+            break;
+        }
+        
+        // TODO: Handle return statements properly
+        // For now, if we hit a return statement, we should break and return its value
+    }
+    
+    free_environment(func_env);
     return result;
 }
 
