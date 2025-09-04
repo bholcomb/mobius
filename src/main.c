@@ -83,16 +83,18 @@ int main(int argc, char *argv[]) {
     // Set global registry for evaluator
     set_global_module_registry(registry);
     
-    // Load available extension modules
-    printf("🔍 Loading extension modules...\n");
+    // Auto-discover and load extension modules
+    printf("🔍 Auto-discovering extension modules...\n");
     
-    // Try to load math module
-    PluginLoadResult math_result = load_module(registry, "./bin/modules/math.so");
-    if (math_result.status == PLUGIN_STATUS_LOADED) {
-        printf("✅ Loaded math extension v%s\n", math_result.plugin->metadata.version);
+    int loaded_count = auto_load_core_modules(registry);
+    if (loaded_count > 0) {
+        printf("✅ Successfully loaded %d extension module%s\n", 
+               loaded_count, loaded_count == 1 ? "" : "s");
+    } else if (loaded_count == 0) {
+        printf("ℹ️  No extension modules found (built-in functions still available)\n");
     } else {
-        printf("ℹ️  Math extension not available (%s)\n", 
-               math_result.error_message ? math_result.error_message : "module not found");
+        printf("⚠️  Failed to scan for modules: %s\n", 
+               module_registry_get_last_error() ? module_registry_get_last_error() : "unknown error");
     }
     
     int result = 0;

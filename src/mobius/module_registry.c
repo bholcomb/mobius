@@ -1,3 +1,4 @@
+#define _GNU_SOURCE  // For strdup
 #include "module_registry.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -386,4 +387,238 @@ void print_plugin_info(Plugin* plugin) {
     printf("API Version: %zu\n", plugin->metadata.api_version);
     printf("Functions: %zu\n", plugin->function_count);
     printf("\n");
+}
+
+// ============================================================================
+// PLUGIN DISCOVERY AND AUTO-LOADING
+// ============================================================================
+
+/**
+ * Check if a filename has a .so extension
+ */
+static bool is_plugin_file(const char* filename) {
+    if (!filename) return false;
+    
+    size_t len = strlen(filename);
+    if (len < 4) return false;
+    
+    return strcmp(filename + len - 3, ".so") == 0;
+}
+
+/**
+ * Scan a directory for plugin files and load them
+ */
+int scan_plugin_directory(ModuleRegistry* registry, const char* directory) {
+    if (!registry || !directory) {
+        set_error("Invalid arguments to scan_plugin_directory");
+        return -1;
+    }
+    
+    DIR* dir = opendir(directory);
+    if (!dir) {
+        char error_msg[512];
+        snprintf(error_msg, sizeof(error_msg), "Failed to open directory: %s", directory);
+        set_error(error_msg);
+        return -1;
+    }
+    
+    int loaded_count = 0;
+    struct dirent* entry;
+    
+    if (registry->debug_mode) {
+        printf("🔍 Scanning plugin directory: %s\n", directory);
+    }
+    
+    while ((entry = readdir(dir)) != NULL) {
+        // Skip . and .. entries
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+            continue;
+        }
+        
+        // Check if it's a plugin file
+        if (!is_plugin_file(entry->d_name)) {
+            continue;
+        }
+        
+        // Build full path
+        char full_path[1024];
+        snprintf(full_path, sizeof(full_path), "%s/%s", directory, entry->d_name);
+        
+        // Check if it's a regular file
+        struct stat file_stat;
+        if (stat(full_path, &file_stat) != 0 || !S_ISREG(file_stat.st_mode)) {
+            continue;
+        }
+        
+        if (registry->debug_mode) {
+            printf("📦 Found plugin file: %s\n", entry->d_name);
+        }
+        
+        // Try to load the plugin
+        PluginLoadResult result = load_module(registry, full_path);
+        if (result.status == PLUGIN_STATUS_LOADED) {
+            loaded_count++;
+            if (registry->debug_mode) {
+                printf("✅ Loaded plugin: %s v%s\n", 
+                       result.plugin->metadata.name, 
+                       result.plugin->metadata.version);
+            }
+        } else {
+            if (registry->debug_mode) {
+                printf("❌ Failed to load %s: %s\n", 
+                       entry->d_name, 
+                       result.error_message ? result.error_message : "unknown error");
+            }
+        }
+    }
+    
+    closedir(dir);
+    
+    if (registry->debug_mode) {
+        printf("📊 Loaded %d plugins from %s\n", loaded_count, directory);
+    }
+    
+    return loaded_count;
+}
+
+// set_plugin_directory already implemented above
+
+/**
+ * Auto-load core modules from the default directory
+ */
+int auto_load_core_modules(ModuleRegistry* registry) {
+    if (!registry) {
+        set_error("Invalid registry for auto_load_core_modules");
+        return -1;
+    }
+    
+    const char* default_dirs[] = {
+        "./bin/modules",
+        "./modules", 
+        "/usr/local/lib/mobius/modules",
+        NULL
+    };
+    
+    // Try user-specified directory first
+    if (registry->plugin_directory) {
+        int count = scan_plugin_directory(registry, registry->plugin_directory);
+        if (count >= 0) {
+            return count;
+        }
+    }
+    
+    // Try default directories
+    for (int i = 0; default_dirs[i]; i++) {
+        DIR* dir = opendir(default_dirs[i]);
+        if (dir) {
+            closedir(dir);
+            int count = scan_plugin_directory(registry, default_dirs[i]);
+            if (count >= 0) {
+                return count;
+            }
+        }
+    }
+    
+    set_error("No plugin directories found");
+    return 0; // No plugins loaded, but not an error
+}
+
+/**
+ * List available plugins in a directory
+ */
+char** list_available_plugins(const char* directory, size_t* count) {
+    if (!directory || !count) {
+        return NULL;
+    }
+    
+    *count = 0;
+    
+    DIR* dir = opendir(directory);
+    if (!dir) {
+        return NULL;
+    }
+    
+    // First pass: count plugin files
+    struct dirent* entry;
+    size_t plugin_count = 0;
+    
+    while ((entry = readdir(dir)) != NULL) {
+        if (is_plugin_file(entry->d_name)) {
+            plugin_count++;
+        }
+    }
+    
+    if (plugin_count == 0) {
+        closedir(dir);
+        return NULL;
+    }
+    
+    // Allocate array for plugin names
+    char** plugins = malloc(plugin_count * sizeof(char*));
+    if (!plugins) {
+        closedir(dir);
+        return NULL;
+    }
+    
+    // Second pass: collect plugin names
+    rewinddir(dir);
+    size_t index = 0;
+    
+    while ((entry = readdir(dir)) != NULL && index < plugin_count) {
+        if (is_plugin_file(entry->d_name)) {
+            plugins[index] = strdup(entry->d_name);
+            if (plugins[index]) {
+                index++;
+            }
+        }
+    }
+    
+    closedir(dir);
+    *count = index;
+    return plugins;
+}
+
+/**
+ * Load a module by name from the default plugin directory
+ */
+PluginLoadResult load_module_by_name(ModuleRegistry* registry, const char* name) {
+    PluginLoadResult result;
+    result.status = PLUGIN_STATUS_ERROR;
+    result.plugin = NULL;
+    result.error_message = "Invalid arguments";
+    
+    if (!registry || !name) {
+        return result;
+    }
+    
+    // Try to build full path
+    const char* plugin_dir = registry->plugin_directory ? registry->plugin_directory : "./bin/modules";
+    
+    char full_path[1024];
+    if (strstr(name, ".so")) {
+        // Name already includes extension
+        snprintf(full_path, sizeof(full_path), "%s/%s", plugin_dir, name);
+    } else {
+        // Add .so extension
+        snprintf(full_path, sizeof(full_path), "%s/%s.so", plugin_dir, name);
+    }
+    
+    return load_module(registry, full_path);
+}
+
+// is_module_loaded already implemented above
+
+/**
+ * Get error message for a specific module
+ */
+const char* get_module_error(ModuleRegistry* registry, const char* name) {
+    LoadedModule* module = find_module(registry, name);
+    return module ? module->error_message : "Module not found";
+}
+
+/**
+ * Check if a function is available in the registry
+ */
+bool is_function_available(ModuleRegistry* registry, const char* name) {
+    return lookup_function(registry, name) != NULL;
 }
