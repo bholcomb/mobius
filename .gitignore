@@ -1,0 +1,35 @@
+# Compiled binaries
+bin/
+*.exe
+
+# Object files
+*.o
+*.obj
+
+# Debug files
+*.pdb
+*.dSYM/
+
+# Core dumps
+core
+core.*
+
+# Editor temporary files
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.a
+*.so
+*.dylib
+
+# Backup files
+*.bak
+*.backup
