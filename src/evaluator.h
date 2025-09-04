@@ -66,15 +66,9 @@ EvalResult eval_if_stmt(IfStmt* stmt, Environment* env);
 EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env);
 EvalResult eval_for_stmt(ForStmt* stmt, Environment* env);
 
-// Built-in functions
-EvalResult builtin_print(Value* args, size_t arg_count);
-EvalResult builtin_typeof(Value* args, size_t arg_count);
-EvalResult builtin_str(Value* args, size_t arg_count);
-EvalResult builtin_int(Value* args, size_t arg_count);
-EvalResult builtin_float(Value* args, size_t arg_count);
+// Note: Built-in functions moved to stdlib.h/stdlib.c
 
-// Built-in function management
-void register_builtins(Environment* env);
+// Built-in function management (now handled by stdlib)
 BuiltinFunction lookup_builtin(const char* name);
 
 // Utility functions

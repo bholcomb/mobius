@@ -1,0 +1,649 @@
+#include "stdlib.h"
+#include "ast.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+#include <ctype.h>
+
+// =============================================================================
+// CORE FUNCTIONS
+// =============================================================================
+
+EvalResult builtin_print(Value* args, size_t arg_count) {
+    for (size_t i = 0; i < arg_count; i++) {
+        if (i > 0) printf(" ");
+        print_value(args[i]);
+    }
+    printf("\n");
+    return make_success(make_nil_value());
+}
+
+EvalResult builtin_typeof(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("typeof() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    const char* type_name = value_type_name(args[0].type);
+    char* result = malloc(strlen(type_name) + 1);
+    if (result) {
+        strcpy(result, type_name);
+    }
+    return make_success(make_string_value(result));
+}
+
+EvalResult builtin_str(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("str() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    char* str_result = value_to_string(args[0]);
+    return make_success(make_string_value(str_result));
+}
+
+EvalResult builtin_int(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("int() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    switch (arg.type) {
+        case VAL_INTEGER:
+            return make_success(arg);  // Already an integer
+        case VAL_FLOAT:
+            return make_success(make_integer_value(NUM_INT32, (int32_t)arg.as.float_val));
+        case VAL_STRING: {
+            if (arg.as.string) {
+                char* endptr;
+                long val = strtol(arg.as.string, &endptr, 10);
+                if (*endptr == '\0') {
+                    return make_success(make_integer_value(NUM_INT32, (int32_t)val));
+                }
+            }
+            return make_error_detailed("Cannot convert string to integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        case VAL_BOOL:
+            return make_success(make_integer_value(NUM_INT32, arg.as.boolean ? 1 : 0));
+        default:
+            return make_error_detailed("Cannot convert value to integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+}
+
+EvalResult builtin_float(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("float() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    switch (arg.type) {
+        case VAL_FLOAT:
+            return make_success(arg);  // Already a float
+        case VAL_INTEGER: {
+            // Convert integer to float based on its numeric type
+            double val = 0.0;
+            switch (arg.as.integer.num_type) {
+                case NUM_INT8:   val = arg.as.integer.value.i8; break;
+                case NUM_UINT8:  val = arg.as.integer.value.u8; break;
+                case NUM_INT16:  val = arg.as.integer.value.i16; break;
+                case NUM_UINT16: val = arg.as.integer.value.u16; break;
+                case NUM_INT32:  val = arg.as.integer.value.i32; break;
+                case NUM_UINT32: val = arg.as.integer.value.u32; break;
+                case NUM_INT64:  val = arg.as.integer.value.i64; break;
+                case NUM_UINT64: val = arg.as.integer.value.u64; break;
+                case NUM_FLOAT64: val = 0.0; break; // Shouldn't happen
+            }
+            return make_success(make_float_value(val));
+        }
+        case VAL_STRING: {
+            if (arg.as.string) {
+                char* endptr;
+                double val = strtod(arg.as.string, &endptr);
+                if (*endptr == '\0') {
+                    return make_success(make_float_value(val));
+                }
+            }
+            return make_error_detailed("Cannot convert string to float", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        default:
+            return make_error_detailed("Cannot convert value to float", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+}
+
+// =============================================================================
+// MATH FUNCTIONS
+// =============================================================================
+
+EvalResult builtin_abs(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("abs() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    if (arg.type == VAL_INTEGER) {
+        int64_t val = arg.as.integer.value.i64;  // Simplified
+        if (val < 0) val = -val;
+        return make_success(make_integer_value(NUM_INT64, val));
+    } else if (arg.type == VAL_FLOAT) {
+        return make_success(make_float_value(fabs(arg.as.float_val)));
+    }
+    
+    return make_error_detailed("abs() requires a numeric argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+}
+
+EvalResult builtin_min(Value* args, size_t arg_count) {
+    if (arg_count < 2) {
+        return make_error_detailed("min() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value min_val = args[0];
+    for (size_t i = 1; i < arg_count; i++) {
+        Value current = args[i];
+        
+        // Convert to same type for comparison
+        if (min_val.type == VAL_FLOAT || current.type == VAL_FLOAT) {
+            double min_d = (min_val.type == VAL_FLOAT) ? min_val.as.float_val : min_val.as.integer.value.i32;
+            double cur_d = (current.type == VAL_FLOAT) ? current.as.float_val : current.as.integer.value.i32;
+            if (cur_d < min_d) {
+                min_val = current;
+            }
+        } else if (min_val.type == VAL_INTEGER && current.type == VAL_INTEGER) {
+            if (current.as.integer.value.i32 < min_val.as.integer.value.i32) {
+                min_val = current;
+            }
+        }
+    }
+    
+    return make_success(min_val);
+}
+
+EvalResult builtin_max(Value* args, size_t arg_count) {
+    if (arg_count < 2) {
+        return make_error_detailed("max() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value max_val = args[0];
+    for (size_t i = 1; i < arg_count; i++) {
+        Value current = args[i];
+        
+        // Convert to same type for comparison
+        if (max_val.type == VAL_FLOAT || current.type == VAL_FLOAT) {
+            double max_d = (max_val.type == VAL_FLOAT) ? max_val.as.float_val : max_val.as.integer.value.i32;
+            double cur_d = (current.type == VAL_FLOAT) ? current.as.float_val : current.as.integer.value.i32;
+            if (cur_d > max_d) {
+                max_val = current;
+            }
+        } else if (max_val.type == VAL_INTEGER && current.type == VAL_INTEGER) {
+            if (current.as.integer.value.i32 > max_val.as.integer.value.i32) {
+                max_val = current;
+            }
+        }
+    }
+    
+    return make_success(max_val);
+}
+
+EvalResult builtin_pow(Value* args, size_t arg_count) {
+    if (arg_count != 2) {
+        return make_error_detailed("pow() expects exactly 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value base = args[0];
+    Value exp = args[1];
+    
+    double base_d = (base.type == VAL_FLOAT) ? base.as.float_val : 
+                   (base.type == VAL_INTEGER) ? base.as.integer.value.i32 : 0.0;
+    double exp_d = (exp.type == VAL_FLOAT) ? exp.as.float_val : 
+                  (exp.type == VAL_INTEGER) ? exp.as.integer.value.i32 : 0.0;
+    
+    if (base.type != VAL_FLOAT && base.type != VAL_INTEGER) {
+        return make_error_detailed("pow() base must be numeric", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    if (exp.type != VAL_FLOAT && exp.type != VAL_INTEGER) {
+        return make_error_detailed("pow() exponent must be numeric", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(make_float_value(pow(base_d, exp_d)));
+}
+
+EvalResult builtin_sqrt(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("sqrt() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    double val;
+    
+    if (arg.type == VAL_FLOAT) {
+        val = arg.as.float_val;
+    } else if (arg.type == VAL_INTEGER) {
+        val = arg.as.integer.value.i32;
+    } else {
+        return make_error_detailed("sqrt() requires a numeric argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    if (val < 0) {
+        return make_error_detailed("sqrt() of negative number", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(make_float_value(sqrt(val)));
+}
+
+EvalResult builtin_floor(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("floor() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    double val;
+    
+    if (arg.type == VAL_FLOAT) {
+        val = arg.as.float_val;
+    } else if (arg.type == VAL_INTEGER) {
+        return make_success(arg);  // Already an integer
+    } else {
+        return make_error_detailed("floor() requires a numeric argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(make_integer_value(NUM_INT32, (int32_t)floor(val)));
+}
+
+EvalResult builtin_ceil(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("ceil() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    double val;
+    
+    if (arg.type == VAL_FLOAT) {
+        val = arg.as.float_val;
+    } else if (arg.type == VAL_INTEGER) {
+        return make_success(arg);  // Already an integer
+    } else {
+        return make_error_detailed("ceil() requires a numeric argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(make_integer_value(NUM_INT32, (int32_t)ceil(val)));
+}
+
+EvalResult builtin_round(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("round() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    double val;
+    
+    if (arg.type == VAL_FLOAT) {
+        val = arg.as.float_val;
+    } else if (arg.type == VAL_INTEGER) {
+        return make_success(arg);  // Already an integer
+    } else {
+        return make_error_detailed("round() requires a numeric argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(make_integer_value(NUM_INT32, (int32_t)round(val)));
+}
+
+// =============================================================================
+// STRING FUNCTIONS
+// =============================================================================
+
+EvalResult builtin_len(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("len() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    if (arg.type == VAL_STRING) {
+        size_t length = arg.as.string ? strlen(arg.as.string) : 0;
+        return make_success(make_integer_value(NUM_INT32, (int32_t)length));
+    }
+    
+    return make_error_detailed("len() requires a string argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+}
+
+EvalResult builtin_substr(Value* args, size_t arg_count) {
+    if (arg_count < 2 || arg_count > 3) {
+        return make_error_detailed("substr() expects 2 or 3 arguments: substr(string, start [, length])", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value str_val = args[0];
+    Value start_val = args[1];
+    
+    if (str_val.type != VAL_STRING) {
+        return make_error_detailed("substr() first argument must be a string", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    if (start_val.type != VAL_INTEGER) {
+        return make_error_detailed("substr() start index must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    const char* str = str_val.as.string;
+    if (!str) str = "";
+    
+    size_t str_len = strlen(str);
+    int32_t start = start_val.as.integer.value.i32;
+    size_t length = str_len;
+    
+    // Handle negative start index
+    if (start < 0) start = 0;
+    if ((size_t)start >= str_len) {
+        char* empty = malloc(1);
+        if (empty) empty[0] = '\0';
+        return make_success(make_string_value(empty));
+    }
+    
+    // Handle length parameter
+    if (arg_count == 3) {
+        Value len_val = args[2];
+        if (len_val.type != VAL_INTEGER) {
+            return make_error_detailed("substr() length must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        int32_t len = len_val.as.integer.value.i32;
+        if (len < 0) len = 0;
+        length = (size_t)len;
+    }
+    
+    // Calculate actual substring length
+    if ((size_t)start + length > str_len) {
+        length = str_len - start;
+    }
+    
+    char* result = malloc(length + 1);
+    if (!result) {
+        return make_error_detailed("Memory allocation failed", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+    }
+    
+    strncpy(result, str + start, length);
+    result[length] = '\0';
+    
+    return make_success(make_string_value(result));
+}
+
+EvalResult builtin_concat(Value* args, size_t arg_count) {
+    if (arg_count < 2) {
+        return make_error_detailed("concat() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    // Calculate total length needed
+    size_t total_len = 0;
+    for (size_t i = 0; i < arg_count; i++) {
+        if (args[i].type != VAL_STRING) {
+            return make_error_detailed("concat() all arguments must be strings", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        if (args[i].as.string) {
+            total_len += strlen(args[i].as.string);
+        }
+    }
+    
+    char* result = malloc(total_len + 1);
+    if (!result) {
+        return make_error_detailed("Memory allocation failed", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+    }
+    
+    result[0] = '\0';
+    for (size_t i = 0; i < arg_count; i++) {
+        if (args[i].as.string) {
+            strcat(result, args[i].as.string);
+        }
+    }
+    
+    return make_success(make_string_value(result));
+}
+
+EvalResult builtin_upper(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("upper() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    if (arg.type != VAL_STRING) {
+        return make_error_detailed("upper() requires a string argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    const char* str = arg.as.string;
+    if (!str) str = "";
+    
+    size_t len = strlen(str);
+    char* result = malloc(len + 1);
+    if (!result) {
+        return make_error_detailed("Memory allocation failed", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+    }
+    
+    for (size_t i = 0; i < len; i++) {
+        result[i] = toupper(str[i]);
+    }
+    result[len] = '\0';
+    
+    return make_success(make_string_value(result));
+}
+
+EvalResult builtin_lower(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("lower() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value arg = args[0];
+    if (arg.type != VAL_STRING) {
+        return make_error_detailed("lower() requires a string argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    const char* str = arg.as.string;
+    if (!str) str = "";
+    
+    size_t len = strlen(str);
+    char* result = malloc(len + 1);
+    if (!result) {
+        return make_error_detailed("Memory allocation failed", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+    }
+    
+    for (size_t i = 0; i < len; i++) {
+        result[i] = tolower(str[i]);
+    }
+    result[len] = '\0';
+    
+    return make_success(make_string_value(result));
+}
+
+EvalResult builtin_contains(Value* args, size_t arg_count) {
+    if (arg_count != 2) {
+        return make_error_detailed("contains() expects exactly 2 arguments: contains(string, substring)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value str_val = args[0];
+    Value substr_val = args[1];
+    
+    if (str_val.type != VAL_STRING || substr_val.type != VAL_STRING) {
+        return make_error_detailed("contains() requires string arguments", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    const char* str = str_val.as.string ? str_val.as.string : "";
+    const char* substr = substr_val.as.string ? substr_val.as.string : "";
+    
+    bool found = strstr(str, substr) != NULL;
+    return make_success(make_bool_value(found));
+}
+
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
+EvalResult builtin_random(Value* args, size_t arg_count) {
+    static bool seeded = false;
+    if (!seeded) {
+        srand((unsigned int)time(NULL));
+        seeded = true;
+    }
+    
+    if (arg_count == 0) {
+        // Return float between 0.0 and 1.0
+        double val = (double)rand() / RAND_MAX;
+        return make_success(make_float_value(val));
+    } else if (arg_count == 1) {
+        // Return integer between 0 and max-1
+        Value max_val = args[0];
+        if (max_val.type != VAL_INTEGER) {
+            return make_error_detailed("random() argument must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        int32_t max = max_val.as.integer.value.i32;
+        if (max <= 0) {
+            return make_error_detailed("random() argument must be positive", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+        }
+        int32_t val = rand() % max;
+        return make_success(make_integer_value(NUM_INT32, val));
+    } else if (arg_count == 2) {
+        // Return integer between min and max-1
+        Value min_val = args[0];
+        Value max_val = args[1];
+        if (min_val.type != VAL_INTEGER || max_val.type != VAL_INTEGER) {
+            return make_error_detailed("random() arguments must be integers", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        int32_t min = min_val.as.integer.value.i32;
+        int32_t max = max_val.as.integer.value.i32;
+        if (max <= min) {
+            return make_error_detailed("random() max must be greater than min", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+        }
+        int32_t val = min + rand() % (max - min);
+        return make_success(make_integer_value(NUM_INT32, val));
+    }
+    
+    return make_error_detailed("random() expects 0, 1, or 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+}
+
+EvalResult builtin_time(Value* args, size_t arg_count) {
+    (void)args; // Suppress unused warning
+    if (arg_count != 0) {
+        return make_error_detailed("time() expects no arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    time_t current_time = time(NULL);
+    return make_success(make_integer_value(NUM_INT64, (int64_t)current_time));
+}
+
+EvalResult builtin_clock(Value* args, size_t arg_count) {
+    (void)args; // Suppress unused warning
+    if (arg_count != 0) {
+        return make_error_detailed("clock() expects no arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    clock_t current_clock = clock();
+    double seconds = (double)current_clock / CLOCKS_PER_SEC;
+    return make_success(make_float_value(seconds));
+}
+
+// =============================================================================
+// STANDARD LIBRARY MANAGEMENT
+// =============================================================================
+
+static const StdlibEntry stdlib_functions[] = {
+    // Core functions
+    {"print", builtin_print, SIZE_MAX, "Print values to stdout", "Core"},
+    {"typeof", builtin_typeof, 1, "Get the type of a value", "Core"},
+    {"str", builtin_str, 1, "Convert value to string", "Core"},
+    {"int", builtin_int, 1, "Convert value to integer", "Core"},
+    {"float", builtin_float, 1, "Convert value to float", "Core"},
+    
+    // Math functions
+    {"abs", builtin_abs, 1, "Get absolute value", "Math"},
+    {"min", builtin_min, SIZE_MAX, "Get minimum value from arguments", "Math"},
+    {"max", builtin_max, SIZE_MAX, "Get maximum value from arguments", "Math"},
+    {"pow", builtin_pow, 2, "Raise base to power", "Math"},
+    {"sqrt", builtin_sqrt, 1, "Get square root", "Math"},
+    {"floor", builtin_floor, 1, "Round down to integer", "Math"},
+    {"ceil", builtin_ceil, 1, "Round up to integer", "Math"},
+    {"round", builtin_round, 1, "Round to nearest integer", "Math"},
+    
+    // String functions
+    {"len", builtin_len, 1, "Get string length", "String"},
+    {"substr", builtin_substr, SIZE_MAX, "Extract substring", "String"},
+    {"concat", builtin_concat, SIZE_MAX, "Concatenate strings", "String"},
+    {"upper", builtin_upper, 1, "Convert to uppercase", "String"},
+    {"lower", builtin_lower, 1, "Convert to lowercase", "String"},
+    {"contains", builtin_contains, 2, "Check if string contains substring", "String"},
+    
+    // Utility functions
+    {"random", builtin_random, SIZE_MAX, "Generate random number", "Utility"},
+    {"time", builtin_time, 0, "Get current Unix timestamp", "Utility"},
+    {"clock", builtin_clock, 0, "Get program execution time", "Utility"},
+};
+
+static const size_t stdlib_count = sizeof(stdlib_functions) / sizeof(stdlib_functions[0]);
+
+const StdlibEntry* get_stdlib_functions(void) {
+    return stdlib_functions;
+}
+
+size_t get_stdlib_count(void) {
+    return stdlib_count;
+}
+
+BuiltinFunction lookup_stdlib_function(const char* name) {
+    for (size_t i = 0; i < stdlib_count; i++) {
+        if (strcmp(stdlib_functions[i].name, name) == 0) {
+            return stdlib_functions[i].function;
+        }
+    }
+    return NULL;
+}
+
+void register_stdlib_functions(Environment* env) {
+    // Standard library functions are looked up dynamically
+    // They don't need to be registered in the environment
+    (void)env;
+}
+
+// =============================================================================
+// HELP AND DOCUMENTATION
+// =============================================================================
+
+void print_stdlib_help(void) {
+    printf("\nMobius Standard Library Functions:\n");
+    printf("==================================\n\n");
+    
+    const char* current_category = "";
+    for (size_t i = 0; i < stdlib_count; i++) {
+        const StdlibEntry* entry = &stdlib_functions[i];
+        
+        // Print category header if changed
+        if (strcmp(current_category, entry->category) != 0) {
+            current_category = entry->category;
+            printf("%s Functions:\n", current_category);
+            printf("-------------------\n");
+        }
+        
+        printf("  %-15s - %s\n", entry->name, entry->description);
+        
+        // Add spacing between categories
+        if (i + 1 < stdlib_count && strcmp(entry->category, stdlib_functions[i + 1].category) != 0) {
+            printf("\n");
+        }
+    }
+    
+    printf("\nUse ':help <function>' for detailed help on a specific function.\n\n");
+}
+
+void print_function_help(const char* function_name) {
+    for (size_t i = 0; i < stdlib_count; i++) {
+        const StdlibEntry* entry = &stdlib_functions[i];
+        if (strcmp(entry->name, function_name) == 0) {
+            printf("\nFunction: %s\n", entry->name);
+            printf("Category: %s\n", entry->category);
+            printf("Description: %s\n", entry->description);
+            
+            if (entry->arity == SIZE_MAX) {
+                printf("Arguments: Variable number of arguments\n");
+            } else if (entry->arity == 0) {
+                printf("Arguments: None\n");
+            } else {
+                printf("Arguments: %zu\n", entry->arity);
+            }
+            
+            printf("\n");
+            return;
+        }
+    }
+    
+    printf("Unknown function: %s\n", function_name);
+    printf("Use ':help' to see all available functions.\n");
+}
