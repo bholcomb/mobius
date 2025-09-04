@@ -83,14 +83,16 @@ int main(int argc, char *argv[]) {
     // Set global registry for evaluator
     set_global_module_registry(registry);
     
-    // Try to load stdlib plugin if available
-    PluginLoadResult stdlib_result = load_module(registry, "./bin/modules/stdlib.so");
-    if (stdlib_result.status == PLUGIN_STATUS_LOADED) {
-        printf("✅ Loaded stdlib plugin v%s\n", stdlib_result.plugin->metadata.version);
+    // Load available extension modules
+    printf("🔍 Loading extension modules...\n");
+    
+    // Try to load math module
+    PluginLoadResult math_result = load_module(registry, "./bin/modules/math.so");
+    if (math_result.status == PLUGIN_STATUS_LOADED) {
+        printf("✅ Loaded math extension v%s\n", math_result.plugin->metadata.version);
     } else {
-        printf("⚠️  Warning: Could not load stdlib plugin (%s)\n", 
-               stdlib_result.error_message ? stdlib_result.error_message : "unknown error");
-        printf("   Falling back to built-in stdlib functions\n");
+        printf("ℹ️  Math extension not available (%s)\n", 
+               math_result.error_message ? math_result.error_message : "module not found");
     }
     
     int result = 0;

@@ -22,8 +22,7 @@ MOBIUS_SHARED = $(BUILD_DIR)/libmobius.so
 TARGET = $(BIN_DIR)/mobius
 
 # Module targets
-STDLIB_MODULE = $(BIN_DIR)/modules/stdlib.so
-MATHLIB_MODULE = $(BIN_DIR)/modules/mathlib.so
+MATH_MODULE = $(BIN_DIR)/modules/math.so
 
 # Source files
 MOBIUS_SOURCES = $(wildcard $(MOBIUS_DIR)/*.c)
@@ -67,16 +66,11 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | directories
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -c $< -o $@
 
 # Build all modules
-modules: $(STDLIB_MODULE) $(MATHLIB_MODULE)
+modules: $(MATH_MODULE)
 
-# Build stdlib module
-$(STDLIB_MODULE): $(MODULES_DIR)/stdlib/stdlib_plugin.c $(MOBIUS_LIB) | directories
-	@echo "📦 Building stdlib module..."
-	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
-
-# Build mathlib example module  
-$(MATHLIB_MODULE): $(EXAMPLES_DIR)/mathlib.c $(MOBIUS_LIB) | directories
-	@echo "📦 Building mathlib example module..."
+# Build math extension module
+$(MATH_MODULE): $(MODULES_DIR)/math/math_plugin.c $(MOBIUS_LIB) | directories
+	@echo "📦 Building math extension module..."
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
 # Install (copy to system directories)
@@ -168,5 +162,4 @@ help:
 
 # Special target dependencies
 $(TARGET): | $(MOBIUS_LIB)
-$(STDLIB_MODULE): | $(MOBIUS_LIB)
-$(MATHLIB_MODULE): | $(MOBIUS_LIB)
+$(MATH_MODULE): | $(MOBIUS_LIB)

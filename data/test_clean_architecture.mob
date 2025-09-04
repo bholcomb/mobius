@@ -1,0 +1,51 @@
+// Clean Plugin Architecture Test
+// Built-in stdlib (always available) vs Math Extension (plugin)
+
+print("=== Mobius Clean Plugin Architecture Test ===");
+
+print("\n🔧 Built-in Standard Library Functions (Always Available):");
+print("print() - This function itself");
+print("typeof(42) =", typeof(42));
+print("str(3.14) =", str(3.14)); 
+print("int(2.7) =", int(2.7));
+print("float(5) =", float(5));
+
+print("abs(-10) =", abs(-10));
+print("min(1, 2, 3) =", min(1, 2, 3));
+print("max(1, 2, 3) =", max(1, 2, 3));
+print("pow(2, 3) =", pow(2, 3));
+print("sqrt(16) =", sqrt(16));
+
+var text = "Hello";
+print("len(text) =", len(text));
+print("upper(text) =", upper(text));
+
+print("random() =", random());
+print("time() =", time());
+
+print("\n📦 Math Extension Functions (Plugin-only):");
+print("sin(pi() / 2) =", sin(pi() / 2));
+print("cos(0) =", cos(0));
+print("tan(pi() / 4) =", tan(pi() / 4));
+
+print("log(e()) =", log(e()));
+print("log10(100) =", log10(100));
+print("exp(1) =", exp(1));
+
+print("factorial(5) =", factorial(5));
+print("gcd(12, 8) =", gcd(12, 8));
+print("lcm(4, 6) =", lcm(4, 6));
+
+print("Math constants:");
+print("pi() =", pi());
+print("e() =", e());
+
+print("\n✅ Architecture Benefits:");
+print("1. Built-in functions always work (no plugin needed)");
+print("2. Extensions add specialized functionality");
+print("3. Clean separation of core vs extended features");
+print("4. Plugin failure doesn't break basic functionality");
+
+print("\n🎯 This is how plugins should work!");
+print("   - Core stdlib: Always available, essential functions");
+print("   - Extensions: Add specialized domain-specific functions");
