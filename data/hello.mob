@@ -1,0 +1,39 @@
+// Hello World program in Mobius
+print("Hello, World!");
+print("Welcome to the Mobius scripting language!");
+
+// Variables and arithmetic
+var name = "Mobius";
+var version = 1.0;
+var build = 42;
+
+print("Language:", name);
+print("Version:", version);
+print("Build:", build);
+
+// Control flow
+if (version >= 1.0) {
+    print("This is a stable release!");
+    
+    var score = build * version;
+    print("Quality score:", score);
+    
+    if (score > 40) {
+        print("Excellent quality!");
+    }
+}
+
+// Type conversions
+var pi = 3.14159;
+print("Pi as integer:", int(pi));
+print("Build as float:", float(build));
+print("Name type:", typeof(name));
+
+// Loop example
+var count = 0;
+while (count < 5) {
+    print("Count:", count);
+    count = count + 1;
+}
+
+print("Mobius script execution complete!");
