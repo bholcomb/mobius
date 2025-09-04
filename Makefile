@@ -27,6 +27,10 @@ MATH_MODULE = $(BIN_DIR)/modules/math.so
 # Example targets
 EMBEDDING_EXAMPLE = $(BIN_DIR)/embedding_example
 SIMPLE_EMBEDDING_EXAMPLE = $(BIN_DIR)/simple_embedding
+GAME_ENGINE_EXAMPLE = $(BIN_DIR)/game_engine
+
+# Plugin targets
+TEXT_PROCESSING_PLUGIN = $(BIN_DIR)/modules/text_processing.so
 
 # Source files
 MOBIUS_SOURCES = $(wildcard $(MOBIUS_DIR)/*.c)
@@ -78,7 +82,7 @@ $(MATH_MODULE): $(MODULES_DIR)/math/math_plugin.c $(MOBIUS_LIB) | directories
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
 # Build examples
-examples: $(EMBEDDING_EXAMPLE) $(SIMPLE_EMBEDDING_EXAMPLE)
+examples: $(EMBEDDING_EXAMPLE) $(SIMPLE_EMBEDDING_EXAMPLE) $(GAME_ENGINE_EXAMPLE) $(TEXT_PROCESSING_PLUGIN)
 
 # Build embedding example
 $(EMBEDDING_EXAMPLE): examples/embedding_example.c $(MOBIUS_LIB) | directories
@@ -89,6 +93,16 @@ $(EMBEDDING_EXAMPLE): examples/embedding_example.c $(MOBIUS_LIB) | directories
 $(SIMPLE_EMBEDDING_EXAMPLE): examples/simple_embedding.c $(MOBIUS_LIB) | directories
 	@echo "🔧 Building simple embedding example..."
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
+# Build game engine example
+$(GAME_ENGINE_EXAMPLE): examples/game_engine.c $(MOBIUS_LIB) | directories
+	@echo "🎮 Building game engine example..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
+# Build text processing plugin
+$(TEXT_PROCESSING_PLUGIN): examples/text_processing_plugin.c $(MOBIUS_LIB) | directories
+	@echo "📝 Building text processing plugin..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
 # Install (copy to system directories)
 install: $(TARGET) $(MOBIUS_LIB)
@@ -133,6 +147,16 @@ test-embedding: $(SIMPLE_EMBEDDING_EXAMPLE) modules
 	@echo "🔗 Testing embedding API..."
 	./$(SIMPLE_EMBEDDING_EXAMPLE)
 
+# Test game engine example
+test-game-engine: $(GAME_ENGINE_EXAMPLE) modules
+	@echo "🎮 Testing game engine example..."
+	./$(GAME_ENGINE_EXAMPLE)
+
+# Test text processing plugin
+test-text-plugin: $(TEXT_PROCESSING_PLUGIN) $(TARGET)
+	@echo "📝 Testing text processing plugin..."
+	@echo 'print("Text plugin test:"); print("Words:", word_count("hello beautiful world"));' | LD_LIBRARY_PATH=./bin/modules ./$(TARGET)
+
 # Development build (debug symbols)
 debug: CFLAGS += -DDEBUG -g3 -O0
 debug: clean all
@@ -175,16 +199,20 @@ help:
 	@echo "  test       - Run comprehensive tests"
 	@echo "  test-plugins - Test plugin loading"
 	@echo "  test-embedding - Test embedding API"
+	@echo "  test-game-engine - Test game engine example"
+	@echo "  test-text-plugin - Test text processing plugin"
 	@echo ""
 	@echo "Information:"
 	@echo "  info       - Show build configuration"
 	@echo "  help       - Show this help message"
 
 # Declare phony targets
-.PHONY: all directories modules examples clean install uninstall run test test-plugins test-embedding debug release docs info help
+.PHONY: all directories modules examples clean install uninstall run test test-plugins test-embedding test-game-engine test-text-plugin debug release docs info help
 
 # Special target dependencies
 $(TARGET): | $(MOBIUS_LIB)
 $(MATH_MODULE): | $(MOBIUS_LIB)
 $(EMBEDDING_EXAMPLE): | $(MOBIUS_LIB)
 $(SIMPLE_EMBEDDING_EXAMPLE): | $(MOBIUS_LIB)
+$(GAME_ENGINE_EXAMPLE): | $(MOBIUS_LIB)
+$(TEXT_PROCESSING_PLUGIN): | $(MOBIUS_LIB)

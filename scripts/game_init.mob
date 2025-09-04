@@ -1,0 +1,47 @@
+// Game Initialization Script
+game_log("Initializing Mobius Adventure...");
+
+// Set up initial game state
+set_player_pos(25, 25);
+set_player_health(100);
+
+// Define event handlers
+func on_player_move(direction) {
+    var pos = get_player_pos();
+    game_log("Player moved " + direction + " to " + pos);
+    
+    // Award points for movement
+    add_score(10);
+}
+
+func on_enemy_spawn(enemy_type) {
+    var x = random() * 100;
+    var y = random() * 100;
+    spawn_enemy(x, y, int(enemy_type));
+    game_log("Spawned enemy type " + enemy_type + " at (" + str(x) + ", " + str(y) + ")");
+}
+
+func on_damage(amount) {
+    var current_health = get_player_health();
+    var new_health = current_health - int(amount);
+    set_player_health(new_health);
+    
+    if (new_health <= 0) {
+        game_log("Game Over! Final score: " + str(get_score()));
+    } else {
+        game_log("Player took " + amount + " damage. Health: " + str(new_health));
+    }
+}
+
+func on_powerup(type) {
+    if (type == "health") {
+        var current_health = get_player_health();
+        set_player_health(min(100, current_health + 25));
+        game_log("Health restored!");
+    } else if (type == "score") {
+        add_score(500);
+        game_log("Bonus points!");
+    }
+}
+
+game_log("Game initialization complete!");
