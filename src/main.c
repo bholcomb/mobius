@@ -9,6 +9,7 @@
 #include "environment.h"
 #include "file_io.h"
 #include "repl.h"
+#include "module_registry.h"
 
 void test_interpreter() {
     printf("Testing Mobius Interpreter\n");
@@ -80,17 +81,43 @@ void test_interpreter() {
 int main(int argc, char *argv[]) {
     printf("Mobius Scripting Language Interpreter v0.1.0\n");
     
+    // Initialize plugin system
+    ModuleRegistry* registry = create_module_registry();
+    if (!registry) {
+        fprintf(stderr, "Failed to create module registry\n");
+        return 1;
+    }
+    
+    // Set global registry for evaluator
+    set_global_module_registry(registry);
+    
+    // Try to load stdlib plugin if available
+    PluginLoadResult stdlib_result = load_module(registry, "./modules/stdlib.so");
+    if (stdlib_result.status == PLUGIN_STATUS_LOADED) {
+        printf("✅ Loaded stdlib plugin v%s\n", stdlib_result.plugin->metadata.version);
+    } else {
+        printf("⚠️  Warning: Could not load stdlib plugin (%s)\n", 
+               stdlib_result.error_message ? stdlib_result.error_message : "unknown error");
+        printf("   Falling back to built-in stdlib functions\n");
+    }
+    
+    int result = 0;
+    
     if (argc > 1) {
         if (strcmp(argv[1], "--test-interpreter") == 0) {
             test_interpreter();
-            return 0;
+        } else if (strcmp(argv[1], "--list-modules") == 0) {
+            print_loaded_modules(registry);
+            print_available_functions(registry);
+        } else {
+            // Execute script file
+            result = execute_script_file(argv[1]);
         }
-        // Execute script file
-        return execute_script_file(argv[1]);
     } else {
         // Start interactive REPL
         start_repl();
     }
     
-    return 0;
+    free_module_registry(registry);
+    return result;
 }
