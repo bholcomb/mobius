@@ -238,6 +238,13 @@ Value make_char_value(char val) {
     return value;
 }
 
+Value make_function_value(MobiusFunction* function) {
+    Value value = {0};
+    value.type = VAL_FUNCTION;
+    value.as.function = function;
+    return value;
+}
+
 // Value utility functions
 bool is_truthy(Value value) {
     switch (value.type) {
@@ -322,6 +329,13 @@ void print_value(Value value) {
         case VAL_CHAR:
             printf("'%c'", value.as.character);
             break;
+        case VAL_FUNCTION:
+            if (value.as.function) {
+                printf("<func %.*s>", value.as.function->name.length, value.as.function->name.start);
+            } else {
+                printf("<func (null)>");
+            }
+            break;
         default:
             printf("unknown_value");
             break;
@@ -394,6 +408,7 @@ const char* value_type_name(ValueType type) {
         case VAL_FLOAT: return "float";
         case VAL_STRING: return "string";
         case VAL_CHAR: return "char";
+        case VAL_FUNCTION: return "function";
         default: return "unknown";
     }
 }
@@ -494,6 +509,17 @@ void free_value(Value value) {
         free(value.as.string);
         // Note: We can't set value.as.string to NULL here since value is passed by copy
         // The caller should manage this to prevent double free
+    } else if (value.type == VAL_FUNCTION && value.as.function) {
+        MobiusFunction* func = value.as.function;
+        if (func->params) free(func->params);
+        if (func->body) {
+            for (size_t i = 0; i < func->body_count; i++) {
+                free_stmt(func->body[i]);
+            }
+            free(func->body);
+        }
+        // Note: don't free closure environment - it's managed separately
+        free(func);
     }
 }
 

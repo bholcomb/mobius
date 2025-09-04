@@ -1,7 +1,0 @@
-2 + 3
-var x = 42
-print("Hello from REPL!")
-x * 2
-typeof(x)
-:env
-:quit

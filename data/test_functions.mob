@@ -1,0 +1,17 @@
+func greet(name) {
+    print("Hello,", name, "!");
+    return name;
+}
+
+func add(a, b) {
+    var result = a + b;
+    print("Adding", a, "+", b, "=", result);
+    return result;
+}
+
+// Test the functions
+var greeting = greet("Alice");
+print("Returned:", greeting);
+
+var sum = add(10, 20);
+print("Sum:", sum);

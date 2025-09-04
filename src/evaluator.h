@@ -88,4 +88,9 @@ EvalResult logical_not(Value value);
 // Error reporting
 void print_runtime_error(RuntimeError error);
 
+// User-defined function support
+EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env);
+EvalResult eval_return_stmt(ReturnStmt* stmt, Environment* env);
+EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t arg_count, Environment* env);
+
 #endif // MOBIUS_EVALUATOR_H
