@@ -18,8 +18,28 @@ EvalResult make_error(const char* message, int line, int column) {
     result.value = make_nil_value();
     result.has_error = true;
     result.error.message = message;
+    result.error.suggestion = NULL;
+    result.error.category = ERROR_RUNTIME;
     result.error.line = line;
     result.error.column = column;
+    result.error.function_name = NULL;
+    result.error.source_line = NULL;
+    return result;
+}
+
+EvalResult make_error_detailed(const char* message, const char* suggestion, 
+                              ErrorCategory category, int line, int column,
+                              const char* function_name, const char* source_line) {
+    EvalResult result = {0};
+    result.value = make_nil_value();
+    result.has_error = true;
+    result.error.message = message;
+    result.error.suggestion = suggestion;
+    result.error.category = category;
+    result.error.line = line;
+    result.error.column = column;
+    result.error.function_name = function_name;
+    result.error.source_line = source_line;
     return result;
 }
 
@@ -27,8 +47,124 @@ bool is_error(EvalResult result) {
     return result.has_error;
 }
 
+const char* error_category_name(ErrorCategory category) {
+    switch (category) {
+        case ERROR_RUNTIME: return "Runtime Error";
+        case ERROR_TYPE: return "Type Error";
+        case ERROR_UNDEFINED: return "Undefined Error";
+        case ERROR_ARGUMENT: return "Argument Error";
+        case ERROR_DIVISION: return "Division Error";
+        case ERROR_MEMORY: return "Memory Error";
+        case ERROR_RETURN: return "Return Error";
+        default: return "Unknown Error";
+    }
+}
+
+const char* get_error_suggestion(ErrorCategory category, const char* context) {
+    switch (category) {
+        case ERROR_TYPE:
+            return "Check that all operands are of compatible types";
+        case ERROR_UNDEFINED:
+            return "Make sure the variable or function is declared before use";
+        case ERROR_ARGUMENT:
+            return "Check the function definition for the correct number of parameters";
+        case ERROR_DIVISION:
+            return "Ensure the divisor is not zero";
+        case ERROR_MEMORY:
+            return "The system may be low on memory";
+        case ERROR_RETURN:
+            return "Return statements can only be used inside functions";
+        default:
+            return NULL;
+    }
+}
+
 void print_runtime_error(RuntimeError error) {
-    fprintf(stderr, "[line %d] Runtime Error: %s\n", error.line, error.message);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "━━━ %s ━━━\n", error_category_name(error.category));
+    
+    if (error.line > 0) {
+        fprintf(stderr, "  at line %d", error.line);
+        if (error.column > 0) {
+            fprintf(stderr, ", column %d", error.column);
+        }
+        if (error.function_name) {
+            fprintf(stderr, " in function '%s'", error.function_name);
+        }
+        fprintf(stderr, "\n");
+    }
+    
+    fprintf(stderr, "\n  %s\n", error.message);
+    
+    // Show source line if available
+    if (error.source_line) {
+        fprintf(stderr, "\n  Source: %s\n", error.source_line);
+        if (error.column > 0) {
+            fprintf(stderr, "          ");
+            for (int i = 1; i < error.column; i++) {
+                fprintf(stderr, " ");
+            }
+            fprintf(stderr, "^\n");
+        }
+    }
+    
+    // Show suggestion if available
+    if (error.suggestion) {
+        fprintf(stderr, "\n  💡 Suggestion: %s\n", error.suggestion);
+    } else {
+        const char* auto_suggestion = get_error_suggestion(error.category, error.message);
+        if (auto_suggestion) {
+            fprintf(stderr, "\n  💡 Suggestion: %s\n", auto_suggestion);
+        }
+    }
+    
+    fprintf(stderr, "\n");
+}
+
+void print_runtime_error_with_context(RuntimeError error, const char* filename) {
+    fprintf(stderr, "\n");
+    fprintf(stderr, "━━━ %s ━━━\n", error_category_name(error.category));
+    
+    if (filename) {
+        fprintf(stderr, "  in file: %s\n", filename);
+    }
+    
+    if (error.line > 0) {
+        fprintf(stderr, "  at line %d", error.line);
+        if (error.column > 0) {
+            fprintf(stderr, ", column %d", error.column);
+        }
+        if (error.function_name) {
+            fprintf(stderr, " in function '%s'", error.function_name);
+        }
+        fprintf(stderr, "\n");
+    }
+    
+    fprintf(stderr, "\n  %s\n", error.message);
+    
+    // Show source line if available
+    if (error.source_line) {
+        fprintf(stderr, "\n  %3d | %s\n", error.line, error.source_line);
+        if (error.column > 0) {
+            fprintf(stderr, "      | ");
+            for (int i = 1; i < error.column; i++) {
+                fprintf(stderr, " ");
+            }
+            fprintf(stderr, "^\n");
+        }
+    }
+    
+    // Show suggestion
+    if (error.suggestion) {
+        fprintf(stderr, "\n  💡 Suggestion: %s\n", error.suggestion);
+    } else {
+        const char* auto_suggestion = get_error_suggestion(error.category, error.message);
+        if (auto_suggestion) {
+            fprintf(stderr, "\n  💡 Suggestion: %s\n", auto_suggestion);
+        }
+    }
+    
+    fprintf(stderr, "\n");
 }
 
 // Expression evaluation
@@ -45,7 +181,27 @@ EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
     Value value = get_variable(env, name, &found);
     
     if (!found) {
-        return make_error("Undefined variable", expr->name.line, expr->name.column);
+        char* var_name = malloc(expr->name.length + 1);
+        if (var_name) {
+            strncpy(var_name, expr->name.start, expr->name.length);
+            var_name[expr->name.length] = '\0';
+        }
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Undefined variable '%.*s'", 
+                expr->name.length, expr->name.start);
+        
+        EvalResult result = make_error_detailed(
+            error_msg,
+            "Make sure the variable is declared before use",
+            ERROR_UNDEFINED,
+            expr->name.line,
+            expr->name.column,
+            NULL,
+            NULL
+        );
+        
+        if (var_name) free(var_name);
+        return result;
     }
     
     return make_success(value);
@@ -234,7 +390,14 @@ EvalResult divide_values(Value left, Value right) {
                        (right.type == VAL_INTEGER) ? right.as.integer.value.i32 : 0.0;
     
     if (right_val == 0.0) {
-        return make_error("Division by zero", 0, 0);
+        return make_error_detailed(
+            "Division by zero",
+            "Check that the divisor is not zero before performing division",
+            ERROR_DIVISION,
+            0, 0,
+            NULL,
+            NULL
+        );
     }
     
     return make_success(make_float_value(left_val / right_val));
@@ -598,7 +761,18 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     // Fall back to built-in function lookup
     BuiltinFunction builtin = lookup_builtin(name);
     if (!builtin) {
-        return make_error("Unknown function", var_expr->name.line, var_expr->name.column);
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", name);
+        
+        return make_error_detailed(
+            error_msg,
+            "Check the function name spelling or make sure it's declared before use",
+            ERROR_UNDEFINED,
+            var_expr->name.line,
+            var_expr->name.column,
+            NULL,
+            NULL
+        );
     }
     
     // Evaluate arguments
@@ -763,7 +937,24 @@ EvalResult eval_return_stmt(ReturnStmt* stmt, Environment* env) {
 EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t arg_count, Environment* env) {
     // Check argument count
     if (arg_count != function->param_count) {
-        return make_error("Wrong number of arguments", 0, 0);
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Function '%.*s' expects %zu arguments but got %zu",
+                function->name.length, function->name.start,
+                function->param_count, arg_count);
+                
+        char func_name[256];
+        snprintf(func_name, sizeof(func_name), "%.*s", 
+                function->name.length, function->name.start);
+                
+        return make_error_detailed(
+            error_msg,
+            "Check the function definition for the correct number of parameters",
+            ERROR_ARGUMENT,
+            0, 0,
+            func_name,
+            NULL
+        );
     }
     
     // Create new environment for function execution (with closure as parent)
@@ -816,7 +1007,9 @@ EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
         result = evaluate_stmt(statements[i], env);
         if (is_error(result)) {
             print_runtime_error(result.error);
-            break;
+            // Continue execution instead of breaking for better error recovery
+            // In a real language, you might want to break on certain error types
+            result = make_success(make_nil_value()); // Reset result for next statement
         }
     }
     

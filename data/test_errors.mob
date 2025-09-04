@@ -1,0 +1,24 @@
+// Test script for enhanced error reporting
+
+// 1. Test undefined variable error
+print("Testing undefined variable...");
+var x = undefined_variable;
+
+// 2. Test division by zero  
+print("Testing division by zero...");
+var result = 10 / 0;
+
+// 3. Test wrong number of arguments
+print("Testing wrong argument count...");
+func add(a, b) {
+    return a + b;
+}
+
+var sum = add(1, 2, 3);  // Too many arguments
+var sum2 = add(1);       // Too few arguments
+
+// 4. Test undefined function
+print("Testing undefined function...");
+var result2 = nonexistent_function(42);
+
+print("Done testing errors");

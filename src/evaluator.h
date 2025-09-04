@@ -5,11 +5,26 @@
 #include "environment.h"
 #include <stdbool.h>
 
-// Runtime error structure
+// Error categories for better reporting
+typedef enum {
+    ERROR_RUNTIME,      // General runtime errors
+    ERROR_TYPE,         // Type mismatches
+    ERROR_UNDEFINED,    // Undefined variables/functions
+    ERROR_ARGUMENT,     // Wrong number of arguments
+    ERROR_DIVISION,     // Division by zero
+    ERROR_MEMORY,       // Memory allocation failures
+    ERROR_RETURN        // Return outside function
+} ErrorCategory;
+
+// Enhanced runtime error structure
 typedef struct {
     const char* message;
+    const char* suggestion;    // Optional suggestion for fixing
+    ErrorCategory category;
     int line;
     int column;
+    const char* function_name; // Function where error occurred
+    const char* source_line;   // The actual source code line
 } RuntimeError;
 
 // Evaluation result
@@ -65,6 +80,9 @@ BuiltinFunction lookup_builtin(const char* name);
 // Utility functions
 EvalResult make_success(Value value);
 EvalResult make_error(const char* message, int line, int column);
+EvalResult make_error_detailed(const char* message, const char* suggestion, 
+                              ErrorCategory category, int line, int column,
+                              const char* function_name, const char* source_line);
 bool is_error(EvalResult result);
 
 // Type conversion and checking
@@ -85,8 +103,11 @@ EvalResult logical_and(Value left, Value right);
 EvalResult logical_or(Value left, Value right);
 EvalResult logical_not(Value value);
 
-// Error reporting
+// Enhanced error reporting
 void print_runtime_error(RuntimeError error);
+void print_runtime_error_with_context(RuntimeError error, const char* filename);
+const char* error_category_name(ErrorCategory category);
+const char* get_error_suggestion(ErrorCategory category, const char* context);
 
 // User-defined function support
 EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env);

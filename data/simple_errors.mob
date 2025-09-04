@@ -1,0 +1,11 @@
+// Simple error test
+
+// Test division by zero
+print("Testing division by zero:");
+var x = 5 / 0;
+
+// Test undefined variable  
+print("Testing undefined variable:");
+var y = missing_var;
+
+print("Done");
