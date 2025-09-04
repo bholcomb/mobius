@@ -1,5 +1,5 @@
-# Mobius Scripting Language Interpreter
-# Simple Makefile for building with system GCC
+# Mobius Scripting Language - Library-based Build System
+# Organized structure: libmobius + application + modules
 
 # Compiler and flags
 CC = gcc
@@ -8,87 +8,165 @@ LDFLAGS = -lm -ldl
 
 # Directories
 SRC_DIR = src
+MOBIUS_DIR = $(SRC_DIR)/mobius
+MODULES_DIR = $(SRC_DIR)/modules
+EXAMPLES_DIR = $(SRC_DIR)/examples
+BUILD_DIR = build
 BIN_DIR = bin
 DATA_DIR = data
 DOC_DIR = doc
-MODULES_DIR = modules
-STDLIB_DIR = stdlib
 
-# Target executable and plugins
+# Library and executable names
+MOBIUS_LIB = $(BUILD_DIR)/libmobius.a
+MOBIUS_SHARED = $(BUILD_DIR)/libmobius.so
 TARGET = $(BIN_DIR)/mobius
-STDLIB_PLUGIN = $(MODULES_DIR)/stdlib.so
 
-# Source files (automatically find all .c files in src/)
-SOURCES = $(wildcard $(SRC_DIR)/*.c)
-OBJECTS = $(SOURCES:$(SRC_DIR)/%.c=$(BIN_DIR)/%.o)
+# Module targets
+STDLIB_MODULE = $(BIN_DIR)/modules/stdlib.so
+MATHLIB_MODULE = $(BIN_DIR)/modules/mathlib.so
+
+# Source files
+MOBIUS_SOURCES = $(wildcard $(MOBIUS_DIR)/*.c)
+MOBIUS_OBJECTS = $(MOBIUS_SOURCES:$(MOBIUS_DIR)/%.c=$(BUILD_DIR)/mobius_%.o)
+
+APP_SOURCES = $(SRC_DIR)/main.c
+APP_OBJECTS = $(APP_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Default target
-all: $(TARGET) plugins
+all: directories $(MOBIUS_LIB) $(TARGET) modules
 
-# Create directories if they don't exist
-$(BIN_DIR):
-	mkdir -p $(BIN_DIR)
+# Create necessary directories
+directories:
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(BIN_DIR)
+	@mkdir -p $(BIN_DIR)/modules
 
-$(MODULES_DIR):
-	mkdir -p $(MODULES_DIR)
+# Build the Mobius static library
+$(MOBIUS_LIB): $(MOBIUS_OBJECTS)
+	@echo "📚 Building Mobius library..."
+	ar rcs $@ $^
+
+# Build the Mobius shared library
+$(MOBIUS_SHARED): $(MOBIUS_OBJECTS)
+	@echo "🔗 Building Mobius shared library..."
+	$(CC) $(CFLAGS) -shared -o $@ $^ $(LDFLAGS)
 
 # Build the main executable
-$(TARGET): $(OBJECTS) | $(BIN_DIR)
-	$(CC) $(OBJECTS) -o $@ $(LDFLAGS)
+$(TARGET): $(APP_OBJECTS) $(MOBIUS_LIB)
+	@echo "🚀 Building Mobius interpreter..."
+	$(CC) $(APP_OBJECTS) -L$(BUILD_DIR) -lmobius -o $@ $(LDFLAGS)
 
-# Compile object files
-$(BIN_DIR)/%.o: $(SRC_DIR)/%.c | $(BIN_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
+# Compile Mobius library object files
+$(BUILD_DIR)/mobius_%.o: $(MOBIUS_DIR)/%.c | directories
+	@echo "🔧 Compiling $<..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -c $< -o $@
 
-# Plugin targets
-plugins: $(STDLIB_PLUGIN)
+# Compile application object files
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | directories
+	@echo "🔧 Compiling $<..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -c $< -o $@
 
-# Build stdlib plugin
-$(STDLIB_PLUGIN): $(STDLIB_DIR)/stdlib_plugin.c $(BIN_DIR)/stdlib.o $(BIN_DIR)/ast.o $(BIN_DIR)/token.o | $(MODULES_DIR)
-	$(CC) $(CFLAGS) -shared -o $@ $< $(BIN_DIR)/stdlib.o $(BIN_DIR)/ast.o $(BIN_DIR)/token.o $(LDFLAGS)
+# Build all modules
+modules: $(STDLIB_MODULE) $(MATHLIB_MODULE)
 
-# Clean build artifacts
-clean:
-	rm -rf $(BIN_DIR)/*
-	rm -rf $(MODULES_DIR)/*
+# Build stdlib module
+$(STDLIB_MODULE): $(MODULES_DIR)/stdlib/stdlib_plugin.c $(MOBIUS_LIB) | directories
+	@echo "📦 Building stdlib module..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
-# Install (optional - copies to /usr/local/bin)
-install: $(TARGET)
-	cp $(TARGET) /usr/local/bin/
+# Build mathlib example module  
+$(MATHLIB_MODULE): $(EXAMPLES_DIR)/mathlib.c $(MOBIUS_LIB) | directories
+	@echo "📦 Building mathlib example module..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
+# Install (copy to system directories)
+install: $(TARGET) $(MOBIUS_LIB)
+	@echo "📥 Installing Mobius..."
+	sudo cp $(TARGET) /usr/local/bin/
+	sudo cp $(MOBIUS_LIB) /usr/local/lib/
+	sudo mkdir -p /usr/local/include/mobius
+	sudo cp $(MOBIUS_DIR)/*.h /usr/local/include/mobius/
+	sudo ldconfig
 
 # Uninstall
 uninstall:
-	rm -f /usr/local/bin/mobius
+	@echo "🗑️  Uninstalling Mobius..."
+	sudo rm -f /usr/local/bin/mobius
+	sudo rm -f /usr/local/lib/libmobius.a
+	sudo rm -rf /usr/local/include/mobius
+
+# Clean build artifacts
+clean:
+	@echo "🧹 Cleaning build artifacts..."
+	rm -rf $(BUILD_DIR)/*
+	rm -rf $(BIN_DIR)/*
 
 # Run the interpreter
 run: $(TARGET)
 	./$(TARGET)
 
-# Test plugin system
-test-plugins: $(TARGET) plugins
+# Test the interpreter with plugins
+test: $(TARGET) modules
+	@echo "🧪 Testing Mobius interpreter..."
+	./$(TARGET) --list-modules
+	@echo ""
+	./$(TARGET) $(DATA_DIR)/test_plugins.mob
+
+# Test plugin loading
+test-plugins: $(TARGET) modules
+	@echo "🔌 Testing plugin system..."
 	./$(TARGET) --list-modules
 
-# Debug build (with debug symbols and no optimization)
+# Development build (debug symbols)
 debug: CFLAGS += -DDEBUG -g3 -O0
-debug: $(TARGET)
+debug: clean all
 
 # Release build (optimized)
-release: CFLAGS += -DNDEBUG -O2
-release: clean $(TARGET)
+release: CFLAGS += -DNDEBUG -O2 -s
+release: clean all
 
-# Help target
+# Create development documentation
+docs:
+	@echo "📖 Generating documentation..."
+	doxygen Doxyfile 2>/dev/null || echo "⚠️  Doxygen not found, skipping docs"
+
+# Library information
+info:
+	@echo "📋 Mobius Library Information:"
+	@echo "   Library: $(MOBIUS_LIB)"
+	@echo "   Executable: $(TARGET)"
+	@echo "   Modules: $(BIN_DIR)/modules/"
+	@echo "   Source: $(MOBIUS_DIR)/"
+	@echo "   Build: $(BUILD_DIR)/"
+
+# Show help
 help:
-	@echo "Available targets:"
-	@echo "  all         - Build the interpreter and plugins (default)"
-	@echo "  plugins     - Build only plugins"
-	@echo "  clean       - Remove build artifacts"
-	@echo "  debug       - Build with debug symbols"
-	@echo "  release     - Build optimized release version"
-	@echo "  run         - Build and run the interpreter"
-	@echo "  test-plugins - Test the plugin system"
-	@echo "  install     - Install to /usr/local/bin"
-	@echo "  uninstall   - Remove from /usr/local/bin"
-	@echo "  help        - Show this help message"
+	@echo "🎯 Mobius Build System Help:"
+	@echo ""
+	@echo "Main targets:"
+	@echo "  all        - Build library, executable, and modules (default)"
+	@echo "  clean      - Remove all build artifacts"
+	@echo "  install    - Install Mobius system-wide"
+	@echo "  uninstall  - Remove system-wide installation"
+	@echo ""
+	@echo "Development:"
+	@echo "  debug      - Build with debug symbols"
+	@echo "  release    - Build optimized release version"
+	@echo "  docs       - Generate documentation"
+	@echo ""
+	@echo "Testing:"
+	@echo "  run        - Run the interpreter"
+	@echo "  test       - Run comprehensive tests"
+	@echo "  test-plugins - Test plugin loading"
+	@echo ""
+	@echo "Information:"
+	@echo "  info       - Show build configuration"
+	@echo "  help       - Show this help message"
 
 # Declare phony targets
-.PHONY: all plugins clean install uninstall run test-plugins debug release help
+.PHONY: all directories modules clean install uninstall run test test-plugins debug release docs info help
+
+# Special target dependencies
+$(TARGET): | $(MOBIUS_LIB)
+$(STDLIB_MODULE): | $(MOBIUS_LIB)
+$(MATHLIB_MODULE): | $(MOBIUS_LIB)
