@@ -7,6 +7,7 @@
 #include "ast.h"
 #include "evaluator.h"
 #include "environment.h"
+#include "file_io.h"
 
 void test_interpreter() {
     printf("Testing Mobius Interpreter\n");
@@ -84,14 +85,13 @@ int main(int argc, char *argv[]) {
             test_interpreter();
             return 0;
         }
-        printf("Would execute script: %s\n", argv[1]);
-        // TODO: Implement script execution using parser
-        // TokenArray tokens = scan_source(source_code);
-        // ParseResult ast = parse(tokens);
-        // ... evaluate AST ...
+        // Execute script file
+        return execute_script_file(argv[1]);
     } else {
         printf("Interactive mode not yet implemented\n");
-        printf("Use --test-interpreter to test the interpreter\n");
+        printf("Options:\n");
+        printf("  --test-interpreter  Test the interpreter with built-in examples\n");
+        printf("  <script.mob>       Execute a Mobius script file\n");
         // TODO: Implement REPL using parser
     }
     
