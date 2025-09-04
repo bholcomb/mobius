@@ -15,11 +15,21 @@ void test_interpreter() {
     const char* test_source = 
         "var x = 42;\n"
         "var y = 3.14;\n"
+        "print(\"Starting values:\");\n"
+        "print(\"x =\", x, \"type:\", typeof(x));\n"
+        "print(\"y =\", y, \"type:\", typeof(y));\n"
         "var z = x + y;\n"
+        "print(\"z = x + y =\", z, \"type:\", typeof(z));\n"
         "x = x - 10;\n"
+        "print(\"After x = x - 10:\", x);\n"
         "if (x > 30) {\n"
         "    z = z * 2;\n"
-        "}\n";
+        "    print(\"z doubled:\", z);\n"
+        "}\n"
+        "print(\"Type conversions:\");\n"
+        "print(\"int(y) =\", int(y), \"type:\", typeof(int(y)));\n"
+        "print(\"float(x) =\", float(x), \"type:\", typeof(float(x)));\n"
+        "print(\"str(z) =\", str(z), \"type:\", typeof(str(z)));\n";
     
     printf("Source code:\n%s\n", test_source);
     

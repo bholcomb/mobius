@@ -453,11 +453,169 @@ EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env) {
     return result;
 }
 
-// Placeholder for call expressions (will implement with functions)
-EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
-    (void)expr;
+// Built-in functions
+EvalResult builtin_print(Value* args, size_t arg_count) {
+    for (size_t i = 0; i < arg_count; i++) {
+        if (i > 0) printf(" ");
+        print_value(args[i]);
+    }
+    printf("\n");
+    return make_success(make_nil_value());
+}
+
+EvalResult builtin_typeof(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error("typeof() expects exactly 1 argument", 0, 0);
+    }
+    
+    const char* type_name = value_type_name(args[0].type);
+    char* result = malloc(strlen(type_name) + 1);
+    if (result) {
+        strcpy(result, type_name);
+    }
+    return make_success(make_string_value(result));
+}
+
+EvalResult builtin_str(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error("str() expects exactly 1 argument", 0, 0);
+    }
+    
+    char* str = value_to_string(args[0]);
+    return make_success(make_string_value(str));
+}
+
+EvalResult builtin_int(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error("int() expects exactly 1 argument", 0, 0);
+    }
+    
+    Value arg = args[0];
+    switch (arg.type) {
+        case VAL_INTEGER:
+            return make_success(arg);  // Already an integer
+        case VAL_FLOAT:
+            return make_success(make_integer_value(NUM_INT32, (int64_t)arg.as.float_val));
+        case VAL_STRING: {
+            if (arg.as.string) {
+                char* endptr;
+                long val = strtol(arg.as.string, &endptr, 10);
+                if (*endptr == '\0') {  // Successful conversion
+                    return make_success(make_integer_value(NUM_INT32, val));
+                }
+            }
+            return make_error("Cannot convert string to integer", 0, 0);
+        }
+        case VAL_BOOL:
+            return make_success(make_integer_value(NUM_INT32, arg.as.boolean ? 1 : 0));
+        default:
+            return make_error("Cannot convert value to integer", 0, 0);
+    }
+}
+
+EvalResult builtin_float(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error("float() expects exactly 1 argument", 0, 0);
+    }
+    
+    Value arg = args[0];
+    switch (arg.type) {
+        case VAL_FLOAT:
+            return make_success(arg);  // Already a float
+        case VAL_INTEGER: {
+            double val = 0.0;
+            switch (arg.as.integer.num_type) {
+                case NUM_INT8:   val = arg.as.integer.value.i8; break;
+                case NUM_UINT8:  val = arg.as.integer.value.u8; break;
+                case NUM_INT16:  val = arg.as.integer.value.i16; break;
+                case NUM_UINT16: val = arg.as.integer.value.u16; break;
+                case NUM_INT32:  val = arg.as.integer.value.i32; break;
+                case NUM_UINT32: val = arg.as.integer.value.u32; break;
+                case NUM_INT64:  val = arg.as.integer.value.i64; break;
+                case NUM_UINT64: val = arg.as.integer.value.u64; break;
+                default: val = 0.0; break;
+            }
+            return make_success(make_float_value(val));
+        }
+        case VAL_STRING: {
+            if (arg.as.string) {
+                char* endptr;
+                double val = strtod(arg.as.string, &endptr);
+                if (*endptr == '\0') {  // Successful conversion
+                    return make_success(make_float_value(val));
+                }
+            }
+            return make_error("Cannot convert string to float", 0, 0);
+        }
+        default:
+            return make_error("Cannot convert value to float", 0, 0);
+    }
+}
+
+// Built-in function lookup table
+static const BuiltinEntry builtins[] = {
+    {"print", builtin_print, SIZE_MAX},    // Variadic
+    {"typeof", builtin_typeof, 1},
+    {"str", builtin_str, 1},
+    {"int", builtin_int, 1},
+    {"float", builtin_float, 1},
+};
+
+static const size_t builtin_count = sizeof(builtins) / sizeof(builtins[0]);
+
+BuiltinFunction lookup_builtin(const char* name) {
+    for (size_t i = 0; i < builtin_count; i++) {
+        if (strcmp(builtins[i].name, name) == 0) {
+            return builtins[i].function;
+        }
+    }
+    return NULL;
+}
+
+void register_builtins(Environment* env) {
+    // Built-ins are looked up dynamically, so we don't need to register them
+    // in the environment. They're handled specially in eval_call_expr.
     (void)env;
-    return make_error("Function calls not yet implemented", 0, 0);
+}
+
+EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
+    // For now, only support built-in function calls
+    if (expr->callee->type != EXPR_VARIABLE) {
+        return make_error("Only built-in function calls supported", 0, 0);
+    }
+    
+    VariableExpr* var_expr = &expr->callee->as.variable;
+    char name[256];
+    snprintf(name, sizeof(name), "%.*s", var_expr->name.length, var_expr->name.start);
+    
+    BuiltinFunction builtin = lookup_builtin(name);
+    if (!builtin) {
+        return make_error("Unknown function", var_expr->name.line, var_expr->name.column);
+    }
+    
+    // Evaluate arguments
+    Value* args = NULL;
+    if (expr->arg_count > 0) {
+        args = malloc(expr->arg_count * sizeof(Value));
+        if (!args) {
+            return make_error("Memory allocation failed", 0, 0);
+        }
+        
+        for (size_t i = 0; i < expr->arg_count; i++) {
+            EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
+            if (is_error(arg_result)) {
+                free(args);
+                return arg_result;
+            }
+            args[i] = arg_result.value;
+        }
+    }
+    
+    // Call the built-in function
+    EvalResult result = builtin(args, expr->arg_count);
+    
+    free(args);
+    return result;
 }
 
 // Main statement evaluator
