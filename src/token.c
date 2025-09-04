@@ -24,7 +24,7 @@ static const char* token_names[] = {
     "ELSE", "ELIF", "FALSE", "FOR", "FUNC", "IF", "IMPORT", "IN", "IS",
     "LET", "MATCH", "NIL", "NOT", "OR", "RETURN", "STATIC", "SUPER",
     "SWITCH", "THIS", "TRUE", "TRY", "CATCH", "FINALLY", "THROW",
-    "TYPEOF", "VAR", "WHEN", "WHILE", "WITH", "YIELD",
+    "VAR", "WHEN", "WHILE", "WITH", "YIELD",
     
     // Special tokens
     "NEWLINE", "EOF", "ERROR"

@@ -90,9 +90,8 @@ typedef enum {
     TOKEN_CATCH,            // catch
     TOKEN_FINALLY,          // finally
     TOKEN_THROW,            // throw
-    TOKEN_TYPEOF,           // typeof
     TOKEN_VAR,              // var (mutable variable)
-    TOKEN_WHEN,             // when (conditional)
+    TOKEN_WHEN,             // when (conditional)  
     TOKEN_WHILE,            // while
     TOKEN_WITH,             // with (context management)
     TOKEN_YIELD,            // yield (generators)
