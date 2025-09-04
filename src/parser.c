@@ -176,10 +176,13 @@ Expr* parse_primary(Parser* parser) {
     
     if (parser_match(parser, TOKEN_STRING)) {
         Token token = parser_previous(parser);
-        // Create a copy of the string
-        char* str_copy = malloc(strlen(token.literal.string) + 1);
-        if (str_copy) {
-            strcpy(str_copy, token.literal.string);
+        // Create a copy of the string for the AST (parser owns this copy)
+        char* str_copy = NULL;
+        if (token.literal.string) {
+            str_copy = malloc(strlen(token.literal.string) + 1);
+            if (str_copy) {
+                strcpy(str_copy, token.literal.string);
+            }
         }
         Value value = make_string_value(str_copy);
         return make_literal_expr(value);
