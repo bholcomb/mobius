@@ -8,6 +8,7 @@
 #include "evaluator.h"
 #include "environment.h"
 #include "file_io.h"
+#include "repl.h"
 
 void test_interpreter() {
     printf("Testing Mobius Interpreter\n");
@@ -78,7 +79,6 @@ void test_interpreter() {
 
 int main(int argc, char *argv[]) {
     printf("Mobius Scripting Language Interpreter v0.1.0\n");
-    printf("Usage: %s [script_file]\n", argv[0]);
     
     if (argc > 1) {
         if (strcmp(argv[1], "--test-interpreter") == 0) {
@@ -88,11 +88,8 @@ int main(int argc, char *argv[]) {
         // Execute script file
         return execute_script_file(argv[1]);
     } else {
-        printf("Interactive mode not yet implemented\n");
-        printf("Options:\n");
-        printf("  --test-interpreter  Test the interpreter with built-in examples\n");
-        printf("  <script.mob>       Execute a Mobius script file\n");
-        // TODO: Implement REPL using parser
+        // Start interactive REPL
+        start_repl();
     }
     
     return 0;

@@ -492,6 +492,8 @@ void free_stmt(Stmt* stmt) {
 void free_value(Value value) {
     if (value.type == VAL_STRING && value.as.string) {
         free(value.as.string);
+        // Note: We can't set value.as.string to NULL here since value is passed by copy
+        // The caller should manage this to prevent double free
     }
 }
 

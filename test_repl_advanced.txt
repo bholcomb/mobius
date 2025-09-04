@@ -1,0 +1,16 @@
+:help
+var name = "Alice"
+var age = 30
+print("Hello,", name, "! You are", age, "years old.")
+var adult = age >= 18
+if (adult) { print("You are an adult!") }
+var count = 0
+while (count < 3) { print("Count:", count); count = count + 1 }
+typeof(name)
+typeof(age)
+typeof(adult)
+str(age)
+int(3.14)
+float(42)
+:env
+:quit
