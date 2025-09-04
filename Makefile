@@ -24,6 +24,10 @@ TARGET = $(BIN_DIR)/mobius
 # Module targets
 MATH_MODULE = $(BIN_DIR)/modules/math.so
 
+# Example targets
+EMBEDDING_EXAMPLE = $(BIN_DIR)/embedding_example
+SIMPLE_EMBEDDING_EXAMPLE = $(BIN_DIR)/simple_embedding
+
 # Source files
 MOBIUS_SOURCES = $(wildcard $(MOBIUS_DIR)/*.c)
 MOBIUS_OBJECTS = $(MOBIUS_SOURCES:$(MOBIUS_DIR)/%.c=$(BUILD_DIR)/mobius_%.o)
@@ -32,7 +36,7 @@ APP_SOURCES = $(SRC_DIR)/main.c
 APP_OBJECTS = $(APP_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Default target
-all: directories $(MOBIUS_LIB) $(TARGET) modules
+all: directories $(MOBIUS_LIB) $(TARGET) modules examples
 
 # Create necessary directories
 directories:
@@ -73,6 +77,19 @@ $(MATH_MODULE): $(MODULES_DIR)/math/math_plugin.c $(MOBIUS_LIB) | directories
 	@echo "📦 Building math extension module..."
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
+# Build examples
+examples: $(EMBEDDING_EXAMPLE) $(SIMPLE_EMBEDDING_EXAMPLE)
+
+# Build embedding example
+$(EMBEDDING_EXAMPLE): examples/embedding_example.c $(MOBIUS_LIB) | directories
+	@echo "🔧 Building embedding example..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
+# Build simple embedding example
+$(SIMPLE_EMBEDDING_EXAMPLE): examples/simple_embedding.c $(MOBIUS_LIB) | directories
+	@echo "🔧 Building simple embedding example..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
 # Install (copy to system directories)
 install: $(TARGET) $(MOBIUS_LIB)
 	@echo "📥 Installing Mobius..."
@@ -110,6 +127,11 @@ test: $(TARGET) modules
 test-plugins: $(TARGET) modules
 	@echo "🔌 Testing plugin system..."
 	./$(TARGET) --list-modules
+
+# Test embedding API
+test-embedding: $(SIMPLE_EMBEDDING_EXAMPLE) modules
+	@echo "🔗 Testing embedding API..."
+	./$(SIMPLE_EMBEDDING_EXAMPLE)
 
 # Development build (debug symbols)
 debug: CFLAGS += -DDEBUG -g3 -O0
@@ -152,14 +174,17 @@ help:
 	@echo "  run        - Run the interpreter"
 	@echo "  test       - Run comprehensive tests"
 	@echo "  test-plugins - Test plugin loading"
+	@echo "  test-embedding - Test embedding API"
 	@echo ""
 	@echo "Information:"
 	@echo "  info       - Show build configuration"
 	@echo "  help       - Show this help message"
 
 # Declare phony targets
-.PHONY: all directories modules clean install uninstall run test test-plugins debug release docs info help
+.PHONY: all directories modules examples clean install uninstall run test test-plugins test-embedding debug release docs info help
 
 # Special target dependencies
 $(TARGET): | $(MOBIUS_LIB)
 $(MATH_MODULE): | $(MOBIUS_LIB)
+$(EMBEDDING_EXAMPLE): | $(MOBIUS_LIB)
+$(SIMPLE_EMBEDDING_EXAMPLE): | $(MOBIUS_LIB)
