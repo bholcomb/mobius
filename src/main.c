@@ -1,15 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "token.h"
-#include "scanner.h"
-#include "parser.h"
-#include "ast.h"
-#include "evaluator.h"
-#include "environment.h"
-#include "file_io.h"
-#include "repl.h"
-#include "module_registry.h"
+#include "mobius/mobius.h"
 
 void test_interpreter() {
     printf("Testing Mobius Interpreter\n");
@@ -92,7 +84,7 @@ int main(int argc, char *argv[]) {
     set_global_module_registry(registry);
     
     // Try to load stdlib plugin if available
-    PluginLoadResult stdlib_result = load_module(registry, "./modules/stdlib.so");
+    PluginLoadResult stdlib_result = load_module(registry, "./bin/modules/stdlib.so");
     if (stdlib_result.status == PLUGIN_STATUS_LOADED) {
         printf("✅ Loaded stdlib plugin v%s\n", stdlib_result.plugin->metadata.version);
     } else {

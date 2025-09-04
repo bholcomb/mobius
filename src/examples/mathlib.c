@@ -1,4 +1,4 @@
-#include "../src/plugin.h"
+#include "../mobius/plugin.h"
 #include <math.h>
 
 // Extended math functions for demonstration

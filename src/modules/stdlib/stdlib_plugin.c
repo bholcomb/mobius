@@ -1,5 +1,5 @@
-#include "../src/plugin.h"
-#include "../src/stdlib.h"
+#include "../../mobius/plugin.h"
+#include "../../mobius/stdlib.h"
 #include <stdio.h>
 
 // Plugin initialization function
@@ -67,4 +67,4 @@ static Plugin stdlib_plugin = {
 // Required plugin entry point
 MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
     return &stdlib_plugin;
-}
+} 
