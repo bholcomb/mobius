@@ -315,7 +315,9 @@ EvalResult add_values(Value left, Value right) {
         free(left_str);
         free(right_str);
         
-        return make_success(make_string_value(result));
+        Value final_result = make_string_value_from_cstr(result);
+        free(result);
+        return make_success(final_result);
     }
     
     // Numeric addition
@@ -1382,7 +1384,8 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     strncpy(key_str, expr->key.start, expr->key.length);
     key_str[expr->key.length] = '\0';
     
-    Value key = make_string_value(key_str);
+    Value key = make_string_value_from_cstr(key_str);
+    free(key_str);
     
     // Get the value from the table
     Value result = table_get(table_result.value.as.table, key);

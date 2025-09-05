@@ -47,7 +47,7 @@ size_t hash_value(Value value, size_t capacity) {
             hash = hash_float(value.as.float_val);
             break;
         case VAL_STRING:
-            hash = value.as.string ? hash_string_for_table(value.as.string) : 0;
+            hash = value.as.string ? hash_string_for_table(string_data(value.as.string)) : 0;
             break;
         case VAL_CHAR:
             hash = (size_t)value.as.character;
@@ -81,8 +81,7 @@ bool values_equal_for_table(Value a, Value b) {
         case VAL_FLOAT32: return a.as.float32_val == b.as.float32_val;
         case VAL_FLOAT: return a.as.float_val == b.as.float_val;
         case VAL_STRING:
-            if (!a.as.string || !b.as.string) return a.as.string == b.as.string;
-            return strcmp(a.as.string, b.as.string) == 0;
+            return string_equals(a.as.string, b.as.string);
         case VAL_CHAR: return a.as.character == b.as.character;
         case VAL_FUNCTION: return a.as.function == b.as.function;
         case VAL_TABLE: return a.as.table == b.as.table;
@@ -333,7 +332,7 @@ void print_table(Table* table) {
             // Print key
             if (table->entries[i].key.type == VAL_STRING) {
                 // Check if the string looks like a valid identifier
-                const char* key_str = table->entries[i].key.as.string;
+                const char* key_str = string_data(table->entries[i].key.as.string);
                 bool is_identifier = key_str && key_str[0] && 
                     (isalpha(key_str[0]) || key_str[0] == '_');
                 
@@ -412,7 +411,8 @@ bool has_table_metamethod(Table* table, const char* method_name) {
     }
     strcpy(name_copy, method_name);
     
-    Value method = table_get(table->metatable, make_string_value(name_copy));
+    Value method = table_get(table->metatable, make_string_value_from_cstr(name_copy));
+    free(name_copy);
     return method.type != VAL_NIL;
 }
 
@@ -427,5 +427,7 @@ Value get_table_metamethod(Table* table, const char* method_name) {
     }
     strcpy(name_copy, method_name);
     
-    return table_get(table->metatable, make_string_value(name_copy));
+    Value result = table_get(table->metatable, make_string_value_from_cstr(name_copy));
+    free(name_copy);
+    return result;
 }
