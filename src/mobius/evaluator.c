@@ -62,6 +62,46 @@ const char* error_category_name(ErrorCategory category) {
     }
 }
 
+// Extract a specific line from source code
+const char* extract_source_line(const char* source, int line_number) {
+    if (!source || line_number <= 0) {
+        return NULL;
+    }
+    
+    static char line_buffer[512];  // Static buffer for the extracted line
+    const char* current = source;
+    int current_line = 1;
+    
+    // Find the start of the target line
+    while (current_line < line_number && *current) {
+        if (*current == '\n') {
+            current_line++;
+        }
+        current++;
+    }
+    
+    if (current_line != line_number || !*current) {
+        return NULL;  // Line not found
+    }
+    
+    // Copy the line content, excluding the newline
+    const char* line_start = current;
+    const char* line_end = current;
+    while (*line_end && *line_end != '\n' && *line_end != '\r') {
+        line_end++;
+    }
+    
+    size_t line_length = line_end - line_start;
+    if (line_length >= sizeof(line_buffer)) {
+        line_length = sizeof(line_buffer) - 1;  // Truncate if too long
+    }
+    
+    strncpy(line_buffer, line_start, line_length);
+    line_buffer[line_length] = '\0';
+    
+    return line_buffer;
+}
+
 const char* get_error_suggestion(ErrorCategory category) {
     switch (category) {
         case ERROR_TYPE:
@@ -192,13 +232,12 @@ EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
         snprintf(error_msg, sizeof(error_msg), "Undefined variable '%.*s'", 
                 expr->name.length, expr->name.start);
         
-        EvalResult result = make_error_detailed(
+        EvalResult result = make_error_detailed_with_source(
             error_msg,
             "Make sure the variable is declared before use",
             ERROR_UNDEFINED,
             expr->name.line,
             expr->name.column,
-            NULL,
             NULL
         );
         
@@ -219,7 +258,9 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
     snprintf(name, sizeof(name), "%.*s", expr->name.length, expr->name.start);
     
     if (!assign_variable(env, name, value_result.value)) {
-        return make_error("Undefined variable in assignment", expr->name.line, expr->name.column);
+        return make_error_detailed_with_source("Undefined variable in assignment", 
+                                               "Make sure the variable is declared before use",
+                                               ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL);
     }
     
     return make_success(value_result.value);
@@ -433,7 +474,7 @@ EvalResult multiply_values(Value left, Value right) {
     return make_error("Cannot multiply these types", 0, 0);
 }
 
-EvalResult divide_values(Value left, Value right) {
+EvalResult divide_values(Value left, Value right, int line, int column) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -457,12 +498,11 @@ EvalResult divide_values(Value left, Value right) {
                        (right.type == VAL_INTEGER) ? right.as.integer.value.i32 : 0.0;
     
     if (right_val == 0.0) {
-        return make_error_detailed(
+        return make_error_detailed_with_source(
             "Division by zero",
             "Check that the divisor is not zero before performing division",
             ERROR_DIVISION,
-            0, 0,
-            NULL,
+            line, column,
             NULL
         );
     }
@@ -579,7 +619,7 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
         case TOKEN_STAR:
             return multiply_values(left_result.value, right_result.value);
         case TOKEN_SLASH:
-            return divide_values(left_result.value, right_result.value);
+            return divide_values(left_result.value, right_result.value, expr->operator.line, expr->operator.column);
         case TOKEN_EQUAL_EQUAL:
         case TOKEN_BANG_EQUAL:
         case TOKEN_GREATER:
@@ -600,7 +640,7 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
             }
             return make_success(right_result.value);
         default:
-            return make_error("Unknown binary operator", expr->operator.line, expr->operator.column);
+            return make_error_with_source("Unknown binary operator", expr->operator.line, expr->operator.column);
     }
 }
 
@@ -1082,6 +1122,38 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     
     free_environment(func_env);
     return result;
+}
+
+// Global source code context for error reporting
+static const char* global_source_code = NULL;
+
+void set_source_context(const char* source) {
+    global_source_code = source;
+}
+
+const char* get_source_context(void) {
+    return global_source_code;
+}
+
+// Enhanced error creation with source line extraction
+EvalResult make_error_with_source(const char* message, int line, int column) {
+    const char* source_line = NULL;
+    if (global_source_code && line > 0) {
+        source_line = extract_source_line(global_source_code, line);
+    }
+    
+    return make_error_detailed(message, NULL, ERROR_RUNTIME, line, column, NULL, source_line);
+}
+
+EvalResult make_error_detailed_with_source(const char* message, const char* suggestion, 
+                                          ErrorCategory category, int line, int column,
+                                          const char* function_name) {
+    const char* source_line = NULL;
+    if (global_source_code && line > 0) {
+        source_line = extract_source_line(global_source_code, line);
+    }
+    
+    return make_error_detailed(message, suggestion, category, line, column, function_name, source_line);
 }
 
 // Evaluate a program (array of statements)

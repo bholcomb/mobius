@@ -119,6 +119,9 @@ int execute_script_string(const char* source, const char* filename) {
         return 1;
     }
     
+    // Set source context for better error reporting
+    set_source_context(source);
+    
     // Execute the program
     EvalResult eval_result = evaluate_program(parse_result.statements, 
                                             parse_result.count, global_env);
@@ -130,6 +133,7 @@ int execute_script_string(const char* source, const char* filename) {
     }
     
     // Cleanup
+    set_source_context(NULL);  // Clear source context
     free_parse_result(&parse_result);
     free_token_array(&tokens);
     cleanup_global_environment();
