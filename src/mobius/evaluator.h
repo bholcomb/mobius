@@ -121,7 +121,7 @@ EvalResult logical_not(Value value);
 void print_runtime_error(RuntimeError error);
 void print_runtime_error_with_context(RuntimeError error, const char* filename);
 const char* error_category_name(ErrorCategory category);
-const char* get_error_suggestion(ErrorCategory category, const char* context);
+const char* get_error_suggestion(ErrorCategory category);
 
 // User-defined function support
 EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env);
