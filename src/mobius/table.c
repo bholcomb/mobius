@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <ctype.h>
 
 // Hash functions for different value types
 size_t hash_string_for_table(const char* str) {
@@ -324,7 +325,26 @@ void print_table(Table* table) {
             
             // Print key
             if (table->entries[i].key.type == VAL_STRING) {
-                printf("%s", table->entries[i].key.as.string);
+                // Check if the string looks like a valid identifier
+                const char* key_str = table->entries[i].key.as.string;
+                bool is_identifier = key_str && key_str[0] && 
+                    (isalpha(key_str[0]) || key_str[0] == '_');
+                
+                if (is_identifier) {
+                    // Check if all characters are valid identifier characters
+                    for (const char* c = key_str + 1; *c; c++) {
+                        if (!isalnum(*c) && *c != '_') {
+                            is_identifier = false;
+                            break;
+                        }
+                    }
+                }
+                
+                if (is_identifier) {
+                    printf("%s", key_str);  // Print as identifier
+                } else {
+                    printf("[%s]", key_str);  // Print as string key
+                }
             } else {
                 printf("[");
                 print_value(table->entries[i].key);
