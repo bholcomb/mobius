@@ -6,7 +6,6 @@
 
 // Forward declarations
 typedef struct LoadedModule LoadedModule;
-typedef struct ModuleRegistry ModuleRegistry;
 
 // Loaded module representation
 struct LoadedModule {

@@ -52,7 +52,7 @@ int custom_add(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusV
  * Custom function: get system information
  * Demonstrates string return values
  */
-int custom_system_info(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
+int custom_system_info(MobiusState* state, MobiusValue** args __attribute__((unused)), size_t arg_count, MobiusValue** result) {
     MOBIUS_CHECK_ARG_COUNT(0);
     
     // Get system information (simplified example)

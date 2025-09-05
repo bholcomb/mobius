@@ -160,7 +160,6 @@ void table_resize(Table* table, size_t new_capacity) {
     }
     
     table->capacity = new_capacity;
-    size_t old_size = table->size;
     table->size = 0;
     
     // Rehash all existing entries

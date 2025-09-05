@@ -75,15 +75,15 @@ typedef struct {
     } as;
 } Value;
 
-// Function representation for runtime
-typedef struct MobiusFunction {
+// Function representation for runtime  
+struct MobiusFunction {
     Token name;
     Token* params;
     size_t param_count;
     Stmt** body;
     size_t body_count;
     struct Environment* closure;  // Lexical scope
-} MobiusFunction;
+};
 
 // Table entry for hash table
 struct TableEntry {
