@@ -52,10 +52,10 @@ Value make_float_value(double val) {
     return value;
 }
 
-Value make_string_value(char* string) {
+Value make_string_value(RefCountedString* string) {
     Value value = {0};
     value.type = VAL_STRING;
-    value.as.string = string;  // Takes ownership of the string
+    value.as.string = string;  // Takes ownership of the ref-counted string
     return value;
 }
 
@@ -110,7 +110,7 @@ bool is_truthy(Value value) {
         }
         case VAL_FLOAT32: return value.as.float32_val != 0.0f;
         case VAL_FLOAT: return value.as.float_val != 0.0;
-        case VAL_STRING: return value.as.string != NULL && strlen(value.as.string) > 0;
+        case VAL_STRING: return value.as.string != NULL && string_length(value.as.string) > 0;
         case VAL_CHAR: return value.as.character != '\0';
         case VAL_FUNCTION: return value.as.function != NULL;
         case VAL_TABLE: return value.as.table != NULL;
@@ -142,8 +142,7 @@ bool values_equal(Value a, Value b) {
         case VAL_FLOAT32: return a.as.float32_val == b.as.float32_val;
         case VAL_FLOAT: return a.as.float_val == b.as.float_val;
         case VAL_STRING: 
-            return (a.as.string == b.as.string) || 
-                   (a.as.string && b.as.string && strcmp(a.as.string, b.as.string) == 0);
+            return (a.as.string == b.as.string) || string_equals(a.as.string, b.as.string);
         case VAL_CHAR: return a.as.character == b.as.character;
         case VAL_FUNCTION: return a.as.function == b.as.function;
         case VAL_TABLE: return a.as.table == b.as.table; // Reference equality
@@ -183,7 +182,7 @@ void print_value(Value value) {
             printf("%g", value.as.float_val);
             break;
         case VAL_STRING:
-            printf("%s", value.as.string ? value.as.string : "(null)");
+            printf("%s", value.as.string ? string_data(value.as.string) : "(null)");
             break;
         case VAL_CHAR:
             printf("'%c'", value.as.character);
@@ -257,8 +256,10 @@ char* value_to_string(Value value) {
             break;
         case VAL_STRING:
             if (value.as.string) {
-                result = malloc(strlen(value.as.string) + 1);
-                if (result) strcpy(result, value.as.string);
+                const char* str_data = string_data(value.as.string);
+                size_t str_len = string_length(value.as.string);
+                result = malloc(str_len + 1);
+                if (result) strcpy(result, str_data);
             } else {
                 result = malloc(7);
                 if (result) strcpy(result, "(null)");
@@ -317,18 +318,12 @@ const char* value_type_name(ValueType type) {
     }
 }
 
-// Create a deep copy of a value (handles string duplication)
+// Create a copy of a value (uses reference counting for strings)
 Value copy_value(Value value) {
     if (value.type == VAL_STRING && value.as.string) {
-        // Create a deep copy of the string
-        char* str_copy = malloc(strlen(value.as.string) + 1);
-        if (str_copy) {
-            strcpy(str_copy, value.as.string);
-            return make_string_value(str_copy);
-        } else {
-            // Allocation failed, return nil
-            return make_nil_value();
-        }
+        // Use reference counting - just increment ref count!
+        RefCountedString* retained_str = string_retain(value.as.string);
+        return make_string_value(retained_str);
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         // For functions, we don't copy the function structure itself
         // as they should be shared. Just return the same value.
@@ -349,9 +344,8 @@ Value copy_value(Value value) {
 
 void free_value(Value value) {
     if (value.type == VAL_STRING && value.as.string) {
-        free(value.as.string);
-        // Note: We can't set value.as.string to NULL here since value is passed by copy
-        // The caller should manage this to prevent double free
+        // Use reference counting - release the string
+        string_release(value.as.string);
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         MobiusFunction* func = value.as.function;
         
@@ -391,4 +385,82 @@ void free_value(Value value) {
         // 
         // This prevents double-free issues when userdata values are copied
     }
+}
+
+// ============================================================================
+// STRING REFERENCE COUNTING IMPLEMENTATION
+// ============================================================================
+
+RefCountedString* string_create(const char* data) {
+    if (!data) return NULL;
+    
+    RefCountedString* str = malloc(sizeof(RefCountedString));
+    if (!str) return NULL;
+    
+    str->length = strlen(data);
+    str->data = malloc(str->length + 1);
+    if (!str->data) {
+        free(str);
+        return NULL;
+    }
+    
+    strcpy(str->data, data);
+    str->ref_count = 1;
+    str->is_literal = false;
+    
+    return str;
+}
+
+RefCountedString* string_create_literal(const char* data) {
+    if (!data) return NULL;
+    
+    RefCountedString* str = malloc(sizeof(RefCountedString));
+    if (!str) return NULL;
+    
+    str->data = (char*)data;  // Point to literal, don't copy
+    str->length = strlen(data);
+    str->ref_count = 1;
+    str->is_literal = true;   // Never free the data
+    
+    return str;
+}
+
+RefCountedString* string_retain(RefCountedString* str) {
+    if (str) {
+        str->ref_count++;
+    }
+    return str;
+}
+
+void string_release(RefCountedString* str) {
+    if (!str) return;
+    
+    str->ref_count--;
+    if (str->ref_count <= 0) {
+        if (!str->is_literal) {
+            free(str->data);  // Only free non-literals
+        }
+        free(str);
+    }
+}
+
+size_t string_length(RefCountedString* str) {
+    return str ? str->length : 0;
+}
+
+const char* string_data(RefCountedString* str) {
+    return str ? str->data : NULL;
+}
+
+bool string_equals(RefCountedString* a, RefCountedString* b) {
+    if (a == b) return true;  // Same pointer
+    if (!a || !b) return false;  // One is NULL
+    if (a->length != b->length) return false;  // Different lengths
+    return strcmp(a->data, b->data) == 0;  // Compare content
+}
+
+// Helper function to create Value from C string
+Value make_string_value_from_cstr(const char* cstr) {
+    RefCountedString* str = string_create(cstr);
+    return make_string_value(str);
 }

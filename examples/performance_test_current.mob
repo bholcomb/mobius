@@ -1,0 +1,26 @@
+// Performance test - current deep copying approach
+print("=== Current Deep Copy Performance Test ===");
+
+func process_text(text) {
+    // Current: text parameter is deep-copied on function entry
+    var result = concat("Processed: ", text);
+    return result;  // This gets deep-copied on return too!
+}
+
+var large_text = "This is a reasonably long string that will be copied multiple times during function calls and assignments, demonstrating the performance overhead of deep copying approach";
+
+print("Testing 1000 function calls with string copying...");
+var start_time = clock();
+
+var i = 0;
+while (i < 1000) {
+    var result = process_text(large_text);  // 2 string copies per call!
+    i = i + 1;
+}
+
+var end_time = clock();
+var duration = end_time - start_time;
+
+print("Time for 1000 calls:", duration, "seconds");
+print("Estimated copies made:", 2000);  // 2 per call
+print("Performance: Deep copying strings is expensive!");

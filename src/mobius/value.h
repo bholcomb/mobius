@@ -5,10 +5,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Reference counting for strings is always enabled
+
 // Forward declarations (MobiusFunction, Table, etc. will be defined elsewhere)
 typedef struct MobiusFunction MobiusFunction;
 typedef struct Table Table;
 typedef struct TableEntry TableEntry;
+
+// Reference counted string structure
+typedef struct RefCountedString {
+    char* data;           // Actual string data (null-terminated)
+    size_t length;        // Cached string length for O(1) operations
+    int ref_count;        // Reference count
+    bool is_literal;      // True for string literals (never freed)
+} RefCountedString;
 
 // Value types for literals
 typedef enum {
@@ -64,7 +74,7 @@ typedef struct {
         } integer;
         float float32_val;
         double float_val;
-        char* string;
+        RefCountedString* string;
         char character;
         MobiusFunction* function;
         Table* table;
@@ -83,7 +93,7 @@ Value make_bool_value(bool value);
 Value make_integer_value(NumericType type, int64_t value);
 Value make_float32_value(float value);
 Value make_float_value(double value);
-Value make_string_value(char* string);
+Value make_string_value(RefCountedString* string);
 Value make_char_value(char value);
 Value make_function_value(MobiusFunction* function);
 Value make_table_value(Table* table);
@@ -99,6 +109,18 @@ const char* value_type_name(ValueType type);
 // Memory management
 Value copy_value(Value value);
 void free_value(Value value);
+
+// String reference counting functions
+RefCountedString* string_create(const char* data);
+RefCountedString* string_create_literal(const char* data);
+RefCountedString* string_retain(RefCountedString* str);
+void string_release(RefCountedString* str);
+size_t string_length(RefCountedString* str);
+const char* string_data(RefCountedString* str);
+bool string_equals(RefCountedString* a, RefCountedString* b);
+
+// Helper function to create Value from C string
+Value make_string_value_from_cstr(const char* cstr);
 
 #endif // MOBIUS_VALUE_H
 
