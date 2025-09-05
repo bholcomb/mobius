@@ -51,6 +51,17 @@ static const Keyword keywords[] = {
     {"while",    TOKEN_WHILE},
     {"with",     TOKEN_WITH},
     {"yield",    TOKEN_YIELD},
+    
+    // Type keywords
+    {"int8",     TOKEN_TYPE_INT8},
+    {"int16",    TOKEN_TYPE_INT16},
+    {"int32",    TOKEN_TYPE_INT32},
+    {"int64",    TOKEN_TYPE_INT64},
+    {"uint8",    TOKEN_TYPE_UINT8},
+    {"uint16",   TOKEN_TYPE_UINT16},
+    {"uint32",   TOKEN_TYPE_UINT32},
+    {"uint64",   TOKEN_TYPE_UINT64},
+    {"float",    TOKEN_TYPE_FLOAT},
 };
 
 static const size_t keyword_count = sizeof(keywords) / sizeof(keywords[0]);

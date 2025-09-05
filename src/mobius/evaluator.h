@@ -3,10 +3,14 @@
 
 #include "ast.h"
 #include "environment.h"
+#include "types.h"
 #include <stdbool.h>
 
 // Forward declaration for plugin system
 typedef struct ModuleRegistry ModuleRegistry;
+
+// Global type checking configuration (TypeCheckConfig defined in types.h)
+extern TypeCheckConfig global_type_config;
 
 // Error categories for better reporting
 typedef enum {

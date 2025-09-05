@@ -2,6 +2,7 @@
 #define MOBIUS_AST_H
 
 #include "token.h"
+#include "value.h"
 #include <stddef.h>
 
 // Forward declarations
@@ -36,54 +37,7 @@ typedef enum {
     STMT_RETURN
 } StmtType;
 
-// Value types for literals
-typedef enum {
-    VAL_NIL,
-    VAL_BOOL,
-    VAL_INTEGER,
-    VAL_FLOAT,
-    VAL_STRING,
-    VAL_CHAR,
-    VAL_FUNCTION,
-    VAL_TABLE,
-    VAL_USERDATA
-} ValueType;
-
-// Forward declarations
-typedef struct MobiusFunction MobiusFunction;
-typedef struct Table Table;
-typedef struct TableEntry TableEntry;
-
-// Forward declaration for userdata destructor
-typedef void (*UserdataDestructor)(void* ptr);
-
-// Runtime value representation
-typedef struct {
-    ValueType type;
-    union {
-        bool boolean;
-        struct {
-            NumericType num_type;
-            union {
-                int8_t   i8;    uint8_t  u8;
-                int16_t  i16;   uint16_t u16;
-                int32_t  i32;   uint32_t u32;
-                int64_t  i64;   uint64_t u64;
-            } value;
-        } integer;
-        double float_val;
-        char* string;
-        char character;
-        MobiusFunction* function;
-        Table* table;
-        struct {
-            void* ptr;                        // Opaque pointer to user data
-            UserdataDestructor destructor;    // Cleanup function (can be NULL)
-            const char* type_name;            // Type identifier for runtime checks
-            size_t size;                      // Size of the data (for debugging/GC)
-        } userdata;
-    } as;
-} Value;
+// Forward declarations for AST structures (core types in value.h)
 
 // Function representation for runtime  
 struct MobiusFunction {
@@ -199,6 +153,7 @@ typedef struct {
 typedef struct {
     Token name;
     Expr* initializer;  // Can be NULL for uninitialized variables
+    TypeInfo type_hint; // Optional type annotation
 } VarStmt;
 
 typedef struct {
@@ -275,7 +230,7 @@ Expr* make_table_dot_expr(Expr* table, Token key);
 
 Stmt* make_expression_stmt(Expr* expression);
 Stmt* make_print_stmt(Expr* expression);
-Stmt* make_var_stmt(Token name, Expr* initializer);
+Stmt* make_var_stmt(Token name, Expr* initializer, TypeInfo type_hint);
 Stmt* make_block_stmt(Stmt** statements, size_t count);
 Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch);
 Stmt* make_while_stmt(Expr* condition, Stmt* body);
@@ -286,29 +241,9 @@ Stmt* make_class_stmt(Token name, VariableExpr* superclass,
                      FunctionStmt** methods, size_t method_count);
 Stmt* make_return_stmt(Token keyword, Expr* value);
 
-// Value creation functions
-Value make_nil_value();
-Value make_bool_value(bool value);
-Value make_integer_value(NumericType type, int64_t value);
-Value make_float_value(double value);
-Value make_string_value(char* string);
-Value make_char_value(char value);
-Value make_function_value(MobiusFunction* function);
-Value make_table_value(Table* table);
-Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
-
-// Value utility functions
-bool is_truthy(Value value);
-bool values_equal(Value a, Value b);
-void print_value(Value value);
-char* value_to_string(Value value);
-const char* value_type_name(ValueType type);
-Value copy_value(Value value);
-
 // Memory management
 void free_expr(Expr* expr);
 void free_stmt(Stmt* stmt);
-void free_value(Value value);
 
 // AST printing for debugging
 void print_expr(Expr* expr);

@@ -1,0 +1,6 @@
+// Test type checking errors
+print("=== Type Error Tests ===");
+
+// This should cause a range error - 300 is too big for uint8 (max 255)
+var overflow: uint8 = 300;
+print("This shouldn't print");
