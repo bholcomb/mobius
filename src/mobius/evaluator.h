@@ -66,6 +66,9 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env);
 EvalResult eval_call_expr(CallExpr* expr, Environment* env);
 EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, ModuleRegistry* registry);
 EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env);
+EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env);
+EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env);
+EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env);
 
 // Statement evaluation
 EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env);

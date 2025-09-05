@@ -66,6 +66,7 @@ Expr* parse_factor(Parser* parser);
 Expr* parse_unary(Parser* parser);
 Expr* parse_call(Parser* parser);
 Expr* parse_primary(Parser* parser);
+Expr* parse_table_literal(Parser* parser);
 
 // Helper functions
 Expr* finish_call(Parser* parser, Expr* callee);

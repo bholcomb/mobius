@@ -2,6 +2,7 @@
 #include "stdlib.h"
 #include "module_registry.h"
 #include "token.h"
+#include "table.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -533,6 +534,12 @@ EvalResult evaluate_expr(Expr* expr, Environment* env) {
             return eval_grouping_expr(&expr->as.grouping, env);
         case EXPR_CALL:
             return eval_call_expr(&expr->as.call, env);
+        case EXPR_TABLE_LITERAL:
+            return eval_table_literal_expr(&expr->as.table_literal, env);
+        case EXPR_TABLE_INDEX:
+            return eval_table_index_expr(&expr->as.table_index, env);
+        case EXPR_TABLE_DOT:
+            return eval_table_dot_expr(&expr->as.table_dot, env);
         default:
             return make_error("Unknown expression type", 0, 0);
     }
@@ -978,4 +985,114 @@ EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
     }
     
     return result;
+}
+
+// Table evaluation functions
+EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
+    Table* table = create_table(INITIAL_TABLE_CAPACITY);
+    if (!table) {
+        return make_error("Failed to create table", 0, 0);
+    }
+    
+    // Evaluate each key-value pair
+    for (size_t i = 0; i < expr->pair_count; i++) {
+        TablePair* pair = &expr->pairs[i];
+        
+        Value key;
+        Value value;
+        
+        // Evaluate the value
+        EvalResult value_result = evaluate_expr(pair->value, env);
+        if (is_error(value_result)) {
+            free_table(table);
+            return value_result;
+        }
+        value = value_result.value;
+        
+        // Evaluate the key (if provided, otherwise use index)
+        if (pair->key) {
+            EvalResult key_result = evaluate_expr(pair->key, env);
+            if (is_error(key_result)) {
+                free_table(table);
+                free_value(value);
+                return key_result;
+            }
+            key = key_result.value;
+        } else {
+            // Use index as key for array-style initialization
+            key = make_integer_value(NUM_INT64, (int64_t)(i + 1));
+        }
+        
+        // Set the key-value pair in the table
+        if (!table_set(table, key, value)) {
+            free_table(table);
+            free_value(key);
+            free_value(value);
+            return make_error("Failed to set table entry", 0, 0);
+        }
+    }
+    
+    return make_success(make_table_value(table));
+}
+
+EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
+    // Evaluate the table expression
+    EvalResult table_result = evaluate_expr(expr->table, env);
+    if (is_error(table_result)) {
+        return table_result;
+    }
+    
+    if (table_result.value.type != VAL_TABLE) {
+        free_value(table_result.value);
+        return make_error("Cannot index non-table value", 0, 0);
+    }
+    
+    // Evaluate the index expression
+    EvalResult index_result = evaluate_expr(expr->index, env);
+    if (is_error(index_result)) {
+        free_value(table_result.value);
+        return index_result;
+    }
+    
+    // Get the value from the table
+    Value result = table_get(table_result.value.as.table, index_result.value);
+    
+    // Clean up
+    free_value(index_result.value);
+    // Don't free table_result.value here - the table is still referenced
+    
+    return make_success(result);
+}
+
+EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
+    // Evaluate the table expression
+    EvalResult table_result = evaluate_expr(expr->table, env);
+    if (is_error(table_result)) {
+        return table_result;
+    }
+    
+    if (table_result.value.type != VAL_TABLE) {
+        free_value(table_result.value);
+        return make_error("Cannot access property of non-table value", 0, 0);
+    }
+    
+    // Create a string key from the identifier token
+    char* key_str = malloc(expr->key.length + 1);
+    if (!key_str) {
+        free_value(table_result.value);
+        return make_error("Memory allocation failed", 0, 0);
+    }
+    strncpy(key_str, expr->key.start, expr->key.length);
+    key_str[expr->key.length] = '\0';
+    
+    Value key = make_string_value(key_str);
+    
+    // Get the value from the table
+    Value result = table_get(table_result.value.as.table, key);
+    
+    // Clean up
+    free_value(key);
+    // Don't free table_result.value here - the table is still referenced
+    
+    return make_success(result);
 }
