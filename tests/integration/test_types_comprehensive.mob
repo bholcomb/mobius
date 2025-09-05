@@ -21,12 +21,12 @@ print("int64 max:", i64);
 print("uint64 max:", u64);
 
 print("\n2. Float Type");
-var f: float = 3.14159265359;
+var f: float64 = 3.14159265359;
 print("float:", f);
 
 print("\n3. Type Conversions (Lenient Mode)");
 var conv1: int32 = 42.7;     // float to int
-var conv2: float = 42;       // int to float
+var conv2: float64 = 42;       // int to float
 var conv3: uint8 = 100;      // int to uint8
 
 print("42.7 -> int32:", conv1);
@@ -44,7 +44,7 @@ var warned: int16 = 123.456;  // Should show warning
 print("With warning:", warned);
 
 print("\n6. Mixed Expressions");
-var mixed: float = i32 + f;   // int32 + float should work
+var mixed: float64 = i32 + f;   // int32 + float should work
 print("Mixed arithmetic result:", mixed);
 
 print("\n7. No Type Annotation (Dynamic)");

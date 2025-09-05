@@ -1,4 +1,7 @@
 // Hello World program in Mobius
+// REQUIRE: Hello, World!
+// REQUIRE: Welcome to the Mobius scripting language!
+// REQUIRE: Mobius script execution complete!
 print("Hello, World!");
 print("Welcome to the Mobius scripting language!");
 

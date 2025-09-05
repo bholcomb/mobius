@@ -1,7 +1,7 @@
 // Test type checking and conversion
 print("=== Basic Type Annotations ===");
 var x: int32 = 42;
-var y: float = 3.14;
+var y: float64 = 3.14;
 var z: uint8 = 255;
 
 print("x (int32):", x);
@@ -10,7 +10,7 @@ print("z (uint8):", z);
 
 print("\n=== Type Conversion Tests ===");
 var a: int32 = 3.8;  // Should convert float to int32
-var b: float = 100;  // Should convert int to float
+var b: float64 = 100;  // Should convert int to float
 var c: uint16 = 1000; // Should work within range
 
 print("a (float->int32):", a);
@@ -18,7 +18,7 @@ print("b (int->float):", b);
 print("c (uint16):", c);
 
 print("\n=== Mixed arithmetic ===");
-var result: float = x + y;
+var result: float64 = x + y;
 print("x + y =", result);
 
 print("\n=== Testing different integer sizes ===");

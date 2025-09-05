@@ -142,12 +142,26 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
-# Test the interpreter with plugins
+# Run comprehensive test suite
 test: $(TARGET) modules
-	@echo "🧪 Testing Mobius interpreter..."
+	@echo "🧪 Running Mobius test suite..."
+	./run_tests.sh
+
+# Test specific category
+test-category: $(TARGET) modules
+	@echo "🧪 Running category-specific tests..."
+	@if [ -z "$(CATEGORY)" ]; then \
+		echo "Usage: make test-category CATEGORY=<basic|types|tables|errors|integration>"; \
+		exit 1; \
+	fi
+	./run_tests.sh --category $(CATEGORY)
+
+# Legacy test (single plugin test)
+test-legacy: $(TARGET) modules
+	@echo "🧪 Testing Mobius interpreter (legacy)..."
 	./$(TARGET) --list-modules
 	@echo ""
-	./$(TARGET) $(DATA_DIR)/test_plugins.mob
+	./$(TARGET) tests/integration/test_plugins.mob
 
 # Test plugin loading
 test-plugins: $(TARGET) modules

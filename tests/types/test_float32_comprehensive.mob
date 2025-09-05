@@ -4,7 +4,7 @@ print("=== Comprehensive Float32 Test Suite ===");
 print("\n1. Type Declarations");
 var f32_a: float32 = 3.14159;
 var f32_b: float32 = 2.71828;
-var f64_c: float = 1.41421;
+var f64_c: float64 = 1.41421;
 var int_d = 42;
 
 print("float32 a:", f32_a);
@@ -15,7 +15,7 @@ print("integer d:", int_d);
 print("\n2. Type Conversions");
 var f32_from_int: float32 = int_d;
 var f32_from_f64: float32 = f64_c;
-var f64_from_f32: float = f32_a;
+var f64_from_f32: float64 = f32_a;
 
 print("int -> float32:", f32_from_int);
 print("float64 -> float32:", f32_from_f64);
@@ -23,7 +23,7 @@ print("float32 -> float64:", f64_from_f32);
 
 print("\n3. Arithmetic Operations");
 var f32_add: float32 = f32_a + f32_b;     // float32 + float32 = float32
-var mixed_add: float = f32_a + f64_c;     // float32 + float64 = float64
+var mixed_add: float64 = f32_a + f64_c;     // float32 + float64 = float64
 var int_f32_add: float32 = f32_a + 1;     // float32 + int = float32
 
 print("f32 + f32 (result: float32):", f32_add);
@@ -37,14 +37,14 @@ print("typeof(f32 + int):", typeof(f32_a + int_d));
 
 print("\n5. Precision Demonstration");
 var precise_f32: float32 = 1.123456789012345;
-var precise_f64: float = 1.123456789012345;
+var precise_f64: float64 = 1.123456789012345;
 
 print("High precision in float32:", precise_f32);
 print("High precision in float64:", precise_f64);
 
 print("\n6. Range and Limits");
 var large_f32: float32 = 3.4e38;         // Near float32 max
-var large_f64: float = 1.7e308;          // Near float64 max
+var large_f64: float64 = 1.7e308;          // Near float64 max
 
 print("Large float32:", large_f32);
 print("Large float64:", large_f64);
