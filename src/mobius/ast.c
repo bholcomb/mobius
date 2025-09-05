@@ -374,6 +374,13 @@ void print_value(Value value) {
                 printf("<func (null)>");
             }
             break;
+        case VAL_TABLE:
+            if (value.as.table) {
+                print_table(value.as.table);
+            } else {
+                printf("<table (null)>");
+            }
+            break;
         default:
             printf("unknown_value");
             break;

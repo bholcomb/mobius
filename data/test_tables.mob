@@ -1,0 +1,39 @@
+// Test basic table functionality
+
+// Empty table
+var empty_table = {};
+print("Empty table:");
+print(typeof(empty_table));
+
+// Table with string keys
+var person = {
+    name: "Alice",
+    age: 30,
+    city: "New York"
+};
+
+print("Person table:");
+print(person);
+print("Name:", person.name);
+print("Age:", person["age"]);
+
+// Table with mixed keys
+var mixed = {
+    [1]: "first",
+    ["hello"]: "world",
+    [2 + 3]: "five"
+};
+
+print("Mixed table:");
+print(mixed);
+print("Key 1:", mixed[1]);
+print("Key 'hello':", mixed["hello"]);
+print("Key 5:", mixed[5]);
+
+// Array-style table (values only)
+var array_style = {"apple", "banana", "cherry"};
+print("Array-style table:");
+print(array_style);
+print("First item:", array_style[1]);
+print("Second item:", array_style[2]);
+print("Third item:", array_style[3]);

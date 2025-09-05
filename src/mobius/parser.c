@@ -198,6 +198,10 @@ Expr* parse_primary(Parser* parser) {
         return make_variable_expr(parser_previous(parser));
     }
     
+    if (parser_match(parser, TOKEN_LEFT_BRACE)) {
+        return parse_table_literal(parser);
+    }
+    
     if (parser_match(parser, TOKEN_LEFT_PAREN)) {
         Expr* expr = parse_expression(parser);
         consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
@@ -211,6 +215,80 @@ Expr* parse_primary(Parser* parser) {
     
     parser_error_at_current(parser, "Expect expression.");
     return NULL;
+}
+
+Expr* parse_table_literal(Parser* parser) {
+    TablePair* pairs = NULL;
+    size_t pair_count = 0;
+    size_t pair_capacity = 0;
+    
+    // Handle empty table
+    if (parser_check(parser, TOKEN_RIGHT_BRACE)) {
+        parser_advance(parser);
+        return make_table_literal_expr(pairs, pair_count);
+    }
+    
+    do {
+        // Ensure capacity
+        if (pair_count >= pair_capacity) {
+            pair_capacity = pair_capacity == 0 ? 4 : pair_capacity * 2;
+            TablePair* new_pairs = realloc(pairs, pair_capacity * sizeof(TablePair));
+            if (!new_pairs) {
+                free(pairs);
+                parser_error_at_current(parser, "Memory allocation failed");
+                return NULL;
+            }
+            pairs = new_pairs;
+        }
+        
+        TablePair* current_pair = &pairs[pair_count];
+        current_pair->key = NULL;
+        current_pair->value = NULL;
+        current_pair->is_computed_key = false;
+        
+        // Check for computed key [expression] = value
+        if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
+            current_pair->key = parse_expression(parser);
+            current_pair->is_computed_key = true;
+            consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after computed key");
+            consume(parser, TOKEN_EQUAL, "Expect '=' after computed key");
+            current_pair->value = parse_expression(parser);
+        }
+        // Check for identifier key: value
+        else if (parser_check(parser, TOKEN_IDENTIFIER)) {
+            Token key_token = parser_advance(parser);
+            if (parser_match(parser, TOKEN_COLON)) {
+                // Create a string literal from the identifier
+                char* key_str = malloc(key_token.length + 1);
+                if (key_str) {
+                    strncpy(key_str, key_token.start, key_token.length);
+                    key_str[key_token.length] = '\0';
+                    current_pair->key = make_literal_expr(make_string_value(key_str));
+                    current_pair->is_computed_key = false;
+                    current_pair->value = parse_expression(parser);
+                } else {
+                    parser_error_at_current(parser, "Memory allocation failed");
+                    free(pairs);
+                    return NULL;
+                }
+            } else {
+                // No colon means this is just a value
+                parser->current--; // Back up
+                current_pair->value = parse_expression(parser);
+            }
+        }
+        // Otherwise it's just a value
+        else {
+            current_pair->value = parse_expression(parser);
+        }
+        
+        pair_count++;
+        
+    } while (parser_match(parser, TOKEN_COMMA));
+    
+    consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after table literal");
+    
+    return make_table_literal_expr(pairs, pair_count);
 }
 
 Expr* finish_call(Parser* parser, Expr* callee) {
@@ -244,6 +322,13 @@ Expr* parse_call(Parser* parser) {
     while (true) {
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {
             expr = finish_call(parser, expr);
+        } else if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
+            Expr* index = parse_expression(parser);
+            consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after table index");
+            expr = make_table_index_expr(expr, index);
+        } else if (parser_match(parser, TOKEN_DOT)) {
+            Token key = consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'");
+            expr = make_table_dot_expr(expr, key);
         } else {
             break;
         }
