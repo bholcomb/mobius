@@ -172,7 +172,7 @@ void print_runtime_error_with_context(RuntimeError error, const char* filename) 
 // Expression evaluation
 EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env) {
     (void)env;  // Unused parameter
-    return make_success(expr->value);
+    return make_success(copy_value(expr->value));
 }
 
 EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {

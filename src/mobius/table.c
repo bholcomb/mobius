@@ -185,7 +185,7 @@ Value table_get(Table* table, Value key) {
     
     TableEntry* entry = find_table_entry(table->entries, table->capacity, key);
     if (entry->is_occupied) {
-        return entry->value;
+        return copy_value(entry->value);
     }
     
     // Check metatable for __index
