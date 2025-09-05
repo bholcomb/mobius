@@ -229,6 +229,16 @@ Expr* parse_table_literal(Parser* parser) {
     }
     
     do {
+        // Skip any newlines before processing the next element
+        while (parser_match(parser, TOKEN_NEWLINE)) {
+            // Continue skipping newlines
+        }
+        
+        // Check if we've reached the end of the table after skipping newlines
+        if (parser_check(parser, TOKEN_RIGHT_BRACE)) {
+            break;
+        }
+        
         // Ensure capacity
         if (pair_count >= pair_capacity) {
             pair_capacity = pair_capacity == 0 ? 4 : pair_capacity * 2;
@@ -284,7 +294,17 @@ Expr* parse_table_literal(Parser* parser) {
         
         pair_count++;
         
+        // Skip any newlines after processing an element
+        while (parser_match(parser, TOKEN_NEWLINE)) {
+            // Continue skipping newlines
+        }
+        
     } while (parser_match(parser, TOKEN_COMMA));
+    
+    // Skip any trailing newlines before the closing brace
+    while (parser_match(parser, TOKEN_NEWLINE)) {
+        // Continue skipping newlines
+    }
     
     consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after table literal");
     
