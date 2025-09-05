@@ -4,8 +4,11 @@ print("=== Object-Oriented Programming with Metatables ===");
 // Example 1: Simple class-like behavior with __index
 print("\n1. Simple Class-like Behavior");
 
-// Create a "class" table with methods  
-var Person = {name: "Unknown", age: 0};
+// Create a "class" table with methods
+var Person = {
+    name: "Unknown",
+    age: 0
+};
 
 // Create a metatable that redirects to Person for missing methods/properties
 var PersonMeta = {["__index"] = Person};
@@ -42,7 +45,10 @@ print("Bob species:", bob.species);     // Should get "Human" from Person via __
 print("\n3. Object with State");
 
 // Create an object that simulates having methods
-var counter = {value: 0, step: 1};
+var counter = {
+    value: 0,
+    step: 1
+};
 
 print("Counter object:", counter);
 print("Counter value:", counter.value);
@@ -59,8 +65,15 @@ print("After another increment:", counter);
 print("\n4. Multiple Inheritance Simulation");
 
 // Base "classes"
-var Animal = {species: "Unknown", legs: 0};
-var Mammal = {warm_blooded: true, fur: false};
+var Animal = {
+    species: "Unknown",
+    legs: 0
+};
+
+var Mammal = {
+    warm_blooded: true,
+    fur: false
+};
 
 // Create a metatable that first looks in Mammal, then in Animal
 var MammalMeta = {["__index"] = Mammal};

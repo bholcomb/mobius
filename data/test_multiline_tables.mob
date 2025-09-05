@@ -1,0 +1,69 @@
+// Test multi-line table literals
+print("=== Testing Multi-line Table Literals ===");
+
+// Test 1: Simple multi-line table with identifier keys
+print("Test 1: Multi-line table with identifier keys");
+var person = {
+    name: "Alice",
+    age: 30,
+    city: "New York"
+};
+print("Person:", person);
+
+// Test 2: Multi-line table with computed keys
+print("Test 2: Multi-line table with computed keys");
+var config = {
+    ["debug_mode"] = true,
+    ["max_connections"] = 100,
+    ["timeout"] = 30
+};
+print("Config:", config);
+
+// Test 3: Mixed syntax multi-line table
+print("Test 3: Mixed syntax multi-line table");
+var mixed = {
+    normal_key: "value1",
+    ["computed_key"] = "value2",
+    another_key: 42
+};
+print("Mixed:", mixed);
+
+// Test 4: Array-style multi-line table
+print("Test 4: Array-style multi-line table");
+var fruits = {
+    "apple",
+    "banana", 
+    "cherry",
+    "date"
+};
+print("Fruits:", fruits);
+
+// Test 5: Empty lines and comments in table
+print("Test 5: Table with empty lines and comments");
+var complex = {
+    // This is a comment
+    first: "value1",
+    
+    // Empty line above
+    second: "value2",
+    
+    third: "value3"
+    // Trailing comment
+};
+print("Complex:", complex);
+
+// Test 6: Nested multi-line tables
+print("Test 6: Nested multi-line tables");
+var nested = {
+    user: {
+        name: "Bob",
+        age: 25
+    },
+    settings: {
+        theme: "dark",
+        notifications: true
+    }
+};
+print("Nested:", nested);
+
+print("=== All multi-line table tests completed! ===");
