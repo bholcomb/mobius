@@ -1,4 +1,5 @@
 #include "ast.h"
+#include "table.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,6 +72,36 @@ Expr* make_grouping_expr(Expr* expression) {
     
     expr->type = EXPR_GROUPING;
     expr->as.grouping.expression = expression;
+    return expr;
+}
+
+Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count) {
+    Expr* expr = malloc(sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = EXPR_TABLE_LITERAL;
+    expr->as.table_literal.pairs = pairs;
+    expr->as.table_literal.pair_count = pair_count;
+    return expr;
+}
+
+Expr* make_table_index_expr(Expr* table, Expr* index) {
+    Expr* expr = malloc(sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = EXPR_TABLE_INDEX;
+    expr->as.table_index.table = table;
+    expr->as.table_index.index = index;
+    return expr;
+}
+
+Expr* make_table_dot_expr(Expr* table, Token key) {
+    Expr* expr = malloc(sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = EXPR_TABLE_DOT;
+    expr->as.table_dot.table = table;
+    expr->as.table_dot.key = key;
     return expr;
 }
 
@@ -245,6 +276,13 @@ Value make_function_value(MobiusFunction* function) {
     return value;
 }
 
+Value make_table_value(Table* table) {
+    Value value = {0};
+    value.type = VAL_TABLE;
+    value.as.table = table;
+    return value;
+}
+
 // Value utility functions
 bool is_truthy(Value value) {
     switch (value.type) {
@@ -409,6 +447,7 @@ const char* value_type_name(ValueType type) {
         case VAL_STRING: return "string";
         case VAL_CHAR: return "char";
         case VAL_FUNCTION: return "function";
+        case VAL_TABLE: return "table";
         default: return "unknown";
     }
 }
@@ -428,6 +467,10 @@ Value copy_value(Value value) {
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         // For functions, we don't copy the function structure itself
         // as they should be shared. Just return the same value.
+        return value;
+    } else if (value.type == VAL_TABLE && value.as.table) {
+        // For tables, increment reference count (shared ownership)
+        value.as.table->ref_count++;
         return value;
     } else {
         // For other types (primitives), simple copy is sufficient
@@ -465,6 +508,22 @@ void free_expr(Expr* expr) {
             break;
         case EXPR_GROUPING:
             free_expr(expr->as.grouping.expression);
+            break;
+        case EXPR_TABLE_LITERAL:
+            for (size_t i = 0; i < expr->as.table_literal.pair_count; i++) {
+                if (expr->as.table_literal.pairs[i].key) {
+                    free_expr(expr->as.table_literal.pairs[i].key);
+                }
+                free_expr(expr->as.table_literal.pairs[i].value);
+            }
+            free(expr->as.table_literal.pairs);
+            break;
+        case EXPR_TABLE_INDEX:
+            free_expr(expr->as.table_index.table);
+            free_expr(expr->as.table_index.index);
+            break;
+        case EXPR_TABLE_DOT:
+            free_expr(expr->as.table_dot.table);
             break;
     }
     
@@ -542,6 +601,13 @@ void free_value(Value value) {
         }
         // Note: don't free closure environment - it's managed separately
         free(func);
+    } else if (value.type == VAL_TABLE && value.as.table) {
+        Table* table = value.as.table;
+        table->ref_count--;
+        if (table->ref_count <= 0) {
+            // Free the table when reference count reaches zero
+            free_table(table);
+        }
     }
 }
 
@@ -589,6 +655,36 @@ void print_expr(Expr* expr) {
             printf("(group ");
             print_expr(expr->as.grouping.expression);
             printf(")");
+            break;
+        case EXPR_TABLE_LITERAL:
+            printf("(table ");
+            for (size_t i = 0; i < expr->as.table_literal.pair_count; i++) {
+                if (i > 0) printf(" ");
+                if (expr->as.table_literal.pairs[i].key) {
+                    if (expr->as.table_literal.pairs[i].is_computed_key) {
+                        printf("[");
+                        print_expr(expr->as.table_literal.pairs[i].key);
+                        printf("]=");
+                    } else {
+                        print_expr(expr->as.table_literal.pairs[i].key);
+                        printf(":");
+                    }
+                }
+                print_expr(expr->as.table_literal.pairs[i].value);
+            }
+            printf(")");
+            break;
+        case EXPR_TABLE_INDEX:
+            printf("(index ");
+            print_expr(expr->as.table_index.table);
+            printf("[");
+            print_expr(expr->as.table_index.index);
+            printf("])");
+            break;
+        case EXPR_TABLE_DOT:
+            printf("(dot ");
+            print_expr(expr->as.table_dot.table);
+            printf(".%.*s)", expr->as.table_dot.key.length, expr->as.table_dot.key.start);
             break;
     }
 }

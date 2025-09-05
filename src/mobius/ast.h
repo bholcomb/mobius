@@ -16,7 +16,10 @@ typedef enum {
     EXPR_VARIABLE,
     EXPR_ASSIGNMENT,
     EXPR_CALL,
-    EXPR_GROUPING
+    EXPR_GROUPING,
+    EXPR_TABLE_LITERAL,
+    EXPR_TABLE_INDEX,
+    EXPR_TABLE_DOT
 } ExprType;
 
 // Statement types
@@ -41,11 +44,14 @@ typedef enum {
     VAL_FLOAT,
     VAL_STRING,
     VAL_CHAR,
-    VAL_FUNCTION
+    VAL_FUNCTION,
+    VAL_TABLE
 } ValueType;
 
-// Forward declaration for function reference
+// Forward declarations
 typedef struct MobiusFunction MobiusFunction;
+typedef struct Table Table;
+typedef struct TableEntry TableEntry;
 
 // Runtime value representation
 typedef struct {
@@ -65,6 +71,7 @@ typedef struct {
         char* string;
         char character;
         MobiusFunction* function;
+        Table* table;
     } as;
 } Value;
 
@@ -77,6 +84,23 @@ typedef struct MobiusFunction {
     size_t body_count;
     struct Environment* closure;  // Lexical scope
 } MobiusFunction;
+
+// Table entry for hash table
+struct TableEntry {
+    Value key;
+    Value value;
+    struct TableEntry* next;  // For collision chaining
+    bool is_occupied;
+};
+
+// Table structure - pure hash table
+struct Table {
+    TableEntry* entries;      // Hash table entries
+    size_t size;             // Number of key-value pairs
+    size_t capacity;         // Size of entries array
+    struct Table* metatable; // For operator overloading
+    int ref_count;           // Reference counting for memory management
+};
 
 // Expression structures
 typedef struct {
@@ -114,6 +138,28 @@ typedef struct {
     Expr* expression;
 } GroupingExpr;
 
+// Table key-value pair for table literals
+typedef struct {
+    Expr* key;    // Can be NULL for computed indices
+    Expr* value;
+    bool is_computed_key;  // true if key is [expression]
+} TablePair;
+
+typedef struct {
+    TablePair* pairs;
+    size_t pair_count;
+} TableLiteralExpr;
+
+typedef struct {
+    Expr* table;
+    Expr* index;
+} TableIndexExpr;
+
+typedef struct {
+    Expr* table;
+    Token key;  // Identifier after the dot
+} TableDotExpr;
+
 // Main expression structure
 struct Expr {
     ExprType type;
@@ -125,6 +171,9 @@ struct Expr {
         AssignmentExpr assignment;
         CallExpr call;
         GroupingExpr grouping;
+        TableLiteralExpr table_literal;
+        TableIndexExpr table_index;
+        TableDotExpr table_dot;
     } as;
 };
 
@@ -210,6 +259,9 @@ Expr* make_variable_expr(Token name);
 Expr* make_assignment_expr(Token name, Expr* value);
 Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_count);
 Expr* make_grouping_expr(Expr* expression);
+Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count);
+Expr* make_table_index_expr(Expr* table, Expr* index);
+Expr* make_table_dot_expr(Expr* table, Token key);
 
 Stmt* make_expression_stmt(Expr* expression);
 Stmt* make_print_stmt(Expr* expression);
@@ -232,6 +284,7 @@ Value make_float_value(double value);
 Value make_string_value(char* string);
 Value make_char_value(char value);
 Value make_function_value(MobiusFunction* function);
+Value make_table_value(Table* table);
 
 // Value utility functions
 bool is_truthy(Value value);
