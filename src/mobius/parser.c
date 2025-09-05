@@ -359,9 +359,9 @@ Expr* parse_call(Parser* parser) {
 
 Expr* parse_unary(Parser* parser) {
     if (parser_match_any(parser, 3, TOKEN_BANG, TOKEN_MINUS, TOKEN_NOT)) {
-        Token operator = parser_previous(parser);
+        Token op = parser_previous(parser);
         Expr* right = parse_unary(parser);
-        return make_unary_expr(operator, right);
+        return make_unary_expr(op, right);
     }
     
     return parse_call(parser);
@@ -371,9 +371,9 @@ Expr* parse_factor(Parser* parser) {
     Expr* expr = parse_unary(parser);
     
     while (parser_match_any(parser, 2, TOKEN_SLASH, TOKEN_STAR)) {
-        Token operator = parser_previous(parser);
+        Token op = parser_previous(parser);
         Expr* right = parse_unary(parser);
-        expr = make_binary_expr(expr, operator, right);
+        expr = make_binary_expr(expr, op, right);
     }
     
     return expr;
@@ -383,9 +383,9 @@ Expr* parse_term(Parser* parser) {
     Expr* expr = parse_factor(parser);
     
     while (parser_match_any(parser, 2, TOKEN_MINUS, TOKEN_PLUS)) {
-        Token operator = parser_previous(parser);
+        Token op = parser_previous(parser);
         Expr* right = parse_factor(parser);
-        expr = make_binary_expr(expr, operator, right);
+        expr = make_binary_expr(expr, op, right);
     }
     
     return expr;
@@ -396,9 +396,9 @@ Expr* parse_comparison(Parser* parser) {
     
     while (parser_match_any(parser, 4, TOKEN_GREATER, TOKEN_GREATER_EQUAL, 
                            TOKEN_LESS, TOKEN_LESS_EQUAL)) {
-        Token operator = parser_previous(parser);
+        Token op = parser_previous(parser);
         Expr* right = parse_term(parser);
-        expr = make_binary_expr(expr, operator, right);
+        expr = make_binary_expr(expr, op, right);
     }
     
     return expr;
@@ -408,9 +408,9 @@ Expr* parse_equality(Parser* parser) {
     Expr* expr = parse_comparison(parser);
     
     while (parser_match_any(parser, 2, TOKEN_BANG_EQUAL, TOKEN_EQUAL_EQUAL)) {
-        Token operator = parser_previous(parser);
+        Token op = parser_previous(parser);
         Expr* right = parse_comparison(parser);
-        expr = make_binary_expr(expr, operator, right);
+        expr = make_binary_expr(expr, op, right);
     }
     
     return expr;
@@ -420,9 +420,9 @@ Expr* parse_and(Parser* parser) {
     Expr* expr = parse_equality(parser);
     
     while (parser_match_any(parser, 2, TOKEN_AND, TOKEN_AND_AND)) {
-        Token operator = parser_previous(parser);
+        Token op = parser_previous(parser);
         Expr* right = parse_equality(parser);
-        expr = make_binary_expr(expr, operator, right);
+        expr = make_binary_expr(expr, op, right);
     }
     
     return expr;
@@ -432,9 +432,9 @@ Expr* parse_or(Parser* parser) {
     Expr* expr = parse_and(parser);
     
     while (parser_match_any(parser, 2, TOKEN_OR, TOKEN_OR_OR)) {
-        Token operator = parser_previous(parser);
+        Token op = parser_previous(parser);
         Expr* right = parse_and(parser);
-        expr = make_binary_expr(expr, operator, right);
+        expr = make_binary_expr(expr, op, right);
     }
     
     return expr;

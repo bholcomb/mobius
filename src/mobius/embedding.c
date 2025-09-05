@@ -300,6 +300,21 @@ MobiusValue* mobius_create_string(MobiusState* state, const char* val) {
     return value;
 }
 
+MobiusValue* mobius_create_userdata(MobiusState* state, void* ptr, 
+                                   UserdataDestructor destructor, 
+                                   const char* type_name, size_t size) {
+    if (!state || !ptr) return NULL;
+    
+    MobiusValue* value = malloc(sizeof(MobiusValue));
+    if (!value) return NULL;
+    
+    value->internal_value = make_userdata_value(ptr, destructor, type_name, size);
+    value->state = state;
+    value->is_owned = true;
+    
+    return value;
+}
+
 // Type checking functions
 bool mobius_is_nil(const MobiusValue* value) {
     return value && value->internal_value.type == VAL_NIL;
@@ -325,6 +340,10 @@ bool mobius_is_function(const MobiusValue* value) {
     return value && value->internal_value.type == VAL_FUNCTION;
 }
 
+bool mobius_is_userdata(const MobiusValue* value) {
+    return value && value->internal_value.type == VAL_USERDATA;
+}
+
 // Value extraction functions
 bool mobius_to_bool(const MobiusValue* value) {
     if (!value || value->internal_value.type != VAL_BOOL) return false;
@@ -344,6 +363,28 @@ double mobius_to_float(const MobiusValue* value) {
 const char* mobius_to_string(const MobiusValue* value) {
     if (!value || value->internal_value.type != VAL_STRING) return NULL;
     return value->internal_value.as.string;
+}
+
+// Userdata extraction functions
+void* mobius_to_userdata(const MobiusValue* value) {
+    if (!value || value->internal_value.type != VAL_USERDATA) return NULL;
+    return value->internal_value.as.userdata.ptr;
+}
+
+const char* mobius_userdata_type(const MobiusValue* value) {
+    if (!value || value->internal_value.type != VAL_USERDATA) return NULL;
+    return value->internal_value.as.userdata.type_name;
+}
+
+size_t mobius_userdata_size(const MobiusValue* value) {
+    if (!value || value->internal_value.type != VAL_USERDATA) return 0;
+    return value->internal_value.as.userdata.size;
+}
+
+bool mobius_is_userdata_type(const MobiusValue* value, const char* type_name) {
+    if (!value || value->internal_value.type != VAL_USERDATA) return false;
+    if (!type_name || !value->internal_value.as.userdata.type_name) return false;
+    return strcmp(value->internal_value.as.userdata.type_name, type_name) == 0;
 }
 
 // Value conversion functions
@@ -391,6 +432,12 @@ void mobius_free_value(MobiusValue* value) {
     if (!value) return;
     
     if (value->is_owned) {
+        // For userdata, handle destructor at this level to avoid double-free
+        if (value->internal_value.type == VAL_USERDATA && 
+            value->internal_value.as.userdata.ptr &&
+            value->internal_value.as.userdata.destructor) {
+            value->internal_value.as.userdata.destructor(value->internal_value.as.userdata.ptr);
+        }
         free_value(value->internal_value);
     }
     
@@ -414,7 +461,14 @@ MobiusValue* mobius_copy_value(const MobiusValue* value) {
     }
     
     copy->state = value->state;
-    copy->is_owned = true;
+    
+    // For userdata, copies should not own the userdata to prevent double-free
+    // Only the original MobiusValue should own and manage the userdata lifetime
+    if (value->internal_value.type == VAL_USERDATA) {
+        copy->is_owned = false;  // Don't call destructor for copies
+    } else {
+        copy->is_owned = true;
+    }
     
     return copy;
 }

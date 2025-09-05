@@ -1,0 +1,3 @@
+// Simple userdata test
+print("Testing built-in print function...");
+print("This should work fine");

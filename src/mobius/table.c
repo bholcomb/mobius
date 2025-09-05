@@ -55,6 +55,13 @@ size_t hash_value(Value value, size_t capacity) {
         case VAL_TABLE:
             hash = (size_t)(uintptr_t)value.as.table;
             break;
+        case VAL_USERDATA:
+            // Hash userdata by pointer address and type name
+            hash = (size_t)(uintptr_t)value.as.userdata.ptr;
+            if (value.as.userdata.type_name) {
+                hash ^= hash_string_for_table(value.as.userdata.type_name);
+            }
+            break;
     }
     
     return hash % capacity;
@@ -75,6 +82,10 @@ bool values_equal_for_table(Value a, Value b) {
         case VAL_CHAR: return a.as.character == b.as.character;
         case VAL_FUNCTION: return a.as.function == b.as.function;
         case VAL_TABLE: return a.as.table == b.as.table;
+        case VAL_USERDATA: 
+            // Userdata equality: same pointer AND same type
+            return a.as.userdata.ptr == b.as.userdata.ptr && 
+                   a.as.userdata.type_name == b.as.userdata.type_name;
     }
     return false;
 }
