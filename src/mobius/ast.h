@@ -45,13 +45,17 @@ typedef enum {
     VAL_STRING,
     VAL_CHAR,
     VAL_FUNCTION,
-    VAL_TABLE
+    VAL_TABLE,
+    VAL_USERDATA
 } ValueType;
 
 // Forward declarations
 typedef struct MobiusFunction MobiusFunction;
 typedef struct Table Table;
 typedef struct TableEntry TableEntry;
+
+// Forward declaration for userdata destructor
+typedef void (*UserdataDestructor)(void* ptr);
 
 // Runtime value representation
 typedef struct {
@@ -72,6 +76,12 @@ typedef struct {
         char character;
         MobiusFunction* function;
         Table* table;
+        struct {
+            void* ptr;                        // Opaque pointer to user data
+            UserdataDestructor destructor;    // Cleanup function (can be NULL)
+            const char* type_name;            // Type identifier for runtime checks
+            size_t size;                      // Size of the data (for debugging/GC)
+        } userdata;
     } as;
 } Value;
 
@@ -105,12 +115,12 @@ struct Table {
 // Expression structures
 typedef struct {
     Expr* left;
-    Token operator;
+    Token op;
     Expr* right;
 } BinaryExpr;
 
 typedef struct {
-    Token operator;
+    Token op;
     Expr* right;
 } UnaryExpr;
 
@@ -246,14 +256,14 @@ struct Stmt {
         WhileStmt while_stmt;
         ForStmt for_stmt;
         FunctionStmt function;
-        ClassStmt class;
+        ClassStmt class_stmt;
         ReturnStmt return_stmt;
     } as;
 };
 
 // AST creation functions
-Expr* make_binary_expr(Expr* left, Token operator, Expr* right);
-Expr* make_unary_expr(Token operator, Expr* right);
+Expr* make_binary_expr(Expr* left, Token op, Expr* right);
+Expr* make_unary_expr(Token op, Expr* right);
 Expr* make_literal_expr(Value value);
 Expr* make_variable_expr(Token name);
 Expr* make_assignment_expr(Token name, Expr* value);
@@ -285,6 +295,7 @@ Value make_string_value(char* string);
 Value make_char_value(char value);
 Value make_function_value(MobiusFunction* function);
 Value make_table_value(Table* table);
+Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
 
 // Value utility functions
 bool is_truthy(Value value);

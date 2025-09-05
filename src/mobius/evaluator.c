@@ -510,7 +510,7 @@ EvalResult divide_values(Value left, Value right, int line, int column) {
     return make_success(make_float_value(left_val / right_val));
 }
 
-EvalResult compare_values(Value left, Value right, TokenType operator) {
+EvalResult compare_values(Value left, Value right, TokenType op) {
     bool result = false;
     
     // Check for table metamethods first
@@ -518,7 +518,7 @@ EvalResult compare_values(Value left, Value right, TokenType operator) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
         const char* metamethod_name = NULL;
         
-        switch (operator) {
+        switch (op) {
             case TOKEN_EQUAL_EQUAL:
             case TOKEN_BANG_EQUAL:
                 metamethod_name = "__eq";
@@ -534,7 +534,7 @@ EvalResult compare_values(Value left, Value right, TokenType operator) {
                 // For > and >=, we check if the right operand has the metamethod
                 if (right.type == VAL_TABLE) {
                     table = right.as.table;
-                    metamethod_name = (operator == TOKEN_GREATER) ? "__lt" : "__le";
+                    metamethod_name = (op == TOKEN_GREATER) ? "__lt" : "__le";
                     // Note: a > b becomes b < a, a >= b becomes b <= a
                 }
                 break;
@@ -554,7 +554,7 @@ EvalResult compare_values(Value left, Value right, TokenType operator) {
         }
         
         // If no metamethod found and tables are involved, handle equality specially
-        if (operator == TOKEN_EQUAL_EQUAL || operator == TOKEN_BANG_EQUAL) {
+        if (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL) {
             // Use default equality for tables
         } else {
             // Other comparisons require metamethods for tables
@@ -563,9 +563,9 @@ EvalResult compare_values(Value left, Value right, TokenType operator) {
     }
     
     // Equality comparison
-    if (operator == TOKEN_EQUAL_EQUAL) {
+    if (op == TOKEN_EQUAL_EQUAL) {
         result = values_equal(left, right);
-    } else if (operator == TOKEN_BANG_EQUAL) {
+    } else if (op == TOKEN_BANG_EQUAL) {
         result = !values_equal(left, right);
     } else {
         // Numeric comparison
@@ -587,7 +587,7 @@ EvalResult compare_values(Value left, Value right, TokenType operator) {
             return make_error("Cannot compare non-numeric types", 0, 0);
         }
         
-        switch (operator) {
+        switch (op) {
             case TOKEN_GREATER:       result = left_val > right_val; break;
             case TOKEN_GREATER_EQUAL: result = left_val >= right_val; break;
             case TOKEN_LESS:          result = left_val < right_val; break;
@@ -611,7 +611,7 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
         return right_result;
     }
     
-    switch (expr->operator.type) {
+    switch (expr->op.type) {
         case TOKEN_PLUS:
             return add_values(left_result.value, right_result.value);
         case TOKEN_MINUS:
@@ -619,14 +619,14 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
         case TOKEN_STAR:
             return multiply_values(left_result.value, right_result.value);
         case TOKEN_SLASH:
-            return divide_values(left_result.value, right_result.value, expr->operator.line, expr->operator.column);
+                return divide_values(left_result.value, right_result.value, expr->op.line, expr->op.column);
         case TOKEN_EQUAL_EQUAL:
         case TOKEN_BANG_EQUAL:
         case TOKEN_GREATER:
         case TOKEN_GREATER_EQUAL:
         case TOKEN_LESS:
         case TOKEN_LESS_EQUAL:
-            return compare_values(left_result.value, right_result.value, expr->operator.type);
+            return compare_values(left_result.value, right_result.value, expr->op.type);
         case TOKEN_AND:
         case TOKEN_AND_AND:
             if (!is_truthy(left_result.value)) {
@@ -640,7 +640,7 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
             }
             return make_success(right_result.value);
         default:
-            return make_error_with_source("Unknown binary operator", expr->operator.line, expr->operator.column);
+            return make_error_with_source("Unknown binary operator", expr->op.line, expr->op.column);
     }
 }
 
@@ -650,20 +650,20 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
         return operand_result;
     }
     
-    switch (expr->operator.type) {
+    switch (expr->op.type) {
         case TOKEN_MINUS:
             if (operand_result.value.type == VAL_FLOAT) {
                 return make_success(make_float_value(-operand_result.value.as.float_val));
             } else if (operand_result.value.type == VAL_INTEGER) {
                 return make_success(make_integer_value(NUM_INT32, -operand_result.value.as.integer.value.i32));
             } else {
-                return make_error("Cannot negate non-numeric value", expr->operator.line, expr->operator.column);
+                return make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
             }
         case TOKEN_BANG:
         case TOKEN_NOT:
             return make_success(make_bool_value(!is_truthy(operand_result.value)));
         default:
-            return make_error("Unknown unary operator", expr->operator.line, expr->operator.column);
+            return make_error("Unknown unary operator", expr->op.line, expr->op.column);
     }
 }
 

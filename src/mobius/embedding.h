@@ -123,6 +123,9 @@ MobiusValue* mobius_create_bool(MobiusState* state, bool value);
 MobiusValue* mobius_create_integer(MobiusState* state, int64_t value);
 MobiusValue* mobius_create_float(MobiusState* state, double value);
 MobiusValue* mobius_create_string(MobiusState* state, const char* value);
+MobiusValue* mobius_create_userdata(MobiusState* state, void* ptr, 
+                                   UserdataDestructor destructor, 
+                                   const char* type_name, size_t size);
 
 // Value access functions
 bool mobius_is_nil(const MobiusValue* value);
@@ -131,12 +134,19 @@ bool mobius_is_integer(const MobiusValue* value);
 bool mobius_is_float(const MobiusValue* value);
 bool mobius_is_string(const MobiusValue* value);
 bool mobius_is_function(const MobiusValue* value);
+bool mobius_is_userdata(const MobiusValue* value);
 
 // Value extraction functions
 bool mobius_to_bool(const MobiusValue* value);
 int64_t mobius_to_integer(const MobiusValue* value);
 double mobius_to_float(const MobiusValue* value);
 const char* mobius_to_string(const MobiusValue* value);
+
+// Userdata extraction functions
+void* mobius_to_userdata(const MobiusValue* value);
+const char* mobius_userdata_type(const MobiusValue* value);
+size_t mobius_userdata_size(const MobiusValue* value);
+bool mobius_is_userdata_type(const MobiusValue* value, const char* type_name);
 
 // Value conversion functions
 bool mobius_convert_to_bool(const MobiusValue* value);

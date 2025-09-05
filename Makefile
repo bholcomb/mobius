@@ -28,6 +28,8 @@ MATH_MODULE = $(BIN_DIR)/modules/math.so
 EMBEDDING_EXAMPLE = $(BIN_DIR)/embedding_example
 SIMPLE_EMBEDDING_EXAMPLE = $(BIN_DIR)/simple_embedding
 GAME_ENGINE_EXAMPLE = $(BIN_DIR)/game_engine
+CPP_CLASS_EXAMPLE = $(BIN_DIR)/cpp_class_example
+SIMPLE_USERDATA_TEST = $(BIN_DIR)/simple_userdata_test
 
 # Plugin targets
 TEXT_PROCESSING_PLUGIN = $(BIN_DIR)/modules/text_processing.so
@@ -82,7 +84,7 @@ $(MATH_MODULE): $(MODULES_DIR)/math/math_plugin.c $(MOBIUS_LIB) | directories
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
 # Build examples
-examples: $(EMBEDDING_EXAMPLE) $(SIMPLE_EMBEDDING_EXAMPLE) $(GAME_ENGINE_EXAMPLE) $(TEXT_PROCESSING_PLUGIN)
+examples: $(EMBEDDING_EXAMPLE) $(SIMPLE_EMBEDDING_EXAMPLE) $(GAME_ENGINE_EXAMPLE) $(CPP_CLASS_EXAMPLE) $(SIMPLE_USERDATA_TEST) $(TEXT_PROCESSING_PLUGIN)
 
 # Build embedding example
 $(EMBEDDING_EXAMPLE): examples/embedding_example.c $(MOBIUS_LIB) | directories
@@ -97,6 +99,16 @@ $(SIMPLE_EMBEDDING_EXAMPLE): examples/simple_embedding.c $(MOBIUS_LIB) | directo
 # Build game engine example
 $(GAME_ENGINE_EXAMPLE): examples/game_engine.c $(MOBIUS_LIB) | directories
 	@echo "🎮 Building game engine example..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
+# Build C++ class example
+$(CPP_CLASS_EXAMPLE): examples/cpp_class_example.cpp $(MOBIUS_LIB) | directories
+	@echo "🔧 Building C++ class example..."
+	g++ -Wall -Wextra -std=c++11 -g -O0 -I$(SRC_DIR) -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
+# Build simple userdata test
+$(SIMPLE_USERDATA_TEST): examples/simple_userdata_test.c $(MOBIUS_LIB) | directories
+	@echo "🔧 Building simple userdata test..."
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
 # Build text processing plugin

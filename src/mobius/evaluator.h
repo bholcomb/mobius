@@ -112,7 +112,7 @@ EvalResult divide_values(Value left, Value right, int line, int column);
 EvalResult modulo_values(Value left, Value right);
 
 // Comparison operations
-EvalResult compare_values(Value left, Value right, TokenType operator);
+EvalResult compare_values(Value left, Value right, TokenType op);
 EvalResult logical_and(Value left, Value right);
 EvalResult logical_or(Value left, Value right);
 EvalResult logical_not(Value value);

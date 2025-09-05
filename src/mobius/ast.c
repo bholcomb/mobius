@@ -5,23 +5,23 @@
 #include <string.h>
 
 // Expression constructors
-Expr* make_binary_expr(Expr* left, Token operator, Expr* right) {
+Expr* make_binary_expr(Expr* left, Token op, Expr* right) {
     Expr* expr = malloc(sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_BINARY;
     expr->as.binary.left = left;
-    expr->as.binary.operator = operator;
+    expr->as.binary.op = op;
     expr->as.binary.right = right;
     return expr;
 }
 
-Expr* make_unary_expr(Token operator, Expr* right) {
+Expr* make_unary_expr(Token op, Expr* right) {
     Expr* expr = malloc(sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_UNARY;
-    expr->as.unary.operator = operator;
+    expr->as.unary.op = op;
     expr->as.unary.right = right;
     return expr;
 }
@@ -197,10 +197,10 @@ Stmt* make_class_stmt(Token name, VariableExpr* superclass,
     if (!stmt) return NULL;
     
     stmt->type = STMT_CLASS;
-    stmt->as.class.name = name;
-    stmt->as.class.superclass = superclass;
-    stmt->as.class.methods = methods;
-    stmt->as.class.method_count = method_count;
+    stmt->as.class_stmt.name = name;
+    stmt->as.class_stmt.superclass = superclass;
+    stmt->as.class_stmt.methods = methods;
+    stmt->as.class_stmt.method_count = method_count;
     return stmt;
 }
 
@@ -283,6 +283,16 @@ Value make_table_value(Table* table) {
     return value;
 }
 
+Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size) {
+    Value value = {0};
+    value.type = VAL_USERDATA;
+    value.as.userdata.ptr = ptr;
+    value.as.userdata.destructor = destructor;
+    value.as.userdata.type_name = type_name;
+    value.as.userdata.size = size;
+    return value;
+}
+
 // Value utility functions
 bool is_truthy(Value value) {
     switch (value.type) {
@@ -304,6 +314,9 @@ bool is_truthy(Value value) {
         case VAL_FLOAT: return value.as.float_val != 0.0;
         case VAL_STRING: return value.as.string != NULL && strlen(value.as.string) > 0;
         case VAL_CHAR: return value.as.character != '\0';
+        case VAL_FUNCTION: return value.as.function != NULL;
+        case VAL_TABLE: return value.as.table != NULL;
+        case VAL_USERDATA: return value.as.userdata.ptr != NULL;
         default: return false;
     }
 }
@@ -335,6 +348,10 @@ bool values_equal(Value a, Value b) {
         case VAL_CHAR: return a.as.character == b.as.character;
         case VAL_FUNCTION: return a.as.function == b.as.function;
         case VAL_TABLE: return a.as.table == b.as.table; // Reference equality
+        case VAL_USERDATA: 
+            // Userdata equality: same pointer AND same type
+            return a.as.userdata.ptr == b.as.userdata.ptr && 
+                   a.as.userdata.type_name == b.as.userdata.type_name;
         default: return false;
     }
 }
@@ -381,6 +398,15 @@ void print_value(Value value) {
                 print_table(value.as.table);
             } else {
                 printf("<table (null)>");
+            }
+            break;
+        case VAL_USERDATA:
+            if (value.as.userdata.ptr) {
+                printf("<%s userdata %p>", 
+                       value.as.userdata.type_name ? value.as.userdata.type_name : "unknown",
+                       value.as.userdata.ptr);
+            } else {
+                printf("<userdata (null)>");
             }
             break;
         default:
@@ -438,6 +464,27 @@ char* value_to_string(Value value) {
                 result[1] = '\0';
             }
             break;
+        case VAL_FUNCTION:
+            snprintf(buffer, sizeof(buffer), "<function>");
+            result = malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
+        case VAL_TABLE:
+            snprintf(buffer, sizeof(buffer), "<table>");
+            result = malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
+        case VAL_USERDATA:
+            if (value.as.userdata.ptr) {
+                snprintf(buffer, sizeof(buffer), "<%s userdata %p>", 
+                         value.as.userdata.type_name ? value.as.userdata.type_name : "unknown",
+                         value.as.userdata.ptr);
+            } else {
+                strcpy(buffer, "<userdata (null)>");
+            }
+            result = malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
         default:
             result = malloc(8);
             if (result) strcpy(result, "unknown");
@@ -457,6 +504,7 @@ const char* value_type_name(ValueType type) {
         case VAL_CHAR: return "char";
         case VAL_FUNCTION: return "function";
         case VAL_TABLE: return "table";
+        case VAL_USERDATA: return "userdata";
         default: return "unknown";
     }
 }
@@ -480,6 +528,10 @@ Value copy_value(Value value) {
     } else if (value.type == VAL_TABLE && value.as.table) {
         // For tables, increment reference count (shared ownership)
         value.as.table->ref_count++;
+        return value;
+    } else if (value.type == VAL_USERDATA) {
+        // For userdata, we don't manage the memory - the external code does
+        // Just return the same value (shared reference)
         return value;
     } else {
         // For other types (primitives), simple copy is sufficient
@@ -581,10 +633,10 @@ void free_stmt(Stmt* stmt) {
             free(stmt->as.function.body);
             break;
         case STMT_CLASS:
-            for (size_t i = 0; i < stmt->as.class.method_count; i++) {
-                free_stmt((Stmt*)stmt->as.class.methods[i]);
+            for (size_t i = 0; i < stmt->as.class_stmt.method_count; i++) {
+                free_stmt((Stmt*)stmt->as.class_stmt.methods[i]);
             }
-            free(stmt->as.class.methods);
+            free(stmt->as.class_stmt.methods);
             break;
         case STMT_RETURN:
             free_expr(stmt->as.return_stmt.value);
@@ -617,6 +669,13 @@ void free_value(Value value) {
             // Free the table when reference count reaches zero
             free_table(table);
         }
+    } else if (value.type == VAL_USERDATA && value.as.userdata.ptr) {
+        // For userdata, we don't automatically call destructors during free_value
+        // The embedding code is responsible for managing the userdata lifetime
+        // Destructors should only be called when the embedding code explicitly
+        // cleans up or when the MobiusState is freed
+        // 
+        // This prevents double-free issues when userdata values are copied
     }
 }
 
@@ -631,12 +690,12 @@ void print_expr(Expr* expr) {
         case EXPR_BINARY:
             printf("(");
             print_expr(expr->as.binary.left);
-            printf(" %.*s ", expr->as.binary.operator.length, expr->as.binary.operator.start);
+            printf(" %.*s ", expr->as.binary.op.length, expr->as.binary.op.start);
             print_expr(expr->as.binary.right);
             printf(")");
             break;
         case EXPR_UNARY:
-            printf("(%.*s ", expr->as.unary.operator.length, expr->as.unary.operator.start);
+            printf("(%.*s ", expr->as.unary.op.length, expr->as.unary.op.start);
             print_expr(expr->as.unary.right);
             printf(")");
             break;
@@ -766,10 +825,10 @@ void print_stmt(Stmt* stmt) {
             printf(") { ... }");
             break;
         case STMT_CLASS:
-            printf("class %.*s", stmt->as.class.name.length, stmt->as.class.name.start);
-            if (stmt->as.class.superclass) {
-                printf(" < %.*s", stmt->as.class.superclass->name.length, 
-                       stmt->as.class.superclass->name.start);
+            printf("class %.*s", stmt->as.class_stmt.name.length, stmt->as.class_stmt.name.start);
+            if (stmt->as.class_stmt.superclass) {
+                printf(" < %.*s", stmt->as.class_stmt.superclass->name.length, 
+                       stmt->as.class_stmt.superclass->name.start);
             }
             printf(" { ... }");
             break;
