@@ -1,0 +1,25 @@
+// Test the new float64 keyword
+print("=== Testing float64 keyword ===");
+
+print("\n1. Basic float64 declarations");
+var f32: float32 = 3.14159;
+var f64: float64 = 2.71828;
+
+print("float32:", f32);
+print("float64:", f64);
+
+print("\n2. Type checking");
+print("typeof(f32):", typeof(f32));
+print("typeof(f64):", typeof(f64));
+
+print("\n3. Explicit precision");
+var precise_f64: float64 = 3.141592653589793238462643383279502884197;
+
+print("High precision float64:", precise_f64);
+
+print("\n4. Type mixing (should promote to float64)");
+var mixed: float64 = f32 + f64;
+print("f32 + f64 (result type float64):", mixed);
+print("typeof(mixed):", typeof(mixed));
+
+print("\nfloat64 keyword test completed!");
