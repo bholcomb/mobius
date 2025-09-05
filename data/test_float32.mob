@@ -1,0 +1,40 @@
+// Test float32 functionality
+print("=== Float32 Type Test ===");
+
+print("\n1. Basic float32 declarations");
+var f32: float32 = 3.14159;
+var f64: float = 2.71828;
+
+print("float32:", f32);
+print("float64:", f64);
+
+print("\n2. Type conversions");
+var f32_from_int: float32 = 42;      // int to float32
+var f64_from_int: float = 42;        // int to float64
+var f32_from_f64: float32 = f64;     // float64 to float32 (potential precision loss)
+var f64_from_f32: float = f32;       // float32 to float64 (precision gain)
+
+print("42 -> float32:", f32_from_int);
+print("42 -> float64:", f64_from_int);
+print("f64 -> float32:", f32_from_f64);
+print("f32 -> float64:", f64_from_f32);
+
+print("\n3. Arithmetic operations");
+var f32_sum: float32 = f32 + 1.0;    // float32 + float32
+var mixed_sum: float = f32 + f64;    // float32 + float64 = float64
+
+print("f32 + 1.0 (float32):", f32_sum);
+print("f32 + f64 (float64):", mixed_sum);
+
+print("\n4. Type checking");
+print("typeof(f32):", typeof(f32));
+print("typeof(f64):", typeof(f64));
+
+print("\n5. Precision comparison");
+var precise32: float32 = 3.1415926535897932384626433832795;
+var precise64: float = 3.1415926535897932384626433832795;
+
+print("float32 precision:", precise32);
+print("float64 precision:", precise64);
+
+print("\nAll float32 tests completed!");

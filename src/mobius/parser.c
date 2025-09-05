@@ -495,6 +495,8 @@ TypeInfo parse_type_annotation(Parser* parser) {
             type_info.type = MOBIUS_TYPE_UINT32;
         } else if (parser_match(parser, TOKEN_TYPE_UINT64)) {
             type_info.type = MOBIUS_TYPE_UINT64;
+        } else if (parser_match(parser, TOKEN_TYPE_FLOAT32)) {
+            type_info.type = MOBIUS_TYPE_FLOAT32;
         } else if (parser_match(parser, TOKEN_TYPE_FLOAT)) {
             type_info.type = MOBIUS_TYPE_FLOAT;
         } else {

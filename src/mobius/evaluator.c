@@ -319,9 +319,19 @@ EvalResult add_values(Value left, Value right) {
     }
     
     // Numeric addition
-    if (left.type == VAL_FLOAT || right.type == VAL_FLOAT) {
-        double left_val = (left.type == VAL_FLOAT) ? left.as.float_val : 0.0;
-        double right_val = (right.type == VAL_FLOAT) ? right.as.float_val : 0.0;
+    if (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT) {
+        // Determine result type: VAL_FLOAT (double) takes precedence over VAL_FLOAT32
+        bool use_double = (left.type == VAL_FLOAT || right.type == VAL_FLOAT);
+        
+        double left_val = 0.0;
+        double right_val = 0.0;
+        
+        // Convert left operand
+        if (left.type == VAL_FLOAT) {
+            left_val = left.as.float_val;
+        } else if (left.type == VAL_FLOAT32) {
+            left_val = (double)left.as.float32_val;
+        }
         
         // Convert integers to double if needed
         if (left.type == VAL_INTEGER) {
@@ -338,7 +348,12 @@ EvalResult add_values(Value left, Value right) {
             }
         }
         
-        if (right.type == VAL_INTEGER) {
+        // Convert right operand
+        if (right.type == VAL_FLOAT) {
+            right_val = right.as.float_val;
+        } else if (right.type == VAL_FLOAT32) {
+            right_val = (double)right.as.float32_val;
+        } else if (right.type == VAL_INTEGER) {
             switch (right.as.integer.num_type) {
                 case NUM_INT8:   right_val = right.as.integer.value.i8; break;
                 case NUM_UINT8:  right_val = right.as.integer.value.u8; break;
@@ -352,7 +367,12 @@ EvalResult add_values(Value left, Value right) {
             }
         }
         
-        return make_success(make_float_value(left_val + right_val));
+        // Return appropriate result type
+        if (use_double) {
+            return make_success(make_float_value(left_val + right_val));
+        } else {
+            return make_success(make_float32_value((float)(left_val + right_val)));
+        }
     }
     
     // Integer addition

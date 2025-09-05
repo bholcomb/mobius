@@ -38,6 +38,13 @@ Value make_integer_value(NumericType type, int64_t val) {
     return value;
 }
 
+Value make_float32_value(float val) {
+    Value value = {0};
+    value.type = VAL_FLOAT32;
+    value.as.float32_val = val;
+    return value;
+}
+
 Value make_float_value(double val) {
     Value value = {0};
     value.type = VAL_FLOAT;
@@ -101,6 +108,7 @@ bool is_truthy(Value value) {
                 default: return false;
             }
         }
+        case VAL_FLOAT32: return value.as.float32_val != 0.0f;
         case VAL_FLOAT: return value.as.float_val != 0.0;
         case VAL_STRING: return value.as.string != NULL && strlen(value.as.string) > 0;
         case VAL_CHAR: return value.as.character != '\0';
@@ -131,6 +139,7 @@ bool values_equal(Value a, Value b) {
                 default: return false;
             }
         }
+        case VAL_FLOAT32: return a.as.float32_val == b.as.float32_val;
         case VAL_FLOAT: return a.as.float_val == b.as.float_val;
         case VAL_STRING: 
             return (a.as.string == b.as.string) || 
@@ -166,6 +175,9 @@ void print_value(Value value) {
                 case NUM_UINT64: printf("%lu", value.as.integer.value.u64); break;
                 default: printf("unknown_int"); break;
             }
+            break;
+        case VAL_FLOAT32:
+            printf("%g", value.as.float32_val);
             break;
         case VAL_FLOAT:
             printf("%g", value.as.float_val);
@@ -233,6 +245,11 @@ char* value_to_string(Value value) {
             result = malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
+        case VAL_FLOAT32:
+            snprintf(buffer, sizeof(buffer), "%g", value.as.float32_val);
+            result = malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
         case VAL_FLOAT:
             snprintf(buffer, sizeof(buffer), "%g", value.as.float_val);
             result = malloc(strlen(buffer) + 1);
@@ -289,6 +306,7 @@ const char* value_type_name(ValueType type) {
         case VAL_NIL: return "nil";
         case VAL_BOOL: return "bool";
         case VAL_INTEGER: return "integer";
+        case VAL_FLOAT32: return "float32";
         case VAL_FLOAT: return "float";
         case VAL_STRING: return "string";
         case VAL_CHAR: return "char";

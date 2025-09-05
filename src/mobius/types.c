@@ -32,6 +32,7 @@ const char* mobius_type_name(MobiusType type) {
         case MOBIUS_TYPE_UINT16:  return "uint16";
         case MOBIUS_TYPE_UINT32:  return "uint32";
         case MOBIUS_TYPE_UINT64:  return "uint64";
+        case MOBIUS_TYPE_FLOAT32: return "float32";
         case MOBIUS_TYPE_FLOAT:   return "float";
         default: return "invalid";
     }
@@ -47,7 +48,7 @@ bool is_unsigned_type(MobiusType type) {
 }
 
 bool is_float_type(MobiusType type) {
-    return type == MOBIUS_TYPE_FLOAT;
+    return type == MOBIUS_TYPE_FLOAT32 || type == MOBIUS_TYPE_FLOAT;
 }
 
 // Convert token type to Mobius type
@@ -61,6 +62,7 @@ MobiusType token_to_mobius_type(TokenType token_type) {
         case TOKEN_TYPE_UINT16: return MOBIUS_TYPE_UINT16;
         case TOKEN_TYPE_UINT32: return MOBIUS_TYPE_UINT32;
         case TOKEN_TYPE_UINT64: return MOBIUS_TYPE_UINT64;
+        case TOKEN_TYPE_FLOAT32: return MOBIUS_TYPE_FLOAT32;
         case TOKEN_TYPE_FLOAT:  return MOBIUS_TYPE_FLOAT;
         default: return MOBIUS_TYPE_UNKNOWN;
     }
@@ -174,6 +176,13 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
         if (value.type == VAL_INTEGER) {
             int_value = value.as.integer.value.i64;
             conversion_needed = (target_type.type != MOBIUS_TYPE_INT64);
+        } else if (value.type == VAL_FLOAT32) {
+            if (config.strict_mode) {
+                result.error_message = strdup("Cannot convert float32 to integer in strict mode");
+                return result;
+            }
+            int_value = (int64_t)value.as.float32_val;
+            conversion_needed = true;
         } else if (value.type == VAL_FLOAT) {
             if (config.strict_mode) {
                 result.error_message = strdup("Cannot convert float to integer in strict mode");
@@ -204,28 +213,62 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
         return result;
     }
     
-    // Handle float target type
+    // Handle float target types
     if (is_float_type(target_type.type)) {
-        double float_value = 0.0;
         bool conversion_needed = false;
         
-        if (value.type == VAL_FLOAT) {
-            float_value = value.as.float_val;
-        } else if (value.type == VAL_INTEGER) {
-            if (config.strict_mode) {
-                result.error_message = strdup("Cannot convert integer to float in strict mode");
+        if (target_type.type == MOBIUS_TYPE_FLOAT32) {
+            float float32_value = 0.0f;
+            
+            if (value.type == VAL_FLOAT32) {
+                float32_value = value.as.float32_val;
+            } else if (value.type == VAL_FLOAT) {
+                if (config.strict_mode) {
+                    result.error_message = strdup("Cannot convert float64 to float32 in strict mode");
+                    return result;
+                }
+                float32_value = (float)value.as.float_val;
+                conversion_needed = true;
+            } else if (value.type == VAL_INTEGER) {
+                if (config.strict_mode) {
+                    result.error_message = strdup("Cannot convert integer to float32 in strict mode");
+                    return result;
+                }
+                float32_value = (float)value.as.integer.value.i64;
+                conversion_needed = true;
+            } else {
+                result.error_message = malloc(256);
+                snprintf(result.error_message, 256, "Cannot convert %s to %s", 
+                        value_type_name(value.type), mobius_type_name(target_type.type));
                 return result;
             }
-            float_value = (double)value.as.integer.value.i64;
-            conversion_needed = true;
-        } else {
-            result.error_message = malloc(256);
-            snprintf(result.error_message, 256, "Cannot convert %s to %s", 
-                    value_type_name(value.type), mobius_type_name(target_type.type));
-            return result;
+            
+            result.converted_value = make_float32_value(float32_value);
+        } else { // MOBIUS_TYPE_FLOAT (float64)
+            double float_value = 0.0;
+            
+            if (value.type == VAL_FLOAT) {
+                float_value = value.as.float_val;
+            } else if (value.type == VAL_FLOAT32) {
+                float_value = (double)value.as.float32_val;
+                conversion_needed = true;
+            } else if (value.type == VAL_INTEGER) {
+                if (config.strict_mode) {
+                    result.error_message = strdup("Cannot convert integer to float in strict mode");
+                    return result;
+                }
+                float_value = (double)value.as.integer.value.i64;
+                conversion_needed = true;
+            } else {
+                result.error_message = malloc(256);
+                snprintf(result.error_message, 256, "Cannot convert %s to %s", 
+                        value_type_name(value.type), mobius_type_name(target_type.type));
+                return result;
+            }
+            
+            result.converted_value = make_float_value(float_value);
         }
         
-        result.converted_value = make_float_value(float_value);
         result.success = true;
         result.was_converted = conversion_needed;
         return result;

@@ -105,7 +105,8 @@ typedef enum {
     TOKEN_TYPE_UINT16,      // uint16
     TOKEN_TYPE_UINT32,      // uint32
     TOKEN_TYPE_UINT64,      // uint64
-    TOKEN_TYPE_FLOAT,       // float
+    TOKEN_TYPE_FLOAT32,     // float32
+    TOKEN_TYPE_FLOAT,       // float (alias for float64)
 
     // Special tokens
     TOKEN_NEWLINE,          // \n (significant in some contexts)

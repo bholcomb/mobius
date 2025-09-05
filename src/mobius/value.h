@@ -15,6 +15,7 @@ typedef enum {
     VAL_NIL,
     VAL_BOOL,
     VAL_INTEGER,
+    VAL_FLOAT32,
     VAL_FLOAT,
     VAL_STRING,
     VAL_CHAR,
@@ -37,7 +38,8 @@ typedef enum {
     MOBIUS_TYPE_UINT16,     // uint16: 0 to 65,535
     MOBIUS_TYPE_UINT32,     // uint32: ~4.3 billion
     MOBIUS_TYPE_UINT64,     // uint64: very large positive range
-    MOBIUS_TYPE_FLOAT,      // float: double precision
+    MOBIUS_TYPE_FLOAT32,    // float32: single precision
+    MOBIUS_TYPE_FLOAT,      // float: double precision (alias for float64)
 } MobiusType;
 
 // Type information structure
@@ -60,6 +62,7 @@ typedef struct {
                 int64_t  i64;   uint64_t u64;
             } value;
         } integer;
+        float float32_val;
         double float_val;
         char* string;
         char character;
@@ -78,6 +81,7 @@ typedef struct {
 Value make_nil_value();
 Value make_bool_value(bool value);
 Value make_integer_value(NumericType type, int64_t value);
+Value make_float32_value(float value);
 Value make_float_value(double value);
 Value make_string_value(char* string);
 Value make_char_value(char value);
@@ -97,3 +101,4 @@ Value copy_value(Value value);
 void free_value(Value value);
 
 #endif // MOBIUS_VALUE_H
+

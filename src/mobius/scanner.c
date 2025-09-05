@@ -61,6 +61,7 @@ static const Keyword keywords[] = {
     {"uint16",   TOKEN_TYPE_UINT16},
     {"uint32",   TOKEN_TYPE_UINT32},
     {"uint64",   TOKEN_TYPE_UINT64},
+    {"float32",  TOKEN_TYPE_FLOAT32},
     {"float",    TOKEN_TYPE_FLOAT},
 };
 
