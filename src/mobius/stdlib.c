@@ -449,10 +449,8 @@ EvalResult builtin_lower(Environment* env, Value* args, size_t arg_count) {
         return make_error_detailed("lower() requires a string argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
     }
     
-    const char* str = arg.as.string;
-    if (!str) str = "";
-    
-    size_t len = strlen(str);
+    const char* str = arg.as.string ? string_data(arg.as.string) : "";
+    size_t len = arg.as.string ? string_length(arg.as.string) : 0;
     char* result = malloc(len + 1);
     if (!result) {
         return make_error_detailed("Memory allocation failed", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
@@ -463,7 +461,11 @@ EvalResult builtin_lower(Environment* env, Value* args, size_t arg_count) {
     }
     result[len] = '\0';
     
-    return make_success(make_string_value(result));
+    // Create ref-counted string and clean up temp
+    Value final_result = make_string_value_from_cstr(result);
+    free(result);
+    
+    return make_success(final_result);
 }
 
 EvalResult builtin_contains(Environment* env, Value* args, size_t arg_count) {
@@ -478,8 +480,8 @@ EvalResult builtin_contains(Environment* env, Value* args, size_t arg_count) {
         return make_error_detailed("contains() requires string arguments", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
     }
     
-    const char* str = str_val.as.string ? str_val.as.string : "";
-    const char* substr = substr_val.as.string ? substr_val.as.string : "";
+    const char* str = str_val.as.string ? string_data(str_val.as.string) : "";
+    const char* substr = substr_val.as.string ? string_data(substr_val.as.string) : "";
     
     bool found = strstr(str, substr) != NULL;
     return make_success(make_bool_value(found));
