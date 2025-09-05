@@ -62,7 +62,7 @@ const char* error_category_name(ErrorCategory category) {
     }
 }
 
-const char* get_error_suggestion(ErrorCategory category, const char* context __attribute__((unused))) {
+const char* get_error_suggestion(ErrorCategory category) {
     switch (category) {
         case ERROR_TYPE:
             return "Check that all operands are of compatible types";
@@ -114,7 +114,7 @@ void print_runtime_error(RuntimeError error) {
     if (error.suggestion) {
         fprintf(stderr, "\n  💡 Suggestion: %s\n", error.suggestion);
     } else {
-        const char* auto_suggestion = get_error_suggestion(error.category, error.message);
+        const char* auto_suggestion = get_error_suggestion(error.category);
         if (auto_suggestion) {
             fprintf(stderr, "\n  💡 Suggestion: %s\n", auto_suggestion);
         }
@@ -160,7 +160,7 @@ void print_runtime_error_with_context(RuntimeError error, const char* filename) 
     if (error.suggestion) {
         fprintf(stderr, "\n  💡 Suggestion: %s\n", error.suggestion);
     } else {
-        const char* auto_suggestion = get_error_suggestion(error.category, error.message);
+        const char* auto_suggestion = get_error_suggestion(error.category);
         if (auto_suggestion) {
             fprintf(stderr, "\n  💡 Suggestion: %s\n", auto_suggestion);
         }
