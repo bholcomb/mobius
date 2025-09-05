@@ -1,0 +1,42 @@
+// Simple AI script for game entities
+// Each entity loads this but has its own environment
+
+print("Loading AI module...");
+
+// AI behavior function - uses entity's local variables
+func ai_think() {
+    print("AI thinking for entity", entity_id);
+    
+    if (health > 80) {
+        print("Entity", entity_id, "is healthy - being aggressive");
+    } else {
+        if (health > 30) {
+            print("Entity", entity_id, "is wounded - being cautious");
+        } else {
+            print("Entity", entity_id, "is critically wounded - fleeing!");
+        }
+    }
+}
+
+// Utility function for health management
+func take_damage(amount) {
+    health = health - amount;
+    print("Entity", entity_id, "took", amount, "damage. Health now:", health);
+    
+    if (health <= 0) {
+        print("Entity", entity_id, "has been defeated!");
+        return false;
+    }
+    return true;
+}
+
+// Healing function
+func heal(amount) {
+    health = health + amount;
+    if (health > 100) {
+        health = 100;
+    }
+    print("Entity", entity_id, "healed for", amount, ". Health now:", health);
+}
+
+print("AI module loaded for entity context");

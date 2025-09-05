@@ -10,47 +10,47 @@
 // - Utility: random, time, clock
 
 // Core conversion and utility functions
-EvalResult builtin_print(Value* args, size_t arg_count);
-EvalResult builtin_typeof(Value* args, size_t arg_count);
-EvalResult builtin_str(Value* args, size_t arg_count);
-EvalResult builtin_int(Value* args, size_t arg_count);
-EvalResult builtin_float(Value* args, size_t arg_count);
+EvalResult builtin_print(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_typeof(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_str(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_int(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_float(Environment* env, Value* args, size_t arg_count);
 
 // Math functions
-EvalResult builtin_abs(Value* args, size_t arg_count);
-EvalResult builtin_min(Value* args, size_t arg_count);
-EvalResult builtin_max(Value* args, size_t arg_count);
-EvalResult builtin_pow(Value* args, size_t arg_count);
-EvalResult builtin_sqrt(Value* args, size_t arg_count);
-EvalResult builtin_floor(Value* args, size_t arg_count);
-EvalResult builtin_ceil(Value* args, size_t arg_count);
+EvalResult builtin_abs(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_min(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_max(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_pow(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_sqrt(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_floor(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_ceil(Environment* env, Value* args, size_t arg_count);
 
-EvalResult builtin_round(Value* args, size_t arg_count);
+EvalResult builtin_round(Environment* env, Value* args, size_t arg_count);
 
 // String manipulation functions
-EvalResult builtin_len(Value* args, size_t arg_count);
-EvalResult builtin_substr(Value* args, size_t arg_count);
-EvalResult builtin_concat(Value* args, size_t arg_count);
-EvalResult builtin_upper(Value* args, size_t arg_count);
-EvalResult builtin_lower(Value* args, size_t arg_count);
-EvalResult builtin_contains(Value* args, size_t arg_count);
+EvalResult builtin_len(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_substr(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_concat(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_upper(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_lower(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_contains(Environment* env, Value* args, size_t arg_count);
 
 // Utility functions
-EvalResult builtin_random(Value* args, size_t arg_count);
-EvalResult builtin_time(Value* args, size_t arg_count);
-EvalResult builtin_clock(Value* args, size_t arg_count);
+EvalResult builtin_random(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_time(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_clock(Environment* env, Value* args, size_t arg_count);
 
 // File I/O functions
-EvalResult builtin_load(Value* args, size_t arg_count);
+EvalResult builtin_load(Environment* env, Value* args, size_t arg_count);
 
 // Table functions
-EvalResult builtin_table_insert(Value* args, size_t arg_count);
-EvalResult builtin_table_remove(Value* args, size_t arg_count);
-EvalResult builtin_table_has_key(Value* args, size_t arg_count);
-EvalResult builtin_table_size(Value* args, size_t arg_count);
-EvalResult builtin_setmetatable(Value* args, size_t arg_count);
-EvalResult builtin_getmetatable(Value* args, size_t arg_count);
-EvalResult builtin_pairs(Value* args, size_t arg_count);
+EvalResult builtin_table_insert(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_table_remove(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_table_has_key(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_table_size(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_setmetatable(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_getmetatable(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_pairs(Environment* env, Value* args, size_t arg_count);
 
 // Standard library management
 typedef struct {

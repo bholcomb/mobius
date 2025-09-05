@@ -41,8 +41,8 @@ typedef struct {
     RuntimeError error;
 } EvalResult;
 
-// Built-in function type
-typedef EvalResult (*BuiltinFunction)(Value* args, size_t arg_count);
+// Built-in function type - now takes environment like user functions
+typedef EvalResult (*BuiltinFunction)(Environment* env, Value* args, size_t arg_count);
 
 // Built-in function entry
 typedef struct {
@@ -132,9 +132,6 @@ void set_source_context(const char* source);
 const char* get_source_context(void);
 const char* extract_source_line(const char* source, int line_number);
 
-// Current evaluation environment tracking for builtin functions
-void set_current_environment(Environment* env);
-Environment* get_current_environment(void);
 
 // Enhanced error creation with source line extraction
 EvalResult make_error_with_source(const char* message, int line, int column);
