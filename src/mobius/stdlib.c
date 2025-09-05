@@ -63,8 +63,9 @@ EvalResult builtin_int(Environment* env, Value* args, size_t arg_count) {
             return make_success(make_integer_value(NUM_INT32, (int32_t)arg.as.float_val));
         case VAL_STRING: {
             if (arg.as.string) {
+                const char* str_data = string_data(arg.as.string);
                 char* endptr;
-                long val = strtol(arg.as.string, &endptr, 10);
+                long val = strtol(str_data, &endptr, 10);
                 if (*endptr == '\0') {
                     return make_success(make_integer_value(NUM_INT32, (int32_t)val));
                 }
@@ -106,8 +107,9 @@ EvalResult builtin_float(Environment* env, Value* args, size_t arg_count) {
         }
         case VAL_STRING: {
             if (arg.as.string) {
+                const char* str_data = string_data(arg.as.string);
                 char* endptr;
-                double val = strtod(arg.as.string, &endptr);
+                double val = strtod(str_data, &endptr);
                 if (*endptr == '\0') {
                     return make_success(make_float_value(val));
                 }
@@ -306,7 +308,7 @@ EvalResult builtin_len(Environment* env, Value* args, size_t arg_count) {
     
     Value arg = args[0];
     if (arg.type == VAL_STRING) {
-        size_t length = arg.as.string ? strlen(arg.as.string) : 0;
+        size_t length = arg.as.string ? string_length(arg.as.string) : 0;
         return make_success(make_integer_value(NUM_INT32, (int32_t)length));
     }
     
@@ -328,10 +330,8 @@ EvalResult builtin_substr(Environment* env, Value* args, size_t arg_count) {
         return make_error_detailed("substr() start index must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
     }
     
-    const char* str = str_val.as.string;
-    if (!str) str = "";
-    
-    size_t str_len = strlen(str);
+    const char* str = str_val.as.string ? string_data(str_val.as.string) : "";
+    size_t str_len = str_val.as.string ? string_length(str_val.as.string) : 0;
     int32_t start = start_val.as.integer.value.i32;
     size_t length = str_len;
     
@@ -359,15 +359,19 @@ EvalResult builtin_substr(Environment* env, Value* args, size_t arg_count) {
         length = str_len - start;
     }
     
-    char* result = malloc(length + 1);
-    if (!result) {
+    char* temp_result = malloc(length + 1);
+    if (!temp_result) {
         return make_error_detailed("Memory allocation failed", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
     }
     
-    strncpy(result, str + start, length);
-    result[length] = '\0';
+    strncpy(temp_result, str + start, length);
+    temp_result[length] = '\0';
     
-    return make_success(make_string_value(result));
+    // Create ref-counted string and clean up temp
+    Value result = make_string_value_from_cstr(temp_result);
+    free(temp_result);
+    
+    return make_success(result);
 }
 
 EvalResult builtin_concat(Environment* env, Value* args, size_t arg_count) {
@@ -382,7 +386,7 @@ EvalResult builtin_concat(Environment* env, Value* args, size_t arg_count) {
             return make_error_detailed("concat() all arguments must be strings", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
         }
         if (args[i].as.string) {
-            total_len += strlen(args[i].as.string);
+            total_len += string_length(args[i].as.string);
         }
     }
     
@@ -394,11 +398,16 @@ EvalResult builtin_concat(Environment* env, Value* args, size_t arg_count) {
     result[0] = '\0';
     for (size_t i = 0; i < arg_count; i++) {
         if (args[i].as.string) {
-            strcat(result, args[i].as.string);
+            const char* str_data = string_data(args[i].as.string);
+            strcat(result, str_data);
         }
     }
     
-    return make_success(make_string_value(result));
+    // Create ref-counted string and clean up temp
+    Value final_result = make_string_value_from_cstr(result);
+    free(result);
+    
+    return make_success(final_result);
 }
 
 EvalResult builtin_upper(Environment* env, Value* args, size_t arg_count) {
@@ -411,10 +420,8 @@ EvalResult builtin_upper(Environment* env, Value* args, size_t arg_count) {
         return make_error_detailed("upper() requires a string argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
     }
     
-    const char* str = arg.as.string;
-    if (!str) str = "";
-    
-    size_t len = strlen(str);
+    const char* str = arg.as.string ? string_data(arg.as.string) : "";
+    size_t len = arg.as.string ? string_length(arg.as.string) : 0;
     char* result = malloc(len + 1);
     if (!result) {
         return make_error_detailed("Memory allocation failed", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
@@ -425,7 +432,11 @@ EvalResult builtin_upper(Environment* env, Value* args, size_t arg_count) {
     }
     result[len] = '\0';
     
-    return make_success(make_string_value(result));
+    // Create ref-counted string and clean up temp
+    Value final_result = make_string_value_from_cstr(result);
+    free(result);
+    
+    return make_success(final_result);
 }
 
 EvalResult builtin_lower(Environment* env, Value* args, size_t arg_count) {
@@ -557,8 +568,8 @@ EvalResult builtin_load(Environment* env, Value* args, size_t arg_count) {
                                   "Usage: load(\"script.mob\")", ERROR_TYPE, 0, 0, NULL, NULL);
     }
     
-    const char* filename = filename_val.as.string;
-    if (!filename || strlen(filename) == 0) {
+    const char* filename = filename_val.as.string ? string_data(filename_val.as.string) : "";
+    if (!filename || string_length(filename_val.as.string) == 0) {
         return make_error_detailed("load() filename cannot be empty", 
                                   "Provide a valid filename", ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
