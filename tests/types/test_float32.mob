@@ -37,4 +37,4 @@ var precise64: float64 = 3.1415926535897932384626433832795;
 print("float32 precision:", precise32);
 print("float64 precision:", precise64);
 
-print("\nAll float32 tests completed!");
+print("\nAll float32 tests completed!"); 
