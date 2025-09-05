@@ -16,7 +16,8 @@
 // CORE FUNCTIONS
 // =============================================================================
 
-EvalResult builtin_print(Value* args, size_t arg_count) {
+EvalResult builtin_print(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Print doesn't need environment access
     for (size_t i = 0; i < arg_count; i++) {
         if (i > 0) printf(" ");
         print_value(args[i]);
@@ -25,7 +26,8 @@ EvalResult builtin_print(Value* args, size_t arg_count) {
     return make_success(make_nil_value());
 }
 
-EvalResult builtin_typeof(Value* args, size_t arg_count) {
+EvalResult builtin_typeof(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // typeof doesn't need environment access
     if (arg_count != 1) {
         return make_error_detailed("typeof() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -38,7 +40,8 @@ EvalResult builtin_typeof(Value* args, size_t arg_count) {
     return make_success(make_string_value(result));
 }
 
-EvalResult builtin_str(Value* args, size_t arg_count) {
+EvalResult builtin_str(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // str() doesn't need environment access
     if (arg_count != 1) {
         return make_error_detailed("str() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -47,7 +50,7 @@ EvalResult builtin_str(Value* args, size_t arg_count) {
     return make_success(make_string_value(str_result));
 }
 
-EvalResult builtin_int(Value* args, size_t arg_count) {
+EvalResult builtin_int(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("int() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -75,7 +78,7 @@ EvalResult builtin_int(Value* args, size_t arg_count) {
     }
 }
 
-EvalResult builtin_float(Value* args, size_t arg_count) {
+EvalResult builtin_float(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("float() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -120,7 +123,7 @@ EvalResult builtin_float(Value* args, size_t arg_count) {
 // MATH FUNCTIONS
 // =============================================================================
 
-EvalResult builtin_abs(Value* args, size_t arg_count) {
+EvalResult builtin_abs(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("abs() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -137,7 +140,7 @@ EvalResult builtin_abs(Value* args, size_t arg_count) {
     return make_error_detailed("abs() requires a numeric argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
 }
 
-EvalResult builtin_min(Value* args, size_t arg_count) {
+EvalResult builtin_min(Environment* env, Value* args, size_t arg_count) {
     if (arg_count < 2) {
         return make_error_detailed("min() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -163,7 +166,7 @@ EvalResult builtin_min(Value* args, size_t arg_count) {
     return make_success(min_val);
 }
 
-EvalResult builtin_max(Value* args, size_t arg_count) {
+EvalResult builtin_max(Environment* env, Value* args, size_t arg_count) {
     if (arg_count < 2) {
         return make_error_detailed("max() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -189,7 +192,7 @@ EvalResult builtin_max(Value* args, size_t arg_count) {
     return make_success(max_val);
 }
 
-EvalResult builtin_pow(Value* args, size_t arg_count) {
+EvalResult builtin_pow(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 2) {
         return make_error_detailed("pow() expects exactly 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -212,7 +215,7 @@ EvalResult builtin_pow(Value* args, size_t arg_count) {
     return make_success(make_float_value(pow(base_d, exp_d)));
 }
 
-EvalResult builtin_sqrt(Value* args, size_t arg_count) {
+EvalResult builtin_sqrt(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("sqrt() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -235,7 +238,7 @@ EvalResult builtin_sqrt(Value* args, size_t arg_count) {
     return make_success(make_float_value(sqrt(val)));
 }
 
-EvalResult builtin_floor(Value* args, size_t arg_count) {
+EvalResult builtin_floor(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("floor() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -254,7 +257,7 @@ EvalResult builtin_floor(Value* args, size_t arg_count) {
     return make_success(make_integer_value(NUM_INT32, (int32_t)floor(val)));
 }
 
-EvalResult builtin_ceil(Value* args, size_t arg_count) {
+EvalResult builtin_ceil(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("ceil() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -273,7 +276,7 @@ EvalResult builtin_ceil(Value* args, size_t arg_count) {
     return make_success(make_integer_value(NUM_INT32, (int32_t)ceil(val)));
 }
 
-EvalResult builtin_round(Value* args, size_t arg_count) {
+EvalResult builtin_round(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("round() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -296,7 +299,7 @@ EvalResult builtin_round(Value* args, size_t arg_count) {
 // STRING FUNCTIONS
 // =============================================================================
 
-EvalResult builtin_len(Value* args, size_t arg_count) {
+EvalResult builtin_len(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("len() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -310,7 +313,7 @@ EvalResult builtin_len(Value* args, size_t arg_count) {
     return make_error_detailed("len() requires a string argument", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
 }
 
-EvalResult builtin_substr(Value* args, size_t arg_count) {
+EvalResult builtin_substr(Environment* env, Value* args, size_t arg_count) {
     if (arg_count < 2 || arg_count > 3) {
         return make_error_detailed("substr() expects 2 or 3 arguments: substr(string, start [, length])", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -367,7 +370,7 @@ EvalResult builtin_substr(Value* args, size_t arg_count) {
     return make_success(make_string_value(result));
 }
 
-EvalResult builtin_concat(Value* args, size_t arg_count) {
+EvalResult builtin_concat(Environment* env, Value* args, size_t arg_count) {
     if (arg_count < 2) {
         return make_error_detailed("concat() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -398,7 +401,7 @@ EvalResult builtin_concat(Value* args, size_t arg_count) {
     return make_success(make_string_value(result));
 }
 
-EvalResult builtin_upper(Value* args, size_t arg_count) {
+EvalResult builtin_upper(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("upper() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -425,7 +428,7 @@ EvalResult builtin_upper(Value* args, size_t arg_count) {
     return make_success(make_string_value(result));
 }
 
-EvalResult builtin_lower(Value* args, size_t arg_count) {
+EvalResult builtin_lower(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("lower() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -452,7 +455,7 @@ EvalResult builtin_lower(Value* args, size_t arg_count) {
     return make_success(make_string_value(result));
 }
 
-EvalResult builtin_contains(Value* args, size_t arg_count) {
+EvalResult builtin_contains(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 2) {
         return make_error_detailed("contains() expects exactly 2 arguments: contains(string, substring)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -475,7 +478,7 @@ EvalResult builtin_contains(Value* args, size_t arg_count) {
 // UTILITY FUNCTIONS
 // =============================================================================
 
-EvalResult builtin_random(Value* args, size_t arg_count) {
+EvalResult builtin_random(Environment* env, Value* args, size_t arg_count) {
     static bool seeded = false;
     if (!seeded) {
         srand((unsigned int)time(NULL));
@@ -517,7 +520,7 @@ EvalResult builtin_random(Value* args, size_t arg_count) {
     return make_error_detailed("random() expects 0, 1, or 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
 }
 
-EvalResult builtin_time(Value* args, size_t arg_count) {
+EvalResult builtin_time(Environment* env, Value* args, size_t arg_count) {
     (void)args; // Suppress unused warning
     if (arg_count != 0) {
         return make_error_detailed("time() expects no arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
@@ -527,7 +530,7 @@ EvalResult builtin_time(Value* args, size_t arg_count) {
     return make_success(make_integer_value(NUM_INT64, (int64_t)current_time));
 }
 
-EvalResult builtin_clock(Value* args, size_t arg_count) {
+EvalResult builtin_clock(Environment* env, Value* args, size_t arg_count) {
     (void)args; // Suppress unused warning
     if (arg_count != 0) {
         return make_error_detailed("clock() expects no arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
@@ -542,7 +545,7 @@ EvalResult builtin_clock(Value* args, size_t arg_count) {
 // FILE I/O FUNCTIONS
 // =============================================================================
 
-EvalResult builtin_load(Value* args, size_t arg_count) {
+EvalResult builtin_load(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("load() expects exactly 1 argument (filename)", 
                                   "Usage: load(\"script.mob\")", ERROR_ARGUMENT, 0, 0, NULL, NULL);
@@ -600,22 +603,15 @@ EvalResult builtin_load(Value* args, size_t arg_count) {
                                   "Check the syntax of the loaded file", ERROR_RUNTIME, 0, 0, NULL, NULL);
     }
     
-    // Get current environment context 
-    // Use the current evaluation environment so loaded functions are available 
-    // in the same scope as the calling script
-    Environment* current_env = get_current_environment();
-    if (!current_env) {
-        // Fall back to global environment if no current environment is set
-        extern Environment* global_env;
-        current_env = global_env;
-    }
+    // Use the passed environment - this is much cleaner than global tracking!
+    // The loaded script will execute in the same environment as the caller
     
     // Set source context for better error reporting
     const char* old_context = get_source_context();
     set_source_context(file_result.content);
     
-    // Execute the loaded script
-    EvalResult eval_result = evaluate_program(parse_result.statements, parse_result.count, current_env);
+    // Execute the loaded script in the caller's environment
+    EvalResult eval_result = evaluate_program(parse_result.statements, parse_result.count, env);
     
     // Restore previous source context
     set_source_context(old_context);
@@ -641,7 +637,7 @@ EvalResult builtin_load(Value* args, size_t arg_count) {
 // TABLE FUNCTIONS
 // =============================================================================
 
-EvalResult builtin_table_insert(Value* args, size_t arg_count) {
+EvalResult builtin_table_insert(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 3) {
         return make_error_detailed("table.insert() expects 3 arguments (table, key, value)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -661,7 +657,7 @@ EvalResult builtin_table_insert(Value* args, size_t arg_count) {
     return make_success(make_nil_value());
 }
 
-EvalResult builtin_table_remove(Value* args, size_t arg_count) {
+EvalResult builtin_table_remove(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 2) {
         return make_error_detailed("table.remove() expects 2 arguments (table, key)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -683,7 +679,7 @@ EvalResult builtin_table_remove(Value* args, size_t arg_count) {
     }
 }
 
-EvalResult builtin_table_has_key(Value* args, size_t arg_count) {
+EvalResult builtin_table_has_key(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 2) {
         return make_error_detailed("table.has_key() expects 2 arguments (table, key)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -699,7 +695,7 @@ EvalResult builtin_table_has_key(Value* args, size_t arg_count) {
     return make_success(make_bool_value(has_key));
 }
 
-EvalResult builtin_table_size(Value* args, size_t arg_count) {
+EvalResult builtin_table_size(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("table.size() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -713,7 +709,7 @@ EvalResult builtin_table_size(Value* args, size_t arg_count) {
     return make_success(make_integer_value(NUM_INT64, (int64_t)size));
 }
 
-EvalResult builtin_setmetatable(Value* args, size_t arg_count) {
+EvalResult builtin_setmetatable(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 2) {
         return make_error_detailed("setmetatable() expects 2 arguments (table, metatable)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -735,7 +731,7 @@ EvalResult builtin_setmetatable(Value* args, size_t arg_count) {
     return make_success(args[0]); // Return the original table
 }
 
-EvalResult builtin_getmetatable(Value* args, size_t arg_count) {
+EvalResult builtin_getmetatable(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("getmetatable() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -754,7 +750,7 @@ EvalResult builtin_getmetatable(Value* args, size_t arg_count) {
     }
 }
 
-EvalResult builtin_pairs(Value* args, size_t arg_count) {
+EvalResult builtin_pairs(Environment* env, Value* args, size_t arg_count) {
     if (arg_count != 1) {
         return make_error_detailed("pairs() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -809,7 +805,7 @@ EvalResult builtin_pairs(Value* args, size_t arg_count) {
 }
 
 // Type checking mode control functions
-EvalResult builtin_set_strict_types(Value* args, size_t arg_count) {
+EvalResult builtin_set_strict_types(Environment* env, Value* args, size_t arg_count) {
     extern TypeCheckConfig global_type_config;
     
     if (arg_count > 1) {
@@ -828,7 +824,7 @@ EvalResult builtin_set_strict_types(Value* args, size_t arg_count) {
     return make_success(make_nil_value());
 }
 
-EvalResult builtin_set_type_warnings(Value* args, size_t arg_count) {
+EvalResult builtin_set_type_warnings(Environment* env, Value* args, size_t arg_count) {
     extern TypeCheckConfig global_type_config;
     
     if (arg_count != 1) {
