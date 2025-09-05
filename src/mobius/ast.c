@@ -413,6 +413,28 @@ const char* value_type_name(ValueType type) {
     }
 }
 
+// Create a deep copy of a value (handles string duplication)
+Value copy_value(Value value) {
+    if (value.type == VAL_STRING && value.as.string) {
+        // Create a deep copy of the string
+        char* str_copy = malloc(strlen(value.as.string) + 1);
+        if (str_copy) {
+            strcpy(str_copy, value.as.string);
+            return make_string_value(str_copy);
+        } else {
+            // Allocation failed, return nil
+            return make_nil_value();
+        }
+    } else if (value.type == VAL_FUNCTION && value.as.function) {
+        // For functions, we don't copy the function structure itself
+        // as they should be shared. Just return the same value.
+        return value;
+    } else {
+        // For other types (primitives), simple copy is sufficient
+        return value;
+    }
+}
+
 // Memory management
 void free_expr(Expr* expr) {
     if (!expr) return;

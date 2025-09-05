@@ -1,4 +1,5 @@
 #include "environment.h"
+#include "ast.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -122,9 +123,9 @@ void define_variable(Environment* env, const char* name, Value value) {
     // Check if variable already exists in current scope
     EnvEntry* existing = find_entry(env, name);
     if (existing) {
-        // Update existing variable
+        // Update existing variable - free old value and copy new one
         free_value(existing->value);
-        existing->value = value;
+        existing->value = copy_value(value);
         existing->is_defined = true;
         return;
     }
@@ -140,7 +141,7 @@ void define_variable(Environment* env, const char* name, Value value) {
     }
     strcpy(entry->name, name);
     
-    entry->value = value;
+    entry->value = copy_value(value);
     entry->is_defined = true;
     
     // Insert into hash table
@@ -181,7 +182,7 @@ bool assign_variable(Environment* env, const char* name, Value value) {
         EnvEntry* entry = find_entry(current, name);
         if (entry) {
             free_value(entry->value);
-            entry->value = value;
+            entry->value = copy_value(value);
             entry->is_defined = true;
             return true;
         }

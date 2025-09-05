@@ -239,6 +239,7 @@ bool values_equal(Value a, Value b);
 void print_value(Value value);
 char* value_to_string(Value value);
 const char* value_type_name(ValueType type);
+Value copy_value(Value value);
 
 // Memory management
 void free_expr(Expr* expr);
