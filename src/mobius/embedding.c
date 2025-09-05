@@ -55,12 +55,7 @@ static void set_error_internal(MobiusState* state, int code, const char* message
     state->last_error->function_name = function_name ? strdup(function_name) : NULL;
 }
 
-// Wrapper for custom C functions to integrate with Mobius calling convention
-static EvalResult custom_function_wrapper(Value* args, size_t arg_count) {
-    // This is a bit tricky - we need to access the state and function info
-    // For now, we'll implement a simpler approach
-    return make_error("Custom function wrapper not yet implemented", 0, 0);
-}
+// Note: custom_function_wrapper removed as it was unused and incomplete
 
 // ============================================================================
 // STATE MANAGEMENT

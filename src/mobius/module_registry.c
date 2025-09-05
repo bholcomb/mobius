@@ -124,7 +124,9 @@ PluginLoadResult load_module(ModuleRegistry* registry, const char* path) {
     }
     
     // Find the plugin info function
-    PluginInfoFunc get_plugin_info = (PluginInfoFunc)dlsym(handle, "mobius_plugin_info");
+    union { void* obj; PluginInfoFunc func; } plugin_info_ptr;
+    plugin_info_ptr.obj = dlsym(handle, "mobius_plugin_info");
+    PluginInfoFunc get_plugin_info = plugin_info_ptr.func;
     if (!get_plugin_info) {
         dlclose(handle);
         set_error("Plugin does not export mobius_plugin_info function");

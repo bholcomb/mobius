@@ -62,7 +62,7 @@ const char* error_category_name(ErrorCategory category) {
     }
 }
 
-const char* get_error_suggestion(ErrorCategory category, const char* context) {
+const char* get_error_suggestion(ErrorCategory category, const char* context __attribute__((unused))) {
     switch (category) {
         case ERROR_TYPE:
             return "Check that all operands are of compatible types";
@@ -845,7 +845,7 @@ EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, Module
         builtin = lookup_builtin(full_name);
         
         if (!builtin) {
-            char error_msg[256];
+            char error_msg[512];
             snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
             
             return make_error_detailed(

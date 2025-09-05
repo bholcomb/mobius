@@ -16,6 +16,7 @@
  */
 
 #define _POSIX_C_SOURCE 200809L  // For usleep
+#define _DEFAULT_SOURCE  // Additional feature for usleep
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

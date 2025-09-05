@@ -90,7 +90,7 @@ Token make_token(TokenType type, const char* start, int length, int line, int co
         .length = length,
         .line = line,
         .column = column,
-        .literal = {0} // Initialize union to zero
+        .literal = {{0}} // Initialize union to zero
     };
     return token;
 }
@@ -102,7 +102,7 @@ Token make_error_token(const char* message, int line, int column) {
         .length = (int)strlen(message),
         .line = line,
         .column = column,
-        .literal = {0}
+        .literal = {{0}}
     };
     return token;
 }
@@ -115,7 +115,7 @@ Token make_integer_token(const char* start, int length, int line, int column,
         .length = length,
         .line = line,
         .column = column,
-        .literal = {0}
+        .literal = {{0}}
     };
     
     token.literal.integer.num_type = num_type;
@@ -141,7 +141,7 @@ Token make_float_token(const char* start, int length, int line, int column, doub
         .length = length,
         .line = line,
         .column = column,
-        .literal = {0}
+        .literal = {{0}}
     };
     
     token.literal.float_val = value;
@@ -155,7 +155,7 @@ Token make_string_token(const char* start, int length, int line, int column, con
         .length = length,
         .line = line,
         .column = column,
-        .literal = {0}
+        .literal = {{0}}
     };
     
     token.literal.string = string;
@@ -169,7 +169,7 @@ Token make_char_token(const char* start, int length, int line, int column, char 
         .length = length,
         .line = line,
         .column = column,
-        .literal = {0}
+        .literal = {{0}}
     };
     
     token.literal.character = character;

@@ -315,14 +315,14 @@ EvalResult math_lcm(Value* args, size_t arg_count) {
 // MATHEMATICAL CONSTANTS
 // ============================================================================
 
-EvalResult math_pi(Value* args, size_t arg_count) {
+EvalResult math_pi(Value* args __attribute__((unused)), size_t arg_count) {
     if (arg_count != 0) {
         return make_error("pi() expects no arguments", 0, 0);
     }
     return make_success(make_float_value(M_PI));
 }
 
-EvalResult math_e(Value* args, size_t arg_count) {
+EvalResult math_e(Value* args __attribute__((unused)), size_t arg_count) {
     if (arg_count != 0) {
         return make_error("e() expects no arguments", 0, 0);
     }
