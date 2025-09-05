@@ -1,0 +1,25 @@
+// Test basic metatable infrastructure
+print("=== Basic Metamethod Infrastructure Test ===");
+
+// Create a table and metatable
+var data = {value: 100};
+
+// Create the fallback table first
+var fallback_table = {fallback: "This is a fallback value"};
+var redirect_table = {redirect: "new values"};
+
+var meta = {["__index"] = fallback_table, ["__newindex"] = redirect_table};
+
+print("Original data:", data);
+print("Metatable:", meta);
+
+// Set metatable
+setmetatable(data, meta);
+print("Metatable set successfully");
+
+// Test __index metamethod (fallback to another table)
+print("data.fallback:", data.fallback);  // Should find it in __index table
+print("data.value:", data.value);        // Should find it in original table
+print("data.missing:", data.missing);    // Should return nil (not in __index table)
+
+print("=== Basic metamethod test completed! ===");

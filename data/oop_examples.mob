@@ -1,0 +1,132 @@
+// Object-Oriented Programming Examples with Metatables
+print("=== Object-Oriented Programming with Metatables ===");
+
+// Example 1: Simple class-like behavior with __index
+print("\n1. Simple Class-like Behavior");
+
+// Create a "class" table with methods  
+var Person = {name: "Unknown", age: 0};
+
+// Create a metatable that redirects to Person for missing methods/properties
+var PersonMeta = {["__index"] = Person};
+
+// Function to create a new Person instance
+// (Note: This simulates a constructor - actual function calls would be needed for full OOP)
+print("Creating person instances...");
+
+// Create instances
+var alice = {name: "Alice", age: 30};
+var bob = {name: "Bob", age: 25};
+
+// Set metatables
+setmetatable(alice, PersonMeta);
+setmetatable(bob, PersonMeta);
+
+print("Alice:", alice);
+print("Bob:", bob);
+
+// Test that we can access default values through __index
+print("Alice name:", alice.name);      // From alice directly
+print("Bob age:", bob.age);            // From bob directly
+
+// Example 2: Shared behavior through metatable
+print("\n2. Shared Default Values");
+
+// Add a default property to the Person "class"
+table_insert(Person, "species", "Human");
+
+print("Alice species:", alice.species); // Should get "Human" from Person via __index
+print("Bob species:", bob.species);     // Should get "Human" from Person via __index
+
+// Example 3: Table as object with methods simulation
+print("\n3. Object with State");
+
+// Create an object that simulates having methods
+var counter = {value: 0, step: 1};
+
+print("Counter object:", counter);
+print("Counter value:", counter.value);
+print("Counter step:", counter.step);
+
+// Simulate method calls by manually updating the object
+table_insert(counter, "value", counter.value + counter.step);
+print("After increment:", counter);
+
+table_insert(counter, "value", counter.value + counter.step);
+print("After another increment:", counter);
+
+// Example 4: Multiple inheritance simulation
+print("\n4. Multiple Inheritance Simulation");
+
+// Base "classes"
+var Animal = {species: "Unknown", legs: 0};
+var Mammal = {warm_blooded: true, fur: false};
+
+// Create a metatable that first looks in Mammal, then in Animal
+var MammalMeta = {["__index"] = Mammal};
+setmetatable(Mammal, {["__index"] = Animal});
+
+// Create a dog instance
+var dog = {species: "Canis lupus", legs: 4, fur: true, name: "Rex"};
+
+setmetatable(dog, MammalMeta);
+
+print("Dog:", dog);
+print("Dog species:", dog.species);         // From dog directly
+print("Dog legs:", dog.legs);               // From dog directly  
+print("Dog warm_blooded:", dog.warm_blooded); // From Mammal via __index
+print("Dog fur:", dog.fur);                 // From dog directly (overrides Mammal)
+
+// Example 5: Encapsulation simulation
+print("\n5. Encapsulation Simulation");
+
+// Create an object with "private" and "public" data
+var BankAccount = {balance: 1000, account_number: "12345", owner: "John Doe"};
+
+// Create account instances
+var account1 = {balance: 500, account_number: "ACC001", owner: "Alice Smith"};
+var account2 = {balance: 1500, account_number: "ACC002", owner: "Bob Johnson"};
+
+print("Account1:", account1);
+print("Account2:", account2);
+
+print("Account1 balance:", account1.balance);
+print("Account1 owner:", account1.owner);
+
+// Example 6: Polymorphism simulation
+print("\n6. Polymorphism Simulation");
+
+// Different "classes" with similar interface
+var Circle = {radius: 1, shape_type: "circle"};
+var Rectangle = {width: 1, height: 1, shape_type: "rectangle"};
+
+// Create instances
+var circle1 = {radius: 5, shape_type: "circle"};
+var rect1 = {width: 10, height: 6, shape_type: "rectangle"};
+
+print("Circle:", circle1);
+print("Rectangle:", rect1);
+print("Circle type:", circle1.shape_type);
+print("Rectangle type:", rect1.shape_type);
+
+// Example 7: Property delegation
+print("\n7. Property Delegation");
+
+// Create a configuration object
+var Config = {debug: false, version: "1.0.0", max_connections: 100};
+
+// Create an application that delegates to config
+var App = {name: "MyApp", status: "running"};
+
+var ConfigMeta = {["__index"] = Config};
+setmetatable(App, ConfigMeta);
+
+print("App:", App);
+print("App name:", App.name);               // From App directly
+print("App debug:", App.debug);             // From Config via __index  
+print("App version:", App.version);         // From Config via __index
+print("App max_connections:", App.max_connections); // From Config via __index
+
+print("\n=== OOP Examples Complete! ===");
+print("Note: Full OOP would require function metamethods for method calls,");
+print("but these examples show the foundation for object-oriented patterns.");

@@ -231,6 +231,20 @@ EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
 
 // Arithmetic operations
 EvalResult add_values(Value left, Value right) {
+    // Check for table metamethods first
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
+        Value add_method = get_table_metamethod(table, "__add");
+        
+        if (add_method.type == VAL_FUNCTION) {
+            // TODO: Call function metamethod
+            // For now, fall through to default behavior
+        } else if (add_method.type != VAL_NIL) {
+            // Non-function metamethod - treat as error for arithmetic
+            return make_error("__add metamethod must be a function", 0, 0);
+        }
+        // If no metamethod found, continue to default error
+    }
     // String concatenation
     if (left.type == VAL_STRING || right.type == VAL_STRING) {
         char* left_str = value_to_string(left);
@@ -328,10 +342,26 @@ EvalResult add_values(Value left, Value right) {
         return make_success(make_integer_value(NUM_INT64, left_val + right_val));
     }
     
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        return make_error("Cannot perform arithmetic on tables without __add metamethod", 0, 0);
+    }
     return make_error("Cannot add these types", 0, 0);
 }
 
 EvalResult subtract_values(Value left, Value right) {
+    // Check for table metamethods first
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
+        Value sub_method = get_table_metamethod(table, "__sub");
+        
+        if (sub_method.type == VAL_FUNCTION) {
+            // TODO: Call function metamethod
+            // For now, fall through to default behavior
+        } else if (sub_method.type != VAL_NIL) {
+            return make_error("__sub metamethod must be a function", 0, 0);
+        }
+    }
+    
     // Numeric subtraction only
     if (left.type == VAL_FLOAT || right.type == VAL_FLOAT) {
         double left_val = (left.type == VAL_FLOAT) ? left.as.float_val : 0.0;
@@ -364,10 +394,26 @@ EvalResult subtract_values(Value left, Value right) {
         return make_success(make_integer_value(NUM_INT32, left_val - right_val));
     }
     
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        return make_error("Cannot perform arithmetic on tables without __sub metamethod", 0, 0);
+    }
     return make_error("Cannot subtract these types", 0, 0);
 }
 
 EvalResult multiply_values(Value left, Value right) {
+    // Check for table metamethods first
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
+        Value mul_method = get_table_metamethod(table, "__mul");
+        
+        if (mul_method.type == VAL_FUNCTION) {
+            // TODO: Call function metamethod
+            // For now, fall through to default behavior
+        } else if (mul_method.type != VAL_NIL) {
+            return make_error("__mul metamethod must be a function", 0, 0);
+        }
+    }
+    
     // Similar pattern to add_values for numeric multiplication
     if (left.type == VAL_FLOAT || right.type == VAL_FLOAT) {
         double left_val = (left.type == VAL_FLOAT) ? left.as.float_val : left.as.integer.value.i32;
@@ -381,10 +427,29 @@ EvalResult multiply_values(Value left, Value right) {
         return make_success(make_integer_value(NUM_INT32, left_val * right_val));
     }
     
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        return make_error("Cannot perform arithmetic on tables without __mul metamethod", 0, 0);
+    }
     return make_error("Cannot multiply these types", 0, 0);
 }
 
 EvalResult divide_values(Value left, Value right) {
+    // Check for table metamethods first
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
+        Value div_method = get_table_metamethod(table, "__div");
+        
+        if (div_method.type == VAL_FUNCTION) {
+            // TODO: Call function metamethod
+            // For now, fall through to default behavior
+        } else if (div_method.type != VAL_NIL) {
+            return make_error("__div metamethod must be a function", 0, 0);
+        }
+        
+        // If tables without metamethods, return error
+        return make_error("Cannot perform arithmetic on tables without __div metamethod", 0, 0);
+    }
+    
     // Division always returns float to handle fractions
     double left_val = (left.type == VAL_FLOAT) ? left.as.float_val : 
                       (left.type == VAL_INTEGER) ? left.as.integer.value.i32 : 0.0;
@@ -407,6 +472,55 @@ EvalResult divide_values(Value left, Value right) {
 
 EvalResult compare_values(Value left, Value right, TokenType operator) {
     bool result = false;
+    
+    // Check for table metamethods first
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
+        const char* metamethod_name = NULL;
+        
+        switch (operator) {
+            case TOKEN_EQUAL_EQUAL:
+            case TOKEN_BANG_EQUAL:
+                metamethod_name = "__eq";
+                break;
+            case TOKEN_LESS:
+                metamethod_name = "__lt";
+                break;
+            case TOKEN_LESS_EQUAL:
+                metamethod_name = "__le";
+                break;
+            case TOKEN_GREATER:
+            case TOKEN_GREATER_EQUAL:
+                // For > and >=, we check if the right operand has the metamethod
+                if (right.type == VAL_TABLE) {
+                    table = right.as.table;
+                    metamethod_name = (operator == TOKEN_GREATER) ? "__lt" : "__le";
+                    // Note: a > b becomes b < a, a >= b becomes b <= a
+                }
+                break;
+            default:
+                break;
+        }
+        
+        if (metamethod_name) {
+            Value compare_method = get_table_metamethod(table, metamethod_name);
+            
+            if (compare_method.type == VAL_FUNCTION) {
+                // TODO: Call function metamethod
+                // For now, fall through to default behavior
+            } else if (compare_method.type != VAL_NIL) {
+                return make_error("Comparison metamethod must be a function", 0, 0);
+            }
+        }
+        
+        // If no metamethod found and tables are involved, handle equality specially
+        if (operator == TOKEN_EQUAL_EQUAL || operator == TOKEN_BANG_EQUAL) {
+            // Use default equality for tables
+        } else {
+            // Other comparisons require metamethods for tables
+            return make_error("Cannot compare tables without appropriate metamethod", 0, 0);
+        }
+    }
     
     // Equality comparison
     if (operator == TOKEN_EQUAL_EQUAL) {

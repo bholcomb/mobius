@@ -36,6 +36,11 @@ void table_insert_entry(TableEntry* entries, size_t capacity, Value key, Value v
 void set_metatable(Table* table, Table* metatable);
 Table* get_metatable(Table* table);
 
+// Basic metatable functions (advanced metamethods in evaluator.h)
+const char* get_metamethod_name(const char* name);
+bool has_table_metamethod(Table* table, const char* method_name);
+Value get_table_metamethod(Table* table, const char* method_name);
+
 // Table debugging
 void print_table(Table* table);
 void print_table_debug(Table* table);

@@ -333,6 +333,8 @@ bool values_equal(Value a, Value b) {
             return (a.as.string == b.as.string) || 
                    (a.as.string && b.as.string && strcmp(a.as.string, b.as.string) == 0);
         case VAL_CHAR: return a.as.character == b.as.character;
+        case VAL_FUNCTION: return a.as.function == b.as.function;
+        case VAL_TABLE: return a.as.table == b.as.table; // Reference equality
         default: return false;
     }
 }
