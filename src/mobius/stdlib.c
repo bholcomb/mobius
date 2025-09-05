@@ -338,9 +338,7 @@ EvalResult builtin_substr(Environment* env, Value* args, size_t arg_count) {
     // Handle negative start index
     if (start < 0) start = 0;
     if ((size_t)start >= str_len) {
-        char* empty = malloc(1);
-        if (empty) empty[0] = '\0';
-        return make_success(make_string_value(empty));
+        return make_success(make_string_value_from_cstr(""));
     }
     
     // Handle length parameter
@@ -868,13 +866,15 @@ EvalResult builtin_get_type_config(Value* args __attribute__((unused)), size_t a
     // Create string keys - we need to allocate them
     char* strict_str = malloc(12);
     if (strict_str) strcpy(strict_str, "strict_mode");
-    Value strict_key = make_string_value(strict_str);
+    Value strict_key = make_string_value_from_cstr(strict_str);
+    free(strict_str);
     Value strict_value = make_bool_value(global_type_config.strict_mode);
     table_set(config_table, strict_key, strict_value);
     
     char* warn_str = malloc(19);
     if (warn_str) strcpy(warn_str, "warn_on_conversion");
-    Value warn_key = make_string_value(warn_str);
+    Value warn_key = make_string_value_from_cstr(warn_str);
+    free(warn_str);
     Value warn_value = make_bool_value(global_type_config.warn_on_conversion);
     table_set(config_table, warn_key, warn_value);
     
