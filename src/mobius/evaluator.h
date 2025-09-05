@@ -108,7 +108,7 @@ bool are_types_compatible(ValueType a, ValueType b);
 EvalResult add_values(Value left, Value right);
 EvalResult subtract_values(Value left, Value right);
 EvalResult multiply_values(Value left, Value right);
-EvalResult divide_values(Value left, Value right);
+EvalResult divide_values(Value left, Value right, int line, int column);
 EvalResult modulo_values(Value left, Value right);
 
 // Comparison operations
@@ -122,6 +122,17 @@ void print_runtime_error(RuntimeError error);
 void print_runtime_error_with_context(RuntimeError error, const char* filename);
 const char* error_category_name(ErrorCategory category);
 const char* get_error_suggestion(ErrorCategory category);
+
+// Source context management for better error reporting
+void set_source_context(const char* source);
+const char* get_source_context(void);
+const char* extract_source_line(const char* source, int line_number);
+
+// Enhanced error creation with source line extraction
+EvalResult make_error_with_source(const char* message, int line, int column);
+EvalResult make_error_detailed_with_source(const char* message, const char* suggestion, 
+                                          ErrorCategory category, int line, int column,
+                                          const char* function_name);
 
 // User-defined function support
 EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env);
