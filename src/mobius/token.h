@@ -138,19 +138,10 @@ typedef struct {
     
     // Literal value (for tokens that have computed values)
     union {
-        // Integer values
+        // Integer values: single value + type metadata (preserves precision)
         struct {
             NumericType num_type;   // Which integer type this represents
-            union {
-                int8_t   i8;
-                uint8_t  u8;
-                int16_t  i16;
-                uint16_t u16;
-                int32_t  i32;
-                uint32_t u32;
-                int64_t  i64;
-                uint64_t u64;
-            } value;
+            int64_t value;          // Always use largest signed type for storage
         } integer;
         
         double float_val;           // For floating point literals (always 64-bit)

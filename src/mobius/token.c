@@ -60,15 +60,17 @@ void print_token(const Token* token) {
     // Print literal value if applicable
     if (token->type == TOKEN_INTEGER) {
         printf(" (%s: ", numeric_type_name(token->literal.integer.num_type));
+        // Print the value with appropriate format based on type
+        int64_t value = token->literal.integer.value;
         switch (token->literal.integer.num_type) {
-            case NUM_INT8:   printf("%d", token->literal.integer.value.i8); break;
-            case NUM_UINT8:  printf("%u", token->literal.integer.value.u8); break;
-            case NUM_INT16:  printf("%d", token->literal.integer.value.i16); break;
-            case NUM_UINT16: printf("%u", token->literal.integer.value.u16); break;
-            case NUM_INT32:  printf("%d", token->literal.integer.value.i32); break;
-            case NUM_UINT32: printf("%u", token->literal.integer.value.u32); break;
-            case NUM_INT64:  printf("%ld", token->literal.integer.value.i64); break;
-            case NUM_UINT64: printf("%lu", token->literal.integer.value.u64); break;
+            case NUM_INT8:   printf("%d", (int8_t)value); break;
+            case NUM_UINT8:  printf("%u", (uint8_t)value); break;
+            case NUM_INT16:  printf("%d", (int16_t)value); break;
+            case NUM_UINT16: printf("%u", (uint16_t)value); break;
+            case NUM_INT32:  printf("%d", (int32_t)value); break;
+            case NUM_UINT32: printf("%u", (uint32_t)value); break;
+            case NUM_INT64:  printf("%ld", value); break;
+            case NUM_UINT64: printf("%lu", (uint64_t)value); break;
             default: printf("unknown"); break;
         }
         printf(")");
@@ -118,18 +120,9 @@ Token make_integer_token(const char* start, int length, int line, int column,
         .literal = {{0}}
     };
     
+    // Store type and value directly - no complex union needed
     token.literal.integer.num_type = num_type;
-    switch (num_type) {
-        case NUM_INT8:   token.literal.integer.value.i8  = (int8_t)value; break;
-        case NUM_UINT8:  token.literal.integer.value.u8  = (uint8_t)value; break;
-        case NUM_INT16:  token.literal.integer.value.i16 = (int16_t)value; break;
-        case NUM_UINT16: token.literal.integer.value.u16 = (uint16_t)value; break;
-        case NUM_INT32:  token.literal.integer.value.i32 = (int32_t)value; break;
-        case NUM_UINT32: token.literal.integer.value.u32 = (uint32_t)value; break;
-        case NUM_INT64:  token.literal.integer.value.i64 = value; break;
-        case NUM_UINT64: token.literal.integer.value.u64 = (uint64_t)value; break;
-        default: break;
-    }
+    token.literal.integer.value = value;
     
     return token;
 }

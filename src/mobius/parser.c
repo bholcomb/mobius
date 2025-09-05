@@ -149,20 +149,9 @@ Expr* parse_primary(Parser* parser) {
     if (parser_match(parser, TOKEN_INTEGER)) {
         Token token = parser_previous(parser);
         // Extract the value from the token's literal field
+        // With simplified integer representation, value is already stored as int64_t
         NumericType num_type = token.literal.integer.num_type;
-        int64_t int_value = 0;
-        
-        switch (num_type) {
-            case NUM_INT8:   int_value = token.literal.integer.value.i8; break;
-            case NUM_UINT8:  int_value = token.literal.integer.value.u8; break;
-            case NUM_INT16:  int_value = token.literal.integer.value.i16; break;
-            case NUM_UINT16: int_value = token.literal.integer.value.u16; break;
-            case NUM_INT32:  int_value = token.literal.integer.value.i32; break;
-            case NUM_UINT32: int_value = token.literal.integer.value.u32; break;
-            case NUM_INT64:  int_value = token.literal.integer.value.i64; break;
-            case NUM_UINT64: int_value = (int64_t)token.literal.integer.value.u64; break;
-            default: int_value = 0; break;
-        }
+        int64_t int_value = token.literal.integer.value;
         
         Value value = make_integer_value(num_type, int_value);
         return make_literal_expr(value);
