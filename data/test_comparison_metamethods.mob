@@ -1,0 +1,28 @@
+// Test comparison metamethods
+print("=== Testing Comparison Metamethods ===");
+
+// Create tables without metamethods
+var table1 = {value: 10};
+var table2 = {value: 5};
+var table3 = {value: 10};
+
+print("Table1:", table1);
+print("Table2:", table2);
+print("Table3:", table3);
+
+// Test equality - should work (reference comparison)
+print("Testing table equality (reference comparison):");
+print("table1 == table2:", table1 == table2);  // false (different objects)
+print("table1 == table3:", table1 == table3);  // false (different objects)
+print("table1 == table1:", table1 == table1);  // true (same reference)
+
+// Test inequality
+print("table1 != table2:", table1 != table2);  // true
+
+// Test other comparisons - should fail without metamethods
+print("Testing comparisons without metamethods (should fail):");
+print("table1 < table2:");
+var result1 = table1 < table2;
+print("Result:", result1);
+
+print("=== Comparison metamethod tests completed! ===");

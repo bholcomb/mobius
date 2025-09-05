@@ -191,15 +191,12 @@ Value table_get(Table* table, Value key) {
     
     // Check metatable for __index
     if (table->metatable) {
-        char* index_str = malloc(8);
-        if (index_str) {
-            strcpy(index_str, "__index");
-            Value index_method = table_get(table->metatable, make_string_value(index_str));
-            if (index_method.type == VAL_FUNCTION) {
-                // TODO: Call metamethod with table and key
-            } else if (index_method.type == VAL_TABLE) {
-                return table_get(index_method.as.table, key);
-            }
+        Value index_method = get_table_metamethod(table, "__index");
+        if (index_method.type == VAL_FUNCTION) {
+            // TODO: Call metamethod with table and key
+            // For now, fall through to return nil
+        } else if (index_method.type == VAL_TABLE) {
+            return table_get(index_method.as.table, key);
         }
     }
     
@@ -220,16 +217,12 @@ bool table_set(Table* table, Value key, Value value) {
     if (is_new_key) {
         // Check metatable for __newindex
         if (table->metatable) {
-            char* newindex_str = malloc(11);
-            if (newindex_str) {
-                strcpy(newindex_str, "__newindex");
-                Value newindex_method = table_get(table->metatable, make_string_value(newindex_str));
-                if (newindex_method.type == VAL_FUNCTION) {
-                    // TODO: Call metamethod with table, key, and value
-                    return true;
-                } else if (newindex_method.type == VAL_TABLE) {
-                    return table_set(newindex_method.as.table, key, value);
-                }
+            Value newindex_method = get_table_metamethod(table, "__newindex");
+            if (newindex_method.type == VAL_FUNCTION) {
+                // TODO: Call metamethod with table, key, and value
+                return true;
+            } else if (newindex_method.type == VAL_TABLE) {
+                return table_set(newindex_method.as.table, key, value);
             }
         }
         table->size++;
@@ -380,4 +373,45 @@ void print_table_debug(Table* table) {
             printf("(empty)\n");
         }
     }
+}
+
+// =============================================================================
+// BASIC METAMETHOD SUPPORT
+// =============================================================================
+
+const char* get_metamethod_name(const char* name) {
+    // Just return the name for validation - used for standard metamethod names
+    if (name && (strncmp(name, "__", 2) == 0)) {
+        return name;
+    }
+    return NULL;
+}
+
+bool has_table_metamethod(Table* table, const char* method_name) {
+    if (!table || !table->metatable || !method_name) {
+        return false;
+    }
+    
+    char* name_copy = malloc(strlen(method_name) + 1);
+    if (!name_copy) {
+        return false;
+    }
+    strcpy(name_copy, method_name);
+    
+    Value method = table_get(table->metatable, make_string_value(name_copy));
+    return method.type != VAL_NIL;
+}
+
+Value get_table_metamethod(Table* table, const char* method_name) {
+    if (!table || !table->metatable || !method_name) {
+        return make_nil_value();
+    }
+    
+    char* name_copy = malloc(strlen(method_name) + 1);
+    if (!name_copy) {
+        return make_nil_value();
+    }
+    strcpy(name_copy, method_name);
+    
+    return table_get(table->metatable, make_string_value(name_copy));
 }
