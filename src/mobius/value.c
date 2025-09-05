@@ -354,15 +354,26 @@ void free_value(Value value) {
         // The caller should manage this to prevent double free
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         MobiusFunction* func = value.as.function;
-        if (func->params) free(func->params);
-        if (func->body) {
-            for (size_t i = 0; i < func->body_count; i++) {
-                // Note: free_stmt is in ast.c, need to declare it or move it
-                // For now, we'll skip this to avoid circular dependencies
-                // free_stmt(func->body[i]);
-            }
-            free(func->body);
+        
+        // Free deep-copied function name
+        if (func->name.start) {
+            free((char*)func->name.start);
         }
+        
+        // Free deep-copied parameters
+        if (func->params) {
+            for (size_t i = 0; i < func->param_count; i++) {
+                if (func->params[i].start) {
+                    free((char*)func->params[i].start);
+                }
+            }
+            free(func->params);
+        }
+        
+        // Note: We don't free func->body because it still points to AST nodes
+        // This is a temporary compromise - the body cleanup should be handled
+        // by the AST cleanup system, not here
+        
         // Note: don't free closure environment - it's managed separately
         free(func);
     } else if (value.type == VAL_TABLE && value.as.table) {

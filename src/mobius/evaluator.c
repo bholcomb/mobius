@@ -1065,9 +1065,59 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         return make_error("Memory allocation failed", 0, 0);
     }
     
-    function->name = stmt->name;
-    function->params = stmt->params;
+    // Deep copy the function name
+    function->name.start = malloc(stmt->name.length + 1);
+    if (!function->name.start) {
+        free(function);
+        return make_error("Memory allocation failed", 0, 0);
+    }
+    strncpy((char*)function->name.start, stmt->name.start, stmt->name.length);
+    ((char*)function->name.start)[stmt->name.length] = '\0';
+    function->name.length = stmt->name.length;
+    function->name.line = stmt->name.line;
+    function->name.column = stmt->name.column;
+    function->name.type = stmt->name.type;
+    
+    // Deep copy the parameters
     function->param_count = stmt->param_count;
+    if (stmt->param_count > 0) {
+        function->params = malloc(stmt->param_count * sizeof(Token));
+        if (!function->params) {
+            free((char*)function->name.start);
+            free(function);
+            return make_error("Memory allocation failed", 0, 0);
+        }
+        
+        for (size_t i = 0; i < stmt->param_count; i++) {
+            Token* param = &function->params[i];
+            Token* src_param = &stmt->params[i];
+            
+            param->start = malloc(src_param->length + 1);
+            if (!param->start) {
+                // Cleanup previously allocated params
+                for (size_t j = 0; j < i; j++) {
+                    free((char*)function->params[j].start);
+                }
+                free(function->params);
+                free((char*)function->name.start);
+                free(function);
+                return make_error("Memory allocation failed", 0, 0);
+            }
+            
+            strncpy((char*)param->start, src_param->start, src_param->length);
+            ((char*)param->start)[src_param->length] = '\0';
+            param->length = src_param->length;
+            param->line = src_param->line;
+            param->column = src_param->column;
+            param->type = src_param->type;
+        }
+    } else {
+        function->params = NULL;
+    }
+    
+    // TODO: For now, still store pointers to body statements
+    // This is a bigger change that requires deep copying the entire AST
+    // For immediate fix, we'll address this separately
     function->body = stmt->body;
     function->body_count = stmt->body_count;
     function->closure = env;  // Capture current environment as closure
@@ -1170,8 +1220,18 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
         // For now, if we hit a return statement, we should break and return its value
     }
     
+    // Deep copy the result value before freeing the function environment
+    // This prevents use-after-free bugs when the result contains references
+    // to values that will be freed with the function environment
+    EvalResult final_result;
+    if (is_error(result)) {
+        final_result = result; // Errors don't need deep copying
+    } else {
+        final_result = make_success(copy_value(result.value));
+    }
+    
     free_environment(func_env);
-    return result;
+    return final_result;
 }
 
 // Global source code context for error reporting
