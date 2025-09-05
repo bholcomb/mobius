@@ -1,0 +1,33 @@
+// Test built-in table functions
+print("=== Testing Table Built-in Functions ===");
+
+// Create a test table
+var data = {name: "Alice", age: 30};
+print("Initial table:", data);
+
+// Test table_insert
+table_insert(data, "city", "New York");
+print("After table_insert:", data);
+
+// Test table_has_key
+print("Has 'name':", table_has_key(data, "name"));
+print("Has 'country':", table_has_key(data, "country"));
+
+// Test table_size
+print("Table size:", table_size(data));
+
+// Test table_remove
+var removed = table_remove(data, "age");
+print("Removed value:", removed);
+print("After table_remove:", data);
+print("New size:", table_size(data));
+
+// Test metatable functions
+var meta = {name: "__meta"};
+
+print("Setting metatable...");
+setmetatable(data, meta);
+var retrieved_meta = getmetatable(data);
+print("Retrieved metatable:", retrieved_meta);
+
+print("=== All table function tests completed! ===");

@@ -1,0 +1,33 @@
+// Test pairs() function
+print("=== Testing pairs() Function ===");
+
+// Create a test table
+var data = {name: "Alice", age: 30, city: "New York"};
+print("Original table:", data);
+
+// Get pairs
+var all_pairs = pairs(data);
+print("Pairs result:", all_pairs);
+
+// Test iteration through pairs
+print("Iterating through pairs:");
+for (var i = 0; i < table_size(all_pairs); i = i + 1) {
+    var pair = all_pairs[i];
+    if (pair != nil) {
+        print("Pair", i, "- Key:", pair[0], "Value:", pair[1]);
+    }
+}
+
+// Test with array-style table
+var fruits = {"apple", "banana", "cherry"};
+print("\nArray-style table:", fruits);
+var fruit_pairs = pairs(fruits);
+print("Fruit pairs:");
+for (var i = 0; i < table_size(fruit_pairs); i = i + 1) {
+    var pair = fruit_pairs[i];
+    if (pair != nil) {
+        print("Pair", i, "- Key:", pair[0], "Value:", pair[1]);
+    }
+}
+
+print("=== pairs() tests completed! ===");

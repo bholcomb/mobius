@@ -1020,7 +1020,7 @@ EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
             key = key_result.value;
         } else {
             // Use index as key for array-style initialization
-            key = make_integer_value(NUM_INT64, (int64_t)(i + 1));
+            key = make_integer_value(NUM_INT64, (int64_t)i);
         }
         
         // Set the key-value pair in the table

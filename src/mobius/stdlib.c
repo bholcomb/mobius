@@ -534,6 +534,177 @@ EvalResult builtin_clock(Value* args, size_t arg_count) {
 }
 
 // =============================================================================
+// TABLE FUNCTIONS
+// =============================================================================
+
+EvalResult builtin_table_insert(Value* args, size_t arg_count) {
+    if (arg_count != 3) {
+        return make_error_detailed("table.insert() expects 3 arguments (table, key, value)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_TABLE) {
+        return make_error_detailed("table.insert() first argument must be a table", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Table* table = args[0].as.table;
+    Value key = args[1];
+    Value value = args[2];
+    
+    if (!table_set(table, key, value)) {
+        return make_error_detailed("Failed to insert into table", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(make_nil_value());
+}
+
+EvalResult builtin_table_remove(Value* args, size_t arg_count) {
+    if (arg_count != 2) {
+        return make_error_detailed("table.remove() expects 2 arguments (table, key)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_TABLE) {
+        return make_error_detailed("table.remove() first argument must be a table", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Table* table = args[0].as.table;
+    Value key = args[1];
+    
+    Value old_value = table_get(table, key);
+    bool removed = table_remove(table, key);
+    
+    if (removed) {
+        return make_success(old_value);
+    } else {
+        return make_success(make_nil_value());
+    }
+}
+
+EvalResult builtin_table_has_key(Value* args, size_t arg_count) {
+    if (arg_count != 2) {
+        return make_error_detailed("table.has_key() expects 2 arguments (table, key)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_TABLE) {
+        return make_error_detailed("table.has_key() first argument must be a table", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Table* table = args[0].as.table;
+    Value key = args[1];
+    
+    bool has_key = table_has_key(table, key);
+    return make_success(make_bool_value(has_key));
+}
+
+EvalResult builtin_table_size(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("table.size() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_TABLE) {
+        return make_error_detailed("table.size() argument must be a table", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Table* table = args[0].as.table;
+    size_t size = table_size(table);
+    return make_success(make_integer_value(NUM_INT64, (int64_t)size));
+}
+
+EvalResult builtin_setmetatable(Value* args, size_t arg_count) {
+    if (arg_count != 2) {
+        return make_error_detailed("setmetatable() expects 2 arguments (table, metatable)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_TABLE) {
+        return make_error_detailed("setmetatable() first argument must be a table", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Table* table = args[0].as.table;
+    
+    if (args[1].type == VAL_NIL) {
+        set_metatable(table, NULL);
+    } else if (args[1].type == VAL_TABLE) {
+        set_metatable(table, args[1].as.table);
+    } else {
+        return make_error_detailed("setmetatable() second argument must be a table or nil", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(args[0]); // Return the original table
+}
+
+EvalResult builtin_getmetatable(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("getmetatable() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_TABLE) {
+        return make_error_detailed("getmetatable() argument must be a table", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Table* table = args[0].as.table;
+    Table* metatable = get_metatable(table);
+    
+    if (metatable) {
+        return make_success(make_table_value(metatable));
+    } else {
+        return make_success(make_nil_value());
+    }
+}
+
+EvalResult builtin_pairs(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("pairs() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_TABLE) {
+        return make_error_detailed("pairs() argument must be a table", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Table* table = args[0].as.table;
+    
+    // Create a table to hold the array of pairs
+    Table* pairs_table = create_table(table->size * 2);
+    if (!pairs_table) {
+        return make_error_detailed("Failed to create pairs table", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+    }
+    
+    // Iterate through all entries and create [key, value] pairs
+    size_t pair_index = 0;
+    for (size_t i = 0; i < table->capacity; i++) {
+        if (table->entries[i].is_occupied) {
+            // Create a sub-table for this [key, value] pair
+            Table* pair = create_table(2);
+            if (!pair) {
+                free_table(pairs_table);
+                return make_error_detailed("Failed to create pair entry", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+            }
+            
+            // Set key as index 0, value as index 1
+            Value key_index = make_integer_value(NUM_INT64, 0);
+            Value value_index = make_integer_value(NUM_INT64, 1);
+            
+            if (!table_set(pair, key_index, copy_value(table->entries[i].key)) ||
+                !table_set(pair, value_index, copy_value(table->entries[i].value))) {
+                free_table(pair);
+                free_table(pairs_table);
+                return make_error_detailed("Failed to set pair values", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+            }
+            
+            // Add this pair to the main pairs table
+            Value pair_index_val = make_integer_value(NUM_INT64, (int64_t)pair_index);
+            if (!table_set(pairs_table, pair_index_val, make_table_value(pair))) {
+                free_table(pair);
+                free_table(pairs_table);
+                return make_error_detailed("Failed to add pair to result", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+            }
+            
+            pair_index++;
+        }
+    }
+    
+    return make_success(make_table_value(pairs_table));
+}
+
+// =============================================================================
 // STANDARD LIBRARY MANAGEMENT
 // =============================================================================
 
@@ -567,6 +738,15 @@ static const StdlibEntry stdlib_functions[] = {
     {"random", builtin_random, SIZE_MAX, "Generate random number", "Utility"},
     {"time", builtin_time, 0, "Get current Unix timestamp", "Utility"},
     {"clock", builtin_clock, 0, "Get program execution time", "Utility"},
+    
+    // Table functions
+    {"table_insert", builtin_table_insert, 3, "Insert key-value pair into table", "Table"},
+    {"table_remove", builtin_table_remove, 2, "Remove key from table and return old value", "Table"},
+    {"table_has_key", builtin_table_has_key, 2, "Check if table contains key", "Table"},
+    {"table_size", builtin_table_size, 1, "Get number of entries in table", "Table"},
+    {"setmetatable", builtin_setmetatable, 2, "Set metatable for table", "Table"},
+    {"getmetatable", builtin_getmetatable, 1, "Get metatable of table", "Table"},
+    {"pairs", builtin_pairs, 1, "Get array of [key, value] pairs from table", "Table"},
 };
 
 static const size_t stdlib_count = sizeof(stdlib_functions) / sizeof(stdlib_functions[0]);
