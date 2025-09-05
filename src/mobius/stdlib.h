@@ -47,6 +47,7 @@ EvalResult builtin_table_has_key(Value* args, size_t arg_count);
 EvalResult builtin_table_size(Value* args, size_t arg_count);
 EvalResult builtin_setmetatable(Value* args, size_t arg_count);
 EvalResult builtin_getmetatable(Value* args, size_t arg_count);
+EvalResult builtin_pairs(Value* args, size_t arg_count);
 
 // Standard library management
 typedef struct {

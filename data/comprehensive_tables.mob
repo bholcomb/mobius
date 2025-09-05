@@ -16,6 +16,16 @@ print("Bracket access - name:", person["name"]);
 // Array-style initialization
 var fruits = {"apple", "banana", "cherry"};
 print("Fruits:", fruits);
-print("First fruit:", fruits[1]);
+
+// Test array indexing
+print("fruits[0]:", fruits[0]);
+print("fruits[1]:", fruits[1]);
+print("fruits[2]:", fruits[2]);
+
+// Test with for loop
+print("Iterating with for loop:");
+for (var i = 0; i < 3; i = i + 1) {
+    print("fruits[" + i + "]:", fruits[i]);
+}
 
 print("=== All tests completed successfully! ===");
