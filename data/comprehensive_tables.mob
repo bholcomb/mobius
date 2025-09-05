@@ -1,0 +1,21 @@
+// Comprehensive table test
+print("=== Table Functionality Test ===");
+
+// Empty table
+var empty = {};
+print("Empty table:", empty);
+
+// Basic table
+var person = {name: "Alice", age: 30};
+print("Person table:", person);
+
+// Test both access methods
+print("Dot access - name:", person.name);
+print("Bracket access - name:", person["name"]);
+
+// Array-style initialization
+var fruits = {"apple", "banana", "cherry"};
+print("Fruits:", fruits);
+print("First fruit:", fruits[1]);
+
+print("=== All tests completed successfully! ===");

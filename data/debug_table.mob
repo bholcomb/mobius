@@ -1,0 +1,5 @@
+// Debug table memory issue - bracket only
+var person = {name: "Alice"};
+print("Bracket notation:");
+print(person["name"]);
+print("Done with bracket notation");
