@@ -1,0 +1,36 @@
+// Test precision differences between float32 and float64
+print("=== Float Precision Comparison ===");
+
+print("\n1. High precision values");
+var high_precision = 3.1415926535897932384626433832795028841971693993751;
+
+var f32: float32 = high_precision;
+var f64: float = high_precision;
+
+print("Original:", high_precision);
+print("float32: ", f32);
+print("float64: ", f64);
+
+print("\n2. Very small values");
+var tiny = 0.000000000000000123456789;
+
+var tiny_f32: float32 = tiny;
+var tiny_f64: float = tiny;
+
+print("Original tiny:", tiny);
+print("float32 tiny:", tiny_f32);
+print("float64 tiny:", tiny_f64);
+
+print("\n3. Arithmetic precision");
+var a32: float32 = 0.1;
+var b32: float32 = 0.2;
+var c32: float32 = a32 + b32;
+
+var a64: float = 0.1;
+var b64: float = 0.2;
+var c64: float = a64 + b64;
+
+print("float32: 0.1 + 0.2 =", c32);
+print("float64: 0.1 + 0.2 =", c64);
+
+print("\nPrecision test completed!");
