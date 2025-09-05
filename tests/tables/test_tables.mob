@@ -19,9 +19,9 @@ print("Age:", person["age"]);
 
 // Table with mixed keys
 var mixed = {
-    [1]: "first",
-    ["hello"]: "world",
-    [2 + 3]: "five"
+    [1] = "first",
+    ["hello"] = "world",
+    [2 + 3] = "five"
 };
 
 print("Mixed table:");
