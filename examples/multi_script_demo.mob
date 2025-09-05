@@ -1,0 +1,22 @@
+// Multi-script programming demonstration
+// Shows how to use the load() function to organize code across multiple files
+
+print("=== Multi-Script Programming Demo ===");
+
+// Load utility functions from another script
+print("Loading utility functions...");
+var load_result = load("examples/utils.mob");
+print("Load result:", load_result);
+
+// Use the loaded variables and functions
+print("Using loaded utilities:");
+print("APP_VERSION:", APP_VERSION);
+print("greeting_for('Alice'):", greeting_for("Alice"));
+
+// Demonstrate arithmetic with loaded functions
+var sum = add(15, 25);
+var product = multiply(6, 7);
+print("add(15, 25) =", sum);
+print("multiply(6, 7) =", product);
+
+print("=== Demo completed successfully ===");

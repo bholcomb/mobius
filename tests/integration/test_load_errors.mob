@@ -1,0 +1,20 @@
+// Test error handling in the load() function
+
+print("=== Testing load() error handling ===");
+
+// Test loading non-existent file
+print("Testing non-existent file...");
+var result1 = load("nonexistent_file.mob");
+print("Result:", result1);  // Should not reach this if error is properly handled
+
+// Test loading empty filename
+print("Testing empty filename...");
+var result2 = load("");
+print("Result:", result2);  // Should not reach this if error is properly handled
+
+// Test loading with wrong argument type
+print("Testing wrong argument type...");
+var result3 = load(123);
+print("Result:", result3);  // Should not reach this if error is properly handled
+
+print("=== Error handling tests completed ===");

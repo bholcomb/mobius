@@ -1,0 +1,38 @@
+// Utility functions for the multi-script demo
+
+print("Loading utility module...");
+
+// Global constants
+var APP_VERSION = "1.0.0";
+var MAX_ITEMS = 100;
+
+// String utilities
+func greeting_for(name) {
+    return concat("Hello, ", name, "!");
+}
+
+func format_message(prefix, message) {
+    return concat("[", prefix, "] ", message);
+}
+
+// Math utilities (simple, non-recursive functions)
+func add(a, b) {
+    return a + b;
+}
+
+func multiply(a, b) {
+    return a * b;
+}
+
+func max_of_three(a, b, c) {
+    var temp_max = a;
+    if (b > temp_max) {
+        temp_max = b;
+    }
+    if (c > temp_max) {
+        temp_max = c;
+    }
+    return temp_max;
+}
+
+print("Utility module loaded successfully!");

@@ -1,0 +1,15 @@
+// Script that loads another script (testing nested loading)
+
+print("Nested loader script executing...");
+
+// Load a mathematical utilities script
+load("tests/integration/math_utils.mob");
+
+// Use functions from the loaded script
+var factorial_5 = factorial(5);
+print("factorial(5) =", factorial_5);
+
+var power_result = power(2, 8);
+print("power(2, 8) =", power_result);
+
+print("Nested loading test completed!");

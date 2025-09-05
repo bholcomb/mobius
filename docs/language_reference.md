@@ -687,6 +687,49 @@ var end = clock();
 print("Elapsed:", end - start, "ms");
 ```
 
+### File I/O Functions
+
+#### `load(filename)`
+**Purpose:** Load and execute another Mobius script file  
+**Parameters:** String - path to the script file  
+**Returns:** Boolean - `true` if successful, error if failed  
+
+```javascript
+// Load utility functions from another file
+load("utils.mob");
+
+// Now you can use functions and variables defined in utils.mob
+var result = utility_function(42);
+print("Shared variable:", shared_value);
+```
+
+**Multi-file Programming Example:**
+
+*main.mob:*
+```javascript
+print("Loading utilities...");
+load("math_utils.mob");
+
+var sum = add(10, 20);
+print("Result:", sum);
+```
+
+*math_utils.mob:*
+```javascript
+func add(a, b) {
+    return a + b;
+}
+
+var MATH_CONSTANT = 3.14159;
+```
+
+**Important Notes:**
+- Loaded scripts execute in the same environment as the calling script
+- Variables and functions defined in loaded scripts become available to the caller
+- Nested loading is supported (loaded scripts can load other scripts)
+- File paths are relative to the current working directory
+- Currently supports simple functions and variables; complex recursive functions may have issues
+
 ---
 
 ## Math Extension Library

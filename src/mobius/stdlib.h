@@ -40,6 +40,9 @@ EvalResult builtin_random(Value* args, size_t arg_count);
 EvalResult builtin_time(Value* args, size_t arg_count);
 EvalResult builtin_clock(Value* args, size_t arg_count);
 
+// File I/O functions
+EvalResult builtin_load(Value* args, size_t arg_count);
+
 // Table functions
 EvalResult builtin_table_insert(Value* args, size_t arg_count);
 EvalResult builtin_table_remove(Value* args, size_t arg_count);
