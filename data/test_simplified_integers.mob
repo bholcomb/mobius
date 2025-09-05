@@ -1,0 +1,40 @@
+// Test that integer parsing still works with simplified token structure
+print("=== Testing Simplified Integer Token Structure ===");
+
+print("\n1. Basic integer values");
+var a = 42;
+var b = -17;
+var c = 1000;
+
+print("a =", a);
+print("b =", b); 
+print("c =", c);
+
+print("\n2. Integer arithmetic");
+print("a + b =", a + b);
+print("a * c =", a * c);
+print("c / a =", c / a);
+
+print("\n3. Type annotations with integers");
+var i8: int8 = 127;
+var i16: int16 = 32000;
+var i32: int32 = 2000000;
+var i64: int64 = 9000000000000000000;
+
+print("i8 =", i8);
+print("i16 =", i16);
+print("i32 =", i32);
+print("i64 =", i64);
+
+print("\n4. Unsigned integers");
+var u8: uint8 = 255;
+var u16: uint16 = 65535;
+var u32: uint32 = 4000000000;
+var u64: uint64 = 18000000000000000000;
+
+print("u8 =", u8);
+print("u16 =", u16); 
+print("u32 =", u32);
+print("u64 =", u64);
+
+print("\nSimplified integer structure test completed!");
