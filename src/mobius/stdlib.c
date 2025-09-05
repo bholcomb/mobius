@@ -33,11 +33,9 @@ EvalResult builtin_typeof(Environment* env, Value* args, size_t arg_count) {
     }
     
     const char* type_name = value_type_name(args[0].type);
-    char* result = malloc(strlen(type_name) + 1);
-    if (result) {
-        strcpy(result, type_name);
-    }
-    return make_success(make_string_value(result));
+    // Create ref-counted string from type name
+    Value result = make_string_value_from_cstr(type_name);
+    return make_success(result);
 }
 
 EvalResult builtin_str(Environment* env, Value* args, size_t arg_count) {
@@ -46,8 +44,10 @@ EvalResult builtin_str(Environment* env, Value* args, size_t arg_count) {
         return make_error_detailed("str() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
     
-    char* str_result = value_to_string(args[0]);
-    return make_success(make_string_value(str_result));
+    char* temp_str = value_to_string(args[0]);
+    Value result = make_string_value_from_cstr(temp_str);
+    free(temp_str);  // Clean up temporary string
+    return make_success(result);
 }
 
 EvalResult builtin_int(Environment* env, Value* args, size_t arg_count) {
