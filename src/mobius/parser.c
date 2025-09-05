@@ -260,7 +260,8 @@ Expr* parse_table_literal(Parser* parser) {
                 if (key_str) {
                     strncpy(key_str, key_token.start, key_token.length);
                     key_str[key_token.length] = '\0';
-                    current_pair->key = make_literal_expr(make_string_value(key_str));
+                    current_pair->key = make_literal_expr(make_string_value_from_cstr(key_str));
+                    free(key_str);
                     current_pair->is_computed_key = false;
                     current_pair->value = parse_expression(parser);
                 } else {
