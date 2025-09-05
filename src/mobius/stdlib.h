@@ -40,6 +40,14 @@ EvalResult builtin_random(Value* args, size_t arg_count);
 EvalResult builtin_time(Value* args, size_t arg_count);
 EvalResult builtin_clock(Value* args, size_t arg_count);
 
+// Table functions
+EvalResult builtin_table_insert(Value* args, size_t arg_count);
+EvalResult builtin_table_remove(Value* args, size_t arg_count);
+EvalResult builtin_table_has_key(Value* args, size_t arg_count);
+EvalResult builtin_table_size(Value* args, size_t arg_count);
+EvalResult builtin_setmetatable(Value* args, size_t arg_count);
+EvalResult builtin_getmetatable(Value* args, size_t arg_count);
+
 // Standard library management
 typedef struct {
     const char* name;
