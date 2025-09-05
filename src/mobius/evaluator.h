@@ -132,6 +132,10 @@ void set_source_context(const char* source);
 const char* get_source_context(void);
 const char* extract_source_line(const char* source, int line_number);
 
+// Current evaluation environment tracking for builtin functions
+void set_current_environment(Environment* env);
+Environment* get_current_environment(void);
+
 // Enhanced error creation with source line extraction
 EvalResult make_error_with_source(const char* message, int line, int column);
 EvalResult make_error_detailed_with_source(const char* message, const char* suggestion, 

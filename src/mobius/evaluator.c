@@ -1185,6 +1185,17 @@ const char* get_source_context(void) {
     return global_source_code;
 }
 
+// Global current environment context for builtin functions
+static Environment* current_evaluation_env = NULL;
+
+void set_current_environment(Environment* env) {
+    current_evaluation_env = env;
+}
+
+Environment* get_current_environment(void) {
+    return current_evaluation_env;
+}
+
 // Enhanced error creation with source line extraction
 EvalResult make_error_with_source(const char* message, int line, int column) {
     const char* source_line = NULL;
@@ -1210,6 +1221,10 @@ EvalResult make_error_detailed_with_source(const char* message, const char* sugg
 EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
     EvalResult result = make_success(make_nil_value());
     
+    // Set current environment for builtin functions
+    Environment* old_env = get_current_environment();
+    set_current_environment(env);
+    
     for (size_t i = 0; i < count; i++) {
         result = evaluate_stmt(statements[i], env);
         if (is_error(result)) {
@@ -1219,6 +1234,9 @@ EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
             result = make_success(make_nil_value()); // Reset result for next statement
         }
     }
+    
+    // Restore previous environment
+    set_current_environment(old_env);
     
     return result;
 }

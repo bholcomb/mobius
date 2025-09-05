@@ -1,6 +1,10 @@
 #include "stdlib.h"
 #include "ast.h"
 #include "table.h"
+#include "file_io.h"
+#include "scanner.h"
+#include "parser.h"
+#include "evaluator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -535,6 +539,105 @@ EvalResult builtin_clock(Value* args, size_t arg_count) {
 }
 
 // =============================================================================
+// FILE I/O FUNCTIONS
+// =============================================================================
+
+EvalResult builtin_load(Value* args, size_t arg_count) {
+    if (arg_count != 1) {
+        return make_error_detailed("load() expects exactly 1 argument (filename)", 
+                                  "Usage: load(\"script.mob\")", ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    Value filename_val = args[0];
+    if (filename_val.type != VAL_STRING) {
+        return make_error_detailed("load() argument must be a string", 
+                                  "Usage: load(\"script.mob\")", ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    const char* filename = filename_val.as.string;
+    if (!filename || strlen(filename) == 0) {
+        return make_error_detailed("load() filename cannot be empty", 
+                                  "Provide a valid filename", ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    // Check if file exists
+    if (!file_exists(filename)) {
+        char error_msg[512];
+        snprintf(error_msg, sizeof(error_msg), "File '%s' does not exist", filename);
+        return make_error_detailed(error_msg, 
+                                  "Check the file path and ensure the file exists", ERROR_RUNTIME, 0, 0, NULL, NULL);
+    }
+    
+    // Read file content
+    FileResult file_result = read_file(filename);
+    if (!file_result.success) {
+        char error_msg[512];
+        snprintf(error_msg, sizeof(error_msg), "Failed to read file '%s': %s", filename, file_result.error);
+        return make_error_detailed(error_msg, 
+                                  "Check file permissions and availability", ERROR_RUNTIME, 0, 0, NULL, NULL);
+    }
+    
+    // Parse and execute the loaded script in the current environment
+    TokenArray tokens = scan_source(file_result.content);
+    if (tokens.count == 0) {
+        free_file_result(&file_result);
+        char error_msg[512];
+        snprintf(error_msg, sizeof(error_msg), "No code found in file '%s'", filename);
+        return make_error_detailed(error_msg, 
+                                  "Ensure the file contains valid Mobius code", ERROR_RUNTIME, 0, 0, NULL, NULL);
+    }
+    
+    // Parse AST
+    ParseResult parse_result = parse(tokens);
+    free_token_array(&tokens);
+    
+    if (parse_result.had_error) {
+        free_file_result(&file_result);
+        free_parse_result(&parse_result);
+        char error_msg[512];
+        snprintf(error_msg, sizeof(error_msg), "Parse error in file '%s'", filename);
+        return make_error_detailed(error_msg, 
+                                  "Check the syntax of the loaded file", ERROR_RUNTIME, 0, 0, NULL, NULL);
+    }
+    
+    // Get current environment context 
+    // Use the current evaluation environment so loaded functions are available 
+    // in the same scope as the calling script
+    Environment* current_env = get_current_environment();
+    if (!current_env) {
+        // Fall back to global environment if no current environment is set
+        extern Environment* global_env;
+        current_env = global_env;
+    }
+    
+    // Set source context for better error reporting
+    const char* old_context = get_source_context();
+    set_source_context(file_result.content);
+    
+    // Execute the loaded script
+    EvalResult eval_result = evaluate_program(parse_result.statements, parse_result.count, current_env);
+    
+    // Restore previous source context
+    set_source_context(old_context);
+    
+    // Cleanup
+    // NOTE: We intentionally don't free parse_result and file_result here
+    // because function definitions contain pointers to this memory.
+    // This creates a memory leak, but ensures loaded functions work correctly.
+    // TODO: Implement proper memory management for loaded scripts
+    // free_parse_result(&parse_result);  // DISABLED: Contains AST that functions reference
+    // free_file_result(&file_result);    // DISABLED: Contains source code that tokens reference
+    
+    if (is_error(eval_result)) {
+        // Propagate the error from the loaded script
+        return eval_result;
+    }
+    
+    // Return true to indicate successful loading
+    return make_success(make_bool_value(true));
+}
+
+// =============================================================================
 // TABLE FUNCTIONS
 // =============================================================================
 
@@ -803,6 +906,9 @@ static const StdlibEntry stdlib_functions[] = {
     {"random", builtin_random, SIZE_MAX, "Generate random number", "Utility"},
     {"time", builtin_time, 0, "Get current Unix timestamp", "Utility"},
     {"clock", builtin_clock, 0, "Get program execution time", "Utility"},
+    
+    // File I/O functions
+    {"load", builtin_load, 1, "Load and execute a script file", "File"},
     
     // Table functions
     {"table_insert", builtin_table_insert, 3, "Insert key-value pair into table", "Table"},

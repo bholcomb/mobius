@@ -1,0 +1,27 @@
+// Test the load() function for multi-file scripts
+
+print("=== Testing load() function ===");
+
+// Test basic loading
+print("Loading basic script...");
+var result = load("tests/integration/helper_script.mob");
+print("Load result:", result);
+
+// Test that loaded variables are available
+print("Testing loaded variables...");
+print("shared_value:", shared_value);
+print("helper_message:", helper_message);
+
+// Test that loaded functions are available
+print("Testing loaded functions...");
+var sum = add_numbers(10, 20);
+print("add_numbers(10, 20) =", sum);
+
+var greeting = create_greeting("World");
+print("create_greeting result:", greeting);
+
+// Test loading a file that loads another file (nested loading)
+print("Loading nested script...");
+load("tests/integration/nested_loader.mob");
+
+print("=== All load() tests completed ===");

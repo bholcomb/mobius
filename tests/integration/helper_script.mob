@@ -1,0 +1,25 @@
+// Helper script to be loaded by other scripts
+
+print("Helper script executing...");
+
+// Define some shared variables
+var shared_value = 42;
+var helper_message = "Hello from helper script!";
+
+// Define some utility functions
+func add_numbers(a, b) {
+    return a + b;
+}
+
+func create_greeting(name) {
+    return concat("Hello, ", name, "!");
+}
+
+func calculate_factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * calculate_factorial(n - 1);
+}
+
+print("Helper script loaded successfully!");
