@@ -3,9 +3,13 @@
 #include "module_registry.h"
 #include "token.h"
 #include "table.h"
+#include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// Global type checking configuration
+TypeCheckConfig global_type_config = {false, false};
 
 // Utility functions
 EvalResult make_success(Value value) {
@@ -713,6 +717,32 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
             return init_result;
         }
         value = init_result.value;
+    }
+    
+    // Validate and convert type if annotation is provided
+    if (stmt->type_hint.is_annotated) {
+        TypeConversionResult conversion = validate_and_convert_value(value, stmt->type_hint, global_type_config);
+        if (!conversion.success) {
+            return make_error_detailed_with_source(
+                conversion.error_message ? conversion.error_message : "Type validation failed",
+                "Check that the value matches the declared type",
+                ERROR_TYPE,
+                stmt->name.line,
+                stmt->name.column,
+                "eval_var_stmt"
+            );
+        }
+        
+        // Use the converted value
+        value = conversion.converted_value;
+        
+        // Warn about conversions if enabled
+        if (conversion.was_converted && global_type_config.warn_on_conversion) {
+            printf("Warning: Implicit type conversion in variable declaration at line %d\n", stmt->name.line);
+        }
+        
+        // Free error message if any
+        free(conversion.error_message);
     }
     
     char name[256];

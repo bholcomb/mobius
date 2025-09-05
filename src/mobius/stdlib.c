@@ -704,6 +704,70 @@ EvalResult builtin_pairs(Value* args, size_t arg_count) {
     return make_success(make_table_value(pairs_table));
 }
 
+// Type checking mode control functions
+EvalResult builtin_set_strict_types(Value* args, size_t arg_count) {
+    extern TypeCheckConfig global_type_config;
+    
+    if (arg_count > 1) {
+        return make_error_detailed("set_strict_types() expects 0 or 1 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    bool strict = true; // Default to strict if no argument
+    if (arg_count == 1) {
+        if (args[0].type != VAL_BOOL) {
+            return make_error_detailed("set_strict_types() argument must be a boolean", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        strict = args[0].as.boolean;
+    }
+    
+    global_type_config.strict_mode = strict;
+    return make_success(make_nil_value());
+}
+
+EvalResult builtin_set_type_warnings(Value* args, size_t arg_count) {
+    extern TypeCheckConfig global_type_config;
+    
+    if (arg_count != 1) {
+        return make_error_detailed("set_type_warnings() expects 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_BOOL) {
+        return make_error_detailed("set_type_warnings() argument must be a boolean", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    global_type_config.warn_on_conversion = args[0].as.boolean;
+    return make_success(make_nil_value());
+}
+
+EvalResult builtin_get_type_config(Value* args __attribute__((unused)), size_t arg_count) {
+    extern TypeCheckConfig global_type_config;
+    
+    if (arg_count != 0) {
+        return make_error_detailed("get_type_config() expects no arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    // Return a table with configuration
+    Table* config_table = create_table(8);
+    if (!config_table) {
+        return make_error_detailed("Failed to create config table", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+    }
+    
+    // Create string keys - we need to allocate them
+    char* strict_str = malloc(12);
+    if (strict_str) strcpy(strict_str, "strict_mode");
+    Value strict_key = make_string_value(strict_str);
+    Value strict_value = make_bool_value(global_type_config.strict_mode);
+    table_set(config_table, strict_key, strict_value);
+    
+    char* warn_str = malloc(19);
+    if (warn_str) strcpy(warn_str, "warn_on_conversion");
+    Value warn_key = make_string_value(warn_str);
+    Value warn_value = make_bool_value(global_type_config.warn_on_conversion);
+    table_set(config_table, warn_key, warn_value);
+    
+    return make_success(make_table_value(config_table));
+}
+
 // =============================================================================
 // STANDARD LIBRARY MANAGEMENT
 // =============================================================================
@@ -747,6 +811,11 @@ static const StdlibEntry stdlib_functions[] = {
     {"setmetatable", builtin_setmetatable, 2, "Set metatable for table", "Table"},
     {"getmetatable", builtin_getmetatable, 1, "Get metatable of table", "Table"},
     {"pairs", builtin_pairs, 1, "Get array of [key, value] pairs from table", "Table"},
+    
+    // Type system configuration
+    {"set_strict_types", builtin_set_strict_types, SIZE_MAX, "Enable/disable strict type checking", "Types"},
+    {"set_type_warnings", builtin_set_type_warnings, 1, "Enable/disable type conversion warnings", "Types"},
+    {"get_type_config", builtin_get_type_config, 0, "Get current type checking configuration", "Types"},
 };
 
 static const size_t stdlib_count = sizeof(stdlib_functions) / sizeof(stdlib_functions[0]);
