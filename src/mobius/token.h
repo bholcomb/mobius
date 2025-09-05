@@ -106,7 +106,7 @@ typedef enum {
     TOKEN_TYPE_UINT32,      // uint32
     TOKEN_TYPE_UINT64,      // uint64
     TOKEN_TYPE_FLOAT32,     // float32
-    TOKEN_TYPE_FLOAT,       // float (alias for float64)
+    TOKEN_TYPE_FLOAT64,     // float64
 
     // Special tokens
     TOKEN_NEWLINE,          // \n (significant in some contexts)
@@ -124,6 +124,7 @@ typedef enum {
     NUM_UINT32,   // uint32_t
     NUM_INT64,    // int64_t
     NUM_UINT64,   // uint64_t
+    NUM_FLOAT32,  // float (32-bit float)
     NUM_FLOAT64   // double (64-bit float)
 } NumericType;
 

@@ -63,7 +63,7 @@ MobiusType token_to_mobius_type(TokenType token_type) {
         case TOKEN_TYPE_UINT32: return MOBIUS_TYPE_UINT32;
         case TOKEN_TYPE_UINT64: return MOBIUS_TYPE_UINT64;
         case TOKEN_TYPE_FLOAT32: return MOBIUS_TYPE_FLOAT32;
-        case TOKEN_TYPE_FLOAT:  return MOBIUS_TYPE_FLOAT;
+        case TOKEN_TYPE_FLOAT64: return MOBIUS_TYPE_FLOAT;
         default: return MOBIUS_TYPE_UNKNOWN;
     }
 }

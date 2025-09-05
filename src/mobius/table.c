@@ -40,6 +40,9 @@ size_t hash_value(Value value, size_t capacity) {
         case VAL_INTEGER:
             hash = hash_integer(value.as.integer.value.i64);
             break;
+        case VAL_FLOAT32:
+            hash = hash_float((double)value.as.float32_val);
+            break;
         case VAL_FLOAT:
             hash = hash_float(value.as.float_val);
             break;
@@ -75,6 +78,7 @@ bool values_equal_for_table(Value a, Value b) {
         case VAL_BOOL: return a.as.boolean == b.as.boolean;
         case VAL_INTEGER:
             return a.as.integer.value.i64 == b.as.integer.value.i64;
+        case VAL_FLOAT32: return a.as.float32_val == b.as.float32_val;
         case VAL_FLOAT: return a.as.float_val == b.as.float_val;
         case VAL_STRING:
             if (!a.as.string || !b.as.string) return a.as.string == b.as.string;

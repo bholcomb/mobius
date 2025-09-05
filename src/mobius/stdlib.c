@@ -92,6 +92,7 @@ EvalResult builtin_float(Value* args, size_t arg_count) {
                 case NUM_UINT32: val = arg.as.integer.value.u32; break;
                 case NUM_INT64:  val = arg.as.integer.value.i64; break;
                 case NUM_UINT64: val = arg.as.integer.value.u64; break;
+                case NUM_FLOAT32: val = 0.0; break; // Shouldn't happen
                 case NUM_FLOAT64: val = 0.0; break; // Shouldn't happen
             }
             return make_success(make_float_value(val));

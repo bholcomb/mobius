@@ -62,7 +62,7 @@ static const Keyword keywords[] = {
     {"uint32",   TOKEN_TYPE_UINT32},
     {"uint64",   TOKEN_TYPE_UINT64},
     {"float32",  TOKEN_TYPE_FLOAT32},
-    {"float",    TOKEN_TYPE_FLOAT},
+    {"float64",  TOKEN_TYPE_FLOAT64},
 };
 
 static const size_t keyword_count = sizeof(keywords) / sizeof(keywords[0]);
