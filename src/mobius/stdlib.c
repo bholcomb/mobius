@@ -1028,6 +1028,137 @@ EvalResult builtin_array_length(Environment* env, Value* args, size_t arg_count)
     return make_success(make_integer_value(NUM_INT64, (int64_t)length));
 }
 
+EvalResult builtin_array_slice(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count < 2 || arg_count > 3) {
+        return make_error_detailed("array_slice() expects 2 or 3 arguments (array, start, [end])", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_slice() first argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    if (args[1].type != VAL_INTEGER) {
+        return make_error_detailed("array_slice() start index must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    ArrayValue* source = args[0].as.array;
+    int64_t start = args[1].as.integer.value.i64;
+    int64_t end = (int64_t)source->length;
+    
+    if (arg_count == 3) {
+        if (args[2].type != VAL_INTEGER) {
+            return make_error_detailed("array_slice() end index must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        end = args[2].as.integer.value.i64;
+    }
+    
+    // Handle negative indices and bounds
+    if (start < 0) start = 0;
+    if (end > (int64_t)source->length) end = (int64_t)source->length;
+    if (start >= end) {
+        // Return empty array
+        ArrayValue* result = array_create(0);
+        return make_success(make_array_value(result));
+    }
+    
+    // Create new array with sliced elements
+    size_t slice_length = (size_t)(end - start);
+    ArrayValue* result = array_create(slice_length);
+    
+    for (size_t i = 0; i < slice_length; i++) {
+        Value element = array_get(source, (size_t)(start + (int64_t)i));
+        array_push(result, element);
+    }
+    
+    return make_success(make_array_value(result));
+}
+
+EvalResult builtin_array_concat(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 2) {
+        return make_error_detailed("array_concat() expects 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY || args[1].type != VAL_ARRAY) {
+        return make_error_detailed("array_concat() arguments must be arrays", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    ArrayValue* arr1 = args[0].as.array;
+    ArrayValue* arr2 = args[1].as.array;
+    
+    // Create new array with combined capacity
+    ArrayValue* result = array_create(arr1->length + arr2->length);
+    
+    // Copy elements from first array
+    for (size_t i = 0; i < arr1->length; i++) {
+        Value element = array_get(arr1, i);
+        array_push(result, element);
+    }
+    
+    // Copy elements from second array
+    for (size_t i = 0; i < arr2->length; i++) {
+        Value element = array_get(arr2, i);
+        array_push(result, element);
+    }
+    
+    return make_success(make_array_value(result));
+}
+
+EvalResult builtin_array_reverse(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 1) {
+        return make_error_detailed("array_reverse() expects 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_reverse() argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    ArrayValue* source = args[0].as.array;
+    ArrayValue* result = array_create(source->length);
+    
+    // Copy elements in reverse order
+    for (size_t i = 0; i < source->length; i++) {
+        size_t reverse_index = source->length - 1 - i;
+        Value element = array_get(source, reverse_index);
+        array_push(result, element);
+    }
+    
+    return make_success(make_array_value(result));
+}
+
+EvalResult builtin_array_find(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 2) {
+        return make_error_detailed("array_find() expects 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_find() first argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    ArrayValue* array = args[0].as.array;
+    Value search_value = args[1];
+    
+    // Search for the value
+    for (size_t i = 0; i < array->length; i++) {
+        Value element = array_get(array, i);
+        if (values_equal(element, search_value)) {
+            free_value(element);
+            return make_success(make_integer_value(NUM_INT64, (int64_t)i));
+        }
+        free_value(element);
+    }
+    
+    // Not found, return -1
+    return make_success(make_integer_value(NUM_INT64, -1));
+}
+
 // =============================================================================
 // STANDARD LIBRARY MANAGEMENT
 // =============================================================================
@@ -1082,6 +1213,10 @@ static const StdlibEntry stdlib_functions[] = {
     {"array_get", builtin_array_get, 2, "Get element at index from array", "Array"},
     {"array_set", builtin_array_set, 3, "Set element at index in array", "Array"},
     {"array_length", builtin_array_length, 1, "Get number of elements in array", "Array"},
+    {"array_slice", builtin_array_slice, SIZE_MAX, "Extract a section of array (start, [end])", "Array"},
+    {"array_concat", builtin_array_concat, 2, "Concatenate two arrays", "Array"},
+    {"array_reverse", builtin_array_reverse, 1, "Create reversed copy of array", "Array"},
+    {"array_find", builtin_array_find, 2, "Find index of value in array (-1 if not found)", "Array"},
     
     // Type system configuration
     {"set_strict_types", builtin_set_strict_types, SIZE_MAX, "Enable/disable strict type checking", "Types"},

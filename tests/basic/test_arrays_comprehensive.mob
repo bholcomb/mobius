@@ -1,0 +1,119 @@
+// Comprehensive Array Test Suite
+// Tests all array operations, bounds checking, and edge cases
+
+// Test 1: Basic array creation and access
+print("=== Test 1: Basic Operations ===");
+var arr1 = [1, 2, 3, 4, 5];
+print("Array:", arr1);
+print("Length:", array_length(arr1));
+print("First element:", arr1[0]);
+print("Last element:", arr1[4]);
+
+// Test 2: Empty array
+print("\n=== Test 2: Empty Array ===");
+var empty = [];
+print("Empty array:", empty);
+print("Length:", array_length(empty));
+
+// Test 3: Array with mixed types
+print("\n=== Test 3: Mixed Types ===");
+var mixed = [1, "hello", 3.14, true, nil];
+print("Mixed array:", mixed);
+print("String element:", mixed[1]);
+print("Float element:", mixed[2]);
+print("Boolean element:", mixed[3]);
+print("Nil element:", mixed[4]);
+
+// Test 4: Nested arrays
+print("\n=== Test 4: Nested Arrays ===");
+var nested = [[1, 2], [3, 4], [5, 6]];
+print("Nested array:", nested);
+print("Sub-array [0]:", nested[0]);
+print("Element [1][1]:", nested[1][1]);
+
+// Test 5: Array manipulation functions
+print("\n=== Test 5: Array Functions ===");
+var arr2 = array_create(3);
+print("Created array:", arr2);
+
+array_push(arr2, 10);
+array_push(arr2, 20);
+array_push(arr2, 30);
+print("After pushes:", arr2);
+
+var popped = array_pop(arr2);
+print("Popped value:", popped);
+print("After pop:", arr2);
+
+array_set(arr2, 0, 100);
+print("After set [0] = 100:", arr2);
+
+var gotten = array_get(arr2, 1);
+print("Get [1]:", gotten);
+
+// Test 6: Array slicing
+print("\n=== Test 6: Array Slicing ===");
+var source = [1, 2, 3, 4, 5, 6, 7, 8];
+print("Source array:", source);
+
+var slice1 = array_slice(source, 2, 5);
+print("Slice [2:5]:", slice1);
+
+var slice2 = array_slice(source, 3);
+print("Slice [3:]:", slice2);
+
+var slice3 = array_slice(source, 0, 3);
+print("Slice [0:3]:", slice3);
+
+// Test 7: Array concatenation
+print("\n=== Test 7: Array Concatenation ===");
+var arr_a = [1, 2, 3];
+var arr_b = [4, 5, 6];
+var concat_result = array_concat(arr_a, arr_b);
+print("Array A:", arr_a);
+print("Array B:", arr_b);
+print("Concatenated:", concat_result);
+
+// Test 8: Array reversal
+print("\n=== Test 8: Array Reversal ===");
+var original = [1, 2, 3, 4, 5];
+var reversed = array_reverse(original);
+print("Original:", original);
+print("Reversed:", reversed);
+
+// Test 9: Array search
+print("\n=== Test 9: Array Search ===");
+var search_array = [10, 20, 30, 40, 50];
+print("Search array:", search_array);
+print("Index of 30:", array_find(search_array, 30));
+print("Index of 99:", array_find(search_array, 99));
+print("Index of 10:", array_find(search_array, 10));
+
+// Test 10: Edge cases and bounds checking
+print("\n=== Test 10: Edge Cases ===");
+var bounds_test = [1, 2, 3];
+print("Bounds test array:", bounds_test);
+
+// These should work
+print("Valid access [0]:", bounds_test[0]);
+print("Valid access [2]:", bounds_test[2]);
+
+// Test array modification
+print("\n=== Test 11: Array Modification ===");
+var modify_test = [1, 2, 3];
+print("Before modification:", modify_test);
+array_set(modify_test, 1, 999);
+print("After set [1] = 999:", modify_test);
+
+// Test large array
+print("\n=== Test 12: Large Array ===");
+var large = array_create(10);
+var i = 0;
+while (i < 10) {
+    array_push(large, i * i);
+    i = i + 1;
+}
+print("Large array (squares):", large);
+print("Length:", array_length(large));
+
+print("\n=== All Array Tests Completed ===");

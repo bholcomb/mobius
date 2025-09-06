@@ -74,6 +74,8 @@ EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env);
 EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env);
 EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env);
 EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env);
+EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env);
+EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env);
 
 // Statement evaluation
 EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env);

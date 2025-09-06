@@ -715,6 +715,10 @@ EvalResult evaluate_expr(Expr* expr, Environment* env) {
             return eval_table_index_expr(&expr->as.table_index, env);
         case EXPR_TABLE_DOT:
             return eval_table_dot_expr(&expr->as.table_dot, env);
+        case EXPR_ARRAY_LITERAL:
+            return eval_array_literal_expr(&expr->as.array_literal, env);
+        case EXPR_ARRAY_INDEX:
+            return eval_array_index_expr(&expr->as.array_index, env);
         default:
             return make_error("Unknown expression type", 0, 0);
     }
@@ -1383,4 +1387,88 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     // Don't free table_result.value here - the table is still referenced
     
     return make_success(result);
+}
+
+// Array evaluation functions
+EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
+    // Create a new array
+    ArrayValue* array = array_create(expr->element_count);
+    if (!array) {
+        return make_error("Failed to create array", 0, 0);
+    }
+    
+    // Evaluate and add each element
+    for (size_t i = 0; i < expr->element_count; i++) {
+        EvalResult element_result = evaluate_expr(expr->elements[i], env);
+        if (is_error(element_result)) {
+            array_release(array);
+            return element_result;
+        }
+        
+        // Add element to array (array_push handles capacity expansion)
+        array_push(array, element_result.value);
+    }
+    
+    return make_success(make_array_value(array));
+}
+
+EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
+    // Evaluate the target expression (could be array or table)
+    EvalResult target_result = evaluate_expr(expr->array, env);
+    if (is_error(target_result)) {
+        return target_result;
+    }
+    
+    // Evaluate the index expression
+    EvalResult index_result = evaluate_expr(expr->index, env);
+    if (is_error(index_result)) {
+        free_value(target_result.value);
+        return index_result;
+    }
+    
+    // Handle both arrays and tables
+    if (target_result.value.type == VAL_ARRAY) {
+        // Array indexing logic
+        if (index_result.value.type != VAL_INTEGER) {
+            free_value(target_result.value);
+            free_value(index_result.value);
+            return make_error("Array index must be an integer", 0, 0);
+        }
+        
+        // Get the index value
+        int64_t index = index_result.value.as.integer.value.i64;
+        ArrayValue* array = target_result.value.as.array;
+        
+        // Check bounds
+        if (index < 0 || (size_t)index >= array->length) {
+            free_value(target_result.value);
+            free_value(index_result.value);
+            return make_error("Array index out of bounds", 0, 0);
+        }
+        
+        // Get the value (array_get returns a copy)
+        Value result = array_get(array, (size_t)index);
+        
+        // Clean up
+        free_value(index_result.value);
+        // Don't free target_result.value here - the array is still referenced
+        
+        return make_success(result);
+        
+    } else if (target_result.value.type == VAL_TABLE) {
+        // Table indexing logic (same as before)
+        Value result = table_get(target_result.value.as.table, index_result.value);
+        
+        // Clean up
+        free_value(index_result.value);
+        // Don't free target_result.value here - the table is still referenced
+        
+        return make_success(result);
+        
+    } else {
+        // Neither array nor table
+        free_value(target_result.value);
+        free_value(index_result.value);
+        return make_error("Cannot index non-array/non-table value", 0, 0);
+    }
 }
