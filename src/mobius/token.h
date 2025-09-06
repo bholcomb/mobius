@@ -164,4 +164,9 @@ Token make_float_token(const char* start, int length, int line, int column, doub
 Token make_string_token(const char* start, int length, int line, int column, const char* string);
 Token make_char_token(const char* start, int length, int line, int column, char character);
 
+// Token utility functions for memory management
+char* extract_identifier_name(const Token* token);
+Token copy_token(const Token* token);
+void free_token(Token* token);
+
 #endif // MOBIUS_TOKEN_H

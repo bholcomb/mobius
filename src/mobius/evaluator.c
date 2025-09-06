@@ -1067,80 +1067,73 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         return make_error("Memory allocation failed", 0, 0);
     }
     
-    // Deep copy the function name
-    function->name.start = malloc(stmt->name.length + 1);
-    if (!function->name.start) {
+    // Extract function name from token
+    function->name = extract_identifier_name(&stmt->name);
+    if (!function->name) {
         free(function);
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error("Failed to extract function name", 0, 0);
     }
-    strncpy((char*)function->name.start, stmt->name.start, stmt->name.length);
-    ((char*)function->name.start)[stmt->name.length] = '\0';
-    function->name.length = stmt->name.length;
-    function->name.line = stmt->name.line;
-    function->name.column = stmt->name.column;
-    function->name.type = stmt->name.type;
     
-    // Deep copy the parameters
+    // Extract parameter names from tokens
     function->param_count = stmt->param_count;
     if (stmt->param_count > 0) {
-        function->params = malloc(stmt->param_count * sizeof(Token));
-        if (!function->params) {
-            free((char*)function->name.start);
+        function->param_names = malloc(stmt->param_count * sizeof(char*));
+        if (!function->param_names) {
+            free(function->name);
             free(function);
             return make_error("Memory allocation failed", 0, 0);
         }
         
         for (size_t i = 0; i < stmt->param_count; i++) {
-            Token* param = &function->params[i];
-            Token* src_param = &stmt->params[i];
-            
-            param->start = malloc(src_param->length + 1);
-            if (!param->start) {
-                // Cleanup previously allocated params
+            function->param_names[i] = extract_identifier_name(&stmt->params[i]);
+            if (!function->param_names[i]) {
+                // Cleanup previously allocated names
                 for (size_t j = 0; j < i; j++) {
-                    free((char*)function->params[j].start);
+                    free(function->param_names[j]);
                 }
-                free(function->params);
-                free((char*)function->name.start);
+                free(function->param_names);
+                free(function->name);
                 free(function);
-                return make_error("Memory allocation failed", 0, 0);
+                return make_error("Failed to extract parameter name", 0, 0);
             }
-            
-            strncpy((char*)param->start, src_param->start, src_param->length);
-            ((char*)param->start)[src_param->length] = '\0';
-            param->length = src_param->length;
-            param->line = src_param->line;
-            param->column = src_param->column;
-            param->type = src_param->type;
         }
     } else {
-        function->params = NULL;
+        function->param_names = NULL;
     }
     
-    // Retain references to AST body statements for proper memory management
-    // This ensures the function body stays alive even after the original parse result is freed
-    function->body = stmt->body;
+    // Create a copy of the body array and retain references to AST body statements
+    // This ensures the function has its own copy and proper memory management
     function->body_count = stmt->body_count;
-    
-    // Retain all body statements to prevent premature deallocation
-    ast_retain_stmt_array(function->body, function->body_count);
+    if (stmt->body_count > 0) {
+        function->body = malloc(stmt->body_count * sizeof(Stmt*));
+        if (!function->body) {
+            // Handle allocation failure - cleanup parameter names
+            if (function->param_names) {
+                for (size_t j = 0; j < function->param_count; j++) {
+                    free(function->param_names[j]);
+                }
+                free(function->param_names);
+            }
+            free(function->name);
+            free(function);
+            return make_error_detailed("Memory allocation failed for function body", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+        }
+        
+        // Copy the body array and retain each statement
+        for (size_t i = 0; i < stmt->body_count; i++) {
+            function->body[i] = stmt->body[i];
+            ast_retain_stmt(stmt->body[i]);
+        }
+    } else {
+        function->body = NULL;
+    }
     function->closure = env;  // Capture current environment as closure
     
     // Create function value
     Value func_value = make_function_value(function);
     
-    // Define the function in the current environment
-    char* func_name = malloc(stmt->name.length + 1);
-    if (!func_name) {
-        free(function);
-        return make_error("Memory allocation failed", 0, 0);
-    }
-    
-    strncpy(func_name, stmt->name.start, stmt->name.length);
-    func_name[stmt->name.length] = '\0';
-    
-    define_variable(env, func_name, func_value);
-    free(func_name);
+    // Define the function in the current environment using the stored name
+    define_variable(env, function->name, func_value);
     
     return make_success(make_nil_value());
 }
@@ -1168,20 +1161,16 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     if (arg_count != function->param_count) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), 
-                "Function '%.*s' expects %zu arguments but got %zu",
-                function->name.length, function->name.start,
+                "Function '%s' expects %zu arguments but got %zu",
+                function->name ? function->name : "anonymous",
                 function->param_count, arg_count);
-                
-        char func_name[256];
-        snprintf(func_name, sizeof(func_name), "%.*s", 
-                function->name.length, function->name.start);
                 
         return make_error_detailed(
             error_msg,
             "Check the function definition for the correct number of parameters",
             ERROR_ARGUMENT,
             0, 0,
-            func_name,
+            function->name,
             NULL
         );
     }
@@ -1198,18 +1187,8 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
         }
         
         // Extract parameter name
-        char* param_name = malloc(function->params[i].length + 1);
-        if (!param_name) {
-            free_environment(func_env);
-            return make_error("Memory allocation failed", 0, 0);
-        }
-        
-        strncpy(param_name, function->params[i].start, function->params[i].length);
-        param_name[function->params[i].length] = '\0';
-        
-        // Bind parameter
-        define_variable(func_env, param_name, arg_result.value);
-        free(param_name);
+        // Bind parameter using the stored parameter name
+        define_variable(func_env, function->param_names[i], arg_result.value);
     }
     
     // Execute function body

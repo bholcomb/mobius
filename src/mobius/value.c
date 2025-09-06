@@ -1,6 +1,7 @@
 #include "value.h"
 #include "table.h"
 #include "ast.h"  // For AST reference counting functions
+#include "token.h"  // For token copying functions
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -190,7 +191,7 @@ void print_value(Value value) {
             break;
         case VAL_FUNCTION:
             if (value.as.function) {
-                printf("<func %.*s>", value.as.function->name.length, value.as.function->name.start);
+                printf("<func %s>", value.as.function->name ? value.as.function->name : "anonymous");
             } else {
                 printf("<func (null)>");
             }
@@ -350,25 +351,26 @@ void free_value(Value value) {
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         MobiusFunction* func = value.as.function;
         
-        // Free deep-copied function name
-        if (func->name.start) {
-            free((char*)func->name.start);
+        // Free function name string
+        if (func->name) {
+            free(func->name);
         }
         
-        // Free deep-copied parameters
-        if (func->params) {
+        // Free parameter name strings
+        if (func->param_names) {
             for (size_t i = 0; i < func->param_count; i++) {
-                if (func->params[i].start) {
-                    free((char*)func->params[i].start);
+                if (func->param_names[i]) {
+                    free(func->param_names[i]);
                 }
             }
-            free(func->params);
+            free(func->param_names);
         }
         
         // Release AST body references using reference counting
         // This properly manages the AST node lifecycle
         if (func->body) {
             ast_release_stmt_array(func->body, func->body_count);
+            free(func->body);  // Free the body array itself
         }
         
         // Note: don't free closure environment - it's managed separately
