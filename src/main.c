@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "mobius/mobius.h"
+#include "mobius/stack_trace.h"
 
 void test_interpreter() {
     printf("Testing Mobius Interpreter\n");
@@ -73,6 +74,9 @@ void test_interpreter() {
 int main(int argc, char *argv[]) {
     printf("Mobius Scripting Language Interpreter v0.1.0\n");
     
+    // Initialize stack trace system
+    stack_trace_init();
+    
     // Initialize plugin system
     ModuleRegistry* registry = create_module_registry();
     if (!registry) {
@@ -115,5 +119,9 @@ int main(int argc, char *argv[]) {
     }
     
     free_module_registry(registry);
+    
+    // Cleanup stack trace system
+    stack_trace_cleanup();
+    
     return result;
 }

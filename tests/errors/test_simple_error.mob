@@ -1,0 +1,7 @@
+// Simple error test
+func test_func() {
+    print("About to divide by zero");
+    return 1 / 0;
+}
+
+test_func();

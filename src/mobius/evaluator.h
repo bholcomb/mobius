@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "environment.h"
 #include "types.h"
+#include "stack_trace.h"
 #include <stdbool.h>
 
 // Forward declaration for plugin system
@@ -32,6 +33,7 @@ typedef struct {
     int column;
     const char* function_name; // Function where error occurred
     const char* source_line;   // The actual source code line
+    StackTrace* stack_trace;   // Call stack at time of error
 } RuntimeError;
 
 // Evaluation result
