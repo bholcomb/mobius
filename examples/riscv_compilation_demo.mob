@@ -1,0 +1,200 @@
+// RISC-V Compilation Demo
+// This example shows how Mobius code compiles to RISC-V instructions
+
+// Simple arithmetic - demonstrates basic instruction generation
+func arithmetic_demo() {
+    var a = 10;
+    var b = 20;
+    var result = a + b * 2;  // Tests operator precedence
+    print("Arithmetic result: " + result);
+    return result;
+}
+
+// Control flow - demonstrates branch instructions
+func control_flow_demo(x) {
+    if (x > 100) {
+        print("Large number");
+        return "large";
+    } else if (x > 50) {
+        print("Medium number");
+        return "medium";
+    } else {
+        print("Small number");
+        return "small";
+    }
+}
+
+// Array operations - demonstrates memory access patterns
+func array_demo() {
+    var numbers = [1, 2, 3, 4, 5];
+    var sum = 0;
+    
+    // Loop demonstrates RISC-V branch instructions
+    for (var i = 0; i < array_length(numbers); i = i + 1) {
+        sum = sum + numbers[i];
+    }
+    
+    print("Array sum: " + sum);
+    return sum;
+}
+
+// String operations - demonstrates runtime function calls
+func string_demo() {
+    var greeting = "Hello";
+    var name = "RISC-V";
+    var message = greeting + ", " + name + "!";
+    
+    print("String result: " + message);
+    return message;
+}
+
+// Recursive function - demonstrates function call overhead
+func fibonacci(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+// Closure example - demonstrates environment capture
+func make_multiplier(factor) {
+    func multiply(x) {
+        return x * factor;  // Accesses captured 'factor'
+    }
+    return multiply;
+}
+
+// Table operations - demonstrates hash table access
+func table_demo() {
+    var person = {
+        name: "Alice",
+        age: 30,
+        city: "San Francisco"
+    };
+    
+    person.age = person.age + 1;  // Demonstrates table modification
+    print("Person: " + person.name + ", age " + person.age);
+    
+    return person;
+}
+
+// Main execution - demonstrates complete program flow
+func main() {
+    print("=== RISC-V Compilation Demo ===");
+    
+    // Test basic arithmetic
+    var arith_result = arithmetic_demo();
+    
+    // Test control flow
+    var flow_result = control_flow_demo(75);
+    
+    // Test array operations
+    var array_result = array_demo();
+    
+    // Test string operations
+    var string_result = string_demo();
+    
+    // Test recursive function
+    var fib_result = fibonacci(10);
+    print("Fibonacci(10): " + fib_result);
+    
+    // Test closures
+    var double = make_multiplier(2);
+    var triple = make_multiplier(3);
+    print("Double 5: " + double(5));
+    print("Triple 5: " + triple(5));
+    
+    // Test table operations
+    var table_result = table_demo();
+    
+    print("=== Demo Complete ===");
+    
+    return {
+        arithmetic: arith_result,
+        control_flow: flow_result,
+        array: array_result,
+        string: string_result,
+        fibonacci: fib_result,
+        table: table_result
+    };
+}
+
+// Execute the demo
+var results = main();
+
+/*
+RISC-V Compilation Notes:
+========================
+
+This program demonstrates various Mobius language features and how they
+would compile to RISC-V instructions:
+
+1. ARITHMETIC OPERATIONS:
+   - Simple operations compile to ADD, SUB, MUL instructions
+   - Operator precedence handled by compiler ordering
+   - Type checking generates conditional branches
+
+2. CONTROL FLOW:
+   - if/else statements compile to BEQ, BNE, BLT, BGE instructions
+   - Nested conditions create jump tables
+   - Early returns use JAL to function epilogue
+
+3. ARRAY OPERATIONS:
+   - Array access compiles to load/store with offset calculation
+   - Bounds checking generates conditional branches
+   - Loop constructs use branch instructions for iteration
+
+4. STRING OPERATIONS:
+   - String concatenation calls runtime functions
+   - Reference counting managed by runtime
+   - Constant strings stored in data section
+
+5. FUNCTION CALLS:
+   - Arguments passed in a0-a7 registers (RISC-V ABI)
+   - Return values in a0 register
+   - Stack management for local variables
+
+6. CLOSURES:
+   - Environment capture requires heap allocation
+   - Closure access through environment pointer
+   - Reference counting for environment lifetime
+
+7. TABLE OPERATIONS:
+   - Hash table access through runtime functions
+   - Key hashing and collision handling in runtime
+   - Property access optimized for common patterns
+
+PERFORMANCE CHARACTERISTICS:
+===========================
+
+Expected performance improvements with RISC-V bytecode:
+
+- Arithmetic: 10-20x faster (direct CPU instructions)
+- Control Flow: 5-10x faster (efficient branching)
+- Array Access: 15-25x faster (direct memory access)
+- Function Calls: 3-8x faster (register-based calling convention)
+- String Operations: 2-5x faster (optimized runtime calls)
+
+COMPILATION MODES:
+==================
+
+1. INTERPRETED MODE:
+   - RISC-V instructions executed by VM
+   - Cross-platform compatibility
+   - Good debugging support
+
+2. JIT COMPILATION:
+   - Hot code compiled to native RISC-V
+   - Dynamic optimization based on runtime behavior
+   - Best performance for long-running programs
+
+3. AOT COMPILATION:
+   - Entire program compiled to RISC-V binary
+   - Maximum performance, minimal startup time
+   - Suitable for embedded systems and production deployment
+
+4. HYBRID MODE:
+   - Interpreter with selective compilation
+   - Balances performance and compilation time
+   - Ideal for development and testing
+*/

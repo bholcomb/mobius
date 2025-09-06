@@ -916,6 +916,119 @@ EvalResult builtin_get_type_config(Environment* env, Value* args, size_t arg_cou
 }
 
 // =============================================================================
+// ARRAY FUNCTIONS
+// =============================================================================
+
+EvalResult builtin_array_create(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count > 1) {
+        return make_error_detailed("array_create() expects 0 or 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    size_t capacity = 8; // Default capacity
+    if (arg_count == 1) {
+        if (args[0].type != VAL_INTEGER) {
+            return make_error_detailed("array_create() capacity must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+        }
+        capacity = (size_t)args[0].as.integer.value.i64;
+        if (capacity == 0) capacity = 8; // Minimum capacity
+    }
+    
+    ArrayValue* array = array_create(capacity);
+    if (!array) {
+        return make_error_detailed("Failed to create array", NULL, ERROR_MEMORY, 0, 0, NULL, NULL);
+    }
+    
+    return make_success(make_array_value(array));
+}
+
+EvalResult builtin_array_push(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 2) {
+        return make_error_detailed("array_push() expects 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_push() first argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    array_push(args[0].as.array, args[1]);
+    return make_success(make_nil_value());
+}
+
+EvalResult builtin_array_pop(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 1) {
+        return make_error_detailed("array_pop() expects 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_pop() argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    Value result = array_pop(args[0].as.array);
+    return make_success(result);
+}
+
+EvalResult builtin_array_get(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 2) {
+        return make_error_detailed("array_get() expects 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_get() first argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    if (args[1].type != VAL_INTEGER) {
+        return make_error_detailed("array_get() second argument must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    size_t index = (size_t)args[1].as.integer.value.i64;
+    Value result = array_get(args[0].as.array, index);
+    return make_success(result);
+}
+
+EvalResult builtin_array_set(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 3) {
+        return make_error_detailed("array_set() expects 3 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_set() first argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    if (args[1].type != VAL_INTEGER) {
+        return make_error_detailed("array_set() second argument must be an integer", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    size_t index = (size_t)args[1].as.integer.value.i64;
+    array_set(args[0].as.array, index, args[2]);
+    return make_success(make_nil_value());
+}
+
+EvalResult builtin_array_length(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    
+    if (arg_count != 1) {
+        return make_error_detailed("array_length() expects 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
+    }
+    
+    if (args[0].type != VAL_ARRAY) {
+        return make_error_detailed("array_length() argument must be an array", NULL, ERROR_TYPE, 0, 0, NULL, NULL);
+    }
+    
+    size_t length = array_length(args[0].as.array);
+    return make_success(make_integer_value(NUM_INT64, (int64_t)length));
+}
+
+// =============================================================================
 // STANDARD LIBRARY MANAGEMENT
 // =============================================================================
 
@@ -961,6 +1074,14 @@ static const StdlibEntry stdlib_functions[] = {
     {"setmetatable", builtin_setmetatable, 2, "Set metatable for table", "Table"},
     {"getmetatable", builtin_getmetatable, 1, "Get metatable of table", "Table"},
     {"pairs", builtin_pairs, 1, "Get array of [key, value] pairs from table", "Table"},
+    
+    // Array functions
+    {"array_create", builtin_array_create, SIZE_MAX, "Create a new array with optional capacity", "Array"},
+    {"array_push", builtin_array_push, 2, "Add element to end of array", "Array"},
+    {"array_pop", builtin_array_pop, 1, "Remove and return last element from array", "Array"},
+    {"array_get", builtin_array_get, 2, "Get element at index from array", "Array"},
+    {"array_set", builtin_array_set, 3, "Set element at index in array", "Array"},
+    {"array_length", builtin_array_length, 1, "Get number of elements in array", "Array"},
     
     // Type system configuration
     {"set_strict_types", builtin_set_strict_types, SIZE_MAX, "Enable/disable strict type checking", "Types"},

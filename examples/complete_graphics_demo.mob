@@ -1,0 +1,180 @@
+// Complete Graphics Demo - Showcasing SDL + OpenGL + ImGui Integration
+// This example demonstrates the power of combining all graphics plugins
+
+// Initialize SDL and create window
+var window = sdl_create_window("Mobius Graphics Demo", 1280, 720);
+var renderer = sdl_create_renderer(window);
+
+// Initialize OpenGL context
+var gl_context = gl_create_context(window);
+gl_viewport(0, 0, 1280, 720);
+
+// Initialize ImGui
+var imgui_context = imgui_create_context();
+
+// Demo state variables
+var rotation = 0.0;
+var show_demo_window = true;
+var show_plot_window = true;
+var clear_color = [0.45, 0.55, 0.60, 1.0];
+
+// Sample data for plotting
+var plot_data_x = [];
+var plot_data_y = [];
+for (var i = 0; i < 100; i = i + 1) {
+    array_push(plot_data_x, i * 0.1);
+    array_push(plot_data_y, sin(i * 0.1) * cos(i * 0.05));
+}
+
+// Main render loop
+var running = true;
+while (running) {
+    // Handle SDL events
+    var events = sdl_poll_events();
+    for (var i = 0; i < array_length(events); i = i + 1) {
+        var event = events[i];
+        if (event.type == "quit") {
+            running = false;
+        }
+    }
+    
+    // Start ImGui frame
+    imgui_new_frame();
+    
+    // Main menu bar
+    if (imgui_begin_menu_bar()) {
+        if (imgui_begin_menu("File")) {
+            if (imgui_menu_item("Exit")) {
+                running = false;
+            }
+            imgui_end_menu();
+        }
+        if (imgui_begin_menu("View")) {
+            imgui_menu_item("Demo Window", "", show_demo_window);
+            imgui_menu_item("Plot Window", "", show_plot_window);
+            imgui_end_menu();
+        }
+        imgui_end_menu_bar();
+    }
+    
+    // Demo control window
+    if (show_demo_window) {
+        if (imgui_begin("Demo Controls", show_demo_window)) {
+            imgui_text("Graphics Demo Controls");
+            imgui_separator();
+            
+            // Color picker for clear color
+            imgui_text("Background Color:");
+            clear_color = imgui_color_edit4("Clear Color", clear_color);
+            
+            // Rotation slider
+            rotation = imgui_slider_float("Rotation", rotation, 0.0, 360.0);
+            
+            // Performance metrics
+            imgui_separator();
+            imgui_text("Performance:");
+            imgui_text("FPS: " + get_fps());
+            imgui_text("Frame Time: " + get_frame_time() + " ms");
+            
+            // OpenGL info
+            imgui_separator();
+            imgui_text("OpenGL Info:");
+            imgui_text("Version: " + gl_get_string("VERSION"));
+            imgui_text("Renderer: " + gl_get_string("RENDERER"));
+        }
+        imgui_end();
+    }
+    
+    // Data visualization window
+    if (show_plot_window) {
+        if (imgui_begin("Data Visualization", show_plot_window)) {
+            imgui_text("Real-time Data Plotting with ImPlot");
+            
+            if (implot_begin_plot("Sample Data")) {
+                implot_plot_line("Sin/Cos Wave", plot_data_x, plot_data_y);
+                
+                // Add real-time data point
+                var time = get_time();
+                array_push(plot_data_x, time);
+                array_push(plot_data_y, sin(time) * cos(time * 0.5));
+                
+                // Keep only last 100 points
+                if (array_length(plot_data_x) > 100) {
+                    array_shift(plot_data_x);
+                    array_shift(plot_data_y);
+                }
+                
+                implot_end_plot();
+            }
+            
+            // Histogram example
+            imgui_separator();
+            if (implot_begin_plot("Histogram")) {
+                var histogram_data = generate_random_data(1000);
+                implot_plot_histogram("Random Data", histogram_data, 50);
+                implot_end_plot();
+            }
+        }
+        imgui_end();
+    }
+    
+    // OpenGL rendering
+    gl_clear_color(clear_color[0], clear_color[1], clear_color[2], clear_color[3]);
+    gl_clear("COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT");
+    
+    // Render a rotating triangle
+    render_rotating_triangle(rotation);
+    
+    // Render ImGui
+    imgui_render();
+    
+    // Present the frame
+    sdl_present(renderer);
+}
+
+// Cleanup
+imgui_destroy_context(imgui_context);
+gl_destroy_context(gl_context);
+sdl_destroy_renderer(renderer);
+sdl_destroy_window(window);
+
+func render_rotating_triangle(rotation) {
+    // Simple OpenGL triangle rendering
+    var vertices = [
+        -0.5, -0.5, 0.0,  1.0, 0.0, 0.0,  // Bottom left, red
+         0.5, -0.5, 0.0,  0.0, 1.0, 0.0,  // Bottom right, green
+         0.0,  0.5, 0.0,  0.0, 0.0, 1.0   // Top, blue
+    ];
+    
+    // Apply rotation transformation
+    gl_push_matrix();
+    gl_rotate(rotation, 0.0, 0.0, 1.0);
+    
+    // Render triangle
+    gl_begin("TRIANGLES");
+    for (var i = 0; i < array_length(vertices); i = i + 6) {
+        gl_color3f(vertices[i+3], vertices[i+4], vertices[i+5]);
+        gl_vertex3f(vertices[i], vertices[i+1], vertices[i+2]);
+    }
+    gl_end();
+    
+    gl_pop_matrix();
+}
+
+func generate_random_data(count) {
+    var data = [];
+    for (var i = 0; i < count; i = i + 1) {
+        array_push(data, random() * 100.0);
+    }
+    return data;
+}
+
+func get_fps() {
+    // Would be implemented by the engine
+    return "60.0";
+}
+
+func get_frame_time() {
+    // Would be implemented by the engine
+    return "16.67";
+}

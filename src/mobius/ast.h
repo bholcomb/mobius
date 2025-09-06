@@ -18,6 +18,8 @@ typedef enum {
     EXPR_ASSIGNMENT,
     EXPR_CALL,
     EXPR_GROUPING,
+    EXPR_ARRAY_LITERAL,
+    EXPR_ARRAY_INDEX,
     EXPR_TABLE_LITERAL,
     EXPR_TABLE_INDEX,
     EXPR_TABLE_DOT
@@ -102,6 +104,18 @@ typedef struct {
     Expr* expression;
 } GroupingExpr;
 
+// Array literal expression [1, 2, 3]
+typedef struct {
+    Expr** elements;
+    size_t element_count;
+} ArrayLiteralExpr;
+
+// Array indexing expression arr[index]
+typedef struct {
+    Expr* array;
+    Expr* index;
+} ArrayIndexExpr;
+
 // Table key-value pair for table literals
 typedef struct {
     Expr* key;    // Can be NULL for computed indices
@@ -136,6 +150,8 @@ struct Expr {
         AssignmentExpr assignment;
         CallExpr call;
         GroupingExpr grouping;
+        ArrayLiteralExpr array_literal;
+        ArrayIndexExpr array_index;
         TableLiteralExpr table_literal;
         TableIndexExpr table_index;
         TableDotExpr table_dot;
@@ -226,6 +242,8 @@ Expr* make_variable_expr(Token name);
 Expr* make_assignment_expr(Token name, Expr* value);
 Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_count);
 Expr* make_grouping_expr(Expr* expression);
+Expr* make_array_literal_expr(Expr** elements, size_t element_count);
+Expr* make_array_index_expr(Expr* array, Expr* index);
 Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count);
 Expr* make_table_index_expr(Expr* table, Expr* index);
 Expr* make_table_dot_expr(Expr* table, Token key);
