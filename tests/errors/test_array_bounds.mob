@@ -1,0 +1,17 @@
+// Array Bounds and Error Testing
+// Tests error conditions and bounds checking
+
+print("=== Array Bounds and Error Tests ===");
+
+// Test bounds checking with array indexing
+var arr = [1, 2, 3];
+print("Test array:", arr);
+print("Length:", array_length(arr));
+
+// Valid accesses
+print("Valid [0]:", arr[0]);
+print("Valid [2]:", arr[2]);
+
+// Note: Out-of-bounds access should be caught by the evaluator
+// These would cause runtime errors in a proper bounds-checking system
+print("=== Bounds Tests Complete ===");

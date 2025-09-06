@@ -189,6 +189,10 @@ Expr* parse_primary(Parser* parser) {
         return parse_table_literal(parser);
     }
     
+    if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
+        return parse_array_literal(parser);
+    }
+    
     if (parser_match(parser, TOKEN_LEFT_PAREN)) {
         Expr* expr = parse_expression(parser);
         consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
@@ -300,6 +304,53 @@ Expr* parse_table_literal(Parser* parser) {
     return make_table_literal_expr(pairs, pair_count);
 }
 
+Expr* parse_array_literal(Parser* parser) {
+    Expr** elements = NULL;
+    size_t element_count = 0;
+    size_t element_capacity = 0;
+    
+    // Handle empty array []
+    if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+        parser_advance(parser);
+        return make_array_literal_expr(elements, element_count);
+    }
+    
+    do {
+        // Skip any newlines before processing the next element
+        while (parser_match(parser, TOKEN_NEWLINE)) {
+            // Continue to skip newlines
+        }
+        
+        // Check for end of array after skipping newlines
+        if (parser_check(parser, TOKEN_RIGHT_BRACKET)) {
+            break;
+        }
+        
+        // Resize elements array if needed
+        if (element_count >= element_capacity) {
+            element_capacity = element_capacity == 0 ? 8 : element_capacity * 2;
+            elements = realloc(elements, element_capacity * sizeof(Expr*));
+            if (!elements) {
+                parser_error_at_current(parser, "Out of memory parsing array literal");
+                return NULL;
+            }
+        }
+        
+        // Parse the element expression
+        elements[element_count++] = parse_expression(parser);
+        
+        // Skip any newlines after the element
+        while (parser_match(parser, TOKEN_NEWLINE)) {
+            // Continue to skip newlines
+        }
+        
+    } while (parser_match(parser, TOKEN_COMMA));
+    
+    consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after array literal");
+    
+    return make_array_literal_expr(elements, element_count);
+}
+
 Expr* finish_call(Parser* parser, Expr* callee) {
     Expr** arguments = NULL;
     size_t arg_count = 0;
@@ -333,8 +384,8 @@ Expr* parse_call(Parser* parser) {
             expr = finish_call(parser, expr);
         } else if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
             Expr* index = parse_expression(parser);
-            consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after table index");
-            expr = make_table_index_expr(expr, index);
+            consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after index");
+            expr = make_array_index_expr(expr, index);
         } else if (parser_match(parser, TOKEN_DOT)) {
             Token key = consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'");
             expr = make_table_dot_expr(expr, key);
