@@ -736,7 +736,7 @@ Stmt* parse_function_declaration(Parser* parser) {
         if (!stmt) {
             // Error occurred, clean up and return
             for (size_t i = 0; i < body_count; i++) {
-                free_stmt(body[i]);
+                ast_release_stmt(body[i]);
             }
             free(body);
             free(params);
@@ -748,9 +748,9 @@ Stmt* parse_function_declaration(Parser* parser) {
             size_t new_capacity = body_capacity == 0 ? 8 : body_capacity * 2;
             Stmt** new_body = realloc(body, new_capacity * sizeof(Stmt*));
             if (!new_body) {
-                free_stmt(stmt);
+                ast_release_stmt(stmt);
                 for (size_t i = 0; i < body_count; i++) {
-                    free_stmt(body[i]);
+                    ast_release_stmt(body[i]);
                 }
                 free(body);
                 free(params);
@@ -786,7 +786,7 @@ Stmt* parse_return_statement(Parser* parser) {
 void free_parse_result(ParseResult* result) {
     if (result->statements) {
         for (size_t i = 0; i < result->count; i++) {
-            free_stmt(result->statements[i]);
+            ast_release_stmt(result->statements[i]);  // Use reference counting
         }
         free(result->statements);
         result->statements = NULL;

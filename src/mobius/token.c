@@ -1,5 +1,7 @@
+#define _POSIX_C_SOURCE 200809L  // For strdup
 #include "token.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Array of token type names for debugging and error messages
@@ -167,4 +169,48 @@ Token make_char_token(const char* start, int length, int line, int column, char 
     
     token.literal.character = character;
     return token;
+}
+
+// Extract identifier name from token (for IDENTIFIER tokens only)
+char* extract_identifier_name(const Token* token) {
+    if (!token || token->type != TOKEN_IDENTIFIER || !token->start || token->length <= 0) {
+        return NULL;
+    }
+    
+    char* name = malloc(token->length + 1);
+    if (!name) return NULL;
+    
+    memcpy(name, token->start, token->length);
+    name[token->length] = '\0';
+    return name;
+}
+
+// Token copying functions for memory management (simplified - only copy what's needed)
+Token copy_token(const Token* token) {
+    if (!token) {
+        Token empty = {0};
+        return empty;
+    }
+    
+    Token copy = *token;  // Shallow copy first
+    
+    // For IDENTIFIER tokens, we don't copy start - we'll extract the name when needed
+    // For STRING tokens, copy the literal string
+    if (token->type == TOKEN_STRING && token->literal.string) {
+        copy.literal.string = strdup(token->literal.string);
+    }
+    
+    return copy;
+}
+
+void free_token(Token* token) {
+    if (!token) return;
+    
+    // Free the copied string literal
+    if (token->type == TOKEN_STRING && token->literal.string) {
+        free((void*)token->literal.string);
+        token->literal.string = NULL;
+    }
+    
+    // Note: We don't free start anymore since we don't copy it
 }

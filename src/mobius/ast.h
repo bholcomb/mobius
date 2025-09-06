@@ -41,8 +41,8 @@ typedef enum {
 
 // Function representation for runtime  
 struct MobiusFunction {
-    Token name;
-    Token* params;
+    char* name;           // Function name (owned string)
+    char** param_names;   // Parameter names (owned strings)
     size_t param_count;
     Stmt** body;
     size_t body_count;

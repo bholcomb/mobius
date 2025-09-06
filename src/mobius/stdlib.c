@@ -628,9 +628,12 @@ EvalResult builtin_load(Environment* env, Value* args, size_t arg_count) {
     set_source_context(old_context);
     
     // Cleanup
-    // With AST reference counting, we can now safely free the parse result
+    // We can now safely free the parse result with AST reference counting
     // Functions retain their own references to the AST nodes they need
     free_parse_result(&parse_result);
+    
+    // Now we can safely free the file result since function names are copied as strings
+    // and no longer depend on the original source code memory
     free_file_result(&file_result);
     
     if (is_error(eval_result)) {
