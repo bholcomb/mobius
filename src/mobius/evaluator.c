@@ -1117,11 +1117,13 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         function->params = NULL;
     }
     
-    // TODO: For now, still store pointers to body statements
-    // This is a bigger change that requires deep copying the entire AST
-    // For immediate fix, we'll address this separately
+    // Retain references to AST body statements for proper memory management
+    // This ensures the function body stays alive even after the original parse result is freed
     function->body = stmt->body;
     function->body_count = stmt->body_count;
+    
+    // Retain all body statements to prevent premature deallocation
+    ast_retain_stmt_array(function->body, function->body_count);
     function->closure = env;  // Capture current environment as closure
     
     // Create function value

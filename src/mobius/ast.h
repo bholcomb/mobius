@@ -127,6 +127,7 @@ typedef struct {
 // Main expression structure
 struct Expr {
     ExprType type;
+    int ref_count;          // Reference counter for memory management
     union {
         BinaryExpr binary;
         UnaryExpr unary;
@@ -202,6 +203,7 @@ typedef struct {
 // Main statement structure
 struct Stmt {
     StmtType type;
+    int ref_count;          // Reference counter for memory management
     union {
         ExpressionStmt expression;
         PrintStmt print;
@@ -241,7 +243,19 @@ Stmt* make_class_stmt(Token name, VariableExpr* superclass,
                      FunctionStmt** methods, size_t method_count);
 Stmt* make_return_stmt(Token keyword, Expr* value);
 
-// Memory management
+// AST Reference Counting
+Expr* ast_retain_expr(Expr* expr);
+void ast_release_expr(Expr* expr);
+Stmt* ast_retain_stmt(Stmt* stmt);
+void ast_release_stmt(Stmt* stmt);
+
+// Helper functions for arrays and complex structures
+void ast_retain_stmt_array(Stmt** stmts, size_t count);
+void ast_release_stmt_array(Stmt** stmts, size_t count);
+void ast_retain_expr_array(Expr** exprs, size_t count);
+void ast_release_expr_array(Expr** exprs, size_t count);
+
+// Memory management (legacy - will be replaced by reference counting)
 void free_expr(Expr* expr);
 void free_stmt(Stmt* stmt);
 

@@ -1,5 +1,6 @@
 #include "value.h"
 #include "table.h"
+#include "ast.h"  // For AST reference counting functions
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -364,9 +365,11 @@ void free_value(Value value) {
             free(func->params);
         }
         
-        // Note: We don't free func->body because it still points to AST nodes
-        // This is a temporary compromise - the body cleanup should be handled
-        // by the AST cleanup system, not here
+        // Release AST body references using reference counting
+        // This properly manages the AST node lifecycle
+        if (func->body) {
+            ast_release_stmt_array(func->body, func->body_count);
+        }
         
         // Note: don't free closure environment - it's managed separately
         free(func);
