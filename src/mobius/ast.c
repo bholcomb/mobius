@@ -247,12 +247,12 @@ void print_expr(Expr* expr) {
         case EXPR_BINARY:
             printf("(");
             print_expr(expr->as.binary.left);
-            printf(" %.*s ", expr->as.binary.op.length, expr->as.binary.op.start);
+            printf(" OP ");
             print_expr(expr->as.binary.right);
             printf(")");
             break;
         case EXPR_UNARY:
-            printf("(%.*s ", expr->as.unary.op.length, expr->as.unary.op.start);
+            printf("(UNARY ");
             print_expr(expr->as.unary.right);
             printf(")");
             break;
@@ -260,10 +260,10 @@ void print_expr(Expr* expr) {
             print_value(expr->as.literal.value);
             break;
         case EXPR_VARIABLE:
-            printf("%.*s", expr->as.variable.name.length, expr->as.variable.name.start);
+            printf("%s", expr->as.variable.name.identifier ? expr->as.variable.name.identifier : "unknown");
             break;
         case EXPR_ASSIGNMENT:
-            printf("(%.*s = ", expr->as.assignment.name.length, expr->as.assignment.name.start);
+            printf("(%s = ", expr->as.assignment.name.identifier ? expr->as.assignment.name.identifier : "unknown");
             print_expr(expr->as.assignment.value);
             printf(")");
             break;
@@ -309,7 +309,7 @@ void print_expr(Expr* expr) {
         case EXPR_TABLE_DOT:
             printf("(dot ");
             print_expr(expr->as.table_dot.table);
-            printf(".%.*s)", expr->as.table_dot.key.length, expr->as.table_dot.key.start);
+            printf(".%s)", expr->as.table_dot.key.identifier ? expr->as.table_dot.key.identifier : "unknown");
             break;
     }
 }
@@ -331,7 +331,7 @@ void print_stmt(Stmt* stmt) {
             printf(";");
             break;
         case STMT_VAR:
-            printf("var %.*s", stmt->as.var.name.length, stmt->as.var.name.start);
+            printf("var %s", stmt->as.var.name.identifier ? stmt->as.var.name.identifier : "unknown");
             if (stmt->as.var.initializer) {
                 printf(" = ");
                 print_expr(stmt->as.var.initializer);
@@ -374,18 +374,17 @@ void print_stmt(Stmt* stmt) {
             print_stmt(stmt->as.for_stmt.body);
             break;
         case STMT_FUNCTION:
-            printf("func %.*s(", stmt->as.function.name.length, stmt->as.function.name.start);
+            printf("func %s(", stmt->as.function.name.identifier ? stmt->as.function.name.identifier : "unknown");
             for (size_t i = 0; i < stmt->as.function.param_count; i++) {
                 if (i > 0) printf(", ");
-                printf("%.*s", stmt->as.function.params[i].length, stmt->as.function.params[i].start);
+                printf("%s", stmt->as.function.params[i].identifier ? stmt->as.function.params[i].identifier : "unknown");
             }
             printf(") { ... }");
             break;
         case STMT_CLASS:
-            printf("class %.*s", stmt->as.class_stmt.name.length, stmt->as.class_stmt.name.start);
+            printf("class %s", stmt->as.class_stmt.name.identifier ? stmt->as.class_stmt.name.identifier : "unknown");
             if (stmt->as.class_stmt.superclass) {
-                printf(" < %.*s", stmt->as.class_stmt.superclass->name.length, 
-                       stmt->as.class_stmt.superclass->name.start);
+                printf(" < %s", stmt->as.class_stmt.superclass->name.identifier ? stmt->as.class_stmt.superclass->name.identifier : "unknown");
             }
             printf(" { ... }");
             break;

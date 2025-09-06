@@ -220,33 +220,24 @@ EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env) {
 }
 
 EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
-    char name[256];
-    snprintf(name, sizeof(name), "%.*s", expr->name.length, expr->name.start);
+    // Use the extracted identifier string from the token's identifier field
+    const char* name = expr->name.identifier ? expr->name.identifier : "unknown";
     
     bool found;
     Value value = get_variable(env, name, &found);
     
     if (!found) {
-        char* var_name = malloc(expr->name.length + 1);
-        if (var_name) {
-            strncpy(var_name, expr->name.start, expr->name.length);
-            var_name[expr->name.length] = '\0';
-        }
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "Undefined variable '%.*s'", 
-                expr->name.length, expr->name.start);
+        snprintf(error_msg, sizeof(error_msg), "Undefined variable '%s'", name);
         
-        EvalResult result = make_error_detailed_with_source(
+        return make_error_detailed(
             error_msg,
             "Make sure the variable is declared before use",
             ERROR_UNDEFINED,
-            expr->name.line,
-            expr->name.column,
+            0, 0,  // No line/column info available
+            name,
             NULL
         );
-        
-        if (var_name) free(var_name);
-        return result;
     }
     
     return make_success(value);
@@ -259,7 +250,8 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
     }
     
     char name[256];
-    snprintf(name, sizeof(name), "%.*s", expr->name.length, expr->name.start);
+    const char* identifier = expr->name.identifier ? expr->name.identifier : "unknown";
+    snprintf(name, sizeof(name), "%s", identifier);
     
     if (!assign_variable(env, name, value_result.value)) {
         return make_error_detailed_with_source("Undefined variable in assignment", 
@@ -768,7 +760,8 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
     }
     
     char name[256];
-    snprintf(name, sizeof(name), "%.*s", stmt->name.length, stmt->name.start);
+    const char* identifier = stmt->name.identifier ? stmt->name.identifier : "unknown";
+    snprintf(name, sizeof(name), "%s", identifier);
     define_variable(env, name, value);
     
     return make_success(make_nil_value());
@@ -893,7 +886,8 @@ EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, Module
     
     VariableExpr* var_expr = &expr->callee->as.variable;
     char full_name[256];
-    snprintf(full_name, sizeof(full_name), "%.*s", var_expr->name.length, var_expr->name.start);
+    const char* identifier = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
+    snprintf(full_name, sizeof(full_name), "%s", identifier);
     
     // Parse qualified name (module.function)
     char module_name[128] = {0};
@@ -1362,7 +1356,8 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
         free_value(table_result.value);
         return make_error("Memory allocation failed", 0, 0);
     }
-    strncpy(key_str, expr->key.start, expr->key.length);
+    const char* key_identifier = expr->key.identifier ? expr->key.identifier : "unknown";
+    strncpy(key_str, key_identifier, strlen(key_identifier));
     key_str[expr->key.length] = '\0';
     
     Value key = make_string_value_from_cstr(key_str);

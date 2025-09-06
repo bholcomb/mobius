@@ -86,7 +86,7 @@ void parser_error(Parser* parser, Token token, const char* message) {
     } else if (token.type == TOKEN_ERROR) {
         // Nothing
     } else {
-        fprintf(stderr, " at '%.*s'", token.length, token.start);
+        fprintf(stderr, " at '%s'", token.identifier ? token.identifier : "unknown");
     }
     
     fprintf(stderr, ": %s\n", message);
@@ -258,7 +258,8 @@ Expr* parse_table_literal(Parser* parser) {
                 // Create a string literal from the identifier
                 char* key_str = malloc(key_token.length + 1);
                 if (key_str) {
-                    strncpy(key_str, key_token.start, key_token.length);
+                    const char* key_id = key_token.identifier ? key_token.identifier : "unknown";
+                    strncpy(key_str, key_id, strlen(key_id));
                     key_str[key_token.length] = '\0';
                     current_pair->key = make_literal_expr(make_string_value_from_cstr(key_str));
                     free(key_str);

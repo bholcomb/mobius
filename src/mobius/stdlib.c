@@ -632,9 +632,12 @@ EvalResult builtin_load(Environment* env, Value* args, size_t arg_count) {
     // Functions retain their own references to the AST nodes they need
     free_parse_result(&parse_result);
     
-    // Now we can safely free the file result since function names are copied as strings
-    // and no longer depend on the original source code memory
-    free_file_result(&file_result);
+    // NOTE: We still can't free file_result because variable names in AST expressions
+    // contain pointers to the source code string. Function names are now copied as strings,
+    // but variable names within expressions still reference the original source.
+    // This creates a memory leak, but ensures loaded functions work correctly.
+    // TODO: Implement comprehensive token string copying for all AST nodes
+    // free_file_result(&file_result);  // DISABLED: Variable expressions still reference source
     
     if (is_error(eval_result)) {
         // Propagate the error from the loaded script
