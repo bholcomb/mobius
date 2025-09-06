@@ -24,7 +24,7 @@ typedef struct RefCountedString {
 // Dynamic array structure with reference counting (defined after Value)
 struct ArrayValue;
 
-// Value types for literals
+// Value types for literals 
 typedef enum {
     VAL_NIL,
     VAL_BOOL,
