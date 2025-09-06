@@ -51,6 +51,7 @@ EvalResult builtin_str(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_int(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("int() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -80,6 +81,7 @@ EvalResult builtin_int(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_float(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("float() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -126,6 +128,7 @@ EvalResult builtin_float(Environment* env, Value* args, size_t arg_count) {
 // =============================================================================
 
 EvalResult builtin_abs(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("abs() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -143,6 +146,7 @@ EvalResult builtin_abs(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_min(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count < 2) {
         return make_error_detailed("min() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -169,6 +173,7 @@ EvalResult builtin_min(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_max(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count < 2) {
         return make_error_detailed("max() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -195,6 +200,7 @@ EvalResult builtin_max(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_pow(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error_detailed("pow() expects exactly 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -218,6 +224,7 @@ EvalResult builtin_pow(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_sqrt(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("sqrt() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -241,6 +248,7 @@ EvalResult builtin_sqrt(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_floor(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("floor() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -260,6 +268,7 @@ EvalResult builtin_floor(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_ceil(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("ceil() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -279,6 +288,7 @@ EvalResult builtin_ceil(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_round(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("round() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -302,6 +312,7 @@ EvalResult builtin_round(Environment* env, Value* args, size_t arg_count) {
 // =============================================================================
 
 EvalResult builtin_len(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("len() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -316,6 +327,7 @@ EvalResult builtin_len(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_substr(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count < 2 || arg_count > 3) {
         return make_error_detailed("substr() expects 2 or 3 arguments: substr(string, start [, length])", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -373,6 +385,7 @@ EvalResult builtin_substr(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_concat(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count < 2) {
         return make_error_detailed("concat() expects at least 2 arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -409,6 +422,7 @@ EvalResult builtin_concat(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_upper(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("upper() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -438,6 +452,7 @@ EvalResult builtin_upper(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_lower(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("lower() expects exactly 1 argument", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -467,6 +482,7 @@ EvalResult builtin_lower(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_contains(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error_detailed("contains() expects exactly 2 arguments: contains(string, substring)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -490,6 +506,7 @@ EvalResult builtin_contains(Environment* env, Value* args, size_t arg_count) {
 // =============================================================================
 
 EvalResult builtin_random(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     static bool seeded = false;
     if (!seeded) {
         srand((unsigned int)time(NULL));
@@ -532,6 +549,7 @@ EvalResult builtin_random(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_time(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     (void)args; // Suppress unused warning
     if (arg_count != 0) {
         return make_error_detailed("time() expects no arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
@@ -542,6 +560,7 @@ EvalResult builtin_time(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_clock(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     (void)args; // Suppress unused warning
     if (arg_count != 0) {
         return make_error_detailed("clock() expects no arguments", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
@@ -653,6 +672,7 @@ EvalResult builtin_load(Environment* env, Value* args, size_t arg_count) {
 // =============================================================================
 
 EvalResult builtin_table_insert(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 3) {
         return make_error_detailed("table.insert() expects 3 arguments (table, key, value)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -673,6 +693,7 @@ EvalResult builtin_table_insert(Environment* env, Value* args, size_t arg_count)
 }
 
 EvalResult builtin_table_remove(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error_detailed("table.remove() expects 2 arguments (table, key)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -695,6 +716,7 @@ EvalResult builtin_table_remove(Environment* env, Value* args, size_t arg_count)
 }
 
 EvalResult builtin_table_has_key(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error_detailed("table.has_key() expects 2 arguments (table, key)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -711,6 +733,7 @@ EvalResult builtin_table_has_key(Environment* env, Value* args, size_t arg_count
 }
 
 EvalResult builtin_table_size(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("table.size() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -725,6 +748,7 @@ EvalResult builtin_table_size(Environment* env, Value* args, size_t arg_count) {
 }
 
 EvalResult builtin_setmetatable(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error_detailed("setmetatable() expects 2 arguments (table, metatable)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -747,6 +771,7 @@ EvalResult builtin_setmetatable(Environment* env, Value* args, size_t arg_count)
 }
 
 EvalResult builtin_getmetatable(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("getmetatable() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -766,6 +791,7 @@ EvalResult builtin_getmetatable(Environment* env, Value* args, size_t arg_count)
 }
 
 EvalResult builtin_pairs(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error_detailed("pairs() expects 1 argument (table)", NULL, ERROR_ARGUMENT, 0, 0, NULL, NULL);
     }
@@ -821,6 +847,7 @@ EvalResult builtin_pairs(Environment* env, Value* args, size_t arg_count) {
 
 // Type checking mode control functions
 EvalResult builtin_set_strict_types(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     extern TypeCheckConfig global_type_config;
     
     if (arg_count > 1) {
@@ -840,6 +867,7 @@ EvalResult builtin_set_strict_types(Environment* env, Value* args, size_t arg_co
 }
 
 EvalResult builtin_set_type_warnings(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     extern TypeCheckConfig global_type_config;
     
     if (arg_count != 1) {
@@ -854,7 +882,9 @@ EvalResult builtin_set_type_warnings(Environment* env, Value* args, size_t arg_c
     return make_success(make_nil_value());
 }
 
-EvalResult builtin_get_type_config(Value* args __attribute__((unused)), size_t arg_count) {
+EvalResult builtin_get_type_config(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    (void)args; // Unused parameter
     extern TypeCheckConfig global_type_config;
     
     if (arg_count != 0) {

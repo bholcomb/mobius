@@ -124,6 +124,7 @@ Token make_error_token(const char* message, int line, int column) {
 
 Token make_integer_token(const char* start, int length, int line, int column, 
                         NumericType num_type, int64_t value) {
+    (void)start; // Unused parameter
     Token token = {
         .type = TOKEN_INTEGER,
         .identifier = NULL,  // Integer tokens don't need identifier copying
@@ -141,6 +142,7 @@ Token make_integer_token(const char* start, int length, int line, int column,
 }
 
 Token make_float_token(const char* start, int length, int line, int column, double value) {
+    (void)start; // Unused parameter
     Token token = {
         .type = TOKEN_FLOAT,
         .identifier = NULL,  // Float tokens don't need identifier copying
@@ -155,6 +157,7 @@ Token make_float_token(const char* start, int length, int line, int column, doub
 }
 
 Token make_string_token(const char* start, int length, int line, int column, const char* string) {
+    (void)start; // Unused parameter
     Token token = {
         .type = TOKEN_STRING,
         .identifier = NULL,  // String tokens don't need identifier copying (use literal.string instead)
@@ -169,6 +172,7 @@ Token make_string_token(const char* start, int length, int line, int column, con
 }
 
 Token make_char_token(const char* start, int length, int line, int column, char character) {
+    (void)start; // Unused parameter
     Token token = {
         .type = TOKEN_CHAR,
         .identifier = NULL,  // Char tokens don't need identifier copying

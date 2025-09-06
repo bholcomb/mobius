@@ -293,7 +293,8 @@ MobiusValue* mobius_create_string(MobiusState* state, const char* val) {
     }
     strcpy(str_copy, val);
     
-    value->internal_value = make_string_value(str_copy);
+    value->internal_value = make_string_value_from_cstr(str_copy);
+    free(str_copy); // make_string_value_from_cstr creates its own copy
     value->state = state;
     value->is_owned = true;
     
@@ -362,7 +363,7 @@ double mobius_to_float(const MobiusValue* value) {
 
 const char* mobius_to_string(const MobiusValue* value) {
     if (!value || value->internal_value.type != VAL_STRING) return NULL;
-    return value->internal_value.as.string;
+    return string_data(value->internal_value.as.string);
 }
 
 // Userdata extraction functions
@@ -450,15 +451,8 @@ MobiusValue* mobius_copy_value(const MobiusValue* value) {
     MobiusValue* copy = malloc(sizeof(MobiusValue));
     if (!copy) return NULL;
     
-    // Deep copy the internal value
-    copy->internal_value = value->internal_value;
-    if (value->internal_value.type == VAL_STRING && value->internal_value.as.string) {
-        char* str_copy = malloc(strlen(value->internal_value.as.string) + 1);
-        if (str_copy) {
-            strcpy(str_copy, value->internal_value.as.string);
-            copy->internal_value.as.string = str_copy;
-        }
-    }
+    // Deep copy the internal value using the proper copy_value function
+    copy->internal_value = copy_value(value->internal_value);
     
     copy->state = value->state;
     
