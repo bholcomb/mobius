@@ -628,12 +628,10 @@ EvalResult builtin_load(Environment* env, Value* args, size_t arg_count) {
     set_source_context(old_context);
     
     // Cleanup
-    // NOTE: We intentionally don't free parse_result and file_result here
-    // because function definitions contain pointers to this memory.
-    // This creates a memory leak, but ensures loaded functions work correctly.
-    // TODO: Implement proper memory management for loaded scripts
-    // free_parse_result(&parse_result);  // DISABLED: Contains AST that functions reference
-    // free_file_result(&file_result);    // DISABLED: Contains source code that tokens reference
+    // With AST reference counting, we can now safely free the parse result
+    // Functions retain their own references to the AST nodes they need
+    free_parse_result(&parse_result);
+    free_file_result(&file_result);
     
     if (is_error(eval_result)) {
         // Propagate the error from the loaded script
