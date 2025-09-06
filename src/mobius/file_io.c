@@ -113,9 +113,9 @@ int execute_script_string(const char* source, const char* filename) {
     ParseResult parse_result = parse(tokens);
     if (parse_result.had_error) {
         fprintf(stderr, "Parse errors occurred\n");
-        free_parse_result(&parse_result);
+        cleanup_global_environment();  // Clean up environment first
+        free_parse_result(&parse_result);  // Then free parse result
         free_token_array(&tokens);
-        cleanup_global_environment();
         return 1;
     }
     
@@ -134,9 +134,9 @@ int execute_script_string(const char* source, const char* filename) {
     
     // Cleanup
     set_source_context(NULL);  // Clear source context
-    free_parse_result(&parse_result);
+    cleanup_global_environment();  // Clean up environment first (releases AST references)
+    free_parse_result(&parse_result);  // Then free parse result
     free_token_array(&tokens);
-    cleanup_global_environment();
     
     return exit_code;
 }

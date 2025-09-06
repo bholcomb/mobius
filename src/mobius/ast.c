@@ -6,10 +6,11 @@
 
 // Expression constructors
 Expr* make_binary_expr(Expr* left, Token op, Expr* right) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_BINARY;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.binary.left = left;
     expr->as.binary.op = op;
     expr->as.binary.right = right;
@@ -17,7 +18,7 @@ Expr* make_binary_expr(Expr* left, Token op, Expr* right) {
 }
 
 Expr* make_unary_expr(Token op, Expr* right) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_UNARY;
@@ -28,7 +29,7 @@ Expr* make_unary_expr(Token op, Expr* right) {
 }
 
 Expr* make_literal_expr(Value value) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_LITERAL;
@@ -38,7 +39,7 @@ Expr* make_literal_expr(Value value) {
 }
 
 Expr* make_variable_expr(Token name) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_VARIABLE;
@@ -48,7 +49,7 @@ Expr* make_variable_expr(Token name) {
 }
 
 Expr* make_assignment_expr(Token name, Expr* value) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_ASSIGNMENT;
@@ -59,7 +60,7 @@ Expr* make_assignment_expr(Token name, Expr* value) {
 }
 
 Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_count) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_CALL;
@@ -72,7 +73,7 @@ Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_cou
 }
 
 Expr* make_grouping_expr(Expr* expression) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_GROUPING;
@@ -82,7 +83,7 @@ Expr* make_grouping_expr(Expr* expression) {
 }
 
 Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_LITERAL;
@@ -93,7 +94,7 @@ Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count) {
 }
 
 Expr* make_table_index_expr(Expr* table, Expr* index) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_INDEX;
@@ -104,7 +105,7 @@ Expr* make_table_index_expr(Expr* table, Expr* index) {
 }
 
 Expr* make_table_dot_expr(Expr* table, Token key) {
-    Expr* expr = malloc(sizeof(Expr));
+    Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_DOT;
@@ -116,7 +117,7 @@ Expr* make_table_dot_expr(Expr* table, Token key) {
 
 // Statement constructors
 Stmt* make_expression_stmt(Expr* expression) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_EXPRESSION;
@@ -126,7 +127,7 @@ Stmt* make_expression_stmt(Expr* expression) {
 }
 
 Stmt* make_print_stmt(Expr* expression) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_PRINT;
@@ -136,7 +137,7 @@ Stmt* make_print_stmt(Expr* expression) {
 }
 
 Stmt* make_var_stmt(Token name, Expr* initializer, TypeInfo type_hint) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_VAR;
@@ -148,7 +149,7 @@ Stmt* make_var_stmt(Token name, Expr* initializer, TypeInfo type_hint) {
 }
 
 Stmt* make_block_stmt(Stmt** statements, size_t count) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_BLOCK;
@@ -159,7 +160,7 @@ Stmt* make_block_stmt(Stmt** statements, size_t count) {
 }
 
 Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_IF;
@@ -171,7 +172,7 @@ Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch) {
 }
 
 Stmt* make_while_stmt(Expr* condition, Stmt* body) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_WHILE;
@@ -182,7 +183,7 @@ Stmt* make_while_stmt(Expr* condition, Stmt* body) {
 }
 
 Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* body) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_FOR;
@@ -196,7 +197,7 @@ Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* b
 
 Stmt* make_function_stmt(Token name, Token* params, size_t param_count, 
                         Stmt** body, size_t body_count) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_FUNCTION;
@@ -211,7 +212,7 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
 
 Stmt* make_class_stmt(Token name, VariableExpr* superclass, 
                      FunctionStmt** methods, size_t method_count) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_CLASS;
@@ -224,7 +225,7 @@ Stmt* make_class_stmt(Token name, VariableExpr* superclass,
 }
 
 Stmt* make_return_stmt(Token keyword, Expr* value) {
-    Stmt* stmt = malloc(sizeof(Stmt));
+    Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_RETURN;
