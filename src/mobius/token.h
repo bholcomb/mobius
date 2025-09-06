@@ -131,8 +131,8 @@ typedef enum {
 // Token structure containing all token information
 typedef struct {
     TokenType type;         // The type of the token
-    const char* start;      // Pointer to the start of the token in source
-    int length;             // Length of the token string
+    const char* identifier; // Copied identifier string (only for IDENTIFIER tokens, NULL otherwise)
+    int length;             // Length of the token string (for compatibility)
     int line;               // Line number where token appears
     int column;             // Column number where token starts
     

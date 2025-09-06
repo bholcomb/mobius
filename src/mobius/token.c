@@ -52,10 +52,9 @@ const char* numeric_type_name(NumericType type) {
 }
 
 void print_token(const Token* token) {
-    printf("Token[%s] '%.*s' at line %d, column %d",
+    printf("Token[%s] '%s' at line %d, column %d",
            token_type_name(token->type),
-           token->length,
-           token->start,
+           token->identifier ? token->identifier : "N/A",
            token->line,
            token->column);
     
@@ -90,24 +89,36 @@ void print_token(const Token* token) {
 Token make_token(TokenType type, const char* start, int length, int line, int column) {
     Token token = {
         .type = type,
-        .start = start,
+        .identifier = NULL,  // Will be set only for IDENTIFIER tokens
         .length = length,
         .line = line,
         .column = column,
         .literal = {{0}} // Initialize union to zero
     };
+    
+    // Copy identifier string only for IDENTIFIER tokens
+    if (type == TOKEN_IDENTIFIER && start && length > 0) {
+        char* id_copy = malloc(length + 1);
+        if (id_copy) {
+            memcpy(id_copy, start, length);
+            id_copy[length] = '\0';
+            token.identifier = id_copy;
+        }
+    }
+    
     return token;
 }
 
 Token make_error_token(const char* message, int line, int column) {
     Token token = {
         .type = TOKEN_ERROR,
-        .start = message,
+        .identifier = NULL,  // Error tokens don't need identifier copying
         .length = (int)strlen(message),
         .line = line,
         .column = column,
         .literal = {{0}}
     };
+    // Note: Error message is typically a string literal, so we don't copy it
     return token;
 }
 
@@ -115,7 +126,7 @@ Token make_integer_token(const char* start, int length, int line, int column,
                         NumericType num_type, int64_t value) {
     Token token = {
         .type = TOKEN_INTEGER,
-        .start = start,
+        .identifier = NULL,  // Integer tokens don't need identifier copying
         .length = length,
         .line = line,
         .column = column,
@@ -132,7 +143,7 @@ Token make_integer_token(const char* start, int length, int line, int column,
 Token make_float_token(const char* start, int length, int line, int column, double value) {
     Token token = {
         .type = TOKEN_FLOAT,
-        .start = start,
+        .identifier = NULL,  // Float tokens don't need identifier copying
         .length = length,
         .line = line,
         .column = column,
@@ -146,7 +157,7 @@ Token make_float_token(const char* start, int length, int line, int column, doub
 Token make_string_token(const char* start, int length, int line, int column, const char* string) {
     Token token = {
         .type = TOKEN_STRING,
-        .start = start,
+        .identifier = NULL,  // String tokens don't need identifier copying (use literal.string instead)
         .length = length,
         .line = line,
         .column = column,
@@ -160,7 +171,7 @@ Token make_string_token(const char* start, int length, int line, int column, con
 Token make_char_token(const char* start, int length, int line, int column, char character) {
     Token token = {
         .type = TOKEN_CHAR,
-        .start = start,
+        .identifier = NULL,  // Char tokens don't need identifier copying
         .length = length,
         .line = line,
         .column = column,
@@ -173,16 +184,12 @@ Token make_char_token(const char* start, int length, int line, int column, char 
 
 // Extract identifier name from token (for IDENTIFIER tokens only)
 char* extract_identifier_name(const Token* token) {
-    if (!token || token->type != TOKEN_IDENTIFIER || !token->start || token->length <= 0) {
+    if (!token || token->type != TOKEN_IDENTIFIER || !token->identifier) {
         return NULL;
     }
     
-    char* name = malloc(token->length + 1);
-    if (!name) return NULL;
-    
-    memcpy(name, token->start, token->length);
-    name[token->length] = '\0';
-    return name;
+    // Return a copy of the already-extracted identifier string
+    return strdup(token->identifier);
 }
 
 // Token copying functions for memory management (simplified - only copy what's needed)
@@ -194,8 +201,12 @@ Token copy_token(const Token* token) {
     
     Token copy = *token;  // Shallow copy first
     
-    // For IDENTIFIER tokens, we don't copy start - we'll extract the name when needed
-    // For STRING tokens, copy the literal string
+    // Copy identifier string if it exists
+    if (token->identifier) {
+        copy.identifier = strdup(token->identifier);
+    }
+    
+    // Copy string literal if it exists
     if (token->type == TOKEN_STRING && token->literal.string) {
         copy.literal.string = strdup(token->literal.string);
     }
@@ -206,11 +217,15 @@ Token copy_token(const Token* token) {
 void free_token(Token* token) {
     if (!token) return;
     
+    // Free the copied identifier string
+    if (token->identifier) {
+        free((void*)token->identifier);
+        token->identifier = NULL;
+    }
+    
     // Free the copied string literal
     if (token->type == TOKEN_STRING && token->literal.string) {
         free((void*)token->literal.string);
         token->literal.string = NULL;
     }
-    
-    // Note: We don't free start anymore since we don't copy it
 }
