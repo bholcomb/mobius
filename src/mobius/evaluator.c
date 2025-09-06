@@ -4,6 +4,7 @@
 #include "token.h"
 #include "table.h"
 #include "types.h"
+#include "stack_trace.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,30 @@ EvalResult make_error(const char* message, int line, int column) {
     result.error.column = column;
     result.error.function_name = NULL;
     result.error.source_line = NULL;
+    
+    // Capture current stack trace immediately (make a copy)
+    StackTrace* current = get_current_stack_trace();
+    if (current && current->frame_count > 0) {
+        result.error.stack_trace = malloc(sizeof(StackTrace));
+        if (result.error.stack_trace) {
+            result.error.stack_trace->frame_count = current->frame_count;
+            result.error.stack_trace->frame_capacity = current->frame_capacity;
+            result.error.stack_trace->max_depth = current->max_depth;
+            
+            // Copy the frames
+            result.error.stack_trace->frames = malloc(sizeof(CallFrame) * current->frame_count);
+            if (result.error.stack_trace->frames) {
+                memcpy(result.error.stack_trace->frames, current->frames, 
+                       sizeof(CallFrame) * current->frame_count);
+            } else {
+                free(result.error.stack_trace);
+                result.error.stack_trace = NULL;
+            }
+        }
+    } else {
+        result.error.stack_trace = NULL;
+    }
+    
     return result;
 }
 
@@ -49,6 +74,30 @@ EvalResult make_error_detailed(const char* message, const char* suggestion,
     result.error.column = column;
     result.error.function_name = function_name;
     result.error.source_line = source_line;
+    
+    // Capture current stack trace immediately (make a copy)
+    StackTrace* current = get_current_stack_trace();
+    if (current && current->frame_count > 0) {
+        result.error.stack_trace = malloc(sizeof(StackTrace));
+        if (result.error.stack_trace) {
+            result.error.stack_trace->frame_count = current->frame_count;
+            result.error.stack_trace->frame_capacity = current->frame_capacity;
+            result.error.stack_trace->max_depth = current->max_depth;
+            
+            // Copy the frames
+            result.error.stack_trace->frames = malloc(sizeof(CallFrame) * current->frame_count);
+            if (result.error.stack_trace->frames) {
+                memcpy(result.error.stack_trace->frames, current->frames, 
+                       sizeof(CallFrame) * current->frame_count);
+            } else {
+                free(result.error.stack_trace);
+                result.error.stack_trace = NULL;
+            }
+        }
+    } else {
+        result.error.stack_trace = NULL;
+    }
+    
     return result;
 }
 
@@ -154,6 +203,43 @@ void print_runtime_error(RuntimeError error) {
                 fprintf(stderr, " ");
             }
             fprintf(stderr, "^\n");
+        }
+    }
+    
+    // Show stack trace if available
+    if (error.stack_trace && error.stack_trace->frame_count > 0) {
+        fprintf(stderr, "\n━━━ Call Stack ━━━\n");
+        for (size_t i = error.stack_trace->frame_count; i > 0; i--) {
+            CallFrame* frame = &error.stack_trace->frames[i - 1];
+            
+            fprintf(stderr, "  %zu. ", error.stack_trace->frame_count - i + 1);
+            
+            if (frame->is_builtin) {
+                fprintf(stderr, "builtin function '%s'", frame->function_name ? frame->function_name : "unknown");
+            } else if (frame->is_plugin) {
+                if (frame->module_name) {
+                    fprintf(stderr, "plugin function '%s.%s'", frame->module_name, 
+                           frame->function_name ? frame->function_name : "unknown");
+                } else {
+                    fprintf(stderr, "plugin function '%s'", frame->function_name ? frame->function_name : "unknown");
+                }
+            } else {
+                fprintf(stderr, "function '%s'", frame->function_name ? frame->function_name : "unknown");
+            }
+            
+            if (frame->filename && frame->line > 0) {
+                fprintf(stderr, " at %s:%d", frame->filename, frame->line);
+                if (frame->column > 0) {
+                    fprintf(stderr, ":%d", frame->column);
+                }
+            } else if (frame->line > 0) {
+                fprintf(stderr, " at line %d", frame->line);
+                if (frame->column > 0) {
+                    fprintf(stderr, ":%d", frame->column);
+                }
+            }
+            
+            fprintf(stderr, "\n");
         }
     }
     
@@ -976,8 +1062,16 @@ EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, Module
         }
     }
     
+    // Push builtin function call onto stack trace
+    const char* func_name = is_qualified ? function_name : full_name;
+    stack_trace_push(func_name, NULL, 0, 0, true, is_qualified, 
+                     is_qualified ? module_name : NULL);
+    
     // Call the function with environment
     EvalResult result = builtin(env, args, expr->arg_count);
+    
+    // Pop builtin function call from stack trace
+    stack_trace_pop();
     
     free(args);
     return result;
@@ -1182,6 +1276,12 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
         );
     }
     
+    // Push function call onto stack trace
+    stack_trace_push(function->name ? function->name : "anonymous", 
+                     NULL, // filename - TODO: add filename tracking
+                     0, 0, // line, column - TODO: add call site tracking
+                     false, false, NULL); // not builtin, not plugin
+    
     // Create new environment for function execution (with closure as parent)
     Environment* func_env = create_environment(function->closure);
     
@@ -1189,6 +1289,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     for (size_t i = 0; i < arg_count; i++) {
         EvalResult arg_result = evaluate_expr(arguments[i], env);
         if (is_error(arg_result)) {
+            stack_trace_pop();
             free_environment(func_env);
             return arg_result;
         }
@@ -1204,7 +1305,9 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     for (size_t i = 0; i < function->body_count; i++) {
         result = evaluate_stmt(function->body[i], func_env);
         if (is_error(result)) {
-            break;
+            stack_trace_pop();
+            free_environment(func_env);
+            return result;
         }
         
         // Check if a return statement was executed (including nested in control structures)
@@ -1222,6 +1325,9 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     } else {
         final_result = make_success(copy_value(result.value));
     }
+    
+    // Pop function call from stack trace
+    stack_trace_pop();
     
     free_environment(func_env);
     return final_result;
