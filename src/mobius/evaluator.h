@@ -38,6 +38,7 @@ typedef struct {
 typedef struct {
     Value value;
     bool has_error;
+    bool has_returned;  // Flag to indicate if a return statement was executed
     RuntimeError error;
 } EvalResult;
 

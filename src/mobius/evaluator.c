@@ -16,6 +16,7 @@ EvalResult make_success(Value value) {
     EvalResult result = {0};
     result.value = value;
     result.has_error = false;
+    result.has_returned = false;
     return result;
 }
 
@@ -23,6 +24,7 @@ EvalResult make_error(const char* message, int line, int column) {
     EvalResult result = {0};
     result.value = make_nil_value();
     result.has_error = true;
+    result.has_returned = false;
     result.error.message = message;
     result.error.suggestion = NULL;
     result.error.category = ERROR_RUNTIME;
@@ -39,6 +41,7 @@ EvalResult make_error_detailed(const char* message, const char* suggestion,
     EvalResult result = {0};
     result.value = make_nil_value();
     result.has_error = true;
+    result.has_returned = false;
     result.error.message = message;
     result.error.suggestion = suggestion;
     result.error.category = category;
@@ -780,6 +783,11 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
         if (is_error(result)) {
             break;
         }
+        
+        // If a return statement was executed, break out of the block
+        if (result.has_returned) {
+            break;
+        }
     }
     
     free_environment(block_env);
@@ -793,9 +801,9 @@ EvalResult eval_if_stmt(IfStmt* stmt, Environment* env) {
     }
     
     if (is_truthy(condition_result.value)) {
-        return evaluate_stmt(stmt->then_branch, env);
+        return evaluate_stmt(stmt->then_branch, env);  // This will propagate has_returned
     } else if (stmt->else_branch) {
-        return evaluate_stmt(stmt->else_branch, env);
+        return evaluate_stmt(stmt->else_branch, env);  // This will propagate has_returned
     }
     
     return make_success(make_nil_value());
@@ -1144,9 +1152,10 @@ EvalResult eval_return_stmt(ReturnStmt* stmt, Environment* env) {
         return_value = result.value;
     }
     
-    // TODO: Implement proper return handling with unwinding
-    // For now, just return the value
-    return make_success(return_value);
+    // Create a result with the return flag set
+    EvalResult result = make_success(return_value);
+    result.has_returned = true;
+    return result;
 }
 
 // Call a user-defined function
@@ -1187,14 +1196,17 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     
     // Execute function body
     EvalResult result = make_success(make_nil_value());
+    
     for (size_t i = 0; i < function->body_count; i++) {
         result = evaluate_stmt(function->body[i], func_env);
         if (is_error(result)) {
             break;
         }
         
-        // TODO: Handle return statements properly
-        // For now, if we hit a return statement, we should break and return its value
+        // Check if a return statement was executed (including nested in control structures)
+        if (result.has_returned) {
+            break;  // Return statement found, exit function body execution
+        }
     }
     
     // Deep copy the result value before freeing the function environment
