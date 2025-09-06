@@ -21,6 +21,7 @@ Expr* make_unary_expr(Token op, Expr* right) {
     if (!expr) return NULL;
     
     expr->type = EXPR_UNARY;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.unary.op = op;
     expr->as.unary.right = right;
     return expr;
@@ -31,6 +32,7 @@ Expr* make_literal_expr(Value value) {
     if (!expr) return NULL;
     
     expr->type = EXPR_LITERAL;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.literal.value = value;
     return expr;
 }
@@ -40,6 +42,7 @@ Expr* make_variable_expr(Token name) {
     if (!expr) return NULL;
     
     expr->type = EXPR_VARIABLE;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.variable.name = name;
     return expr;
 }
@@ -49,6 +52,7 @@ Expr* make_assignment_expr(Token name, Expr* value) {
     if (!expr) return NULL;
     
     expr->type = EXPR_ASSIGNMENT;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.assignment.name = name;
     expr->as.assignment.value = value;
     return expr;
@@ -59,6 +63,7 @@ Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_cou
     if (!expr) return NULL;
     
     expr->type = EXPR_CALL;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.call.callee = callee;
     expr->as.call.paren = paren;
     expr->as.call.arguments = arguments;
@@ -71,6 +76,7 @@ Expr* make_grouping_expr(Expr* expression) {
     if (!expr) return NULL;
     
     expr->type = EXPR_GROUPING;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.grouping.expression = expression;
     return expr;
 }
@@ -80,6 +86,7 @@ Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count) {
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_LITERAL;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.table_literal.pairs = pairs;
     expr->as.table_literal.pair_count = pair_count;
     return expr;
@@ -90,6 +97,7 @@ Expr* make_table_index_expr(Expr* table, Expr* index) {
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_INDEX;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.table_index.table = table;
     expr->as.table_index.index = index;
     return expr;
@@ -100,6 +108,7 @@ Expr* make_table_dot_expr(Expr* table, Token key) {
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_DOT;
+    expr->ref_count = 1;  // Initialize reference count
     expr->as.table_dot.table = table;
     expr->as.table_dot.key = key;
     return expr;
@@ -111,6 +120,7 @@ Stmt* make_expression_stmt(Expr* expression) {
     if (!stmt) return NULL;
     
     stmt->type = STMT_EXPRESSION;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.expression.expression = expression;
     return stmt;
 }
@@ -120,6 +130,7 @@ Stmt* make_print_stmt(Expr* expression) {
     if (!stmt) return NULL;
     
     stmt->type = STMT_PRINT;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.print.expression = expression;
     return stmt;
 }
@@ -129,6 +140,7 @@ Stmt* make_var_stmt(Token name, Expr* initializer, TypeInfo type_hint) {
     if (!stmt) return NULL;
     
     stmt->type = STMT_VAR;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.var.name = name;
     stmt->as.var.initializer = initializer;
     stmt->as.var.type_hint = type_hint;
@@ -140,6 +152,7 @@ Stmt* make_block_stmt(Stmt** statements, size_t count) {
     if (!stmt) return NULL;
     
     stmt->type = STMT_BLOCK;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.block.statements = statements;
     stmt->as.block.count = count;
     return stmt;
@@ -150,6 +163,7 @@ Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch) {
     if (!stmt) return NULL;
     
     stmt->type = STMT_IF;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.if_stmt.condition = condition;
     stmt->as.if_stmt.then_branch = then_branch;
     stmt->as.if_stmt.else_branch = else_branch;
@@ -161,6 +175,7 @@ Stmt* make_while_stmt(Expr* condition, Stmt* body) {
     if (!stmt) return NULL;
     
     stmt->type = STMT_WHILE;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.while_stmt.condition = condition;
     stmt->as.while_stmt.body = body;
     return stmt;
@@ -171,6 +186,7 @@ Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* b
     if (!stmt) return NULL;
     
     stmt->type = STMT_FOR;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.for_stmt.initializer = initializer;
     stmt->as.for_stmt.condition = condition;
     stmt->as.for_stmt.increment = increment;
@@ -184,6 +200,7 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
     if (!stmt) return NULL;
     
     stmt->type = STMT_FUNCTION;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.function.name = name;
     stmt->as.function.params = params;
     stmt->as.function.param_count = param_count;
@@ -198,6 +215,7 @@ Stmt* make_class_stmt(Token name, VariableExpr* superclass,
     if (!stmt) return NULL;
     
     stmt->type = STMT_CLASS;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.class_stmt.name = name;
     stmt->as.class_stmt.superclass = superclass;
     stmt->as.class_stmt.methods = methods;
@@ -210,6 +228,7 @@ Stmt* make_return_stmt(Token keyword, Expr* value) {
     if (!stmt) return NULL;
     
     stmt->type = STMT_RETURN;
+    stmt->ref_count = 1;  // Initialize reference count
     stmt->as.return_stmt.keyword = keyword;
     stmt->as.return_stmt.value = value;
     return stmt;
@@ -498,4 +517,199 @@ void free_stmt(Stmt* stmt) {
             break;
     }
     free(stmt);
+}
+
+// ============================================================================
+// AST Reference Counting Implementation
+// ============================================================================
+
+Expr* ast_retain_expr(Expr* expr) {
+    if (!expr) return NULL;
+    
+    expr->ref_count++;
+    return expr;
+}
+
+void ast_release_expr(Expr* expr) {
+    if (!expr) return;
+    
+    expr->ref_count--;
+    if (expr->ref_count <= 0) {
+        // Recursively release referenced expressions
+        switch (expr->type) {
+            case EXPR_BINARY:
+                ast_release_expr(expr->as.binary.left);
+                ast_release_expr(expr->as.binary.right);
+                break;
+            case EXPR_UNARY:
+                ast_release_expr(expr->as.unary.right);
+                break;
+            case EXPR_ASSIGNMENT:
+                ast_release_expr(expr->as.assignment.value);
+                break;
+            case EXPR_CALL:
+                ast_release_expr(expr->as.call.callee);
+                if (expr->as.call.arguments) {
+                    for (size_t i = 0; i < expr->as.call.arg_count; i++) {
+                        ast_release_expr(expr->as.call.arguments[i]);
+                    }
+                    free(expr->as.call.arguments);
+                }
+                break;
+            case EXPR_GROUPING:
+                ast_release_expr(expr->as.grouping.expression);
+                break;
+            case EXPR_TABLE_LITERAL:
+                if (expr->as.table_literal.pairs) {
+                    for (size_t i = 0; i < expr->as.table_literal.pair_count; i++) {
+                        if (expr->as.table_literal.pairs[i].key) {
+                            ast_release_expr(expr->as.table_literal.pairs[i].key);
+                        }
+                        ast_release_expr(expr->as.table_literal.pairs[i].value);
+                    }
+                    free(expr->as.table_literal.pairs);
+                }
+                break;
+            case EXPR_TABLE_INDEX:
+                ast_release_expr(expr->as.table_index.table);
+                ast_release_expr(expr->as.table_index.index);
+                break;
+            case EXPR_TABLE_DOT:
+                ast_release_expr(expr->as.table_dot.table);
+                break;
+            case EXPR_LITERAL:
+            case EXPR_VARIABLE:
+                // These don't reference other expressions
+                break;
+        }
+        
+        // Free the literal value if it exists
+        if (expr->type == EXPR_LITERAL) {
+            free_value(expr->as.literal.value);
+        }
+        
+        free(expr);
+    }
+}
+
+Stmt* ast_retain_stmt(Stmt* stmt) {
+    if (!stmt) return NULL;
+    
+    stmt->ref_count++;
+    return stmt;
+}
+
+void ast_release_stmt(Stmt* stmt) {
+    if (!stmt) return;
+    
+    stmt->ref_count--;
+    if (stmt->ref_count <= 0) {
+        // Recursively release referenced statements and expressions
+        switch (stmt->type) {
+            case STMT_EXPRESSION:
+                ast_release_expr(stmt->as.expression.expression);
+                break;
+            case STMT_PRINT:
+                ast_release_expr(stmt->as.print.expression);
+                break;
+            case STMT_VAR:
+                if (stmt->as.var.initializer) {
+                    ast_release_expr(stmt->as.var.initializer);
+                }
+                break;
+            case STMT_BLOCK:
+                if (stmt->as.block.statements) {
+                    for (size_t i = 0; i < stmt->as.block.count; i++) {
+                        ast_release_stmt(stmt->as.block.statements[i]);
+                    }
+                    free(stmt->as.block.statements);
+                }
+                break;
+            case STMT_IF:
+                ast_release_expr(stmt->as.if_stmt.condition);
+                ast_release_stmt(stmt->as.if_stmt.then_branch);
+                if (stmt->as.if_stmt.else_branch) {
+                    ast_release_stmt(stmt->as.if_stmt.else_branch);
+                }
+                break;
+            case STMT_WHILE:
+                ast_release_expr(stmt->as.while_stmt.condition);
+                ast_release_stmt(stmt->as.while_stmt.body);
+                break;
+            case STMT_FOR:
+                if (stmt->as.for_stmt.initializer) {
+                    ast_release_stmt(stmt->as.for_stmt.initializer);
+                }
+                if (stmt->as.for_stmt.condition) {
+                    ast_release_expr(stmt->as.for_stmt.condition);
+                }
+                if (stmt->as.for_stmt.increment) {
+                    ast_release_expr(stmt->as.for_stmt.increment);
+                }
+                ast_release_stmt(stmt->as.for_stmt.body);
+                break;
+            case STMT_FUNCTION:
+                if (stmt->as.function.body) {
+                    for (size_t i = 0; i < stmt->as.function.body_count; i++) {
+                        ast_release_stmt(stmt->as.function.body[i]);
+                    }
+                    free(stmt->as.function.body);
+                }
+                if (stmt->as.function.params) {
+                    free(stmt->as.function.params);
+                }
+                break;
+            case STMT_CLASS:
+                if (stmt->as.class_stmt.superclass) {
+                    ast_release_expr((Expr*)stmt->as.class_stmt.superclass);
+                }
+                if (stmt->as.class_stmt.methods) {
+                    for (size_t i = 0; i < stmt->as.class_stmt.method_count; i++) {
+                        ast_release_stmt((Stmt*)stmt->as.class_stmt.methods[i]);
+                    }
+                    free(stmt->as.class_stmt.methods);
+                }
+                break;
+            case STMT_RETURN:
+                if (stmt->as.return_stmt.value) {
+                    ast_release_expr(stmt->as.return_stmt.value);
+                }
+                break;
+        }
+        
+        free(stmt);
+    }
+}
+
+// Helper functions for arrays and complex structures
+void ast_retain_stmt_array(Stmt** stmts, size_t count) {
+    if (!stmts) return;
+    
+    for (size_t i = 0; i < count; i++) {
+        ast_retain_stmt(stmts[i]);
+    }
+}
+
+void ast_release_stmt_array(Stmt** stmts, size_t count) {
+    if (!stmts) return;
+    
+    for (size_t i = 0; i < count; i++) {
+        ast_release_stmt(stmts[i]);
+    }
+}
+
+void ast_retain_expr_array(Expr** exprs, size_t count) {
+    if (!exprs) return;
+    
+    for (size_t i = 0; i < count; i++) {
+        ast_retain_expr(exprs[i]);
+    }
+}
+
+void ast_release_expr_array(Expr** exprs, size_t count) {
+    if (!exprs) return;
+    
+    for (size_t i = 0; i < count; i++) {
+        ast_release_expr(exprs[i]);
+    }
 }
