@@ -1,0 +1,34 @@
+// Basic array test to verify our implementation
+print("=== Array Implementation Test ===");
+
+// Test array creation and basic operations
+var arr = array_create(5);
+print("Created array with capacity 5");
+
+// Test array_push
+array_push(arr, 10);
+array_push(arr, 20);
+array_push(arr, 30);
+print("Pushed 3 elements");
+
+// Test array_length
+var len = array_length(arr);
+print("Array length: " + len);
+
+// Test array_get
+var first = array_get(arr, 0);
+var second = array_get(arr, 1);
+var third = array_get(arr, 2);
+print("Elements: " + first + ", " + second + ", " + third);
+
+// Test array_set
+array_set(arr, 1, 99);
+var modified = array_get(arr, 1);
+print("After setting index 1 to 99: " + modified);
+
+// Test array_pop
+var popped = array_pop(arr);
+print("Popped element: " + popped);
+print("New length: " + array_length(arr));
+
+print("=== Array Test Complete ===");

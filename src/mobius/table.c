@@ -52,6 +52,10 @@ size_t hash_value(Value value, size_t capacity) {
         case VAL_CHAR:
             hash = (size_t)value.as.character;
             break;
+        case VAL_ARRAY:
+            // Hash arrays by their pointer address (reference equality)
+            hash = (size_t)(uintptr_t)value.as.array;
+            break;
         case VAL_FUNCTION:
             hash = (size_t)(uintptr_t)value.as.function;
             break;
@@ -83,6 +87,7 @@ bool values_equal_for_table(Value a, Value b) {
         case VAL_STRING:
             return string_equals(a.as.string, b.as.string);
         case VAL_CHAR: return a.as.character == b.as.character;
+        case VAL_ARRAY: return a.as.array == b.as.array;  // Reference equality
         case VAL_FUNCTION: return a.as.function == b.as.function;
         case VAL_TABLE: return a.as.table == b.as.table;
         case VAL_USERDATA: 

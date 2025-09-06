@@ -68,6 +68,13 @@ Value make_char_value(char val) {
     return value;
 }
 
+Value make_array_value(ArrayValue* array) {
+    Value value = {0};
+    value.type = VAL_ARRAY;
+    value.as.array = array;
+    return value;
+}
+
 Value make_function_value(MobiusFunction* function) {
     Value value = {0};
     value.type = VAL_FUNCTION;
@@ -114,6 +121,7 @@ bool is_truthy(Value value) {
         case VAL_FLOAT: return value.as.float_val != 0.0;
         case VAL_STRING: return value.as.string != NULL && string_length(value.as.string) > 0;
         case VAL_CHAR: return value.as.character != '\0';
+        case VAL_ARRAY: return value.as.array != NULL && array_length(value.as.array) > 0;
         case VAL_FUNCTION: return value.as.function != NULL;
         case VAL_TABLE: return value.as.table != NULL;
         case VAL_USERDATA: return value.as.userdata.ptr != NULL;
@@ -179,6 +187,9 @@ bool values_equal(Value a, Value b) {
         case VAL_STRING: 
             return (a.as.string == b.as.string) || string_equals(a.as.string, b.as.string);
         case VAL_CHAR: return a.as.character == b.as.character;
+        case VAL_ARRAY:
+            // Array equality: same reference (arrays are reference types)
+            return a.as.array == b.as.array;
         case VAL_FUNCTION: return a.as.function == b.as.function;
         case VAL_TABLE: return a.as.table == b.as.table; // Reference equality
         case VAL_USERDATA: 
@@ -221,6 +232,18 @@ void print_value(Value value) {
             break;
         case VAL_CHAR:
             printf("'%c'", value.as.character);
+            break;
+        case VAL_ARRAY:
+            if (value.as.array) {
+                printf("[");
+                for (size_t i = 0; i < value.as.array->length; i++) {
+                    if (i > 0) printf(", ");
+                    print_value(value.as.array->elements[i]);
+                }
+                printf("]");
+            } else {
+                printf("<array (null)>");
+            }
             break;
         case VAL_FUNCTION:
             if (value.as.function) {
@@ -346,6 +369,7 @@ const char* value_type_name(ValueType type) {
         case VAL_FLOAT: return "float";
         case VAL_STRING: return "string";
         case VAL_CHAR: return "char";
+        case VAL_ARRAY: return "array";
         case VAL_FUNCTION: return "function";
         case VAL_TABLE: return "table";
         case VAL_USERDATA: return "userdata";
@@ -359,6 +383,10 @@ Value copy_value(Value value) {
         // Use reference counting - just increment ref count!
         RefCountedString* retained_str = string_retain(value.as.string);
         return make_string_value(retained_str);
+    } else if (value.type == VAL_ARRAY && value.as.array) {
+        // For arrays, increment reference count (shared ownership)
+        ArrayValue* retained_array = array_retain(value.as.array);
+        return make_array_value(retained_array);
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         // For functions, we don't copy the function structure itself
         // as they should be shared. Just return the same value.
@@ -381,6 +409,9 @@ void free_value(Value value) {
     if (value.type == VAL_STRING && value.as.string) {
         // Use reference counting - release the string
         string_release(value.as.string);
+    } else if (value.type == VAL_ARRAY && value.as.array) {
+        // Use reference counting - release the array
+        array_release(value.as.array);
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         MobiusFunction* func = value.as.function;
         
@@ -501,4 +532,114 @@ bool string_equals(RefCountedString* a, RefCountedString* b) {
 Value make_string_value_from_cstr(const char* cstr) {
     RefCountedString* str = string_create(cstr);
     return make_string_value(str);
+}
+
+// ============================================================================
+// ARRAY REFERENCE COUNTING IMPLEMENTATION
+// ============================================================================
+
+ArrayValue* array_create(size_t initial_capacity) {
+    ArrayValue* array = calloc(1, sizeof(ArrayValue));
+    if (!array) return NULL;
+    
+    array->capacity = initial_capacity > 0 ? initial_capacity : 8;  // Default capacity
+    array->elements = calloc(array->capacity, sizeof(Value));
+    if (!array->elements) {
+        free(array);
+        return NULL;
+    }
+    
+    array->length = 0;
+    array->ref_count = 1;
+    
+    return array;
+}
+
+ArrayValue* array_retain(ArrayValue* array) {
+    if (array) {
+        array->ref_count++;
+    }
+    return array;
+}
+
+void array_release(ArrayValue* array) {
+    if (!array) return;
+    
+    array->ref_count--;
+    if (array->ref_count <= 0) {
+        // Free all elements
+        for (size_t i = 0; i < array->length; i++) {
+            free_value(array->elements[i]);
+        }
+        
+        // Free the elements array
+        free(array->elements);
+        
+        // Free the array structure
+        free(array);
+    }
+}
+
+void array_push(ArrayValue* array, Value value) {
+    if (!array) return;
+    
+    // Resize if necessary
+    if (array->length >= array->capacity) {
+        array_resize(array, array->capacity * 2);
+    }
+    
+    // Add the element (copy to handle reference counting)
+    array->elements[array->length] = copy_value(value);
+    array->length++;
+}
+
+Value array_pop(ArrayValue* array) {
+    if (!array || array->length == 0) {
+        return make_nil_value();
+    }
+    
+    array->length--;
+    Value result = array->elements[array->length];
+    
+    // Clear the slot (set to nil without freeing, since we're returning it)
+    array->elements[array->length] = make_nil_value();
+    
+    return result;
+}
+
+Value array_get(ArrayValue* array, size_t index) {
+    if (!array || index >= array->length) {
+        return make_nil_value();
+    }
+    
+    return copy_value(array->elements[index]);
+}
+
+void array_set(ArrayValue* array, size_t index, Value value) {
+    if (!array || index >= array->length) return;
+    
+    // Free the old value
+    free_value(array->elements[index]);
+    
+    // Set the new value (copy to handle reference counting)
+    array->elements[index] = copy_value(value);
+}
+
+size_t array_length(ArrayValue* array) {
+    return array ? array->length : 0;
+}
+
+void array_resize(ArrayValue* array, size_t new_capacity) {
+    if (!array || new_capacity <= array->capacity) return;
+    
+    Value* new_elements = realloc(array->elements, new_capacity * sizeof(Value));
+    if (!new_elements) return;  // Failed to resize
+    
+    // Initialize new slots to nil
+    for (size_t i = array->capacity; i < new_capacity; i++) {
+        new_elements[i] = make_nil_value();
+    }
+    
+    array->elements = new_elements;
+    array->capacity = new_capacity;
 }

@@ -82,6 +82,28 @@ Expr* make_grouping_expr(Expr* expression) {
     return expr;
 }
 
+Expr* make_array_literal_expr(Expr** elements, size_t element_count) {
+    Expr* expr = calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = EXPR_ARRAY_LITERAL;
+    expr->ref_count = 1;  // Initialize reference count
+    expr->as.array_literal.elements = elements;
+    expr->as.array_literal.element_count = element_count;
+    return expr;
+}
+
+Expr* make_array_index_expr(Expr* array, Expr* index) {
+    Expr* expr = calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = EXPR_ARRAY_INDEX;
+    expr->ref_count = 1;  // Initialize reference count
+    expr->as.array_index.array = array;
+    expr->as.array_index.index = index;
+    return expr;
+}
+
 Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count) {
     Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
@@ -281,6 +303,20 @@ void print_expr(Expr* expr) {
             print_expr(expr->as.grouping.expression);
             printf(")");
             break;
+        case EXPR_ARRAY_LITERAL:
+            printf("[");
+            for (size_t i = 0; i < expr->as.array_literal.element_count; i++) {
+                if (i > 0) printf(", ");
+                print_expr(expr->as.array_literal.elements[i]);
+            }
+            printf("]");
+            break;
+        case EXPR_ARRAY_INDEX:
+            print_expr(expr->as.array_index.array);
+            printf("[");
+            print_expr(expr->as.array_index.index);
+            printf("]");
+            break;
         case EXPR_TABLE_LITERAL:
             printf("(table ");
             for (size_t i = 0; i < expr->as.table_literal.pair_count; i++) {
@@ -421,6 +457,16 @@ void free_expr(Expr* expr) {
         case EXPR_GROUPING:
             free_expr(expr->as.grouping.expression);
             break;
+        case EXPR_ARRAY_LITERAL:
+            for (size_t i = 0; i < expr->as.array_literal.element_count; i++) {
+                free_expr(expr->as.array_literal.elements[i]);
+            }
+            if (expr->as.array_literal.elements) free(expr->as.array_literal.elements);
+            break;
+        case EXPR_ARRAY_INDEX:
+            free_expr(expr->as.array_index.array);
+            free_expr(expr->as.array_index.index);
+            break;
         case EXPR_LITERAL:
             free_value(expr->as.literal.value);
             break;
@@ -558,6 +604,18 @@ void ast_release_expr(Expr* expr) {
                 break;
             case EXPR_GROUPING:
                 ast_release_expr(expr->as.grouping.expression);
+                break;
+            case EXPR_ARRAY_LITERAL:
+                if (expr->as.array_literal.elements) {
+                    for (size_t i = 0; i < expr->as.array_literal.element_count; i++) {
+                        ast_release_expr(expr->as.array_literal.elements[i]);
+                    }
+                    free(expr->as.array_literal.elements);
+                }
+                break;
+            case EXPR_ARRAY_INDEX:
+                ast_release_expr(expr->as.array_index.array);
+                ast_release_expr(expr->as.array_index.index);
                 break;
             case EXPR_TABLE_LITERAL:
                 if (expr->as.table_literal.pairs) {

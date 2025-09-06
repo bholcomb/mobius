@@ -11,6 +11,7 @@
 typedef struct MobiusFunction MobiusFunction;
 typedef struct Table Table;
 typedef struct TableEntry TableEntry;
+typedef struct ArrayValue ArrayValue;
 
 // Reference counted string structure
 typedef struct RefCountedString {
@@ -19,6 +20,9 @@ typedef struct RefCountedString {
     int ref_count;        // Reference count
     bool is_literal;      // True for string literals (never freed)
 } RefCountedString;
+
+// Dynamic array structure with reference counting (defined after Value)
+struct ArrayValue;
 
 // Value types for literals
 typedef enum {
@@ -29,6 +33,7 @@ typedef enum {
     VAL_FLOAT,
     VAL_STRING,
     VAL_CHAR,
+    VAL_ARRAY,
     VAL_FUNCTION,
     VAL_TABLE,
     VAL_USERDATA
@@ -76,6 +81,7 @@ typedef struct {
         double float_val;
         RefCountedString* string;
         char character;
+        ArrayValue* array;
         MobiusFunction* function;
         Table* table;
         struct {
@@ -87,6 +93,14 @@ typedef struct {
     } as;
 } Value;
 
+// Dynamic array structure with reference counting
+struct ArrayValue {
+    Value* elements;      // Array of values
+    size_t length;        // Current number of elements
+    size_t capacity;      // Allocated capacity
+    int ref_count;        // Reference count for memory management
+};
+
 // Value creation functions
 Value make_nil_value();
 Value make_bool_value(bool value);
@@ -95,6 +109,7 @@ Value make_float32_value(float value);
 Value make_float_value(double value);
 Value make_string_value(RefCountedString* string);
 Value make_char_value(char value);
+Value make_array_value(ArrayValue* array);
 Value make_function_value(MobiusFunction* function);
 Value make_table_value(Table* table);
 Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
@@ -121,6 +136,17 @@ bool string_equals(RefCountedString* a, RefCountedString* b);
 
 // Helper function to create Value from C string
 Value make_string_value_from_cstr(const char* cstr);
+
+// Array management functions
+ArrayValue* array_create(size_t initial_capacity);
+ArrayValue* array_retain(ArrayValue* array);
+void array_release(ArrayValue* array);
+void array_push(ArrayValue* array, Value value);
+Value array_pop(ArrayValue* array);
+Value array_get(ArrayValue* array, size_t index);
+void array_set(ArrayValue* array, size_t index, Value value);
+size_t array_length(ArrayValue* array);
+void array_resize(ArrayValue* array, size_t new_capacity);
 
 #endif // MOBIUS_VALUE_H
 
