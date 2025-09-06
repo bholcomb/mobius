@@ -122,27 +122,60 @@ bool is_truthy(Value value) {
 }
 
 bool values_equal(Value a, Value b) {
+    // Handle numeric type coercion for equality
+    if ((a.type == VAL_INTEGER || a.type == VAL_FLOAT32 || a.type == VAL_FLOAT) &&
+        (b.type == VAL_INTEGER || b.type == VAL_FLOAT32 || b.type == VAL_FLOAT)) {
+        
+        // Convert both values to double for comparison
+        double a_val = 0.0, b_val = 0.0;
+        
+        // Convert a to double
+        if (a.type == VAL_FLOAT) {
+            a_val = a.as.float_val;
+        } else if (a.type == VAL_FLOAT32) {
+            a_val = (double)a.as.float32_val;
+        } else if (a.type == VAL_INTEGER) {
+            switch (a.as.integer.num_type) {
+                case NUM_INT8:   a_val = a.as.integer.value.i8; break;
+                case NUM_UINT8:  a_val = a.as.integer.value.u8; break;
+                case NUM_INT16:  a_val = a.as.integer.value.i16; break;
+                case NUM_UINT16: a_val = a.as.integer.value.u16; break;
+                case NUM_INT32:  a_val = a.as.integer.value.i32; break;
+                case NUM_UINT32: a_val = a.as.integer.value.u32; break;
+                case NUM_INT64:  a_val = a.as.integer.value.i64; break;
+                case NUM_UINT64: a_val = a.as.integer.value.u64; break;
+                default: a_val = 0.0; break;
+            }
+        }
+        
+        // Convert b to double
+        if (b.type == VAL_FLOAT) {
+            b_val = b.as.float_val;
+        } else if (b.type == VAL_FLOAT32) {
+            b_val = (double)b.as.float32_val;
+        } else if (b.type == VAL_INTEGER) {
+            switch (b.as.integer.num_type) {
+                case NUM_INT8:   b_val = b.as.integer.value.i8; break;
+                case NUM_UINT8:  b_val = b.as.integer.value.u8; break;
+                case NUM_INT16:  b_val = b.as.integer.value.i16; break;
+                case NUM_UINT16: b_val = b.as.integer.value.u16; break;
+                case NUM_INT32:  b_val = b.as.integer.value.i32; break;
+                case NUM_UINT32: b_val = b.as.integer.value.u32; break;
+                case NUM_INT64:  b_val = b.as.integer.value.i64; break;
+                case NUM_UINT64: b_val = b.as.integer.value.u64; break;
+                default: b_val = 0.0; break;
+            }
+        }
+        
+        return a_val == b_val;
+    }
+    
+    // Non-numeric types must have exact type match
     if (a.type != b.type) return false;
     
     switch (a.type) {
         case VAL_NIL: return true;
         case VAL_BOOL: return a.as.boolean == b.as.boolean;
-        case VAL_INTEGER: {
-            if (a.as.integer.num_type != b.as.integer.num_type) return false;
-            switch (a.as.integer.num_type) {
-                case NUM_INT8:   return a.as.integer.value.i8 == b.as.integer.value.i8;
-                case NUM_UINT8:  return a.as.integer.value.u8 == b.as.integer.value.u8;
-                case NUM_INT16:  return a.as.integer.value.i16 == b.as.integer.value.i16;
-                case NUM_UINT16: return a.as.integer.value.u16 == b.as.integer.value.u16;
-                case NUM_INT32:  return a.as.integer.value.i32 == b.as.integer.value.i32;
-                case NUM_UINT32: return a.as.integer.value.u32 == b.as.integer.value.u32;
-                case NUM_INT64:  return a.as.integer.value.i64 == b.as.integer.value.i64;
-                case NUM_UINT64: return a.as.integer.value.u64 == b.as.integer.value.u64;
-                default: return false;
-            }
-        }
-        case VAL_FLOAT32: return a.as.float32_val == b.as.float32_val;
-        case VAL_FLOAT: return a.as.float_val == b.as.float_val;
         case VAL_STRING: 
             return (a.as.string == b.as.string) || string_equals(a.as.string, b.as.string);
         case VAL_CHAR: return a.as.character == b.as.character;
