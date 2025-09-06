@@ -41,7 +41,8 @@ static double extract_number(Value val) {
 // TRIGONOMETRIC FUNCTIONS
 // ============================================================================
 
-EvalResult math_sin(Value* args, size_t arg_count) {
+EvalResult math_sin(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("sin() expects exactly 1 argument", 0, 0);
     }
@@ -54,7 +55,8 @@ EvalResult math_sin(Value* args, size_t arg_count) {
     return make_success(make_float_value(sin(val)));
 }
 
-EvalResult math_cos(Value* args, size_t arg_count) {
+EvalResult math_cos(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("cos() expects exactly 1 argument", 0, 0);
     }
@@ -67,7 +69,8 @@ EvalResult math_cos(Value* args, size_t arg_count) {
     return make_success(make_float_value(cos(val)));
 }
 
-EvalResult math_tan(Value* args, size_t arg_count) {
+EvalResult math_tan(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("tan() expects exactly 1 argument", 0, 0);
     }
@@ -80,7 +83,8 @@ EvalResult math_tan(Value* args, size_t arg_count) {
     return make_success(make_float_value(tan(val)));
 }
 
-EvalResult math_asin(Value* args, size_t arg_count) {
+EvalResult math_asin(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("asin() expects exactly 1 argument", 0, 0);
     }
@@ -96,7 +100,8 @@ EvalResult math_asin(Value* args, size_t arg_count) {
     return make_success(make_float_value(asin(val)));
 }
 
-EvalResult math_acos(Value* args, size_t arg_count) {
+EvalResult math_acos(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("acos() expects exactly 1 argument", 0, 0);
     }
@@ -112,7 +117,8 @@ EvalResult math_acos(Value* args, size_t arg_count) {
     return make_success(make_float_value(acos(val)));
 }
 
-EvalResult math_atan(Value* args, size_t arg_count) {
+EvalResult math_atan(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("atan() expects exactly 1 argument", 0, 0);
     }
@@ -125,7 +131,8 @@ EvalResult math_atan(Value* args, size_t arg_count) {
     return make_success(make_float_value(atan(val)));
 }
 
-EvalResult math_atan2(Value* args, size_t arg_count) {
+EvalResult math_atan2(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error("atan2() expects exactly 2 arguments", 0, 0);
     }
@@ -144,7 +151,8 @@ EvalResult math_atan2(Value* args, size_t arg_count) {
 // LOGARITHMIC AND EXPONENTIAL FUNCTIONS
 // ============================================================================
 
-EvalResult math_log(Value* args, size_t arg_count) {
+EvalResult math_log(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("log() expects exactly 1 argument", 0, 0);
     }
@@ -160,7 +168,8 @@ EvalResult math_log(Value* args, size_t arg_count) {
     return make_success(make_float_value(log(val)));
 }
 
-EvalResult math_log10(Value* args, size_t arg_count) {
+EvalResult math_log10(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("log10() expects exactly 1 argument", 0, 0);
     }
@@ -176,7 +185,8 @@ EvalResult math_log10(Value* args, size_t arg_count) {
     return make_success(make_float_value(log10(val)));
 }
 
-EvalResult math_exp(Value* args, size_t arg_count) {
+EvalResult math_exp(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("exp() expects exactly 1 argument", 0, 0);
     }
@@ -193,7 +203,8 @@ EvalResult math_exp(Value* args, size_t arg_count) {
 // HYPERBOLIC FUNCTIONS
 // ============================================================================
 
-EvalResult math_sinh(Value* args, size_t arg_count) {
+EvalResult math_sinh(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("sinh() expects exactly 1 argument", 0, 0);
     }
@@ -206,7 +217,8 @@ EvalResult math_sinh(Value* args, size_t arg_count) {
     return make_success(make_float_value(sinh(val)));
 }
 
-EvalResult math_cosh(Value* args, size_t arg_count) {
+EvalResult math_cosh(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("cosh() expects exactly 1 argument", 0, 0);
     }
@@ -219,7 +231,8 @@ EvalResult math_cosh(Value* args, size_t arg_count) {
     return make_success(make_float_value(cosh(val)));
 }
 
-EvalResult math_tanh(Value* args, size_t arg_count) {
+EvalResult math_tanh(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("tanh() expects exactly 1 argument", 0, 0);
     }
@@ -236,7 +249,8 @@ EvalResult math_tanh(Value* args, size_t arg_count) {
 // ADVANCED MATHEMATICAL FUNCTIONS
 // ============================================================================
 
-EvalResult math_factorial(Value* args, size_t arg_count) {
+EvalResult math_factorial(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("factorial() expects exactly 1 argument", 0, 0);
     }
@@ -261,7 +275,8 @@ EvalResult math_factorial(Value* args, size_t arg_count) {
     return make_success(make_float_value(result));
 }
 
-EvalResult math_gcd(Value* args, size_t arg_count) {
+EvalResult math_gcd(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error("gcd() expects exactly 2 arguments", 0, 0);
     }
@@ -282,7 +297,8 @@ EvalResult math_gcd(Value* args, size_t arg_count) {
     return make_success(make_integer_value(NUM_INT32, (int32_t)a));
 }
 
-EvalResult math_lcm(Value* args, size_t arg_count) {
+EvalResult math_lcm(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error("lcm() expects exactly 2 arguments", 0, 0);
     }
@@ -315,14 +331,18 @@ EvalResult math_lcm(Value* args, size_t arg_count) {
 // MATHEMATICAL CONSTANTS
 // ============================================================================
 
-EvalResult math_pi(Value* args __attribute__((unused)), size_t arg_count) {
+EvalResult math_pi(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    (void)args; // Unused parameter
     if (arg_count != 0) {
         return make_error("pi() expects no arguments", 0, 0);
     }
     return make_success(make_float_value(M_PI));
 }
 
-EvalResult math_e(Value* args __attribute__((unused)), size_t arg_count) {
+EvalResult math_e(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
+    (void)args; // Unused parameter
     if (arg_count != 0) {
         return make_error("e() expects no arguments", 0, 0);
     }

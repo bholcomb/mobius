@@ -75,7 +75,8 @@ static void reverse_string(char* str) {
  * Count words in a string
  * word_count(text) -> integer
  */
-EvalResult text_word_count(Value* args, size_t arg_count) {
+EvalResult text_word_count(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("word_count() expects exactly 1 argument", 0, 0);
     }
@@ -84,7 +85,7 @@ EvalResult text_word_count(Value* args, size_t arg_count) {
         return make_error("word_count() expects a string argument", 0, 0);
     }
     
-    const char* text = args[0].as.string;
+    const char* text = string_data(args[0].as.string);
     int word_count = 0;
     int in_word = 0;
     
@@ -105,7 +106,8 @@ EvalResult text_word_count(Value* args, size_t arg_count) {
  * Count lines in a string
  * line_count(text) -> integer
  */
-EvalResult text_line_count(Value* args, size_t arg_count) {
+EvalResult text_line_count(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("line_count() expects exactly 1 argument", 0, 0);
     }
@@ -114,7 +116,7 @@ EvalResult text_line_count(Value* args, size_t arg_count) {
         return make_error("line_count() expects a string argument", 0, 0);
     }
     
-    const char* text = args[0].as.string;
+    const char* text = string_data(args[0].as.string);
     int line_count = 1; // At least one line if string is not empty
     
     if (strlen(text) == 0) {
@@ -135,7 +137,8 @@ EvalResult text_line_count(Value* args, size_t arg_count) {
  * Count occurrences of a character
  * char_count(text, character) -> integer
  */
-EvalResult text_char_count(Value* args, size_t arg_count) {
+EvalResult text_char_count(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error("char_count() expects exactly 2 arguments", 0, 0);
     }
@@ -144,8 +147,8 @@ EvalResult text_char_count(Value* args, size_t arg_count) {
         return make_error("char_count() expects string arguments", 0, 0);
     }
     
-    const char* text = args[0].as.string;
-    const char* char_str = args[1].as.string;
+    const char* text = string_data(args[0].as.string);
+    const char* char_str = string_data(args[1].as.string);
     
     if (strlen(char_str) != 1) {
         return make_error("char_count() second argument must be a single character", 0, 0);
@@ -165,7 +168,8 @@ EvalResult text_char_count(Value* args, size_t arg_count) {
  * Reverse a string
  * reverse(text) -> string
  */
-EvalResult text_reverse(Value* args, size_t arg_count) {
+EvalResult text_reverse(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("reverse() expects exactly 1 argument", 0, 0);
     }
@@ -174,14 +178,15 @@ EvalResult text_reverse(Value* args, size_t arg_count) {
         return make_error("reverse() expects a string argument", 0, 0);
     }
     
-    char* reversed = safe_strdup(args[0].as.string);
+    char* reversed = safe_strdup(string_data(args[0].as.string));
     if (!reversed) {
         return make_error("Memory allocation failed", 0, 0);
     }
     
     reverse_string(reversed);
     
-    Value result = make_string_value(reversed);
+    Value result = make_string_value_from_cstr(reversed);
+    free(reversed);
     return make_success(result);
 }
 
@@ -189,7 +194,8 @@ EvalResult text_reverse(Value* args, size_t arg_count) {
  * Convert to title case
  * title_case(text) -> string
  */
-EvalResult text_title_case(Value* args, size_t arg_count) {
+EvalResult text_title_case(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("title_case() expects exactly 1 argument", 0, 0);
     }
@@ -198,7 +204,7 @@ EvalResult text_title_case(Value* args, size_t arg_count) {
         return make_error("title_case() expects a string argument", 0, 0);
     }
     
-    const char* input = args[0].as.string;
+    const char* input = string_data(args[0].as.string);
     char* result = safe_strdup(input);
     if (!result) {
         return make_error("Memory allocation failed", 0, 0);
@@ -218,14 +224,17 @@ EvalResult text_title_case(Value* args, size_t arg_count) {
         }
     }
     
-    return make_success(make_string_value(result));
+    Value return_val = make_string_value_from_cstr(result);
+    free(result);
+    return make_success(return_val);
 }
 
 /**
  * Remove whitespace from both ends
  * trim(text) -> string
  */
-EvalResult text_trim(Value* args, size_t arg_count) {
+EvalResult text_trim(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 1) {
         return make_error("trim() expects exactly 1 argument", 0, 0);
     }
@@ -234,7 +243,7 @@ EvalResult text_trim(Value* args, size_t arg_count) {
         return make_error("trim() expects a string argument", 0, 0);
     }
     
-    const char* input = args[0].as.string;
+    const char* input = string_data(args[0].as.string);
     
     // Find start of non-whitespace
     while (*input && isspace(*input)) {
@@ -257,14 +266,17 @@ EvalResult text_trim(Value* args, size_t arg_count) {
     strncpy(result, input, len);
     result[len] = '\0';
     
-    return make_success(make_string_value(result));
+    Value return_val = make_string_value_from_cstr(result);
+    free(result);
+    return make_success(return_val);
 }
 
 /**
  * Replace all occurrences of a substring
  * replace_all(text, old_substr, new_substr) -> string
  */
-EvalResult text_replace_all(Value* args, size_t arg_count) {
+EvalResult text_replace_all(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 3) {
         return make_error("replace_all() expects exactly 3 arguments", 0, 0);
     }
@@ -273,9 +285,9 @@ EvalResult text_replace_all(Value* args, size_t arg_count) {
         return make_error("replace_all() expects string arguments", 0, 0);
     }
     
-    const char* text = args[0].as.string;
-    const char* old_substr = args[1].as.string;
-    const char* new_substr = args[2].as.string;
+    const char* text = string_data(args[0].as.string);
+    const char* old_substr = string_data(args[1].as.string);
+    const char* new_substr = string_data(args[2].as.string);
     
     if (strlen(old_substr) == 0) {
         return make_error("replace_all() old substring cannot be empty", 0, 0);
@@ -291,7 +303,7 @@ EvalResult text_replace_all(Value* args, size_t arg_count) {
     
     if (count == 0) {
         // No replacements needed
-        return make_success(make_string_value(safe_strdup(text)));
+        return make_success(make_string_value_from_cstr(text));
     }
     
     // Calculate result size
@@ -321,7 +333,9 @@ EvalResult text_replace_all(Value* args, size_t arg_count) {
     }
     *dest = '\0';
     
-    return make_success(make_string_value(result));
+    Value return_val = make_string_value_from_cstr(result);
+    free(result);
+    return make_success(return_val);
 }
 
 // ============================================================================
@@ -332,7 +346,8 @@ EvalResult text_replace_all(Value* args, size_t arg_count) {
  * Pad string to specified width with character
  * pad_left(text, width, pad_char) -> string
  */
-EvalResult text_pad_left(Value* args, size_t arg_count) {
+EvalResult text_pad_left(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 3) {
         return make_error("pad_left() expects exactly 3 arguments", 0, 0);
     }
@@ -341,9 +356,9 @@ EvalResult text_pad_left(Value* args, size_t arg_count) {
         return make_error("pad_left() expects (string, integer, string) arguments", 0, 0);
     }
     
-    const char* text = args[0].as.string;
+    const char* text = string_data(args[0].as.string);
     int width = args[1].as.integer.value.i32;
-    const char* pad_char_str = args[2].as.string;
+    const char* pad_char_str = string_data(args[2].as.string);
     
     if (strlen(pad_char_str) != 1) {
         return make_error("pad_left() pad character must be a single character", 0, 0);
@@ -354,7 +369,7 @@ EvalResult text_pad_left(Value* args, size_t arg_count) {
     
     if (width <= text_len) {
         // No padding needed
-        return make_success(make_string_value(safe_strdup(text)));
+        return make_success(make_string_value_from_cstr(text));
     }
     
     char* result = malloc(width + 1);
@@ -368,14 +383,17 @@ EvalResult text_pad_left(Value* args, size_t arg_count) {
     }
     strcpy(result + pad_count, text);
     
-    return make_success(make_string_value(result));
+    Value return_val = make_string_value_from_cstr(result);
+    free(result);
+    return make_success(return_val);
 }
 
 /**
  * Split string by delimiter
  * split(text, delimiter) -> string (comma-separated for this example)
  */
-EvalResult text_split(Value* args, size_t arg_count) {
+EvalResult text_split(Environment* env, Value* args, size_t arg_count) {
+    (void)env; // Unused parameter
     if (arg_count != 2) {
         return make_error("split() expects exactly 2 arguments", 0, 0);
     }
@@ -384,8 +402,8 @@ EvalResult text_split(Value* args, size_t arg_count) {
         return make_error("split() expects string arguments", 0, 0);
     }
     
-    const char* text = args[0].as.string;
-    const char* delimiter = args[1].as.string;
+    const char* text = string_data(args[0].as.string);
+    const char* delimiter = string_data(args[1].as.string);
     
     if (strlen(delimiter) == 0) {
         return make_error("split() delimiter cannot be empty", 0, 0);
@@ -413,7 +431,9 @@ EvalResult text_split(Value* args, size_t arg_count) {
     }
     
     free(text_copy);
-    return make_success(make_string_value(result));
+    Value return_val = make_string_value_from_cstr(result);
+    free(result);
+    return make_success(return_val);
 }
 
 // ============================================================================

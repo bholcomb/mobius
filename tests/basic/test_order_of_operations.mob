@@ -12,12 +12,15 @@ var result2 = 10 - 6 / 2;       // Should be 10 - 3 = 7, not 4 / 2 = 2
 var result3 = 2 * 3 + 4 * 5;    // Should be 6 + 20 = 26
 var result4 = 20 / 4 - 2 * 3;   // Should be 5 - 6 = -1
 
-// Verify results by displaying them (values are correct, avoiding complex boolean expressions)
-print("✅ Basic arithmetic precedence test results:");
-print("  2 + 3 * 4 = " + result1 + " (expected 14)");
-print("  10 - 6 / 2 = " + result2 + " (expected 7)");
-print("  2 * 3 + 4 * 5 = " + result3 + " (expected 26)");
-print("  20 / 4 - 2 * 3 = " + result4 + " (expected -1)");
+if (result1 == 14 && result2 == 7 && result3 == 26 && result4 == -1) {
+    print("✅ Basic arithmetic precedence test passed");
+} else {
+    print("❌ Basic arithmetic precedence test failed:");
+    print("  2 + 3 * 4 = " + result1 + " (expected 14) - " + (result1 == 14));
+    print("  10 - 6 / 2 = " + result2 + " (expected 7) - " + (result2 == 7));
+    print("  2 * 3 + 4 * 5 = " + result3 + " (expected 26) - " + (result3 == 26));
+    print("  20 / 4 - 2 * 3 = " + result4 + " (expected -1) - " + (result4 == -1));
+}
 
 // Test 2: Parentheses override precedence
 print("Testing parentheses precedence...");
@@ -27,11 +30,15 @@ var paren2 = (10 - 6) / 2;      // Should be 4 / 2 = 2
 var paren3 = 2 * (3 + 4) * 5;   // Should be 2 * 7 * 5 = 70
 var paren4 = (20 / 4 - 2) * 3;  // Should be (5 - 2) * 3 = 9
 
-print("✅ Parentheses precedence test results:");
-print("  (2 + 3) * 4 = " + paren1 + " (expected 20)");
-print("  (10 - 6) / 2 = " + paren2 + " (expected 2)");
-print("  2 * (3 + 4) * 5 = " + paren3 + " (expected 70)");
-print("  (20 / 4 - 2) * 3 = " + paren4 + " (expected 9)");
+if (paren1 == 20 && paren2 == 2 && paren3 == 70 && paren4 == 9) {
+    print("✅ Parentheses precedence test passed");
+} else {
+    print("❌ Parentheses precedence test failed:");
+    print("  (2 + 3) * 4 = " + paren1 + " (expected 20) - " + (paren1 == 20));
+    print("  (10 - 6) / 2 = " + paren2 + " (expected 2) - " + (paren2 == 2));
+    print("  2 * (3 + 4) * 5 = " + paren3 + " (expected 70) - " + (paren3 == 70));
+    print("  (20 / 4 - 2) * 3 = " + paren4 + " (expected 9) - " + (paren4 == 9));
+}
 
 // Test 3: Comparison operators
 print("Testing comparison operator precedence...");
@@ -42,11 +49,15 @@ var comp2 = 10 - 6 < 2 * 3;     // Should be 4 < 6 = true
 var comp3 = 3 * 4 == 6 + 6;     // Should be 12 == 12 = true
 var comp4 = 15 / 3 != 2 + 2;    // Should be 5 != 4 = true
 
-print("✅ Comparison operator precedence test results:");
-print("  2 + 3 > 4 = " + comp1 + " (expected true)");
-print("  10 - 6 < 2 * 3 = " + comp2 + " (expected true)");
-print("  3 * 4 == 6 + 6 = " + comp3 + " (expected true)");
-print("  15 / 3 != 2 + 2 = " + comp4 + " (expected true)");
+if (comp1 == true && comp2 == true && comp3 == true && comp4 == true) {
+    print("✅ Comparison operator precedence test passed");
+} else {
+    print("❌ Comparison operator precedence test failed:");
+    print("  2 + 3 > 4 = " + comp1 + " (expected true) - " + (comp1 == true));
+    print("  10 - 6 < 2 * 3 = " + comp2 + " (expected true) - " + (comp2 == true));
+    print("  3 * 4 == 6 + 6 = " + comp3 + " (expected true) - " + (comp3 == true));
+    print("  15 / 3 != 2 + 2 = " + comp4 + " (expected true) - " + (comp4 == true));
+}
 
 // Test 4: Logical AND precedence
 print("Testing logical AND precedence...");
