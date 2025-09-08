@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 // Global type checking configuration
 TypeCheckConfig global_type_config = {false, false};
@@ -642,6 +643,65 @@ EvalResult divide_values(Value left, Value right, int line, int column) {
     return make_success(make_float_value(left_val / right_val));
 }
 
+EvalResult modulo_values(Value left, Value right, int line, int column) {
+    // Check for table metamethods first
+    if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
+        Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
+        Value mod_method = get_table_metamethod(table, "__mod");
+        
+        if (mod_method.type == VAL_FUNCTION) {
+            // TODO: Call function metamethod
+            // For now, fall through to default behavior
+        } else if (mod_method.type != VAL_NIL) {
+            return make_error("__mod metamethod must be a function", 0, 0);
+        }
+        
+        // If tables without metamethods, return error
+        return make_error("Cannot perform modulo on tables without __mod metamethod", 0, 0);
+    }
+    
+    // Handle integer modulo (preferred for exact results)
+    if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
+        int32_t left_val = left.as.integer.value.i32;
+        int32_t right_val = right.as.integer.value.i32;
+        
+        if (right_val == 0) {
+            return make_error_detailed_with_source(
+                "Modulo by zero",
+                "Check that the divisor is not zero before performing modulo",
+                ERROR_DIVISION,
+                line, column,
+                NULL
+            );
+        }
+        
+        return make_success(make_integer_value(NUM_INT32, left_val % right_val));
+    }
+    
+    // Handle float modulo using fmod
+    if ((left.type == VAL_FLOAT || left.type == VAL_INTEGER) &&
+        (right.type == VAL_FLOAT || right.type == VAL_INTEGER)) {
+        double left_val = (left.type == VAL_FLOAT) ? left.as.float_val : 
+                          (double)left.as.integer.value.i32;
+        double right_val = (right.type == VAL_FLOAT) ? right.as.float_val : 
+                           (double)right.as.integer.value.i32;
+        
+        if (right_val == 0.0) {
+            return make_error_detailed_with_source(
+                "Modulo by zero",
+                "Check that the divisor is not zero before performing modulo",
+                ERROR_DIVISION,
+                line, column,
+                NULL
+            );
+        }
+        
+        return make_success(make_float_value(fmod(left_val, right_val)));
+    }
+    
+    return make_error("Cannot modulo these types", 0, 0);
+}
+
 EvalResult compare_values(Value left, Value right, TokenType op) {
     bool result = false;
     
@@ -752,6 +812,8 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
             return multiply_values(left_result.value, right_result.value);
         case TOKEN_SLASH:
                 return divide_values(left_result.value, right_result.value, expr->op.line, expr->op.column);
+        case TOKEN_PERCENT:
+                return modulo_values(left_result.value, right_result.value, expr->op.line, expr->op.column);
         case TOKEN_EQUAL_EQUAL:
         case TOKEN_BANG_EQUAL:
         case TOKEN_GREATER:
@@ -790,6 +852,13 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
                 return make_success(make_integer_value(NUM_INT32, -operand_result.value.as.integer.value.i32));
             } else {
                 return make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
+            }
+        case TOKEN_PLUS:
+            // Unary plus is identity for numbers
+            if (operand_result.value.type == VAL_FLOAT || operand_result.value.type == VAL_INTEGER) {
+                return make_success(operand_result.value);
+            } else {
+                return make_error("Cannot apply unary plus to non-numeric value", expr->op.line, expr->op.column);
             }
         case TOKEN_BANG:
         case TOKEN_NOT:

@@ -13,7 +13,7 @@
 
 // Forward declarations
 typedef struct MobiusVM MobiusVM;
-typedef struct BytecodeChunk BytecodeChunk;
+typedef struct BytecodeChunk BytecodeChunk; 
 typedef struct CompilerContext CompilerContext;
 
 // =============================================================================
@@ -68,6 +68,7 @@ typedef enum {
     OP_MOD              = 0x24,  // Modulo
     OP_NEG              = 0x25,  // Negate top value
     OP_ABS              = 0x26,  // Absolute value
+    OP_POS              = 0x27,  // Unary plus (identity operation)
     
     // Bitwise Operations (0x28-0x2F) - Direct RISC-V Mapping
     OP_AND              = 0x28,  // Bitwise AND
@@ -206,7 +207,7 @@ typedef enum {
 // BYTECODE CHUNK STRUCTURE
 // =============================================================================
 
-typedef struct {
+struct BytecodeChunk {
     Instruction* instructions;    // Bytecode instructions
     size_t count;                // Number of instructions
     size_t capacity;             // Allocated capacity
@@ -238,13 +239,13 @@ typedef struct {
     } functions[256];
     size_t function_count;
     
-} BytecodeChunk;
+};
 
 // =============================================================================
 // COMPILATION CONTEXT
 // =============================================================================
 
-typedef struct {
+struct CompilerContext {
     BytecodeChunk* chunk;
     
     // Local variable tracking (for register allocation)
@@ -287,17 +288,17 @@ typedef struct {
     bool had_error;
     bool panic_mode;
     
-} CompilerContext;
+};
 
 // =============================================================================
 // VIRTUAL MACHINE STATE
 // =============================================================================
 
-typedef struct CallFrame {
+typedef struct BytecodeCallFrame {
     Instruction* return_ip;      // Return instruction pointer
     Value* slots;                // Local variable slots
     MobiusFunction* function;    // Current function
-} CallFrame;
+} BytecodeCallFrame;
 
 struct MobiusVM {
     // Execution state
@@ -311,7 +312,7 @@ struct MobiusVM {
     double fp_registers[32];     // Floating-point registers
     
     // Function call state
-    CallFrame frames[256];       // Call stack
+    BytecodeCallFrame frames[256];       // Call stack
     int frame_count;
     
     // Global state
@@ -359,7 +360,7 @@ bool compile_statement(CompilerContext* compiler, Stmt* stmt);
 // Virtual machine
 MobiusVM* vm_create(void);
 void vm_free(MobiusVM* vm);
-bool vm_execute(MobiusVM* vm, BytecodeChunk* chunk);
+int vm_execute(MobiusVM* vm, BytecodeChunk* chunk);
 void vm_push(MobiusVM* vm, Value value);
 Value vm_pop(MobiusVM* vm);
 Value vm_peek(MobiusVM* vm, int distance);
@@ -371,7 +372,7 @@ bool execute_riscv_native(MobiusVM* vm, void* native_code);
 
 // Debug and profiling
 void bytecode_disassemble(BytecodeChunk* chunk, const char* name);
-void bytecode_disassemble_instruction(BytecodeChunk* chunk, int offset);
+int bytecode_disassemble_instruction(BytecodeChunk* chunk, int offset);
 void vm_print_stack(MobiusVM* vm);
 
 #endif // MOBIUS_BYTECODE_H

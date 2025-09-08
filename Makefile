@@ -31,6 +31,10 @@ GAME_ENGINE_EXAMPLE = $(BIN_DIR)/game_engine
 CPP_CLASS_EXAMPLE = $(BIN_DIR)/cpp_class_example
 SIMPLE_USERDATA_TEST = $(BIN_DIR)/simple_userdata_test
 
+# Test suite targets
+TEST_RUNNER = $(BIN_DIR)/test_runner
+TEST_SUITE_DIR = test_suite
+
 # Plugin targets
 TEXT_PROCESSING_PLUGIN = $(BIN_DIR)/modules/text_processing.so
 
@@ -42,7 +46,10 @@ APP_SOURCES = $(SRC_DIR)/main.c
 APP_OBJECTS = $(APP_SOURCES:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 
 # Default target
-all: directories $(MOBIUS_LIB) $(TARGET) modules examples
+all: directories $(MOBIUS_LIB) $(TARGET) modules examples tests
+
+# Test suite target
+tests: $(TEST_RUNNER)
 
 # Create necessary directories
 directories:
@@ -115,6 +122,11 @@ $(SIMPLE_USERDATA_TEST): examples/simple_userdata_test.c $(MOBIUS_LIB) | directo
 $(TEXT_PROCESSING_PLUGIN): examples/text_processing_plugin.c $(MOBIUS_LIB) | directories
 	@echo "📝 Building text processing plugin..."
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -shared -o $@ $< -L$(BUILD_DIR) -lmobius $(LDFLAGS)
+
+# Test runner
+$(TEST_RUNNER): $(MOBIUS_LIB) $(TEST_SUITE_DIR)/test_runner.c $(TEST_SUITE_DIR)/test_framework.c $(TEST_SUITE_DIR)/test_cases.c | directories
+	@echo "🧪 Building test runner..."
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -o $(TEST_RUNNER) $(TEST_SUITE_DIR)/test_runner.c $(TEST_SUITE_DIR)/test_framework.c $(TEST_SUITE_DIR)/test_cases.c -L$(BUILD_DIR) -lmobius $(LDFLAGS)
 
 # Install (copy to system directories)
 install: $(TARGET) $(MOBIUS_LIB)
@@ -223,6 +235,8 @@ help:
 	@echo "Testing:"
 	@echo "  run        - Run the interpreter"
 	@echo "  test       - Run comprehensive tests"
+	@echo "  test-dual  - Run dual-backend validation tests"
+	@echo "  test-performance - Run performance benchmarks"
 	@echo "  test-plugins - Test plugin loading"
 	@echo "  test-embedding - Test embedding API"
 	@echo "  test-game-engine - Test game engine example"
@@ -232,8 +246,21 @@ help:
 	@echo "  info       - Show build configuration"
 	@echo "  help       - Show this help message"
 
+# Test targets
+test-dual: $(TEST_RUNNER)
+	@echo "🧪 Running dual-backend validation tests..."
+	./$(TEST_RUNNER) --validation
+
+test-performance: $(TEST_RUNNER)
+	@echo "⚡ Running performance benchmarks..."
+	./$(TEST_RUNNER) --performance --benchmark
+
+test-all-suites: $(TEST_RUNNER)
+	@echo "🎯 Running complete test suite..."
+	./$(TEST_RUNNER) --verbose
+
 # Declare phony targets
-.PHONY: all directories modules examples clean install uninstall run test test-plugins test-embedding test-game-engine test-text-plugin debug release docs info help
+.PHONY: all directories modules examples tests clean install uninstall run test test-dual test-performance test-all-suites test-plugins test-embedding test-game-engine test-text-plugin debug release docs info help
 
 # Special target dependencies
 $(TARGET): | $(MOBIUS_LIB)
