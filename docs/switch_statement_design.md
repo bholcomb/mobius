@@ -87,7 +87,7 @@ switch (value) {
     case type(int):
         print("Integer:", value);
         break;
-    case typeof(string):
+    case is string:
         print("String:", value);
         break;
     case type(array):
@@ -147,10 +147,10 @@ switch (value) {
     case x when x > 0 && x < 100:
         print("Positive number under 100");
         break;
-    case s when typeof(s) == string && length(s) > 5:
+    case s when typeof(s) == "string" && length(s) > 5:
         print("Long string:", s);
         break;
-    case arr when typeof(arr) == array && length(arr) > 0:
+    case arr when typeof(arr) == "array" && length(arr) > 0:
         print("Non-empty array");
         break;
     default:
@@ -212,7 +212,7 @@ typedef enum {
     PATTERN_VALUE,             // Literal value: case 42:
     PATTERN_EXPRESSION,        // Expression: case >= 10:
     PATTERN_RANGE,             // Range: case 1..10:
-    PATTERN_TYPE,              // Type: case typeof(string):
+    PATTERN_TYPE,              // Type: case is string:
     PATTERN_ARRAY,             // Array destructuring: case [x, y]:
     PATTERN_TABLE,             // Table destructuring: case {name, age}:
     PATTERN_WILDCARD,          // Wildcard: case _:

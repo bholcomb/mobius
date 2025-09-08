@@ -76,7 +76,7 @@ typedef enum {
     TOKEN_IF,               // if
     TOKEN_IMPORT,           // import
     TOKEN_IN,               // in (for iteration, membership)
-    TOKEN_IS,               // is (identity comparison)
+    TOKEN_IS,               // is (identity comparison and type matching)
     TOKEN_LET,              // let (immutable binding)
     TOKEN_MATCH,            // match (pattern matching)
     TOKEN_NIL,              // nil (null value)
@@ -89,7 +89,6 @@ typedef enum {
     TOKEN_THIS,             // this
     TOKEN_TRUE,             // true
     TOKEN_TRY,              // try
-    TOKEN_TYPEOF,           // typeof (for type matching)
     TOKEN_CATCH,            // catch
     TOKEN_FINALLY,          // finally
     TOKEN_THROW,            // throw
