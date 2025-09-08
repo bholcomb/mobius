@@ -37,7 +37,9 @@ struct ModuleRegistry {
     size_t function_capacity;
     
     // Configuration
-    char* plugin_directory;     // Default plugin directory
+    char** plugin_directories;  // List of plugin directories
+    size_t plugin_dir_count;    // Number of plugin directories
+    size_t plugin_dir_capacity; // Capacity of plugin directories array
     bool auto_load_core;        // Auto-load core modules
     bool allow_unload;          // Allow module unloading
     bool debug_mode;            // Debug output
@@ -46,7 +48,8 @@ struct ModuleRegistry {
 // Registry management
 ModuleRegistry* create_module_registry(void);
 void free_module_registry(ModuleRegistry* registry);
-void set_plugin_directory(ModuleRegistry* registry, const char* directory);
+bool add_plugin_directory(ModuleRegistry* registry, const char* directory);
+void clear_plugin_directories(ModuleRegistry* registry);
 
 // Module loading/unloading
 PluginLoadResult load_module(ModuleRegistry* registry, const char* path);

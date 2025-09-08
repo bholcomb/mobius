@@ -674,6 +674,10 @@ Stmt* parse_statement(Parser* parser) {
         return parse_break_statement(parser);
     }
     
+    if (parser_match(parser, TOKEN_IMPORT)) {
+        return parse_import_statement(parser);
+    }
+    
     return parse_expression_statement(parser);
 }
 
@@ -847,6 +851,20 @@ Stmt* parse_break_statement(Parser* parser) {
     Token keyword = parser_previous(parser);
     consume(parser, TOKEN_SEMICOLON, "Expected ';' after 'break'");
     return make_break_stmt(keyword);
+}
+
+Stmt* parse_import_statement(Parser* parser) {
+    Token keyword = parser_previous(parser);
+    
+    if (!parser_check(parser, TOKEN_STRING)) {
+        parser_error_at_current(parser, "Expect string literal after 'import'");
+        return NULL;
+    }
+    
+    Token module_name = parser_advance(parser);
+    consume(parser, TOKEN_SEMICOLON, "Expected ';' after import statement");
+    
+    return make_import_stmt(keyword, module_name);
 }
 
 // Forward declarations for switch parsing functions

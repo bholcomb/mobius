@@ -38,7 +38,8 @@ typedef enum {
     STMT_CLASS,
     STMT_RETURN,
     STMT_SWITCH,
-    STMT_BREAK
+    STMT_BREAK,
+    STMT_IMPORT
 } StmtType;
 
 // Forward declarations for AST structures (core types in value.h)
@@ -302,6 +303,12 @@ typedef struct {
     Token keyword;              // The 'break' token for error reporting
 } BreakStmt;
 
+// Import statement
+typedef struct {
+    Token keyword;              // The 'import' token for error reporting
+    Token module_name;          // Module name string literal
+} ImportStmt;
+
 // Main statement structure
 struct Stmt {
     StmtType type;
@@ -319,6 +326,7 @@ struct Stmt {
         ReturnStmt return_stmt;
         SwitchStmt switch_stmt;
         BreakStmt break_stmt;
+        ImportStmt import_stmt;
     } as;
 };
 
@@ -351,6 +359,7 @@ Stmt* make_return_stmt(Token keyword, Expr* value);
 Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count,
                       Stmt** default_body, size_t default_body_count);
 Stmt* make_break_stmt(Token keyword);
+Stmt* make_import_stmt(Token keyword, Token module_name);
 
 // Pattern and case creation functions
 CasePattern* make_value_pattern(Value literal);

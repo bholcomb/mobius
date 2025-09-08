@@ -442,6 +442,9 @@ void print_stmt(Stmt* stmt) {
         case STMT_BREAK:
             printf("break");
             break;
+        case STMT_IMPORT:
+            printf("import \"%s\"", stmt->as.import_stmt.module_name.literal.string ? stmt->as.import_stmt.module_name.literal.string : "unknown");
+            break;
     }
 }
 
@@ -615,6 +618,9 @@ void free_stmt(Stmt* stmt) {
             break;
         case STMT_BREAK:
             // Nothing to free for break statements
+            break;
+        case STMT_IMPORT:
+            // Nothing to free for import statements (tokens are not owned)
             break;
     }
     free(stmt);
@@ -833,6 +839,9 @@ void ast_release_stmt(Stmt* stmt) {
             case STMT_BREAK:
                 // Nothing to release for break statements
                 break;
+            case STMT_IMPORT:
+                // Nothing to release for import statements (tokens are not owned)
+                break;
         }
         
         free(stmt);
@@ -895,6 +904,17 @@ Stmt* make_break_stmt(Token keyword) {
     stmt->type = STMT_BREAK;
     stmt->ref_count = 1;  // Initialize reference count
     stmt->as.break_stmt.keyword = keyword;
+    return stmt;
+}
+
+Stmt* make_import_stmt(Token keyword, Token module_name) {
+    Stmt* stmt = calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+    
+    stmt->type = STMT_IMPORT;
+    stmt->ref_count = 1;  // Initialize reference count
+    stmt->as.import_stmt.keyword = keyword;
+    stmt->as.import_stmt.module_name = module_name;
     return stmt;
 }
 

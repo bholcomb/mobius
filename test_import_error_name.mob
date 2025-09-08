@@ -1,0 +1,8 @@
+// Test import error with module name display
+
+print("Testing import error with module name...");
+
+// Try to import a non-existent module
+import "nonexistent_module_test";
+
+print("This should not be reached");

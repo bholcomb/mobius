@@ -153,5 +153,6 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
 // Switch statement support
 EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env);
 EvalResult eval_break_stmt(BreakStmt* stmt, Environment* env);
+EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env);
 
 #endif // MOBIUS_EVALUATOR_H
