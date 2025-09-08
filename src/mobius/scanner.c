@@ -46,7 +46,6 @@ static const Keyword keywords[] = {
     {"throw",    TOKEN_THROW},
     {"true",     TOKEN_TRUE},
     {"try",      TOKEN_TRY},
-    {"typeof",   TOKEN_TYPEOF},
     {"var",      TOKEN_VAR},
     {"when",     TOKEN_WHEN},
     {"while",    TOKEN_WHILE},

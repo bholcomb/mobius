@@ -4,13 +4,13 @@ func test_string_type(value) {
     var result = "";
     
     switch (value) {
-        case typeof(string):
+        case is string:
             result = "is_string";
             break;
-        case typeof(int):
+        case is int:
             result = "is_integer";
             break;
-        case typeof(array):
+        case is array:
             result = "is_array";
             break;
         default:
@@ -24,13 +24,13 @@ func test_numeric_types(value) {
     var result = "";
     
     switch (value) {
-        case typeof(int):
+        case is int:
             result = "integer_type";
             break;
-        case typeof(float):
+        case is float:
             result = "float_type";
             break;
-        case typeof(bool):
+        case is bool:
             result = "boolean_type";
             break;
         default:
@@ -44,16 +44,16 @@ func test_complex_types(value) {
     var result = "";
     
     switch (value) {
-        case typeof(array):
+        case is array:
             result = "array_type";
             break;
-        case typeof(table):
+        case is table:
             result = "table_type";
             break;
-        case typeof(function):
+        case is function:
             result = "function_type";
             break;
-        case typeof(nil):
+        case is nil:
             result = "nil_type";
             break;
         default:

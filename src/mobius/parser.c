@@ -1025,10 +1025,9 @@ CasePattern* parse_case_pattern(Parser* parser) {
         parser_advance(parser);
         Value value = make_nil_value();
         return make_value_pattern(value);
-    } else if (parser_check(parser, TOKEN_TYPEOF)) {
-        // Type matching pattern: typeof(string), typeof(int), etc.
-        parser_advance(parser); // consume 'typeof'
-        consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'typeof'");
+    } else if (parser_check(parser, TOKEN_IS)) {
+        // Type matching pattern: is string, is array, etc.
+        parser_advance(parser); // consume 'is'
         
         ValueType value_type;
         const char* type_name = NULL;
@@ -1040,8 +1039,7 @@ CasePattern* parse_case_pattern(Parser* parser) {
             parser_advance(parser);
             type_name = "nil";
         } else {
-            parser_error_at_current(parser, "Expect type name after 'typeof('");
-            consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after type name");
+            parser_error_at_current(parser, "Expect type name after 'is'");
             return make_wildcard_pattern();
         }
         
@@ -1063,12 +1061,10 @@ CasePattern* parse_case_pattern(Parser* parser) {
         } else if (strcmp(type_name, "nil") == 0) {
             value_type = VAL_NIL;
         } else {
-            parser_error_at_current(parser, "Unknown type name in typeof pattern");
-            consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after type name");
+            parser_error_at_current(parser, "Unknown type name in 'is' pattern");
             return make_wildcard_pattern();
         }
         
-        consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after type name");
         return make_type_pattern(value_type);
     } else {
         parser_error_at_current(parser, "Expect literal value in case pattern");
