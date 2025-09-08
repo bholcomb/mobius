@@ -398,7 +398,7 @@ Expr* parse_call(Parser* parser) {
 }
 
 Expr* parse_unary(Parser* parser) {
-    if (parser_match_any(parser, 3, TOKEN_BANG, TOKEN_MINUS, TOKEN_NOT)) {
+    if (parser_match_any(parser, 4, TOKEN_BANG, TOKEN_MINUS, TOKEN_NOT, TOKEN_PLUS)) {
         Token op = parser_previous(parser);
         Expr* right = parse_unary(parser);
         return make_unary_expr(op, right);
@@ -410,7 +410,7 @@ Expr* parse_unary(Parser* parser) {
 Expr* parse_factor(Parser* parser) {
     Expr* expr = parse_unary(parser);
     
-    while (parser_match_any(parser, 2, TOKEN_SLASH, TOKEN_STAR)) {
+    while (parser_match_any(parser, 3, TOKEN_SLASH, TOKEN_STAR, TOKEN_PERCENT)) {
         Token op = parser_previous(parser);
         Expr* right = parse_unary(parser);
         expr = make_binary_expr(expr, op, right);
@@ -646,8 +646,48 @@ Stmt* parse_for_statement(Parser* parser) {
 }
 
 Stmt* parse_statement(Parser* parser) {
-    if (parser_match(parser, TOKEN_LEFT_BRACE)) {
-        return parse_block_statement(parser);
+    // Special handling for { to distinguish table literals from block statements
+    if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+        // Look ahead to distinguish table literal from block statement
+        // Table literals typically have identifier:value or [key]:value patterns
+        // Block statements have statements (declarations, expressions, etc.)
+        
+        // Save current position
+        size_t saved_current = parser->current;
+        
+        // Advance past the {
+        parser_advance(parser);
+        
+        bool is_table_literal = false;
+        
+        // Skip newlines
+        while (parser_check(parser, TOKEN_NEWLINE)) {
+            parser_advance(parser);
+        }
+        
+        // Check for table literal patterns:
+        // 1. identifier : (key-value pair)
+        // 2. [ (computed key)
+        // 3. } (empty table)
+        if (parser_check(parser, TOKEN_RIGHT_BRACE) ||
+            parser_check(parser, TOKEN_LEFT_BRACKET) ||
+            (parser_check(parser, TOKEN_IDENTIFIER) && 
+             (parser->current + 1 < parser->token_count && 
+              parser->tokens[parser->current + 1].type == TOKEN_COLON))) {
+            is_table_literal = true;
+        }
+        
+        // Restore position
+        parser->current = saved_current;
+        
+        if (is_table_literal) {
+            // Parse as expression statement with table literal
+            return parse_expression_statement(parser);
+        } else {
+            // Parse as block statement
+            parser_advance(parser);  // consume the {
+            return parse_block_statement(parser);
+        }
     }
     
     if (parser_match(parser, TOKEN_IF)) {

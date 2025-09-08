@@ -119,7 +119,7 @@ EvalResult add_values(Value left, Value right);
 EvalResult subtract_values(Value left, Value right);
 EvalResult multiply_values(Value left, Value right);
 EvalResult divide_values(Value left, Value right, int line, int column);
-EvalResult modulo_values(Value left, Value right);
+EvalResult modulo_values(Value left, Value right, int line, int column);
 
 // Comparison operations
 EvalResult compare_values(Value left, Value right, TokenType op);
