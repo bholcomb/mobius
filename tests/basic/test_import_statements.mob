@@ -1,0 +1,55 @@
+// Comprehensive import statement tests
+
+func test_successful_imports() {
+    print("Testing successful imports...");
+    
+    // Import math module
+    import "math";
+    
+    // Import text processing module  
+    import "text_processing";
+    
+    // Test that functions are available
+    var sqrt_result = sqrt(25);
+    var reverse_result = reverse("test");
+    
+    print("sqrt(25) =", sqrt_result);
+    print("reverse('test') =", reverse_result);
+    
+    return sqrt_result == 5 && reverse_result == "tset";
+}
+
+func test_duplicate_imports() {
+    print("Testing duplicate imports (should work)...");
+    
+    // Import the same module multiple times - should be fine
+    import "math";
+    import "math";
+    import "math";
+    
+    // Should still work
+    var result = cos(0);
+    print("cos(0) =", result);
+    
+    return result == 1;
+}
+
+// Test successful cases
+print("=== Import Statement Tests ===");
+
+var success1 = test_successful_imports();
+if (success1) {
+    print("Successful imports: PASS");
+} else {
+    print("Successful imports: FAIL");
+}
+
+var success2 = test_duplicate_imports();
+if (success2) {
+    print("Duplicate imports: PASS");
+} else {
+    print("Duplicate imports: FAIL");
+}
+
+print("Import tests completed successfully!");
+print("Note: Error cases tested separately due to fatal nature");

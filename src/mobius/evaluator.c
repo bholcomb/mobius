@@ -1,3 +1,4 @@
+#define _GNU_SOURCE  // For strdup
 #include "evaluator.h"
 #include "stdlib.h"
 #include "module_registry.h"
@@ -28,7 +29,15 @@ EvalResult make_error(const char* message, int line, int column) {
     result.has_error = true;
     result.has_returned = false;
     result.has_break = false;
-    result.error.message = message;
+    
+    // Duplicate the message to prevent corruption from stack-allocated strings
+    if (message) {
+        char* message_copy = strdup(message);
+        result.error.message = message_copy;
+    } else {
+        result.error.message = "Unknown error";
+    }
+    
     result.error.suggestion = NULL;
     result.error.category = ERROR_RUNTIME;
     result.error.line = line;
@@ -70,8 +79,21 @@ EvalResult make_error_detailed(const char* message, const char* suggestion,
     result.has_error = true;
     result.has_returned = false;
     result.has_break = false;
-    result.error.message = message;
-    result.error.suggestion = suggestion;
+    
+    // Duplicate the message and suggestion to prevent corruption
+    if (message) {
+        char* message_copy = strdup(message);
+        result.error.message = message_copy;
+    } else {
+        result.error.message = "Unknown error";
+    }
+    
+    if (suggestion) {
+        char* suggestion_copy = strdup(suggestion);
+        result.error.suggestion = suggestion_copy;
+    } else {
+        result.error.suggestion = NULL;
+    }
     result.error.category = category;
     result.error.line = line;
     result.error.column = column;
@@ -1107,6 +1129,8 @@ EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
             return eval_switch_stmt(&stmt->as.switch_stmt, env);
         case STMT_BREAK:
             return eval_break_stmt(&stmt->as.break_stmt, env);
+        case STMT_IMPORT:
+            return eval_import_stmt(&stmt->as.import_stmt, env);
         default:
             return make_error("Unknown statement type", 0, 0);
     }
@@ -1611,6 +1635,49 @@ EvalResult eval_break_stmt(BreakStmt* stmt, Environment* env) {
     result.has_break = true;  // We need to add this field to EvalResult
     result.value = make_nil_value();
     return result;
+}
+
+// Import statement evaluation
+EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
+    (void)env;  // Unused parameter for now
+    
+    ModuleRegistry* registry = get_global_module_registry();
+    if (!registry) {
+        return make_error("Module registry not initialized", 0, 0);
+    }
+    
+    // Extract module name from string literal token
+    const char* module_name = stmt->module_name.literal.string;
+    if (!module_name) {
+        return make_error("Invalid module name - null string", stmt->keyword.line, stmt->keyword.column);
+    }
+    
+    // Additional validation for module name
+    size_t name_len = strlen(module_name);
+    if (name_len == 0) {
+        return make_error("Invalid module name - empty string", stmt->keyword.line, stmt->keyword.column);
+    }
+    if (name_len > 100) {  // Sanity check
+        return make_error("Invalid module name - too long", stmt->keyword.line, stmt->keyword.column);
+    }
+    
+    // Check if module is already loaded
+    if (is_module_loaded(registry, module_name)) {
+        // Module already loaded, this is fine - just return success
+        return make_success(make_nil_value());
+    }
+    
+    // Try to load the module by name
+    PluginLoadResult result = load_module_by_name(registry, module_name);
+    if (result.status != PLUGIN_STATUS_LOADED) {
+        // Create a detailed error message with module name
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "FATAL: Import failed - module '%s' not found", module_name);
+        return make_error(error_msg, stmt->keyword.line, stmt->keyword.column);
+    }
+    
+    // Import successful - return nil value
+    return make_success(make_nil_value());
 }
 
 // Switch statement evaluation

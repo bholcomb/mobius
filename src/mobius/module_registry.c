@@ -38,7 +38,9 @@ ModuleRegistry* create_module_registry(void) {
     registry->function_table = malloc(64 * sizeof(FunctionEntry));
     registry->function_count = 0;
     registry->function_capacity = 64;
-    registry->plugin_directory = NULL;
+    registry->plugin_directories = NULL;
+    registry->plugin_dir_count = 0;
+    registry->plugin_dir_capacity = 0;
     registry->auto_load_core = true;
     registry->allow_unload = true;
     registry->debug_mode = false;
@@ -53,9 +55,56 @@ ModuleRegistry* create_module_registry(void) {
     return registry;
 }
 
+// Add a plugin directory to the registry
+bool add_plugin_directory(ModuleRegistry* registry, const char* directory) {
+    if (!registry || !directory) {
+        set_error("Invalid arguments to add_plugin_directory");
+        return false;
+    }
+    
+    // Check if we need to expand the array
+    if (registry->plugin_dir_count >= registry->plugin_dir_capacity) {
+        size_t new_capacity = registry->plugin_dir_capacity == 0 ? 4 : registry->plugin_dir_capacity * 2;
+        char** new_dirs = realloc(registry->plugin_directories, new_capacity * sizeof(char*));
+        if (!new_dirs) {
+            set_error("Failed to allocate memory for plugin directories");
+            return false;
+        }
+        registry->plugin_directories = new_dirs;
+        registry->plugin_dir_capacity = new_capacity;
+    }
+    
+    // Duplicate the directory string
+    char* dir_copy = strdup(directory);
+    if (!dir_copy) {
+        set_error("Failed to allocate memory for directory string");
+        return false;
+    }
+    
+    registry->plugin_directories[registry->plugin_dir_count++] = dir_copy;
+    return true;
+}
+
+// Clear all plugin directories
+void clear_plugin_directories(ModuleRegistry* registry) {
+    if (!registry) return;
+    
+    for (size_t i = 0; i < registry->plugin_dir_count; i++) {
+        free(registry->plugin_directories[i]);
+    }
+    free(registry->plugin_directories);
+    
+    registry->plugin_directories = NULL;
+    registry->plugin_dir_count = 0;
+    registry->plugin_dir_capacity = 0;
+}
+
 // Free module registry and all loaded modules
 void free_module_registry(ModuleRegistry* registry) {
     if (!registry) return;
+    
+    // Free plugin directories
+    clear_plugin_directories(registry);
     
     // Unload all modules
     LoadedModule* module = registry->modules;
@@ -85,20 +134,9 @@ void free_module_registry(ModuleRegistry* registry) {
     }
     free(registry->function_table);
     
-    free(registry->plugin_directory);
     free(registry);
 }
 
-// Set plugin directory
-void set_plugin_directory(ModuleRegistry* registry, const char* directory) {
-    if (!registry) return;
-    
-    free(registry->plugin_directory);
-    registry->plugin_directory = malloc(strlen(directory) + 1);
-    if (registry->plugin_directory) {
-        strcpy(registry->plugin_directory, directory);
-    }
-}
 
 // Load a module from a file path
 PluginLoadResult load_module(ModuleRegistry* registry, const char* path) {
@@ -483,7 +521,6 @@ int scan_plugin_directory(ModuleRegistry* registry, const char* directory) {
     return loaded_count;
 }
 
-// set_plugin_directory already implemented above
 
 /**
  * Auto-load core modules from the default directory
@@ -501,9 +538,9 @@ int auto_load_core_modules(ModuleRegistry* registry) {
         NULL
     };
     
-    // Try user-specified directory first
-    if (registry->plugin_directory) {
-        int count = scan_plugin_directory(registry, registry->plugin_directory);
+    // Try user-specified directories first
+    for (size_t i = 0; i < registry->plugin_dir_count; i++) {
+        int count = scan_plugin_directory(registry, registry->plugin_directories[i]);
         if (count >= 0) {
             return count;
         }
@@ -593,19 +630,58 @@ PluginLoadResult load_module_by_name(ModuleRegistry* registry, const char* name)
         return result;
     }
     
-    // Try to build full path
-    const char* plugin_dir = registry->plugin_directory ? registry->plugin_directory : "./bin/modules";
+    // Prepare directories to search (custom + defaults)
+    const char* default_dirs[] = {
+        "./bin/modules",
+        "./modules", 
+        "/usr/local/lib/mobius/modules",
+        NULL
+    };
     
     char full_path[1024];
+    const char* module_filename;
+    
+    // Determine filename with .so extension
     if (strstr(name, ".so")) {
-        // Name already includes extension
-        snprintf(full_path, sizeof(full_path), "%s/%s", plugin_dir, name);
+        module_filename = name;
     } else {
-        // Add .so extension
-        snprintf(full_path, sizeof(full_path), "%s/%s.so", plugin_dir, name);
+        static char temp_name[256];
+        snprintf(temp_name, sizeof(temp_name), "%s.so", name);
+        module_filename = temp_name;
     }
     
-    return load_module(registry, full_path);
+    // First try user-specified directories
+    for (size_t i = 0; i < registry->plugin_dir_count; i++) {
+        snprintf(full_path, sizeof(full_path), "%s/%s", registry->plugin_directories[i], module_filename);
+        
+        // Check if file exists
+        struct stat file_stat;
+        if (stat(full_path, &file_stat) == 0 && S_ISREG(file_stat.st_mode)) {
+            result = load_module(registry, full_path);
+            if (result.status == PLUGIN_STATUS_LOADED) {
+                return result;
+            }
+        }
+    }
+    
+    // Then try default directories
+    for (int i = 0; default_dirs[i]; i++) {
+        snprintf(full_path, sizeof(full_path), "%s/%s", default_dirs[i], module_filename);
+        
+        // Check if file exists
+        struct stat file_stat;
+        if (stat(full_path, &file_stat) == 0 && S_ISREG(file_stat.st_mode)) {
+            result = load_module(registry, full_path);
+            if (result.status == PLUGIN_STATUS_LOADED) {
+                return result;
+            }
+        }
+    }
+    
+    // Module not found in any directory
+    result.status = PLUGIN_STATUS_ERROR;
+    result.error_message = "Module not found in any configured directory";
+    return result;
 }
 
 // is_module_loaded already implemented above
