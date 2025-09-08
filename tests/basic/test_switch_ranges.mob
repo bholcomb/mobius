@@ -1,0 +1,95 @@
+// Range pattern tests for switch statements
+
+func test_integer_ranges() {
+    var score = 75;
+    var grade = "";
+    
+    switch (score) {
+        case 90..100:
+            grade = "A";
+            break;
+        case 80..89:
+            grade = "B";
+            break;
+        case 70..79:
+            grade = "C";
+            break;
+        case 60..69:
+            grade = "D";
+            break;
+        default:
+            grade = "F";
+    }
+    
+    return grade;
+}
+
+func test_boundary_conditions() {
+    var value = 10;
+    var category = "";
+    
+    switch (value) {
+        case 1..10:
+            category = "first_range";
+            break;
+        case 11..20:
+            category = "second_range";
+            break;
+        default:
+            category = "outside";
+    }
+    
+    return category;
+}
+
+func test_char_ranges() {
+    var letter = 'g';
+    var category = "";
+    
+    switch (letter) {
+        case 'a'..'f':
+            category = "early_alphabet";
+            break;
+        case 'g'..'n':
+            category = "middle_alphabet";
+            break;
+        case 'o'..'z':
+            category = "late_alphabet";
+            break;
+        default:
+            category = "not_letter";
+    }
+    
+    return category;
+}
+
+func test_float_ranges() {
+    var temperature = 22.5;
+    var description = "";
+    
+    switch (temperature) {
+        case 0.0..10.0:
+            description = "cold";
+            break;
+        case 10.1..25.0:
+            description = "mild";
+            break;
+        case 25.1..40.0:
+            description = "hot";
+            break;
+        default:
+            description = "extreme";
+    }
+    
+    return description;
+}
+
+// Run range pattern tests
+print("Testing switch range patterns:");
+
+print("Integer range (75): " + test_integer_ranges());        // Should print: C
+print("Boundary test (10): " + test_boundary_conditions());   // Should print: first_range
+print("Char range ('g'): " + test_char_ranges());            // Should print: middle_alphabet
+print("Float range (22.5): " + test_float_ranges());         // Should print: mild
+
+print("Range pattern tests completed.");

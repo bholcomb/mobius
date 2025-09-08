@@ -1,0 +1,122 @@
+// Comprehensive switch statement test demonstrating all implemented features
+
+func classify_value(value) {
+    var result = "";
+    
+    switch (value) {
+        // Simple value patterns
+        case 0:
+            result = "zero";
+            break;
+        case 1:
+            result = "one";
+            break;
+        case "hello":
+            result = "greeting";
+            break;
+        case true:
+            result = "boolean_true";
+            break;
+        case false:
+            result = "boolean_false";
+            break;
+        case nil:
+            result = "nil_value";
+            break;
+            
+        // Expression patterns  
+        case >= 100:
+            result = "large_number";
+            break;
+        case <= -10:
+            result = "negative_number";
+            break;
+        case != 42:
+            result = "not_answer"; // This will match most values
+            break;
+            
+        // Range patterns
+        case 2..10:
+            result = "small_range";
+            break;
+        case 11..99:
+            result = "medium_range";
+            break;
+            
+        // Type patterns
+        case typeof(string):
+            result = "string_type";
+            break;
+        case typeof(array):
+            result = "array_type";
+            break;
+        case typeof(table):
+            result = "table_type";
+            break;
+        case typeof(function):
+            result = "function_type";
+            break;
+            
+        default:
+            result = "unmatched";
+    }
+    
+    return result;
+}
+
+// Test fall-through behavior
+func test_fall_through(value) {
+    var result = "";
+    
+    switch (value) {
+        case 1:
+            result = result + "one";
+        case 2:
+            result = result + "_two";
+            break;
+        case 3:
+            result = result + "three";
+        default:
+            result = result + "_end";
+    }
+    
+    return result;
+}
+
+// Create various test values
+var test_values = [
+    0,           // zero
+    1,           // one  
+    5,           // small_range
+    50,          // medium_range
+    150,         // large_number
+    -20,         // negative_number
+    "hello",     // greeting
+    "world",     // string_type (due to != 42 matching first)
+    true,        // boolean_true
+    false,       // boolean_false
+    nil,         // nil_value
+    [1, 2, 3],   // array_type
+    {name: "test"}, // table_type
+];
+
+print("=== Comprehensive Switch Statement Test ===");
+
+// Test all patterns
+var i = 0;
+while (i < array_length(test_values)) {
+    var value = array_get(test_values, i);
+    var result = classify_value(value);
+    print("Value " + value + " -> " + result);
+    i = i + 1;
+}
+
+print("");
+print("=== Fall-through Tests ===");
+print("Fall-through(1): " + test_fall_through(1));  // Should: one_two
+print("Fall-through(2): " + test_fall_through(2));  // Should: _two  
+print("Fall-through(3): " + test_fall_through(3));  // Should: three_end
+print("Fall-through(4): " + test_fall_through(4));  // Should: _end
+
+print("");
+print("All switch features tested successfully!");

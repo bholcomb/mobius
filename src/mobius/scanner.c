@@ -46,6 +46,7 @@ static const Keyword keywords[] = {
     {"throw",    TOKEN_THROW},
     {"true",     TOKEN_TRUE},
     {"try",      TOKEN_TRY},
+    {"typeof",   TOKEN_TYPEOF},
     {"var",      TOKEN_VAR},
     {"when",     TOKEN_WHEN},
     {"while",    TOKEN_WHILE},
@@ -315,7 +316,16 @@ Token scan_token(Scanner* scanner) {
         case '{': return make_simple_token(scanner, TOKEN_LEFT_BRACE);
         case '}': return make_simple_token(scanner, TOKEN_RIGHT_BRACE);
         case ',': return make_simple_token(scanner, TOKEN_COMMA);
-        case '.': return make_simple_token(scanner, TOKEN_DOT);
+        case '.':
+            if (match(scanner, '.')) {
+                if (match(scanner, '.')) {
+                    return make_simple_token(scanner, TOKEN_DOT_DOT_DOT);
+                } else {
+                    return make_simple_token(scanner, TOKEN_DOT_DOT);
+                }
+            } else {
+                return make_simple_token(scanner, TOKEN_DOT);
+            }
         case ';': return make_simple_token(scanner, TOKEN_SEMICOLON);
         case ':': return make_simple_token(scanner, TOKEN_COLON);
         case '?': return make_simple_token(scanner, TOKEN_QUESTION);

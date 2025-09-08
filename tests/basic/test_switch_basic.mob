@@ -1,0 +1,114 @@
+// Basic switch statement tests
+
+// Test 1: Simple integer matching
+func test_integer_switch() {
+    var result = "";
+    switch (42) {
+        case 10:
+            result = "ten";
+            break;
+        case 42:
+            result = "answer";
+            break;
+        case 100:
+            result = "hundred";
+            break;
+        default:
+            result = "other";
+    }
+    return result;
+}
+
+// Test 2: String matching
+func test_string_switch() {
+    var result = "";
+    switch ("hello") {
+        case "world":
+            result = "greeting";
+            break;
+        case "hello":
+            result = "greeting_hello";
+            break;
+        case "goodbye":
+            result = "farewell";
+            break;
+        default:
+            result = "unknown";
+    }
+    return result;
+}
+
+// Test 3: Boolean matching
+func test_boolean_switch() {
+    var result = "";
+    switch (true) {
+        case false:
+            result = "false_case";
+            break;
+        case true:
+            result = "true_case";
+            break;
+        default:
+            result = "default_case";
+    }
+    return result;
+}
+
+// Test 4: Default case
+func test_default_case() {
+    var result = "";
+    switch (999) {
+        case 1:
+            result = "one";
+            break;
+        case 2:
+            result = "two";
+            break;
+        default:
+            result = "default_reached";
+    }
+    return result;
+}
+
+// Test 5: Fall-through behavior (no break)
+func test_fall_through() {
+    var result = "";
+    switch (1) {
+        case 1:
+            result = result + "one";
+        case 2:
+            result = result + "two";
+            break;
+        case 3:
+            result = result + "three";
+            break;
+    }
+    return result;
+}
+
+// Test 6: Break statement
+func test_break_statement() {
+    var result = "";
+    switch (5) {
+        case 5:
+            result = "five";
+            break;
+            result = "should_not_reach";
+        default:
+            result = "default";
+    }
+    return result;
+}
+
+// Run tests
+print("Testing basic switch statements:");
+
+print("Integer switch: " + test_integer_switch());  // Should print: answer
+print("String switch: " + test_string_switch());    // Should print: greeting_hello
+print("Boolean switch: " + test_boolean_switch());  // Should print: true_case
+print("Default case: " + test_default_case());      // Should print: default_reached
+print("Fall-through: " + test_fall_through());      // Should print: onetwo
+print("Break statement: " + test_break_statement()); // Should print: five
+
+print("Basic switch tests completed.");
+

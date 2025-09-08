@@ -53,6 +53,12 @@ Stmt* parse_if_statement(Parser* parser);
 Stmt* parse_while_statement(Parser* parser);
 Stmt* parse_for_statement(Parser* parser);
 Stmt* parse_return_statement(Parser* parser);
+Stmt* parse_switch_statement(Parser* parser);
+Stmt* parse_break_statement(Parser* parser);
+
+// Switch statement parsing helpers
+SwitchCase* parse_switch_case(Parser* parser);
+CasePattern* parse_case_pattern(Parser* parser);
 
 // Expression parsing (recursive descent)
 Expr* parse_expression(Parser* parser);

@@ -41,6 +41,7 @@ typedef struct {
     Value value;
     bool has_error;
     bool has_returned;  // Flag to indicate if a return statement was executed
+    bool has_break;     // Flag to indicate if a break statement was executed
     RuntimeError error;
 } EvalResult;
 
@@ -148,5 +149,9 @@ EvalResult make_error_detailed_with_source(const char* message, const char* sugg
 EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env);
 EvalResult eval_return_stmt(ReturnStmt* stmt, Environment* env);
 EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t arg_count, Environment* env);
+
+// Switch statement support
+EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env);
+EvalResult eval_break_stmt(BreakStmt* stmt, Environment* env);
 
 #endif // MOBIUS_EVALUATOR_H
