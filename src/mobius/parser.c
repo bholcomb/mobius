@@ -666,6 +666,14 @@ Stmt* parse_statement(Parser* parser) {
         return parse_return_statement(parser);
     }
     
+    if (parser_match(parser, TOKEN_SWITCH)) {
+        return parse_switch_statement(parser);
+    }
+    
+    if (parser_match(parser, TOKEN_BREAK)) {
+        return parse_break_statement(parser);
+    }
+    
     return parse_expression_statement(parser);
 }
 
@@ -833,6 +841,239 @@ Stmt* parse_return_statement(Parser* parser) {
     consume(parser, TOKEN_SEMICOLON, "Expected ';' after return value");
     
     return make_return_stmt(keyword, value);
+}
+
+Stmt* parse_break_statement(Parser* parser) {
+    Token keyword = parser_previous(parser);
+    consume(parser, TOKEN_SEMICOLON, "Expected ';' after 'break'");
+    return make_break_stmt(keyword);
+}
+
+// Forward declarations for switch parsing functions
+CasePattern* parse_case_pattern(Parser* parser);
+SwitchCase* parse_switch_case(Parser* parser);
+
+Stmt* parse_switch_statement(Parser* parser) {
+    consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'switch'");
+    Expr* discriminant = parse_expression(parser);
+    consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after switch expression");
+    consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before switch body");
+    
+    SwitchCase** cases = NULL;
+    size_t case_count = 0;
+    size_t case_capacity = 0;
+    
+    Stmt** default_body = NULL;
+    size_t default_body_count = 0;
+    
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        // Skip newlines
+        if (parser_match(parser, TOKEN_NEWLINE)) {
+            continue;
+        }
+        
+        if (parser_match(parser, TOKEN_CASE)) {
+            // Parse case clause
+            SwitchCase* case_clause = parse_switch_case(parser);
+            if (case_count >= case_capacity) {
+                case_capacity = case_capacity == 0 ? 4 : case_capacity * 2;
+                cases = realloc(cases, sizeof(SwitchCase*) * case_capacity);
+            }
+            cases[case_count++] = case_clause;
+        } else if (parser_match(parser, TOKEN_DEFAULT)) {
+            // Parse default clause
+            consume(parser, TOKEN_COLON, "Expect ':' after 'default'");
+            
+            // Parse statements until next case/default or end of switch
+            Stmt** body = NULL;
+            size_t body_count = 0;
+            size_t body_capacity = 0;
+            
+            while (!parser_check(parser, TOKEN_CASE) && 
+                   !parser_check(parser, TOKEN_DEFAULT) && 
+                   !parser_check(parser, TOKEN_RIGHT_BRACE) && 
+                   !parser_at_end(parser)) {
+                // Skip newlines
+                if (parser_match(parser, TOKEN_NEWLINE)) {
+                    continue;
+                }
+                Stmt* stmt = parse_statement(parser);
+                if (body_count >= body_capacity) {
+                    body_capacity = body_capacity == 0 ? 4 : body_capacity * 2;
+                    body = realloc(body, sizeof(Stmt*) * body_capacity);
+                }
+                body[body_count++] = stmt;
+            }
+            
+            default_body = body;
+            default_body_count = body_count;
+        } else {
+            parser_error_at_current(parser, "Expect 'case' or 'default' in switch body");
+            break;
+        }
+    }
+    
+    consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after switch body");
+    
+    return make_switch_stmt(discriminant, cases, case_count, default_body, default_body_count);
+}
+
+SwitchCase* parse_switch_case(Parser* parser) {
+    // For now, only implement simple value patterns
+    CasePattern** patterns = malloc(sizeof(CasePattern*));
+    size_t pattern_count = 1;
+    
+    patterns[0] = parse_case_pattern(parser);
+    
+    // TODO: Handle multiple patterns per case (comma-separated)
+    
+    consume(parser, TOKEN_COLON, "Expect ':' after case pattern");
+    
+    // Parse case body statements
+    Stmt** body = NULL;
+    size_t body_count = 0;
+    size_t body_capacity = 0;
+    bool has_break = false;
+    
+    while (!parser_check(parser, TOKEN_CASE) && 
+           !parser_check(parser, TOKEN_DEFAULT) && 
+           !parser_check(parser, TOKEN_RIGHT_BRACE) && 
+           !parser_at_end(parser)) {
+        // Skip newlines
+        if (parser_match(parser, TOKEN_NEWLINE)) {
+            continue;
+        }
+        Stmt* stmt = parse_statement(parser);
+        
+        // Check if this statement is a break
+        if (stmt->type == STMT_BREAK) {
+            has_break = true;
+        }
+        
+        if (body_count >= body_capacity) {
+            body_capacity = body_capacity == 0 ? 4 : body_capacity * 2;
+            body = realloc(body, sizeof(Stmt*) * body_capacity);
+        }
+        body[body_count++] = stmt;
+        
+        // Continue parsing statements even after break (they become unreachable code)
+        // The break flag will be used by the evaluator to stop execution
+    }
+    
+    return make_switch_case(patterns, pattern_count, NULL, body, body_count, has_break);
+}
+
+CasePattern* parse_case_pattern(Parser* parser) {
+    // Check for expression patterns first (>=, <=, ==, !=, >, <)
+    if (parser_check(parser, TOKEN_GREATER_EQUAL) || 
+        parser_check(parser, TOKEN_LESS_EQUAL) ||
+        parser_check(parser, TOKEN_EQUAL_EQUAL) ||
+        parser_check(parser, TOKEN_BANG_EQUAL) ||
+        parser_check(parser, TOKEN_GREATER) ||
+        parser_check(parser, TOKEN_LESS)) {
+        
+        TokenType op = parser_peek(parser).type;
+        parser_advance(parser); // consume the operator
+        
+        Expr* expr = parse_expression(parser);
+        return make_expression_pattern(op, expr);
+    }
+    
+    // Range patterns (e.g., 1..10, 'a'..'z')
+    // We need to look ahead to see if this is a range
+    if ((parser_check(parser, TOKEN_INTEGER) || parser_check(parser, TOKEN_FLOAT) || 
+         parser_check(parser, TOKEN_CHAR) || parser_check(parser, TOKEN_STRING)) &&
+        parser->current + 1 < parser->token_count && 
+        parser->tokens[parser->current + 1].type == TOKEN_DOT_DOT) {
+        
+        Expr* start = parse_primary(parser);  // Parse the start value
+        consume(parser, TOKEN_DOT_DOT, "Expect '..' in range pattern");
+        
+        bool inclusive = true;
+        if (parser_check(parser, TOKEN_DOT)) {
+            parser_advance(parser); // consume the third dot for exclusive range
+            inclusive = false;
+        }
+        
+        Expr* end = parse_primary(parser);    // Parse the end value
+        return make_range_pattern(start, end, inclusive);
+    }
+    
+    // Simple value patterns
+    if (parser_check(parser, TOKEN_INTEGER)) {
+        Token token = parser_advance(parser);
+        Value value = make_integer_value(token.literal.integer.num_type, token.literal.integer.value);
+        return make_value_pattern(value);
+    } else if (parser_check(parser, TOKEN_FLOAT)) {
+        Token token = parser_advance(parser);
+        Value value = make_float_value(token.literal.float_val);
+        return make_value_pattern(value);
+    } else if (parser_check(parser, TOKEN_STRING)) {
+        Token token = parser_advance(parser);
+        RefCountedString* rc_string = string_create(token.literal.string);
+        Value value = make_string_value(rc_string);
+        return make_value_pattern(value);
+    } else if (parser_check(parser, TOKEN_TRUE)) {
+        parser_advance(parser);
+        Value value = make_bool_value(true);
+        return make_value_pattern(value);
+    } else if (parser_check(parser, TOKEN_FALSE)) {
+        parser_advance(parser);
+        Value value = make_bool_value(false);
+        return make_value_pattern(value);
+    } else if (parser_check(parser, TOKEN_NIL)) {
+        parser_advance(parser);
+        Value value = make_nil_value();
+        return make_value_pattern(value);
+    } else if (parser_check(parser, TOKEN_TYPEOF)) {
+        // Type matching pattern: typeof(string), typeof(int), etc.
+        parser_advance(parser); // consume 'typeof'
+        consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'typeof'");
+        
+        ValueType value_type;
+        const char* type_name = NULL;
+        
+        if (parser_check(parser, TOKEN_IDENTIFIER)) {
+            Token type_token = parser_advance(parser);
+            type_name = type_token.identifier;
+        } else if (parser_check(parser, TOKEN_NIL)) {
+            parser_advance(parser);
+            type_name = "nil";
+        } else {
+            parser_error_at_current(parser, "Expect type name after 'typeof('");
+            consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after type name");
+            return make_wildcard_pattern();
+        }
+        
+        // Map type names to ValueType enum
+        if (strcmp(type_name, "string") == 0) {
+            value_type = VAL_STRING;
+        } else if (strcmp(type_name, "int") == 0 || strcmp(type_name, "integer") == 0) {
+            value_type = VAL_INTEGER;
+        } else if (strcmp(type_name, "float") == 0) {
+            value_type = VAL_FLOAT;
+        } else if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0) {
+            value_type = VAL_BOOL;
+        } else if (strcmp(type_name, "array") == 0) {
+            value_type = VAL_ARRAY;
+        } else if (strcmp(type_name, "table") == 0) {
+            value_type = VAL_TABLE;
+        } else if (strcmp(type_name, "function") == 0) {
+            value_type = VAL_FUNCTION;
+        } else if (strcmp(type_name, "nil") == 0) {
+            value_type = VAL_NIL;
+        } else {
+            parser_error_at_current(parser, "Unknown type name in typeof pattern");
+            consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after type name");
+            return make_wildcard_pattern();
+        }
+        
+        consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after type name");
+        return make_type_pattern(value_type);
+    } else {
+        parser_error_at_current(parser, "Expect literal value in case pattern");
+        return make_wildcard_pattern();
+    }
 }
 
 void free_parse_result(ParseResult* result) {

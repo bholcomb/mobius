@@ -1,0 +1,90 @@
+// Type pattern tests for switch statements
+
+func test_string_type(value) {
+    var result = "";
+    
+    switch (value) {
+        case typeof(string):
+            result = "is_string";
+            break;
+        case typeof(int):
+            result = "is_integer";
+            break;
+        case typeof(array):
+            result = "is_array";
+            break;
+        default:
+            result = "unknown_type";
+    }
+    
+    return result;
+}
+
+func test_numeric_types(value) {
+    var result = "";
+    
+    switch (value) {
+        case typeof(int):
+            result = "integer_type";
+            break;
+        case typeof(float):
+            result = "float_type";
+            break;
+        case typeof(bool):
+            result = "boolean_type";
+            break;
+        default:
+            result = "other_type";
+    }
+    
+    return result;
+}
+
+func test_complex_types(value) {
+    var result = "";
+    
+    switch (value) {
+        case typeof(array):
+            result = "array_type";
+            break;
+        case typeof(table):
+            result = "table_type";
+            break;
+        case typeof(function):
+            result = "function_type";
+            break;
+        case typeof(nil):
+            result = "nil_type";
+            break;
+        default:
+            result = "unknown";
+    }
+    
+    return result;
+}
+
+// Create test values
+var str_val = "hello";
+var int_val = 42;
+var float_val = 3.14;
+var bool_val = true;
+var array_val = [1, 2, 3];
+var table_val = {name: "test"};
+var nil_val = nil;
+
+// Run type pattern tests
+print("Testing switch type patterns:");
+
+print("String type: " + test_string_type(str_val));        // Should print: is_string
+print("Integer type: " + test_string_type(int_val));       // Should print: is_integer  
+print("Array type: " + test_string_type(array_val));       // Should print: is_array
+
+print("Integer numeric: " + test_numeric_types(int_val));  // Should print: integer_type
+print("Float numeric: " + test_numeric_types(float_val));  // Should print: float_type
+print("Boolean numeric: " + test_numeric_types(bool_val)); // Should print: boolean_type
+
+print("Array complex: " + test_complex_types(array_val));  // Should print: array_type
+print("Table complex: " + test_complex_types(table_val));  // Should print: table_type
+print("Nil complex: " + test_complex_types(nil_val));      // Should print: nil_type
+
+print("Type pattern tests completed.");

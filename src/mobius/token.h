@@ -49,6 +49,8 @@ typedef enum {
     TOKEN_LEFT_SHIFT,       // <<
     TOKEN_RIGHT_SHIFT,      // >>
     TOKEN_ARROW,            // ->
+    TOKEN_DOT_DOT,          // .. (range operator)
+    TOKEN_DOT_DOT_DOT,      // ... (rest operator)
 
     // Literals
     TOKEN_IDENTIFIER,       // variable names, function names, etc.
@@ -87,6 +89,7 @@ typedef enum {
     TOKEN_THIS,             // this
     TOKEN_TRUE,             // true
     TOKEN_TRY,              // try
+    TOKEN_TYPEOF,           // typeof (for type matching)
     TOKEN_CATCH,            // catch
     TOKEN_FINALLY,          // finally
     TOKEN_THROW,            // throw

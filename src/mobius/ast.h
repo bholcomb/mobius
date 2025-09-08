@@ -36,7 +36,9 @@ typedef enum {
     STMT_FOR,
     STMT_FUNCTION,
     STMT_CLASS,
-    STMT_RETURN
+    STMT_RETURN,
+    STMT_SWITCH,
+    STMT_BREAK
 } StmtType;
 
 // Forward declarations for AST structures (core types in value.h)
@@ -216,6 +218,90 @@ typedef struct {
     Expr* value;        // Can be NULL for bare return
 } ReturnStmt;
 
+// Pattern types for case matching
+typedef enum {
+    PATTERN_VALUE,             // Literal value: case 42:
+    PATTERN_EXPRESSION,        // Expression: case >= 10:
+    PATTERN_RANGE,             // Range: case 1..10:
+    PATTERN_TYPE,              // Type: case type(string):
+    PATTERN_ARRAY,             // Array destructuring: case [x, y]:
+    PATTERN_TABLE,             // Table destructuring: case {name, age}:
+    PATTERN_WILDCARD,          // Wildcard: case _:
+} PatternType;
+
+// Forward declarations for pattern structures
+typedef struct CasePattern CasePattern;
+
+// Array pattern element
+typedef struct ArrayPattern {
+    char* name;                // Variable name to bind (NULL for literals)
+    CasePattern* pattern;      // Nested pattern (NULL for simple binding)
+    bool is_rest;             // Whether this is a ...rest element
+} ArrayPattern;
+
+// Table pattern field
+typedef struct TablePattern {
+    char* key;                // Field key
+    char* bind_name;          // Variable name to bind (NULL to use key)
+    CasePattern* pattern;     // Nested pattern (NULL for simple binding)
+    bool is_optional;         // Whether field is optional
+} TablePattern;
+
+// Pattern matching structure
+struct CasePattern {
+    PatternType type;
+    union {
+        Value literal;          // For PATTERN_VALUE
+        struct {
+            TokenType op;       // >=, <=, ==, !=, etc.
+            Expr* expression;   // Right-hand side
+        } expr_pattern;
+        struct {
+            Expr* start;        // Start of range
+            Expr* end;          // End of range
+            bool inclusive;     // Whether end is inclusive
+        } range_pattern;
+        struct {
+            ValueType value_type; // Type to match
+        } type_pattern;
+        struct {
+            ArrayPattern* elements;
+            size_t element_count;
+            bool has_rest;      // Has ...rest pattern
+            char* rest_name;    // Name for rest elements
+        } array_pattern;
+        struct {
+            TablePattern* fields;
+            size_t field_count;
+            bool is_exhaustive; // Whether all fields must match
+        } table_pattern;
+    } as;
+};
+
+// Individual case clause
+typedef struct {
+    CasePattern** patterns;     // Array of patterns to match
+    size_t pattern_count;
+    Expr* guard;               // Optional guard expression (when clause)
+    Stmt** body;               // Case body statements
+    size_t body_count;
+    bool has_break;            // Whether case has explicit break
+} SwitchCase;
+
+// Switch statement AST node
+typedef struct {
+    Expr* discriminant;         // The value being switched on
+    SwitchCase** cases;         // Array of case clauses
+    size_t case_count;
+    Stmt** default_body;        // Default case body (optional)
+    size_t default_body_count;
+} SwitchStmt;
+
+// Break statement
+typedef struct {
+    Token keyword;              // The 'break' token for error reporting
+} BreakStmt;
+
 // Main statement structure
 struct Stmt {
     StmtType type;
@@ -231,6 +317,8 @@ struct Stmt {
         FunctionStmt function;
         ClassStmt class_stmt;
         ReturnStmt return_stmt;
+        SwitchStmt switch_stmt;
+        BreakStmt break_stmt;
     } as;
 };
 
@@ -260,6 +348,25 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
 Stmt* make_class_stmt(Token name, VariableExpr* superclass, 
                      FunctionStmt** methods, size_t method_count);
 Stmt* make_return_stmt(Token keyword, Expr* value);
+Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count,
+                      Stmt** default_body, size_t default_body_count);
+Stmt* make_break_stmt(Token keyword);
+
+// Pattern and case creation functions
+CasePattern* make_value_pattern(Value literal);
+CasePattern* make_expression_pattern(TokenType op, Expr* expression);
+CasePattern* make_range_pattern(Expr* start, Expr* end, bool inclusive);
+CasePattern* make_type_pattern(ValueType value_type);
+CasePattern* make_array_pattern(ArrayPattern* elements, size_t element_count, 
+                               bool has_rest, char* rest_name);
+CasePattern* make_table_pattern(TablePattern* fields, size_t field_count, bool is_exhaustive);
+CasePattern* make_wildcard_pattern(void);
+
+SwitchCase* make_switch_case(CasePattern** patterns, size_t pattern_count,
+                            Expr* guard, Stmt** body, size_t body_count, bool has_break);
+
+// Pattern cleanup function
+void free_case_pattern(CasePattern* pattern);
 
 // AST Reference Counting
 Expr* ast_retain_expr(Expr* expr);

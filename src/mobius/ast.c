@@ -432,6 +432,16 @@ void print_stmt(Stmt* stmt) {
             }
             printf(";");
             break;
+        case STMT_SWITCH:
+            printf("switch (");
+            if (stmt->as.switch_stmt.discriminant) {
+                print_expr(stmt->as.switch_stmt.discriminant);
+            }
+            printf(") { %zu cases }", stmt->as.switch_stmt.case_count);
+            break;
+        case STMT_BREAK:
+            printf("break");
+            break;
     }
 }
 
@@ -560,6 +570,51 @@ void free_stmt(Stmt* stmt) {
             if (stmt->as.return_stmt.value) {
                 free_expr(stmt->as.return_stmt.value);
             }
+            break;
+        case STMT_SWITCH:
+            if (stmt->as.switch_stmt.discriminant) {
+                free_expr(stmt->as.switch_stmt.discriminant);
+            }
+            // Free all case patterns and bodies
+            for (size_t i = 0; i < stmt->as.switch_stmt.case_count; i++) {
+                SwitchCase* case_clause = stmt->as.switch_stmt.cases[i];
+                if (case_clause) {
+                    // Free patterns
+                    for (size_t j = 0; j < case_clause->pattern_count; j++) {
+                        if (case_clause->patterns[j]) {
+                            free_case_pattern(case_clause->patterns[j]);
+                        }
+                    }
+                    if (case_clause->patterns) free(case_clause->patterns);
+                    
+                    // Free guard
+                    if (case_clause->guard) {
+                        free_expr(case_clause->guard);
+                    }
+                    
+                    // Free body
+                    for (size_t j = 0; j < case_clause->body_count; j++) {
+                        if (case_clause->body[j]) {
+                            free_stmt(case_clause->body[j]);
+                        }
+                    }
+                    if (case_clause->body) free(case_clause->body);
+                    
+                    free(case_clause);
+                }
+            }
+            if (stmt->as.switch_stmt.cases) free(stmt->as.switch_stmt.cases);
+            
+            // Free default body
+            for (size_t i = 0; i < stmt->as.switch_stmt.default_body_count; i++) {
+                if (stmt->as.switch_stmt.default_body[i]) {
+                    free_stmt(stmt->as.switch_stmt.default_body[i]);
+                }
+            }
+            if (stmt->as.switch_stmt.default_body) free(stmt->as.switch_stmt.default_body);
+            break;
+        case STMT_BREAK:
+            // Nothing to free for break statements
             break;
     }
     free(stmt);
@@ -733,6 +788,51 @@ void ast_release_stmt(Stmt* stmt) {
                     ast_release_expr(stmt->as.return_stmt.value);
                 }
                 break;
+            case STMT_SWITCH:
+                if (stmt->as.switch_stmt.discriminant) {
+                    ast_release_expr(stmt->as.switch_stmt.discriminant);
+                }
+                // Release all case patterns and bodies
+                for (size_t i = 0; i < stmt->as.switch_stmt.case_count; i++) {
+                    SwitchCase* case_clause = stmt->as.switch_stmt.cases[i];
+                    if (case_clause) {
+                        // Release patterns
+                        for (size_t j = 0; j < case_clause->pattern_count; j++) {
+                            if (case_clause->patterns[j]) {
+                                free_case_pattern(case_clause->patterns[j]);
+                            }
+                        }
+                        if (case_clause->patterns) free(case_clause->patterns);
+                        
+                        // Release guard
+                        if (case_clause->guard) {
+                            ast_release_expr(case_clause->guard);
+                        }
+                        
+                        // Release body
+                        for (size_t j = 0; j < case_clause->body_count; j++) {
+                            if (case_clause->body[j]) {
+                                ast_release_stmt(case_clause->body[j]);
+                            }
+                        }
+                        if (case_clause->body) free(case_clause->body);
+                        
+                        free(case_clause);
+                    }
+                }
+                if (stmt->as.switch_stmt.cases) free(stmt->as.switch_stmt.cases);
+                
+                // Release default body
+                for (size_t i = 0; i < stmt->as.switch_stmt.default_body_count; i++) {
+                    if (stmt->as.switch_stmt.default_body[i]) {
+                        ast_release_stmt(stmt->as.switch_stmt.default_body[i]);
+                    }
+                }
+                if (stmt->as.switch_stmt.default_body) free(stmt->as.switch_stmt.default_body);
+                break;
+            case STMT_BREAK:
+                // Nothing to release for break statements
+                break;
         }
         
         free(stmt);
@@ -770,4 +870,172 @@ void ast_release_expr_array(Expr** exprs, size_t count) {
     for (size_t i = 0; i < count; i++) {
         ast_release_expr(exprs[i]);
     }
+}
+
+// Switch statement creation functions
+Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count,
+                      Stmt** default_body, size_t default_body_count) {
+    Stmt* stmt = calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+    
+    stmt->type = STMT_SWITCH;
+    stmt->ref_count = 1;  // Initialize reference count
+    stmt->as.switch_stmt.discriminant = discriminant;
+    stmt->as.switch_stmt.cases = cases;
+    stmt->as.switch_stmt.case_count = case_count;
+    stmt->as.switch_stmt.default_body = default_body;
+    stmt->as.switch_stmt.default_body_count = default_body_count;
+    return stmt;
+}
+
+Stmt* make_break_stmt(Token keyword) {
+    Stmt* stmt = calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+    
+    stmt->type = STMT_BREAK;
+    stmt->ref_count = 1;  // Initialize reference count
+    stmt->as.break_stmt.keyword = keyword;
+    return stmt;
+}
+
+// Pattern creation functions
+CasePattern* make_value_pattern(Value literal) {
+    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    if (!pattern) return NULL;
+    
+    pattern->type = PATTERN_VALUE;
+    pattern->as.literal = literal;
+    return pattern;
+}
+
+CasePattern* make_expression_pattern(TokenType op, Expr* expression) {
+    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    if (!pattern) return NULL;
+    
+    pattern->type = PATTERN_EXPRESSION;
+    pattern->as.expr_pattern.op = op;
+    pattern->as.expr_pattern.expression = expression;
+    return pattern;
+}
+
+CasePattern* make_range_pattern(Expr* start, Expr* end, bool inclusive) {
+    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    if (!pattern) return NULL;
+    
+    pattern->type = PATTERN_RANGE;
+    pattern->as.range_pattern.start = start;
+    pattern->as.range_pattern.end = end;
+    pattern->as.range_pattern.inclusive = inclusive;
+    return pattern;
+}
+
+CasePattern* make_type_pattern(ValueType value_type) {
+    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    if (!pattern) return NULL;
+    
+    pattern->type = PATTERN_TYPE;
+    pattern->as.type_pattern.value_type = value_type;
+    return pattern;
+}
+
+CasePattern* make_array_pattern(ArrayPattern* elements, size_t element_count, 
+                               bool has_rest, char* rest_name) {
+    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    if (!pattern) return NULL;
+    
+    pattern->type = PATTERN_ARRAY;
+    pattern->as.array_pattern.elements = elements;
+    pattern->as.array_pattern.element_count = element_count;
+    pattern->as.array_pattern.has_rest = has_rest;
+    pattern->as.array_pattern.rest_name = rest_name;
+    return pattern;
+}
+
+CasePattern* make_table_pattern(TablePattern* fields, size_t field_count, bool is_exhaustive) {
+    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    if (!pattern) return NULL;
+    
+    pattern->type = PATTERN_TABLE;
+    pattern->as.table_pattern.fields = fields;
+    pattern->as.table_pattern.field_count = field_count;
+    pattern->as.table_pattern.is_exhaustive = is_exhaustive;
+    return pattern;
+}
+
+CasePattern* make_wildcard_pattern(void) {
+    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    if (!pattern) return NULL;
+    
+    pattern->type = PATTERN_WILDCARD;
+    return pattern;
+}
+
+SwitchCase* make_switch_case(CasePattern** patterns, size_t pattern_count,
+                            Expr* guard, Stmt** body, size_t body_count, bool has_break) {
+    SwitchCase* switch_case = calloc(1, sizeof(SwitchCase));
+    if (!switch_case) return NULL;
+    
+    switch_case->patterns = patterns;
+    switch_case->pattern_count = pattern_count;
+    switch_case->guard = guard;
+    switch_case->body = body;
+    switch_case->body_count = body_count;
+    switch_case->has_break = has_break;
+    return switch_case;
+}
+
+// Pattern cleanup function
+void free_case_pattern(CasePattern* pattern) {
+    if (!pattern) return;
+    
+    switch (pattern->type) {
+        case PATTERN_VALUE:
+            // Value patterns don't need special cleanup
+            break;
+        case PATTERN_EXPRESSION:
+            if (pattern->as.expr_pattern.expression) {
+                free_expr(pattern->as.expr_pattern.expression);
+            }
+            break;
+        case PATTERN_RANGE:
+            if (pattern->as.range_pattern.start) {
+                free_expr(pattern->as.range_pattern.start);
+            }
+            if (pattern->as.range_pattern.end) {
+                free_expr(pattern->as.range_pattern.end);
+            }
+            break;
+        case PATTERN_TYPE:
+            // Type patterns don't need special cleanup
+            break;
+        case PATTERN_ARRAY:
+            if (pattern->as.array_pattern.elements) {
+                for (size_t i = 0; i < pattern->as.array_pattern.element_count; i++) {
+                    ArrayPattern* elem = &pattern->as.array_pattern.elements[i];
+                    if (elem->name) free(elem->name);
+                    if (elem->pattern) free_case_pattern(elem->pattern);
+                }
+                free(pattern->as.array_pattern.elements);
+            }
+            if (pattern->as.array_pattern.rest_name) {
+                free(pattern->as.array_pattern.rest_name);
+            }
+            break;
+        case PATTERN_TABLE:
+            if (pattern->as.table_pattern.fields) {
+                for (size_t i = 0; i < pattern->as.table_pattern.field_count; i++) {
+                    TablePattern* field = &pattern->as.table_pattern.fields[i];
+                    if (field->key) free(field->key);
+                    if (field->bind_name) free(field->bind_name);
+                    if (field->pattern) free_case_pattern(field->pattern);
+                }
+                free(pattern->as.table_pattern.fields);
+            }
+            break;
+        case PATTERN_WILDCARD:
+            // Wildcard patterns don't need special cleanup
+            break;
+    }
+    
+    free(pattern);
 }

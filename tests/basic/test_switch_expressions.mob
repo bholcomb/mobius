@@ -1,0 +1,86 @@
+// Expression pattern tests for switch statements
+
+func test_greater_than() {
+    var score = 95;
+    var grade = "";
+    
+    switch (score) {
+        case >= 90:
+            grade = "A";
+            break;
+        case >= 80:
+            grade = "B";
+            break;
+        default:
+            grade = "F";
+    }
+    
+    return grade;
+}
+
+func test_less_than() {
+    var temperature = 15;
+    var description = "";
+    
+    switch (temperature) {
+        case <= 0:
+            description = "freezing";
+            break;
+        case <= 20:
+            description = "cold";
+            break;
+        case <= 30:
+            description = "warm";
+            break;
+        default:
+            description = "hot";
+    }
+    
+    return description;
+}
+
+func test_equality() {
+    var value = 42;
+    var result = "";
+    
+    switch (value) {
+        case == 42:
+            result = "exact_match";
+            break;
+        case != 42:
+            result = "not_match";
+            break;
+        default:
+            result = "unknown";
+    }
+    
+    return result;
+}
+
+func test_string_comparison() {
+    var name = "Charlie";
+    var category = "";
+    
+    switch (name) {
+        case > "M":
+            category = "second_half";
+            break;
+        case < "M":
+            category = "first_half";
+            break;
+        default:
+            category = "exactly_M";
+    }
+    
+    return category;
+}
+
+// Run expression pattern tests
+print("Testing switch expression patterns:");
+
+print("Greater than (95): " + test_greater_than());         // Should print: A
+print("Less than (15): " + test_less_than());              // Should print: cold  
+print("Equality (42): " + test_equality());                // Should print: exact_match
+print("String comparison (Charlie): " + test_string_comparison()); // Should print: first_half
+
+print("Expression pattern tests completed.");
