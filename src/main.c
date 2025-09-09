@@ -7,72 +7,6 @@
 #include "mobius/execution.h"
 #include "mobius/file_io.h"
 
-void test_interpreter_func() {
-    printf("Testing Mobius Interpreter\n");
-    printf("===========================\n\n");
-    
-    const char* test_source = 
-        "var x = 42;\n"
-        "var y = 3.14;\n"
-        "print(\"Starting values:\");\n"
-        "print(\"x =\", x, \"type:\", typeof(x));\n"
-        "print(\"y =\", y, \"type:\", typeof(y));\n"
-        "var z = x + y;\n"
-        "print(\"z = x + y =\", z, \"type:\", typeof(z));\n"
-        "x = x - 10;\n"
-        "print(\"After x = x - 10:\", x);\n"
-        "if (x > 30) {\n"
-        "    z = z * 2;\n"
-        "    print(\"z doubled:\", z);\n"
-        "}\n"
-        "print(\"Type conversions:\");\n"
-        "print(\"int(y) =\", int(y), \"type:\", typeof(int(y)));\n"
-        "print(\"float(x) =\", float(x), \"type:\", typeof(float(x)));\n"
-        "print(\"str(z) =\", str(z), \"type:\", typeof(str(z)));\n";
-    
-    printf("Source code:\n%s\n", test_source);
-    
-    // Initialize environment
-    init_global_environment();
-    
-    // Scan tokens
-    TokenArray tokens = scan_source(test_source);
-    printf("Scanned %zu tokens\n\n", tokens.count);
-    
-    // Parse AST
-    ParseResult parse_result = parse(tokens);
-    
-    if (parse_result.had_error) {
-        printf("Parser encountered errors!\n");
-        free_parse_result(&parse_result);
-        free_token_array(&tokens);
-        cleanup_global_environment();
-        return;
-    }
-    
-    printf("Parsed %zu statements successfully\n\n", parse_result.count);
-    
-    // Execute the program
-    printf("Executing program:\n");
-    printf("==================\n");
-    
-    EvalResult eval_result = evaluate_program(parse_result.statements, parse_result.count, global_env);
-    
-    if (is_error(eval_result)) {
-        printf("Runtime error during execution!\n");
-        print_runtime_error(eval_result.error);
-    } else {
-        printf("Program executed successfully!\n\n");
-        
-        printf("Final environment state:\n");
-        print_environment(global_env);
-    }
-    
-    // Cleanup
-    free_parse_result(&parse_result);
-    free_token_array(&tokens);
-    cleanup_global_environment();
-}
 
 int execute_file_with_backend(const char* filename, ExecutionBackend backend) {
     // Read the file
@@ -118,14 +52,11 @@ int main(int argc, char *argv[]) {
     // Parse command line arguments
     bool use_bytecode = false;
     const char* script_file = NULL;
-    bool test_interpreter = false;
     bool list_modules = false;
     
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--bytecode") == 0) {
             use_bytecode = true;
-        } else if (strcmp(argv[i], "--test-interpreter") == 0) {
-            test_interpreter = true;
         } else if (strcmp(argv[i], "--list-modules") == 0) {
             list_modules = true;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
@@ -133,7 +64,6 @@ int main(int argc, char *argv[]) {
             printf("Usage: %s [options] [script_file]\n", argv[0]);
             printf("\nOptions:\n");
             printf("  --bytecode         Use bytecode VM instead of AST tree-walker\n");
-            printf("  --test-interpreter Run built-in interpreter test\n");
             printf("  --list-modules     List loaded modules and functions\n");
             printf("  --help, -h         Show this help message\n");
             printf("\nIf no script file is provided, starts interactive REPL.\n");
@@ -190,10 +120,7 @@ int main(int argc, char *argv[]) {
     
     int result = 0;
     
-    if (test_interpreter) {
-        printf("Mobius Scripting Language Interpreter v0.1.0\n");
-        test_interpreter_func();
-    } else if (list_modules) {
+    if (list_modules) {
         print_loaded_modules(registry);
         print_available_functions(registry);
     } else if (script_file) {

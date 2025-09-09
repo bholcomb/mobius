@@ -1,38 +1,22 @@
 #include "environment.h"
 #include "ast.h"
+#include "table.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define INITIAL_ENV_CAPACITY 16
-#define LOAD_FACTOR_THRESHOLD 0.75
-
 // Global environment instance
 Environment* global_env = NULL;
-
-// Hash function for string keys
-size_t hash_string(const char* str, size_t capacity) {
-    size_t hash = 5381;  // djb2 hash algorithm
-    int c;
-    
-    while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c;  // hash * 33 + c
-    }
-    
-    return hash % capacity;
-}
 
 // Create a new environment
 Environment* create_environment(Environment* enclosing) {
     Environment* env = malloc(sizeof(Environment));
     if (!env) return NULL;
     
-    env->capacity = INITIAL_ENV_CAPACITY;
-    env->count = 0;
     env->enclosing = enclosing;
-    env->table = calloc(env->capacity, sizeof(EnvEntry*));
+    env->variables = create_table(INITIAL_TABLE_CAPACITY);
     
-    if (!env->table) {
+    if (!env->variables) {
         free(env);
         return NULL;
     }
@@ -44,111 +28,24 @@ Environment* create_environment(Environment* enclosing) {
 void free_environment(Environment* env) {
     if (!env) return;
     
-    // Free all entries in the hash table
-    for (size_t i = 0; i < env->capacity; i++) {
-        EnvEntry* entry = env->table[i];
-        while (entry) {
-            EnvEntry* next = entry->next;
-            free(entry->name);
-            free_value(entry->value);
-            free(entry);
-            entry = next;
-        }
-    }
-    
-    free(env->table);
+    // Free the table (this handles all variable cleanup)
+    free_table(env->variables);
     free(env);
 }
 
-// Resize the hash table when load factor gets too high
-static void resize_environment(Environment* env) {
-    size_t old_capacity = env->capacity;
-    EnvEntry** old_table = env->table;
-    
-    // Double the capacity
-    env->capacity *= 2;
-    env->table = calloc(env->capacity, sizeof(EnvEntry*));
-    env->count = 0;
-    
-    if (!env->table) {
-        // Revert on failure
-        env->capacity = old_capacity;
-        env->table = old_table;
-        return;
-    }
-    
-    // Rehash all existing entries
-    for (size_t i = 0; i < old_capacity; i++) {
-        EnvEntry* entry = old_table[i];
-        while (entry) {
-            EnvEntry* next = entry->next;
-            
-            // Rehash and insert into new table
-            size_t index = hash_string(entry->name, env->capacity);
-            entry->next = env->table[index];
-            env->table[index] = entry;
-            env->count++;
-            
-            entry = next;
-        }
-    }
-    
-    free(old_table);
-}
-
-// Find an entry in the environment (local search only)
-static EnvEntry* find_entry(Environment* env, const char* name) {
-    size_t index = hash_string(name, env->capacity);
-    EnvEntry* entry = env->table[index];
-    
-    while (entry) {
-        if (strcmp(entry->name, name) == 0) {
-            return entry;
-        }
-        entry = entry->next;
-    }
-    
-    return NULL;
-}
 
 // Define a variable in the current environment
 void define_variable(Environment* env, const char* name, Value value) {
     if (!env || !name) return;
     
-    // Check if we need to resize
-    if ((double)env->count / env->capacity > LOAD_FACTOR_THRESHOLD) {
-        resize_environment(env);
-    }
+    // Convert name to string Value for use as key
+    Value key = make_string_value_from_cstr(name);
     
-    // Check if variable already exists in current scope
-    EnvEntry* existing = find_entry(env, name);
-    if (existing) {
-        // Update existing variable - free old value and copy new one
-        free_value(existing->value);
-        existing->value = copy_value(value);
-        existing->is_defined = true;
-        return;
-    }
+    // Set the variable in the table (table_set handles overwriting)
+    table_set(env->variables, key, value);
     
-    // Create new entry
-    EnvEntry* entry = malloc(sizeof(EnvEntry));
-    if (!entry) return;
-    
-    entry->name = malloc(strlen(name) + 1);
-    if (!entry->name) {
-        free(entry);
-        return;
-    }
-    strcpy(entry->name, name);
-    
-    entry->value = copy_value(value);
-    entry->is_defined = true;
-    
-    // Insert into hash table
-    size_t index = hash_string(name, env->capacity);
-    entry->next = env->table[index];
-    env->table[index] = entry;
-    env->count++;
+    // Clean up the key (table_set copies it)
+    free_value(key);
 }
 
 // Get a variable value (searches up the scope chain)
@@ -157,17 +54,16 @@ Value get_variable(Environment* env, const char* name, bool* found) {
     
     Environment* current = env;
     while (current) {
-        EnvEntry* entry = find_entry(current, name);
-        if (entry) {
-            if (entry->is_defined) {
-                *found = true;
-                return entry->value;
-            } else {
-                // Variable declared but not initialized
-                *found = false;
-                return make_nil_value();
-            }
+        Value key = make_string_value_from_cstr(name);
+        
+        if (table_has_key(current->variables, key)) {
+            Value value = table_get(current->variables, key);
+            free_value(key);
+            *found = true;
+            return value;
         }
+        
+        free_value(key);
         current = current->enclosing;
     }
     
@@ -179,13 +75,15 @@ Value get_variable(Environment* env, const char* name, bool* found) {
 bool assign_variable(Environment* env, const char* name, Value value) {
     Environment* current = env;
     while (current) {
-        EnvEntry* entry = find_entry(current, name);
-        if (entry) {
-            free_value(entry->value);
-            entry->value = copy_value(value);
-            entry->is_defined = true;
+        Value key = make_string_value_from_cstr(name);
+        
+        if (table_has_key(current->variables, key)) {
+            table_set(current->variables, key, value);
+            free_value(key);
             return true;
         }
+        
+        free_value(key);
         current = current->enclosing;
     }
     
@@ -194,16 +92,9 @@ bool assign_variable(Environment* env, const char* name, Value value) {
 
 // Check if a variable is defined (searches up the scope chain)
 bool is_defined(Environment* env, const char* name) {
-    Environment* current = env;
-    while (current) {
-        EnvEntry* entry = find_entry(current, name);
-        if (entry) {
-            return entry->is_defined;
-        }
-        current = current->enclosing;
-    }
-    
-    return false;
+    bool found = false;
+    get_variable(env, name, &found);
+    return found;
 }
 
 // Print environment contents for debugging
@@ -213,20 +104,8 @@ void print_environment(Environment* env) {
         return;
     }
     
-    printf("Environment (count: %zu, capacity: %zu):\n", env->count, env->capacity);
-    for (size_t i = 0; i < env->capacity; i++) {
-        EnvEntry* entry = env->table[i];
-        while (entry) {
-            printf("  %s = ", entry->name);
-            if (entry->is_defined) {
-                print_value(entry->value);
-            } else {
-                printf("(undefined)");
-            }
-            printf("\n");
-            entry = entry->next;
-        }
-    }
+    printf("Environment (variables: %zu):\n", table_size(env->variables));
+    print_table(env->variables);
     
     if (env->enclosing) {
         printf("Enclosing:\n");
