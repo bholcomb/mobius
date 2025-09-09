@@ -170,12 +170,12 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
             }
             int_value = (int64_t)value.as.float32_val;
             conversion_needed = true;
-        } else if (value.type == VAL_FLOAT) {
+        } else if (value.type == VAL_FLOAT64) {
             if (config.strict_mode) {
                 result.error_message = mobius_strdup("Cannot convert float to integer in strict mode");
                 return result;
             }
-            int_value = (int64_t)value.as.float_val;
+            int_value = (int64_t)value.as.float64_val;
             conversion_needed = true;
         } else {
             result.error_message = malloc(256);
@@ -209,12 +209,12 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
             
             if (value.type == VAL_FLOAT32) {
                 float32_value = value.as.float32_val;
-            } else if (value.type == VAL_FLOAT) {
+            } else if (value.type == VAL_FLOAT64) {
                 if (config.strict_mode) {
                     result.error_message = mobius_strdup("Cannot convert float64 to float32 in strict mode");
                     return result;
                 }
-                float32_value = (float)value.as.float_val;
+                float32_value = (float)value.as.float64_val;
                 conversion_needed = true;
             } else if (value.type == VAL_INTEGER) {
                 if (config.strict_mode) {
@@ -234,8 +234,8 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
         } else { // MOBIUS_TYPE_FLOAT (float64)
             double float_value = 0.0;
             
-            if (value.type == VAL_FLOAT) {
-                float_value = value.as.float_val;
+            if (value.type == VAL_FLOAT64) {
+                float_value = value.as.float64_val;
             } else if (value.type == VAL_FLOAT32) {
                 float_value = (double)value.as.float32_val;
                 conversion_needed = true;

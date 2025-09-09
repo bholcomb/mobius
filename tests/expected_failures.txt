@@ -1,0 +1,22 @@
+# Tests that are expected to fail (one per line)
+# These tests are used to verify error handling works correctly
+
+tests/types/test_strict_simple.mob
+tests/types/test_type_errors.mob
+tests/types/test_strict_mode.mob
+tests/errors/test_simple_error.mob
+tests/types/test_float32_strict.mob
+
+# Individual error tests (broken out from test_errors.mob)
+tests/errors/test_undefined_variable.mob
+tests/errors/test_division_by_zero.mob
+tests/errors/test_wrong_argument_count.mob
+tests/errors/test_too_few_arguments.mob
+tests/errors/test_undefined_function.mob
+tests/errors/test_errors.mob
+tests/errors/simple_errors.mob
+tests/errors/test_table_comparison_no_metamethod.mob
+tests/errors/test_arithmetic_no_metamethod.mob
+tests/errors/test_semicolon_required.mob
+tests/errors/test_nested_stack_trace.mob
+tests/integration/test_load_errors.mob

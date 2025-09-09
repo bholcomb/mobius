@@ -26,8 +26,6 @@ typedef struct RefCountedString {
 // Dynamic array structure with reference counting (defined after Value)
 struct ArrayValue;
 
-// Forward declaration for bytecode function (defined in bytecode.h)
-struct BytecodeFunction;
 
 // Value types for literals 
 typedef enum {
@@ -35,13 +33,11 @@ typedef enum {
     VAL_BOOL,
     VAL_INTEGER,
     VAL_FLOAT32,
-    VAL_FLOAT,
+    VAL_FLOAT64,
     VAL_STRING,
     VAL_CHAR,
     VAL_ARRAY,
-    VAL_FUNCTION,           // AST function (for AST evaluation)
-    VAL_BYTECODE_FUNCTION,  // Bytecode function (for bytecode execution)
-    VAL_BUILTIN_FUNCTION,   // Builtin C function (for VM builtins)
+    VAL_FUNCTION,           // Function (AST or builtin)
     VAL_TABLE,
     VAL_USERDATA,
     VAL_ENUM
@@ -50,11 +46,6 @@ typedef enum {
 // Forward declaration for userdata destructor
 typedef void (*UserdataDestructor)(void* ptr);
 
-// Forward declaration
-struct MobiusVM;
-
-// VM Builtin function typedef
-typedef void (*VMBuiltinFunction)(struct MobiusVM* vm, int arg_count, void* result);
 
 // Type system enums (for type annotations)
 typedef enum {
@@ -92,13 +83,11 @@ typedef struct {
             } value;
         } integer;
         float float32_val;
-        double float_val;
+        double float64_val;
         RefCountedString* string;
         char character;
         ArrayValue* array;
-        MobiusFunction* function;               // AST function
-        struct BytecodeFunction* bytecode_func;  // Bytecode function
-        VMBuiltinFunction builtin_func;         // VM Builtin C function
+        MobiusFunction* function;               // Function (AST or builtin)
         Table* table;
         struct {
             void* ptr;                        // Opaque pointer to user data

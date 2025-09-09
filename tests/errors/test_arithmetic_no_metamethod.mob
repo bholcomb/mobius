@@ -1,0 +1,9 @@
+// Test arithmetic without metamethods (should fail)
+print("Testing arithmetic without metamethods...");
+
+var table1 = {value: 10};
+var table2 = {value: 5};
+
+print("table1 + table2 should fail:");
+var result = table1 + table2; // This should cause a runtime error
+print("Result:", result);

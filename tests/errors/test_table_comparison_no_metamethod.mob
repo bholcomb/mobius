@@ -1,0 +1,14 @@
+// Test table comparison without metamethod - should fail
+print("Testing table comparison without metamethod...");
+
+// Create tables without comparison metamethods
+var table1 = {value: 10};
+var table2 = {value: 5};
+
+print("Table1:", table1);
+print("Table2:", table2);
+
+// This should fail - no __lt metamethod defined
+print("Attempting table1 < table2 (should error):");
+var result = table1 < table2;
+print("This should not print");

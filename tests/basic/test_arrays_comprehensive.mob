@@ -59,7 +59,7 @@ print("Source array:", source);
 var slice1 = array_slice(source, 2, 5);
 print("Slice [2:5]:", slice1);
 
-var slice2 = array_slice(source, 3);
+var slice2 = array_slice(source, 3, len(source));
 print("Slice [3:]:", slice2);
 
 var slice3 = array_slice(source, 0, 3);

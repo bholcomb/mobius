@@ -10,6 +10,7 @@
 // Forward declaration for plugin system
 typedef struct ModuleRegistry ModuleRegistry;
 
+
 // Global type checking configuration (TypeCheckConfig defined in types.h)
 extern TypeCheckConfig global_type_config;
 
@@ -38,7 +39,8 @@ typedef struct {
 
 // Evaluation result
 typedef struct {
-    Value value;
+    Value value;        // For traditional AST evaluation
+    int return_count;   // Number of values pushed onto stack (for library functions)
     bool has_error;
     bool has_returned;  // Flag to indicate if a return statement was executed
     bool has_break;     // Flag to indicate if a break statement was executed
@@ -46,20 +48,18 @@ typedef struct {
     RuntimeError error;
 } EvalResult;
 
-// Built-in function type - now takes environment like user functions
-typedef EvalResult (*BuiltinFunction)(Environment* env, Value* args, size_t arg_count);
-
-// Built-in function entry
-typedef struct {
-    const char* name;
-    BuiltinFunction function;
-    size_t arity;  // Expected number of arguments (-1 for variadic)
-} BuiltinEntry;
+// Library function type (for builtin function interface)
+// Uses EvalResult.return_count to indicate number of values pushed onto stack
+// Uses EvalResult.has_error and EvalResult.error for error handling
+typedef EvalResult (*LibraryFunction)(Environment* env, int arg_count);
 
 // Main evaluation functions
 EvalResult evaluate_expr(Expr* expr, Environment* env);
 EvalResult evaluate_stmt(Stmt* stmt, Environment* env);
 EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env);
+
+// Stack-based evaluation functions (NEW)
+EvalResult evaluate_expr_stack(Expr* expr, Environment* env);
 
 // Plugin-aware evaluation
 EvalResult evaluate_expr_with_registry(Expr* expr, Environment* env, ModuleRegistry* registry);
@@ -93,9 +93,9 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env);
 // Note: Built-in functions moved to stdlib.h/stdlib.c
 
 // Plugin-aware function management
-BuiltinFunction lookup_builtin(const char* name);
-BuiltinFunction lookup_plugin_function(ModuleRegistry* registry, const char* name);
-BuiltinFunction lookup_qualified_plugin_function(ModuleRegistry* registry, 
+LibraryFunction lookup_builtin(const char* name);
+LibraryFunction lookup_plugin_function(ModuleRegistry* registry, const char* name);
+LibraryFunction lookup_qualified_plugin_function(ModuleRegistry* registry, 
                                                 const char* module_name, 
                                                 const char* function_name);
 
@@ -104,7 +104,8 @@ void set_global_module_registry(ModuleRegistry* registry);
 ModuleRegistry* get_global_module_registry(void);
 
 // Utility functions
-EvalResult make_success(Value value);
+EvalResult make_success(int return_count);        // For library functions using stack-based returns
+EvalResult make_success_with_value(Value value);  // For AST evaluation that returns values traditionally
 EvalResult make_error(const char* message, int line, int column);
 EvalResult make_error_detailed(const char* message, const char* suggestion, 
                               ErrorCategory category, int line, int column,

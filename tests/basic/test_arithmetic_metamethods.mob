@@ -1,19 +1,42 @@
-// Test arithmetic metamethods
-print("=== Testing Arithmetic Metamethods ===");
+// Test basic metatable infrastructure
+print("=== Testing Basic Metatable Infrastructure ===");
 
-// Create tables without metamethods first
+// Define some functions to use as metamethods
+func add_handler(a, b) {
+    return {value: a.value + b.value};
+}
+
+func sub_handler(a, b) {
+    return {value: a.value - b.value};
+}
+
+// Create metatable with metamethods  
+var meta = {
+    ["__add"] = add_handler,
+    ["__sub"] = sub_handler,
+    ["__index"] = {fallback: "default_value"}
+};
+
+// Create test table
 var table1 = {value: 10};
-var table2 = {value: 5};
 
-print("Table1:", table1);
-print("Table2:", table2);
+print("Table:", table1);
+print("Metatable:", meta);
 
-// Test that arithmetic fails without metamethods
-print("Testing arithmetic without metamethods...");
+// Test setmetatable/getmetatable
+setmetatable(table1, meta);
+var retrieved = getmetatable(table1);
 
-// This should fail
-print("table1 + table2 should fail:");
-var result = table1 + table2;
-print("Result:", result);
+print("Set metatable successfully");
+print("Retrieved metatable:", retrieved);
 
-print("=== Arithmetic metamethod tests completed! ===");
+// Test that metamethods are accessible
+print("Checking metamethod access:");
+print("Has __add metamethod:", retrieved["__add"]);
+print("Has __index metamethod:", retrieved["__index"]);
+
+// Test __index metamethod (this should work)
+print("Testing __index metamethod:");
+print("table1.fallback:", table1.fallback);  // Should get "default_value" via __index
+
+print("=== Basic metatable tests completed! ===");

@@ -286,11 +286,11 @@ TypeConversionResult validate_and_convert_type(Value value, TypeInfo expected_ty
                 } else {
                     result.error_message = strdup("Value out of range for int32");
                 }
-            } else if (value.type == VAL_FLOAT) {
+            } else if (value.type == VAL_FLOAT64) {
                 // Convert float to int32 with range checking
-                if (value.as.float_val >= INT32_MIN && value.as.float_val <= INT32_MAX) {
+                if (value.as.float64_val >= INT32_MIN && value.as.float64_val <= INT32_MAX) {
                     result.success = true;
-                    result.converted_value = make_integer_value(NUM_INT32, (int64_t)value.as.float_val);
+                    result.converted_value = make_integer_value(NUM_INT32, (int64_t)value.as.float64_val);
                 } else {
                     result.error_message = strdup("Float value out of range for int32");
                 }

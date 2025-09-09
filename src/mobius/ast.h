@@ -46,15 +46,15 @@ typedef enum {
 
 // Forward declarations for AST structures (core types in value.h)
 
-// Function representation in AST (for parsing and AST evaluation)
+// Function representation (AST functions only - builtins are loaded as regular functions)
 struct MobiusFunction {
-    char* name;           // Function name (owned string)
-    char** param_names;   // Parameter names (owned strings)
-    size_t param_count;
-    Stmt** body;          // AST statements
-    size_t body_count;
+    char* name;               // Function name (owned string)
+    char** param_names;       // Parameter names (owned strings)
+    size_t param_count;       // Parameter count
+    Stmt** body;              // AST statements
+    size_t body_count;        // Number of statements in body
     struct Environment* closure;  // Lexical scope
-    int ref_count;        // Reference counter for memory management
+    int ref_count;            // Reference counter for memory management
 };
 
 // Table entry for hash table

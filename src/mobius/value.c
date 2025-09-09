@@ -2,7 +2,6 @@
 #include "table.h"
 #include "ast.h"  // For AST reference counting functions
 #include "token.h"  // For token copying functions
-#include "bytecode.h"  // For bytecode function management
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,8 +49,8 @@ Value make_float32_value(float val) {
 
 Value make_float_value(double val) {
     Value value = {0};
-    value.type = VAL_FLOAT;
-    value.as.float_val = val;
+    value.type = VAL_FLOAT64;
+    value.as.float64_val = val;
     return value;
 }
 
@@ -127,7 +126,7 @@ bool is_truthy(Value value) {
             }
         }
         case VAL_FLOAT32: return value.as.float32_val != 0.0f;
-        case VAL_FLOAT: return value.as.float_val != 0.0;
+        case VAL_FLOAT64: return value.as.float64_val != 0.0;
         case VAL_STRING: return value.as.string != NULL && string_length(value.as.string) > 0;
         case VAL_CHAR: return value.as.character != '\0';
         case VAL_ARRAY: return value.as.array != NULL && array_length(value.as.array) > 0;
@@ -141,15 +140,15 @@ bool is_truthy(Value value) {
 
 bool values_equal(Value a, Value b) {
     // Handle numeric type coercion for equality
-    if ((a.type == VAL_INTEGER || a.type == VAL_FLOAT32 || a.type == VAL_FLOAT) &&
-        (b.type == VAL_INTEGER || b.type == VAL_FLOAT32 || b.type == VAL_FLOAT)) {
+    if ((a.type == VAL_INTEGER || a.type == VAL_FLOAT32 || a.type == VAL_FLOAT64) &&
+        (b.type == VAL_INTEGER || b.type == VAL_FLOAT32 || b.type == VAL_FLOAT64)) {
         
         // Convert both values to double for comparison
         double a_val = 0.0, b_val = 0.0;
         
         // Convert a to double
-        if (a.type == VAL_FLOAT) {
-            a_val = a.as.float_val;
+        if (a.type == VAL_FLOAT64) {
+            a_val = a.as.float64_val;
         } else if (a.type == VAL_FLOAT32) {
             a_val = (double)a.as.float32_val;
         } else if (a.type == VAL_INTEGER) {
@@ -167,8 +166,8 @@ bool values_equal(Value a, Value b) {
         }
         
         // Convert b to double
-        if (b.type == VAL_FLOAT) {
-            b_val = b.as.float_val;
+        if (b.type == VAL_FLOAT64) {
+            b_val = b.as.float64_val;
         } else if (b.type == VAL_FLOAT32) {
             b_val = (double)b.as.float32_val;
         } else if (b.type == VAL_INTEGER) {
@@ -236,10 +235,20 @@ void print_value(Value value) {
             }
             break;
         case VAL_FLOAT32:
-            printf("%g", value.as.float32_val);
+            // Use %g but ensure at least one decimal place for whole numbers
+            if (value.as.float32_val == (float)(int)value.as.float32_val) {
+                printf("%.1f", value.as.float32_val);
+            } else {
+                printf("%g", value.as.float32_val);
+            }
             break;
-        case VAL_FLOAT:
-            printf("%g", value.as.float_val);
+        case VAL_FLOAT64:
+            // Use %g but ensure at least one decimal place for whole numbers
+            if (value.as.float64_val == (double)(long long)value.as.float64_val) {
+                printf("%.1f", value.as.float64_val);
+            } else {
+                printf("%g", value.as.float64_val);
+            }
             break;
         case VAL_STRING:
             printf("%s", value.as.string ? string_data(value.as.string) : "(null)");
@@ -326,12 +335,22 @@ char* value_to_string(Value value) {
             if (result) strcpy(result, buffer);
             break;
         case VAL_FLOAT32:
-            snprintf(buffer, sizeof(buffer), "%g", value.as.float32_val);
+            // Use %g but ensure at least one decimal place for whole numbers
+            if (value.as.float32_val == (float)(int)value.as.float32_val) {
+                snprintf(buffer, sizeof(buffer), "%.1f", value.as.float32_val);
+            } else {
+                snprintf(buffer, sizeof(buffer), "%g", value.as.float32_val);
+            }
             result = malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
-        case VAL_FLOAT:
-            snprintf(buffer, sizeof(buffer), "%g", value.as.float_val);
+        case VAL_FLOAT64:
+            // Use %g but ensure at least one decimal place for whole numbers
+            if (value.as.float64_val == (double)(long long)value.as.float64_val) {
+                snprintf(buffer, sizeof(buffer), "%.1f", value.as.float64_val);
+            } else {
+                snprintf(buffer, sizeof(buffer), "%g", value.as.float64_val);
+            }
             result = malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
@@ -400,13 +419,11 @@ const char* value_type_name(ValueType type) {
         case VAL_BOOL: return "bool";
         case VAL_INTEGER: return "integer";
         case VAL_FLOAT32: return "float32";
-        case VAL_FLOAT: return "float";
+        case VAL_FLOAT64: return "float";
         case VAL_STRING: return "string";
         case VAL_CHAR: return "char";
         case VAL_ARRAY: return "array";
         case VAL_FUNCTION: return "function";
-        case VAL_BYTECODE_FUNCTION: return "function";
-        case VAL_BUILTIN_FUNCTION: return "function";
         case VAL_TABLE: return "table";
         case VAL_USERDATA: return "userdata";
         case VAL_ENUM: return "enum";
@@ -425,15 +442,8 @@ Value copy_value(Value value) {
         ArrayValue* retained_array = array_retain(value.as.array);
         return make_array_value(retained_array);
     } else if (value.type == VAL_FUNCTION && value.as.function) {
-        // For AST functions, increment reference count (shared ownership)
+        // For functions (both AST and builtin), increment reference count (shared ownership)
         value.as.function->ref_count++;
-        return value;
-    } else if (value.type == VAL_BYTECODE_FUNCTION && value.as.bytecode_func) {
-        // For bytecode functions, increment reference count (shared ownership)
-        value.as.bytecode_func->ref_count++;
-        return value;
-    } else if (value.type == VAL_BUILTIN_FUNCTION) {
-        // Builtin functions don't need reference counting - they're static
         return value;
     } else if (value.type == VAL_TABLE && value.as.table) {
         // For tables, increment reference count (shared ownership)
@@ -482,15 +492,10 @@ void free_value(Value value) {
                 }
                 free(func->param_names);
             }
-            
-            
             // Note: don't free closure environment - it's managed separately
+            
             free(func);
         }
-    } else if (value.type == VAL_BYTECODE_FUNCTION && value.as.bytecode_func) {
-        bytecode_function_free(value.as.bytecode_func);
-    } else if (value.type == VAL_BUILTIN_FUNCTION) {
-        // Builtin functions are static - no cleanup needed
     } else if (value.type == VAL_TABLE && value.as.table) {
         Table* table = value.as.table;
         table->ref_count--;

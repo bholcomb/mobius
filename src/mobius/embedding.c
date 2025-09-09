@@ -330,7 +330,7 @@ bool mobius_is_integer(const MobiusValue* value) {
 }
 
 bool mobius_is_float(const MobiusValue* value) {
-    return value && value->internal_value.type == VAL_FLOAT;
+    return value && value->internal_value.type == VAL_FLOAT64;
 }
 
 bool mobius_is_string(const MobiusValue* value) {
@@ -357,8 +357,8 @@ int64_t mobius_to_integer(const MobiusValue* value) {
 }
 
 double mobius_to_float(const MobiusValue* value) {
-    if (!value || value->internal_value.type != VAL_FLOAT) return 0.0;
-    return value->internal_value.as.float_val;
+    if (!value || value->internal_value.type != VAL_FLOAT64) return 0.0;
+    return value->internal_value.as.float64_val;
 }
 
 const char* mobius_to_string(const MobiusValue* value) {
@@ -400,8 +400,8 @@ int64_t mobius_convert_to_integer(const MobiusValue* value) {
     switch (value->internal_value.type) {
         case VAL_INTEGER:
             return value->internal_value.as.integer.value.i64;
-        case VAL_FLOAT:
-            return (int64_t)value->internal_value.as.float_val;
+        case VAL_FLOAT64:
+            return (int64_t)value->internal_value.as.float64_val;
         case VAL_BOOL:
             return value->internal_value.as.boolean ? 1 : 0;
         default:
@@ -413,8 +413,8 @@ double mobius_convert_to_float(const MobiusValue* value) {
     if (!value) return 0.0;
     
     switch (value->internal_value.type) {
-        case VAL_FLOAT:
-            return value->internal_value.as.float_val;
+        case VAL_FLOAT64:
+            return value->internal_value.as.float64_val;
         case VAL_INTEGER:
             return (double)value->internal_value.as.integer.value.i64;
         case VAL_BOOL:
