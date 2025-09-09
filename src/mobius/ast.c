@@ -243,19 +243,6 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
     return stmt;
 }
 
-Stmt* make_class_stmt(Token name, VariableExpr* superclass, 
-                     FunctionStmt** methods, size_t method_count) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
-    if (!stmt) return NULL;
-    
-    stmt->type = STMT_CLASS;
-    stmt->ref_count = 1;  // Initialize reference count
-    stmt->as.class_stmt.name = name;
-    stmt->as.class_stmt.superclass = superclass;
-    stmt->as.class_stmt.methods = methods;
-    stmt->as.class_stmt.method_count = method_count;
-    return stmt;
-}
 
 Stmt* make_return_stmt(Token keyword, Expr* value) {
     Stmt* stmt = calloc(1, sizeof(Stmt));
@@ -457,13 +444,6 @@ void print_stmt(Stmt* stmt) {
             }
             printf(") { ... }");
             break;
-        case STMT_CLASS:
-            printf("class %s", stmt->as.class_stmt.name.identifier ? stmt->as.class_stmt.name.identifier : "unknown");
-            if (stmt->as.class_stmt.superclass) {
-                printf(" < %s", stmt->as.class_stmt.superclass->name.identifier ? stmt->as.class_stmt.superclass->name.identifier : "unknown");
-            }
-            printf(" { ... }");
-            break;
         case STMT_RETURN:
             printf("return");
             if (stmt->as.return_stmt.value) {
@@ -612,15 +592,6 @@ void free_stmt(Stmt* stmt) {
                 free_stmt(stmt->as.function.body[i]);
             }
             if (stmt->as.function.body) free(stmt->as.function.body);
-            break;
-        case STMT_CLASS:
-            if (stmt->as.class_stmt.superclass) {
-                free_expr((Expr*)stmt->as.class_stmt.superclass);
-            }
-            for (size_t i = 0; i < stmt->as.class_stmt.method_count; i++) {
-                free_stmt((Stmt*)stmt->as.class_stmt.methods[i]);
-            }
-            if (stmt->as.class_stmt.methods) free(stmt->as.class_stmt.methods);
             break;
         case STMT_RETURN:
             if (stmt->as.return_stmt.value) {
@@ -846,17 +817,6 @@ void ast_release_stmt(Stmt* stmt) {
                 }
                 if (stmt->as.function.params) {
                     free(stmt->as.function.params);
-                }
-                break;
-            case STMT_CLASS:
-                if (stmt->as.class_stmt.superclass) {
-                    ast_release_expr((Expr*)stmt->as.class_stmt.superclass);
-                }
-                if (stmt->as.class_stmt.methods) {
-                    for (size_t i = 0; i < stmt->as.class_stmt.method_count; i++) {
-                        ast_release_stmt((Stmt*)stmt->as.class_stmt.methods[i]);
-                    }
-                    free(stmt->as.class_stmt.methods);
                 }
                 break;
             case STMT_RETURN:

@@ -158,7 +158,6 @@ void synchronize(Parser* parser) {
         if (parser_match(parser, TOKEN_NEWLINE)) continue;
         
         switch (parser_peek(parser).type) {
-            case TOKEN_CLASS:
             case TOKEN_FUNC:
             case TOKEN_VAR:
             case TOKEN_FOR:

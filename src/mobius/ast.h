@@ -36,7 +36,6 @@ typedef enum {
     STMT_WHILE,
     STMT_FOR,
     STMT_FUNCTION,
-    STMT_CLASS,
     STMT_RETURN,
     STMT_SWITCH,
     STMT_BREAK,
@@ -218,12 +217,6 @@ typedef struct {
     size_t body_count;
 } FunctionStmt;
 
-typedef struct {
-    Token name;
-    VariableExpr* superclass;  // Can be NULL
-    FunctionStmt** methods;    // Array of method declarations
-    size_t method_count;
-} ClassStmt;
 
 typedef struct {
     Token keyword;      // The 'return' token for error reporting
@@ -354,7 +347,6 @@ struct Stmt {
         WhileStmt while_stmt;
         ForStmt for_stmt;
         FunctionStmt function;
-        ClassStmt class_stmt;
         ReturnStmt return_stmt;
         SwitchStmt switch_stmt;
         BreakStmt break_stmt;
@@ -388,8 +380,6 @@ Stmt* make_while_stmt(Expr* condition, Stmt* body);
 Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* body);
 Stmt* make_function_stmt(Token name, Token* params, size_t param_count, 
                         Stmt** body, size_t body_count);
-Stmt* make_class_stmt(Token name, VariableExpr* superclass, 
-                     FunctionStmt** methods, size_t method_count);
 Stmt* make_return_stmt(Token keyword, Expr* value);
 Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count,
                       Stmt** default_body, size_t default_body_count);
