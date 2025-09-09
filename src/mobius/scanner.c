@@ -1,4 +1,5 @@
 #include "scanner.h"
+#include "value.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -188,14 +189,16 @@ Token scan_string(Scanner* scanner) {
     // Create string token (without quotes)
     Token token = make_simple_token(scanner, TOKEN_STRING);
     
-    // TODO: Process escape sequences and create actual string value
-    // For now, just store the raw string content
+    // Allocate memory for string content (without quotes)
+    // This memory will be freed by free_token() when the token is cleaned up
     size_t content_length = scanner->current - scanner->start - 2; // -2 for quotes
     char* string_content = malloc(content_length + 1);
     if (string_content) {
         strncpy(string_content, scanner->start + 1, content_length);
         string_content[content_length] = '\0';
         token.literal.string = string_content;
+    } else {
+        token.literal.string = NULL;
     }
     
     return token;
@@ -261,14 +264,14 @@ Token scan_number(Scanner* scanner) {
                                scanner->column - (int)(scanner->current - scanner->start),
                                value);
     } else {
-        // For now, assume 32-bit signed integers
+        // Use 64-bit signed integers by default (unless user specifies type suffixes)
         // TODO: Implement type suffixes (i8, u8, i16, etc.)
         long long value = strtoll(scanner->start, NULL, 10);
         return make_integer_token(scanner->start,
                                  (int)(scanner->current - scanner->start),
                                  scanner->line,
                                  scanner->column - (int)(scanner->current - scanner->start),
-                                 NUM_INT32, value);
+                                 NUM_INT64, value);
     }
 }
 

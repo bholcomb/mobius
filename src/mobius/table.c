@@ -59,6 +59,9 @@ size_t hash_value(Value value, size_t capacity) {
         case VAL_FUNCTION:
             hash = (size_t)(uintptr_t)value.as.function;
             break;
+        case VAL_BYTECODE_FUNCTION:
+            hash = (size_t)(uintptr_t)value.as.bytecode_func;
+            break;
         case VAL_TABLE:
             hash = (size_t)(uintptr_t)value.as.table;
             break;
@@ -89,6 +92,7 @@ bool values_equal_for_table(Value a, Value b) {
         case VAL_CHAR: return a.as.character == b.as.character;
         case VAL_ARRAY: return a.as.array == b.as.array;  // Reference equality
         case VAL_FUNCTION: return a.as.function == b.as.function;
+        case VAL_BYTECODE_FUNCTION: return a.as.bytecode_func == b.as.bytecode_func;
         case VAL_TABLE: return a.as.table == b.as.table;
         case VAL_USERDATA: 
             // Userdata equality: same pointer AND same type
@@ -320,11 +324,29 @@ Table* get_metatable(Table* table) {
     return table ? table->metatable : NULL;
 }
 
-void print_table(Table* table) {
+void print_table_safe(Table* table, Table** visited, int* visited_count, int max_depth) {
     if (!table) {
         printf("(null table)");
         return;
     }
+    
+    // Check for circular reference
+    for (int i = 0; i < *visited_count; i++) {
+        if (visited[i] == table) {
+            printf("{...circular...}");
+            return;
+        }
+    }
+    
+    // Check max depth
+    if (*visited_count >= max_depth) {
+        printf("{...depth limit...}");
+        return;
+    }
+    
+    // Add to visited list
+    visited[*visited_count] = table;
+    (*visited_count)++;
     
     printf("{");
     bool first = true;
@@ -358,16 +380,36 @@ void print_table(Table* table) {
                 }
             } else {
                 printf("[");
-                print_value(table->entries[i].key);
+                // For non-string keys, check if they are tables too
+                if (table->entries[i].key.type == VAL_TABLE) {
+                    print_table_safe(table->entries[i].key.as.table, visited, visited_count, max_depth);
+                } else {
+                    print_value(table->entries[i].key);
+                }
                 printf("]");
             }
             
             printf(": ");
-            print_value(table->entries[i].value);
+            // For values, use safe printing for nested tables
+            if (table->entries[i].value.type == VAL_TABLE) {
+                print_table_safe(table->entries[i].value.as.table, visited, visited_count, max_depth);
+            } else {
+                print_value(table->entries[i].value);
+            }
         }
     }
     
     printf("}");
+    
+    // Remove from visited list
+    (*visited_count)--;
+}
+
+void print_table(Table* table) {
+    // Use safe printing with reasonable limits
+    Table* visited[100];  // Allow up to 100 nested tables
+    int visited_count = 0;
+    print_table_safe(table, visited, &visited_count, 100);
 }
 
 void print_table_debug(Table* table) {

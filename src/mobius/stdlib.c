@@ -5,6 +5,7 @@
 #include "scanner.h"
 #include "parser.h"
 #include "evaluator.h"
+#include "module_registry.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1302,4 +1303,42 @@ void print_function_help(const char* function_name) {
     
     printf("Unknown function: %s\n", function_name);
     printf("Use ':help' to see all available functions.\n");
+}
+
+EvalResult builtin_import(Environment* env, Value* args, size_t arg_count) {
+    (void)env;  // Unused in bytecode context
+    
+    if (arg_count != 1) {
+        return make_error("import() expects exactly 1 argument", 0, 0);
+    }
+    
+    if (args[0].type != VAL_STRING) {
+        return make_error("import() expects a string argument", 0, 0);
+    }
+    
+    const char* module_name = args[0].as.string->data;
+    
+    // Get the global module registry
+    ModuleRegistry* registry = get_global_module_registry();
+    if (!registry) {
+        return make_error("Module registry not initialized", 0, 0);
+    }
+    
+    // Check if module is already loaded
+    if (is_module_loaded(registry, module_name)) {
+        // Module already loaded, this is fine - just return success
+        return make_success(make_nil_value());
+    }
+    
+    // Try to load the module by name
+    PluginLoadResult result = load_module_by_name(registry, module_name);
+    if (result.status != PLUGIN_STATUS_LOADED) {
+        // Create a detailed error message with module name
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "FATAL: Import failed - module '%s' not found", module_name);
+        return make_error(error_msg, 0, 0);
+    }
+    
+    // Import successful - return nil value
+    return make_success(make_nil_value());
 }

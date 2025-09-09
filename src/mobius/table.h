@@ -43,6 +43,7 @@ Value get_table_metamethod(Table* table, const char* method_name);
 
 // Table debugging
 void print_table(Table* table);
+void print_table_safe(Table* table, Table** visited, int* visited_count, int max_depth);
 void print_table_debug(Table* table);
 
 #endif // MOBIUS_TABLE_H

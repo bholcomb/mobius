@@ -294,12 +294,33 @@ struct CompilerContext {
 // VIRTUAL MACHINE STATE
 // =============================================================================
 
-typedef struct BytecodeCallFrame {
-    Instruction* return_ip;      // Return instruction pointer
-    Value* slots;                // Local variable slots
-    MobiusFunction* function;    // Current function
-} BytecodeCallFrame;
+// Forward declaration for BytecodeCallFrame
+typedef struct BytecodeCallFrame BytecodeCallFrame;
 
+// =============================================================================
+// BYTECODE FUNCTION REPRESENTATION
+// =============================================================================
+
+// Runtime function representation for bytecode execution
+typedef struct BytecodeFunction {
+    char* name;                  // Function name (owned string)
+    char** param_names;          // Parameter names (owned strings)
+    size_t param_count;
+    BytecodeChunk* bytecode;     // Compiled function body
+    int ref_count;               // Reference counter
+} BytecodeFunction;
+
+// Define BytecodeCallFrame after BytecodeFunction
+struct BytecodeCallFrame {
+    Instruction* return_ip;        // Return instruction pointer
+    Value* slots;                  // Local variable slots
+    BytecodeFunction* function;    // Current function
+    BytecodeChunk* caller_chunk;   // Caller's bytecode chunk
+    Value* caller_constants;       // Caller's constants
+    char** caller_strings;         // Caller's strings
+};
+
+// Define MobiusVM after BytecodeCallFrame
 struct MobiusVM {
     // Execution state
     Instruction* ip;             // Instruction pointer
@@ -336,8 +357,11 @@ struct MobiusVM {
     // Error handling
     bool has_error;
     char* error_message;
-    
 };
+
+// Bytecode function management
+BytecodeFunction* bytecode_function_create(const char* name, char** param_names, size_t param_count);
+void bytecode_function_free(BytecodeFunction* func);
 
 // =============================================================================
 // FUNCTION DECLARATIONS
