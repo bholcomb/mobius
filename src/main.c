@@ -101,35 +101,10 @@ int execute_file_with_backend(const char* filename, ExecutionBackend backend) {
         return 1;
     }
     
-    // Print result if it's not nil (only the value, no extra output)
-    if (result.result_value.type != VAL_NIL) {
-        switch (result.result_value.type) {
-            case VAL_INTEGER:
-                printf("%d", result.result_value.as.integer.value.i32);
-                break;
-            case VAL_FLOAT:
-                printf("%g", result.result_value.as.float_val);
-                break;
-            case VAL_STRING:
-                printf("%s", result.result_value.as.string && result.result_value.as.string->data ? 
-                       result.result_value.as.string->data : "");
-                break;
-            case VAL_BOOL:
-                printf("%s", result.result_value.as.boolean ? "true" : "false");
-                break;
-            case VAL_ARRAY:
-                print_value(result.result_value);
-                break;
-            case VAL_TABLE:
-                print_value(result.result_value);
-                break;
-            default:
-                print_value(result.result_value);
-                break;
-        }
-        printf("\n");
-        fflush(stdout);
-    }
+    // For script files, don't print the final result value
+    // (unlike REPL mode where we show expression results)
+    // The final result is typically from the last expression statement,
+    // but scripts usually want to control their own output via print statements
     
     // Cleanup
     free_execution_result(&result);

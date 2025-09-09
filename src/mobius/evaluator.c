@@ -849,7 +849,20 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
             if (operand_result.value.type == VAL_FLOAT) {
                 return make_success(make_float_value(-operand_result.value.as.float_val));
             } else if (operand_result.value.type == VAL_INTEGER) {
-                return make_success(make_integer_value(NUM_INT32, -operand_result.value.as.integer.value.i32));
+                // Extract value properly based on the actual type, but result should be int64_t
+                int64_t value = 0;
+                switch (operand_result.value.as.integer.num_type) {
+                    case NUM_INT8:   value = operand_result.value.as.integer.value.i8; break;
+                    case NUM_UINT8:  value = operand_result.value.as.integer.value.u8; break;
+                    case NUM_INT16:  value = operand_result.value.as.integer.value.i16; break;
+                    case NUM_UINT16: value = operand_result.value.as.integer.value.u16; break;
+                    case NUM_INT32:  value = operand_result.value.as.integer.value.i32; break;
+                    case NUM_UINT32: value = operand_result.value.as.integer.value.u32; break;
+                    case NUM_INT64:  value = operand_result.value.as.integer.value.i64; break;
+                    case NUM_UINT64: value = operand_result.value.as.integer.value.u64; break;
+                    default: value = operand_result.value.as.integer.value.i32; break;
+                }
+                return make_success(make_integer_value(NUM_INT64, -value));
             } else {
                 return make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
             }
