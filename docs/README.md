@@ -44,6 +44,18 @@ Welcome to the Mobius Scripting Language documentation! This directory contains 
 
 *Study these examples to understand real-world usage patterns*
 
+### For Language Developers and Contributors
+
+#### 🔧 [Design Documents](design/)
+**Internal design specifications and implementation plans**
+- Bytecode system architecture and implementation
+- Memory management and reference counting design
+- Language feature specifications (enums, types, etc.)
+- RISC-V backend and compilation strategies
+- Implementation roadmaps and risk assessments
+
+*Use these documents if you're contributing to the Mobius language implementation*
+
 ## 🚀 Quick Start
 
 ### For Script Writers
@@ -107,7 +119,9 @@ docs/
 ├── README.md              # This file - documentation index
 ├── language_reference.md  # Complete language and library reference
 ├── embedding_guide.md     # C API and embedding documentation
-└── examples_guide.md      # Real-world usage examples
+├── examples_guide.md      # Real-world usage examples
+├── ENUM_REFERENCE.md      # Enum system reference
+└── design/                # Internal design documents and specifications
 
 examples/
 ├── simple_embedding.c     # Basic embedding example
