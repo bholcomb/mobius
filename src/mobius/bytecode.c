@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <math.h>
+#include <ctype.h>
+#include <time.h>
 
 // =============================================================================
 // BYTECODE CHUNK MANAGEMENT
@@ -281,11 +283,1155 @@ static void builtin_typeof_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
     *result = make_string_value_from_cstr(type_name);
 }
 
-// VM Builtin function registry (Lua-inspired approach)
+static void builtin_int_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "int expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    switch (arg.type) {
+        case VAL_INTEGER:
+            *result = arg;  // Already an integer
+            break;
+        case VAL_FLOAT:
+            *result = make_integer_value(NUM_INT32, (int32_t)arg.as.float_val);
+            break;
+        case VAL_FLOAT32:
+            *result = make_integer_value(NUM_INT32, (int32_t)arg.as.float32_val);
+            break;
+        case VAL_STRING: {
+            if (arg.as.string) {
+                const char* str_data = string_data(arg.as.string);
+                char* endptr;
+                long val = strtol(str_data, &endptr, 10);
+                if (*endptr == '\0') {
+                    *result = make_integer_value(NUM_INT32, (int32_t)val);
+                } else {
+                    vm_runtime_error(vm, "Cannot convert string to integer");
+                    *result = make_nil_value();
+                }
+            } else {
+                vm_runtime_error(vm, "Cannot convert null string to integer");
+                *result = make_nil_value();
+            }
+            break;
+        }
+        case VAL_BOOL:
+            *result = make_integer_value(NUM_INT32, arg.as.boolean ? 1 : 0);
+            break;
+        default:
+            vm_runtime_error(vm, "Cannot convert value to integer");
+            *result = make_nil_value();
+            break;
+    }
+}
+
+static void builtin_float_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "float expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    switch (arg.type) {
+        case VAL_FLOAT:
+            *result = arg;  // Already a float
+            break;
+        case VAL_FLOAT32:
+            *result = make_float_value((double)arg.as.float32_val);
+            break;
+        case VAL_INTEGER: {
+            // Convert integer to float based on its numeric type
+            double val = 0.0;
+            switch (arg.as.integer.num_type) {
+                case NUM_INT8:   val = arg.as.integer.value.i8; break;
+                case NUM_UINT8:  val = arg.as.integer.value.u8; break;
+                case NUM_INT16:  val = arg.as.integer.value.i16; break;
+                case NUM_UINT16: val = arg.as.integer.value.u16; break;
+                case NUM_INT32:  val = arg.as.integer.value.i32; break;
+                case NUM_UINT32: val = arg.as.integer.value.u32; break;
+                case NUM_INT64:  val = arg.as.integer.value.i64; break;
+                case NUM_UINT64: val = arg.as.integer.value.u64; break;
+                case NUM_FLOAT32: val = 0.0; break; // Shouldn't happen
+                case NUM_FLOAT64: val = 0.0; break; // Shouldn't happen
+            }
+            *result = make_float_value(val);
+            break;
+        }
+        case VAL_STRING: {
+            if (arg.as.string) {
+                const char* str_data = string_data(arg.as.string);
+                char* endptr;
+                double val = strtod(str_data, &endptr);
+                if (*endptr == '\0') {
+                    *result = make_float_value(val);
+                } else {
+                    vm_runtime_error(vm, "Cannot convert string to float");
+                    *result = make_nil_value();
+                }
+            } else {
+                vm_runtime_error(vm, "Cannot convert null string to float");
+                *result = make_nil_value();
+            }
+            break;
+        }
+        default:
+            vm_runtime_error(vm, "Cannot convert value to float");
+            *result = make_nil_value();
+            break;
+    }
+}
+
+// Core function: str
+static void builtin_str_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "str expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    char* temp_str = value_to_string(arg);
+    if (temp_str) {
+        *result = make_string_value_from_cstr(temp_str);
+        free(temp_str);
+    } else {
+        *result = make_nil_value();
+    }
+}
+
+// Math functions
+static void builtin_abs_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "abs expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    if (arg.type == VAL_INTEGER) {
+        // Handle different integer types properly
+        int64_t val = 0;
+        switch (arg.as.integer.num_type) {
+            case NUM_INT8:   val = arg.as.integer.value.i8; break;
+            case NUM_UINT8:  val = arg.as.integer.value.u8; break;
+            case NUM_INT16:  val = arg.as.integer.value.i16; break;
+            case NUM_UINT16: val = arg.as.integer.value.u16; break;
+            case NUM_INT32:  val = arg.as.integer.value.i32; break;
+            case NUM_UINT32: val = arg.as.integer.value.u32; break;
+            case NUM_INT64:  val = arg.as.integer.value.i64; break;
+            case NUM_UINT64: val = arg.as.integer.value.u64; break;
+            default: val = arg.as.integer.value.i32; break;
+        }
+        *result = make_integer_value(NUM_INT64, val < 0 ? -val : val);
+    } else if (arg.type == VAL_FLOAT) {
+        *result = make_float_value(fabs(arg.as.float_val));
+    } else if (arg.type == VAL_FLOAT32) {
+        *result = make_float32_value(fabsf(arg.as.float32_val));
+    } else {
+        vm_runtime_error(vm, "abs expects a numeric argument");
+        *result = make_nil_value();
+    }
+}
+
+static void builtin_min_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count == 0) {
+        vm_runtime_error(vm, "min expects at least 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value min_val = vm_peek(vm, arg_count - 1);
+    for (int i = arg_count - 2; i >= 0; i--) {
+        Value current = vm_peek(vm, i);
+        // Simple comparison - assumes numeric types
+        if (current.type == VAL_INTEGER && min_val.type == VAL_INTEGER) {
+            if (current.as.integer.value.i64 < min_val.as.integer.value.i64) {
+                min_val = current;
+            }
+        } else if (current.type == VAL_FLOAT && min_val.type == VAL_FLOAT) {
+            if (current.as.float_val < min_val.as.float_val) {
+                min_val = current;
+            }
+        }
+    }
+    *result = min_val;
+}
+
+static void builtin_max_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count == 0) {
+        vm_runtime_error(vm, "max expects at least 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value max_val = vm_peek(vm, arg_count - 1);
+    for (int i = arg_count - 2; i >= 0; i--) {
+        Value current = vm_peek(vm, i);
+        // Simple comparison - assumes numeric types
+        if (current.type == VAL_INTEGER && max_val.type == VAL_INTEGER) {
+            if (current.as.integer.value.i64 > max_val.as.integer.value.i64) {
+                max_val = current;
+            }
+        } else if (current.type == VAL_FLOAT && max_val.type == VAL_FLOAT) {
+            if (current.as.float_val > max_val.as.float_val) {
+                max_val = current;
+            }
+        }
+    }
+    *result = max_val;
+}
+
+static void builtin_pow_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "pow expects 2 arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value base = vm_peek(vm, 1);
+    Value exponent = vm_peek(vm, 0);
+    
+    double base_val = 0.0, exp_val = 0.0;
+    
+    if (base.type == VAL_INTEGER) base_val = (double)base.as.integer.value.i64;
+    else if (base.type == VAL_FLOAT) base_val = base.as.float_val;
+    else if (base.type == VAL_FLOAT32) base_val = (double)base.as.float32_val;
+    else {
+        vm_runtime_error(vm, "pow base must be numeric");
+        *result = make_nil_value();
+        return;
+    }
+    
+    if (exponent.type == VAL_INTEGER) exp_val = (double)exponent.as.integer.value.i64;
+    else if (exponent.type == VAL_FLOAT) exp_val = exponent.as.float_val;
+    else if (exponent.type == VAL_FLOAT32) exp_val = (double)exponent.as.float32_val;
+    else {
+        vm_runtime_error(vm, "pow exponent must be numeric");
+        *result = make_nil_value();
+        return;
+    }
+    
+    *result = make_float_value(pow(base_val, exp_val));
+}
+
+static void builtin_sqrt_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "sqrt expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    double val = 0.0;
+    
+    if (arg.type == VAL_INTEGER) val = (double)arg.as.integer.value.i64;
+    else if (arg.type == VAL_FLOAT) val = arg.as.float_val;
+    else if (arg.type == VAL_FLOAT32) val = (double)arg.as.float32_val;
+    else {
+        vm_runtime_error(vm, "sqrt expects a numeric argument");
+        *result = make_nil_value();
+        return;
+    }
+    
+    if (val < 0) {
+        vm_runtime_error(vm, "sqrt of negative number");
+        *result = make_nil_value();
+        return;
+    }
+    
+    *result = make_float_value(sqrt(val));
+}
+
+static void builtin_floor_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "floor expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    double val = 0.0;
+    
+    if (arg.type == VAL_INTEGER) {
+        *result = arg; // Already an integer
+        return;
+    } else if (arg.type == VAL_FLOAT) val = arg.as.float_val;
+    else if (arg.type == VAL_FLOAT32) val = (double)arg.as.float32_val;
+    else {
+        vm_runtime_error(vm, "floor expects a numeric argument");
+        *result = make_nil_value();
+        return;
+    }
+    
+    *result = make_integer_value(NUM_INT64, (int64_t)floor(val));
+}
+
+static void builtin_ceil_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "ceil expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    double val = 0.0;
+    
+    if (arg.type == VAL_INTEGER) {
+        *result = arg; // Already an integer
+        return;
+    } else if (arg.type == VAL_FLOAT) val = arg.as.float_val;
+    else if (arg.type == VAL_FLOAT32) val = (double)arg.as.float32_val;
+    else {
+        vm_runtime_error(vm, "ceil expects a numeric argument");
+        *result = make_nil_value();
+        return;
+    }
+    
+    *result = make_integer_value(NUM_INT64, (int64_t)ceil(val));
+}
+
+static void builtin_round_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "round expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    double val = 0.0;
+    
+    if (arg.type == VAL_INTEGER) {
+        *result = arg; // Already an integer
+        return;
+    } else if (arg.type == VAL_FLOAT) val = arg.as.float_val;
+    else if (arg.type == VAL_FLOAT32) val = (double)arg.as.float32_val;
+    else {
+        vm_runtime_error(vm, "round expects a numeric argument");
+        *result = make_nil_value();
+        return;
+    }
+    
+    *result = make_integer_value(NUM_INT64, (int64_t)round(val));
+}
+
+// String functions
+static void builtin_len_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "len expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    if (arg.type == VAL_STRING && arg.as.string) {
+        *result = make_integer_value(NUM_INT64, (int64_t)string_length(arg.as.string));
+    } else if (arg.type == VAL_ARRAY && arg.as.array) {
+        *result = make_integer_value(NUM_INT64, (int64_t)arg.as.array->length);
+    } else {
+        vm_runtime_error(vm, "len expects a string or array argument");
+        *result = make_nil_value();
+    }
+}
+
+static void builtin_upper_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "upper expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    if (arg.type != VAL_STRING || !arg.as.string) {
+        vm_runtime_error(vm, "upper expects a string argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    const char* input = string_data(arg.as.string);
+    size_t len = string_length(arg.as.string);
+    char* upper_str = malloc(len + 1);
+    if (!upper_str) {
+        vm_runtime_error(vm, "Memory allocation failed");
+        *result = make_nil_value();
+        return;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        upper_str[i] = toupper(input[i]);
+    }
+    upper_str[len] = '\0';
+
+    *result = make_string_value_from_cstr(upper_str);
+    free(upper_str);
+}
+
+static void builtin_lower_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "lower expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    if (arg.type != VAL_STRING || !arg.as.string) {
+        vm_runtime_error(vm, "lower expects a string argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    const char* input = string_data(arg.as.string);
+    size_t len = string_length(arg.as.string);
+    char* lower_str = malloc(len + 1);
+    if (!lower_str) {
+        vm_runtime_error(vm, "Memory allocation failed");
+        *result = make_nil_value();
+        return;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        lower_str[i] = tolower(input[i]);
+    }
+    lower_str[len] = '\0';
+
+    *result = make_string_value_from_cstr(lower_str);
+    free(lower_str);
+}
+
+// Utility functions
+static void builtin_random_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    
+    if (arg_count == 0) {
+        // Return random float between 0 and 1
+        *result = make_float_value((double)rand() / RAND_MAX);
+    } else if (arg_count == 1) {
+        // Return random integer between 0 and n-1
+        Value arg = vm_peek(vm, 0);
+        if (arg.type != VAL_INTEGER) {
+            vm_runtime_error(vm, "random expects an integer argument");
+            *result = make_nil_value();
+            return;
+        }
+        int64_t max_val = arg.as.integer.value.i64;
+        if (max_val <= 0) {
+            vm_runtime_error(vm, "random expects a positive integer");
+            *result = make_nil_value();
+            return;
+        }
+        *result = make_integer_value(NUM_INT64, rand() % max_val);
+    } else {
+        vm_runtime_error(vm, "random expects 0 or 1 arguments");
+        *result = make_nil_value();
+    }
+}
+
+static void builtin_time_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 0) {
+        vm_runtime_error(vm, "time expects no arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    *result = make_integer_value(NUM_INT64, (int64_t)time(NULL));
+}
+
+static void builtin_clock_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 0) {
+        vm_runtime_error(vm, "clock expects no arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    *result = make_float_value((double)clock() / CLOCKS_PER_SEC);
+}
+
+// Table functions
+static void builtin_table_insert_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 3) {
+        vm_runtime_error(vm, "table_insert expects 3 arguments (table, key, value)");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value table_val = vm_peek(vm, 2);
+    Value key = vm_peek(vm, 1);
+    Value value = vm_peek(vm, 0);
+    
+    if (table_val.type != VAL_TABLE) {
+        vm_runtime_error(vm, "table_insert first argument must be a table");
+        *result = make_nil_value();
+        return;
+    }
+
+    Table* table = table_val.as.table;
+    if (!table_set(table, key, value)) {
+        vm_runtime_error(vm, "Failed to insert into table");
+        *result = make_nil_value();
+        return;
+    }
+
+    *result = make_nil_value();
+}
+
+static void builtin_table_remove_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "table_remove expects 2 arguments (table, key)");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value table_val = vm_peek(vm, 1);
+    Value key = vm_peek(vm, 0);
+    
+    if (table_val.type != VAL_TABLE) {
+        vm_runtime_error(vm, "table_remove first argument must be a table");
+        *result = make_nil_value();
+        return;
+    }
+
+    Table* table = table_val.as.table;
+    Value old_value = table_get(table, key);
+    bool removed = table_remove(table, key);
+    
+    if (removed) {
+        *result = old_value;
+    } else {
+        *result = make_nil_value();
+    }
+}
+
+static void builtin_table_has_key_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "table_has_key expects 2 arguments (table, key)");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value table_val = vm_peek(vm, 1);
+    Value key = vm_peek(vm, 0);
+    
+    if (table_val.type != VAL_TABLE) {
+        vm_runtime_error(vm, "table_has_key first argument must be a table");
+        *result = make_nil_value();
+        return;
+    }
+
+    Table* table = table_val.as.table;
+    bool has_key = table_has_key(table, key);
+    *result = make_bool_value(has_key);
+}
+
+static void builtin_table_size_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "table_size expects 1 argument (table)");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value table_val = vm_peek(vm, 0);
+    
+    if (table_val.type != VAL_TABLE) {
+        vm_runtime_error(vm, "table_size argument must be a table");
+        *result = make_nil_value();
+        return;
+    }
+
+    Table* table = table_val.as.table;
+    size_t size = table_size(table);
+    *result = make_integer_value(NUM_INT64, (int64_t)size);
+}
+
+static void builtin_setmetatable_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "setmetatable expects 2 arguments (table, metatable)");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value table_val = vm_peek(vm, 1);
+    Value metatable_val = vm_peek(vm, 0);
+    
+    if (table_val.type != VAL_TABLE) {
+        vm_runtime_error(vm, "setmetatable first argument must be a table");
+        *result = make_nil_value();
+        return;
+    }
+
+    Table* table = table_val.as.table;
+    
+    if (metatable_val.type == VAL_NIL) {
+        set_metatable(table, NULL);
+    } else if (metatable_val.type == VAL_TABLE) {
+        set_metatable(table, metatable_val.as.table);
+    } else {
+        vm_runtime_error(vm, "setmetatable second argument must be a table or nil");
+        *result = make_nil_value();
+        return;
+    }
+    
+    *result = table_val; // Return the original table
+}
+
+static void builtin_getmetatable_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "getmetatable expects 1 argument (table)");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value table_val = vm_peek(vm, 0);
+    
+    if (table_val.type != VAL_TABLE) {
+        vm_runtime_error(vm, "getmetatable argument must be a table");
+        *result = make_nil_value();
+        return;
+    }
+
+    Table* table = table_val.as.table;
+    Table* metatable = get_metatable(table);
+    
+    if (metatable) {
+        *result = make_table_value(metatable);
+    } else {
+        *result = make_nil_value();
+    }
+}
+
+static void builtin_pairs_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "pairs expects 1 argument (table)");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value table_val = vm_peek(vm, 0);
+    
+    if (table_val.type != VAL_TABLE) {
+        vm_runtime_error(vm, "pairs argument must be a table");
+        *result = make_nil_value();
+        return;
+    }
+
+    Table* table = table_val.as.table;
+    
+    // Create a table to hold the array of pairs
+    Table* pairs_table = create_table(table->size * 2);
+    if (!pairs_table) {
+        vm_runtime_error(vm, "Failed to create pairs table");
+        *result = make_nil_value();
+        return;
+    }
+    
+    // Iterate through all entries and create [key, value] pairs
+    size_t pair_index = 0;
+    for (size_t i = 0; i < table->capacity; i++) {
+        if (table->entries[i].is_occupied) {
+            // Create a sub-table for this [key, value] pair
+            Table* pair = create_table(2);
+            if (!pair) {
+                free_table(pairs_table);
+                vm_runtime_error(vm, "Failed to create pair entry");
+                *result = make_nil_value();
+                return;
+            }
+            
+            // Set key as index 0, value as index 1
+            Value key_index = make_integer_value(NUM_INT64, 0);
+            Value value_index = make_integer_value(NUM_INT64, 1);
+            
+            if (!table_set(pair, key_index, copy_value(table->entries[i].key)) ||
+                !table_set(pair, value_index, copy_value(table->entries[i].value))) {
+                free_table(pair);
+                free_table(pairs_table);
+                vm_runtime_error(vm, "Failed to set pair values");
+                *result = make_nil_value();
+                return;
+            }
+            
+            // Add this pair to the main pairs table
+            Value pair_index_val = make_integer_value(NUM_INT64, (int64_t)pair_index);
+            if (!table_set(pairs_table, pair_index_val, make_table_value(pair))) {
+                free_table(pair);
+                free_table(pairs_table);
+                vm_runtime_error(vm, "Failed to add pair to result");
+                *result = make_nil_value();
+                return;
+            }
+            
+            pair_index++;
+        }
+    }
+    
+    *result = make_table_value(pairs_table);
+}
+
+// Array functions
+static void builtin_array_create_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count > 1) {
+        vm_runtime_error(vm, "array_create expects 0 or 1 arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    size_t capacity = 8; // Default capacity
+    if (arg_count == 1) {
+        Value arg = vm_peek(vm, 0);
+        if (arg.type != VAL_INTEGER) {
+            vm_runtime_error(vm, "array_create capacity must be an integer");
+            *result = make_nil_value();
+            return;
+        }
+        capacity = (size_t)arg.as.integer.value.i64;
+        if (capacity == 0) capacity = 8; // Minimum capacity
+    }
+
+    ArrayValue* array = array_create(capacity);
+    if (!array) {
+        vm_runtime_error(vm, "Failed to create array");
+        *result = make_nil_value();
+        return;
+    }
+
+    *result = make_array_value(array);
+}
+
+static void builtin_array_push_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "array_push expects 2 arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, 1);
+    Value value = vm_peek(vm, 0);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_push first argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+
+    array_push(array_val.as.array, value);
+    *result = make_nil_value();
+}
+
+static void builtin_array_pop_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "array_pop expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, 0);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_pop argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+
+    *result = array_pop(array_val.as.array);
+}
+
+static void builtin_array_get_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "array_get expects 2 arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, 1);
+    Value index_val = vm_peek(vm, 0);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_get first argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+    
+    if (index_val.type != VAL_INTEGER) {
+        vm_runtime_error(vm, "array_get second argument must be an integer");
+        *result = make_nil_value();
+        return;
+    }
+
+    size_t index = (size_t)index_val.as.integer.value.i64;
+    *result = array_get(array_val.as.array, index);
+}
+
+static void builtin_array_set_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 3) {
+        vm_runtime_error(vm, "array_set expects 3 arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, 2);
+    Value index_val = vm_peek(vm, 1);
+    Value value = vm_peek(vm, 0);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_set first argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+    
+    if (index_val.type != VAL_INTEGER) {
+        vm_runtime_error(vm, "array_set second argument must be an integer");
+        *result = make_nil_value();
+        return;
+    }
+
+    size_t index = (size_t)index_val.as.integer.value.i64;
+    array_set(array_val.as.array, index, value);
+    *result = make_nil_value();
+}
+
+static void builtin_array_length_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "array_length expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, 0);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_length argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+
+    size_t length = array_length(array_val.as.array);
+    *result = make_integer_value(NUM_INT64, (int64_t)length);
+}
+
+static void builtin_array_slice_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count < 2 || arg_count > 3) {
+        vm_runtime_error(vm, "array_slice expects 2 or 3 arguments (array, start, [end])");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, arg_count - 1);
+    Value start_val = vm_peek(vm, arg_count - 2);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_slice first argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+    
+    if (start_val.type != VAL_INTEGER) {
+        vm_runtime_error(vm, "array_slice start index must be an integer");
+        *result = make_nil_value();
+        return;
+    }
+
+    ArrayValue* source = array_val.as.array;
+    int64_t start = start_val.as.integer.value.i64;
+    int64_t end = (int64_t)source->length;
+    
+    if (arg_count == 3) {
+        Value end_val = vm_peek(vm, 0);
+        if (end_val.type != VAL_INTEGER) {
+            vm_runtime_error(vm, "array_slice end index must be an integer");
+            *result = make_nil_value();
+            return;
+        }
+        end = end_val.as.integer.value.i64;
+    }
+    
+    // Handle negative indices and bounds
+    if (start < 0) start = 0;
+    if (end > (int64_t)source->length) end = (int64_t)source->length;
+    if (start >= end) {
+        // Return empty array
+        ArrayValue* empty_array = array_create(0);
+        *result = make_array_value(empty_array);
+        return;
+    }
+    
+    // Create new array with sliced elements
+    size_t slice_length = (size_t)(end - start);
+    ArrayValue* slice_array = array_create(slice_length);
+    
+    for (int64_t i = start; i < end; i++) {
+        Value element = array_get(source, (size_t)i);
+        array_push(slice_array, element);
+    }
+    
+    *result = make_array_value(slice_array);
+}
+
+static void builtin_array_concat_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "array_concat expects 2 arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arr1_val = vm_peek(vm, 1);
+    Value arr2_val = vm_peek(vm, 0);
+    
+    if (arr1_val.type != VAL_ARRAY || arr2_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_concat arguments must be arrays");
+        *result = make_nil_value();
+        return;
+    }
+
+    ArrayValue* arr1 = arr1_val.as.array;
+    ArrayValue* arr2 = arr2_val.as.array;
+    
+    // Create new array with combined capacity
+    ArrayValue* concat_array = array_create(arr1->length + arr2->length);
+    
+    // Copy elements from first array
+    for (size_t i = 0; i < arr1->length; i++) {
+        Value element = array_get(arr1, i);
+        array_push(concat_array, element);
+    }
+    
+    // Copy elements from second array
+    for (size_t i = 0; i < arr2->length; i++) {
+        Value element = array_get(arr2, i);
+        array_push(concat_array, element);
+    }
+    
+    *result = make_array_value(concat_array);
+}
+
+static void builtin_array_reverse_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "array_reverse expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, 0);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_reverse argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+
+    ArrayValue* source = array_val.as.array;
+    ArrayValue* reverse_array = array_create(source->length);
+    
+    // Copy elements in reverse order
+    for (size_t i = 0; i < source->length; i++) {
+        size_t reverse_index = source->length - 1 - i;
+        Value element = array_get(source, reverse_index);
+        array_push(reverse_array, element);
+    }
+    
+    *result = make_array_value(reverse_array);
+}
+
+static void builtin_array_find_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 2) {
+        vm_runtime_error(vm, "array_find expects 2 arguments");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value array_val = vm_peek(vm, 1);
+    Value search_value = vm_peek(vm, 0);
+    
+    if (array_val.type != VAL_ARRAY) {
+        vm_runtime_error(vm, "array_find first argument must be an array");
+        *result = make_nil_value();
+        return;
+    }
+
+    ArrayValue* array = array_val.as.array;
+    
+    // Search for the value
+    for (size_t i = 0; i < array->length; i++) {
+        Value element = array_get(array, i);
+        if (values_equal(element, search_value)) {
+            free_value(element);
+            *result = make_integer_value(NUM_INT64, (int64_t)i);
+            return;
+        }
+        free_value(element);
+    }
+    
+    // Not found, return -1
+    *result = make_integer_value(NUM_INT64, -1);
+}
+
+// Type system functions
+static void builtin_set_strict_types_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    extern TypeCheckConfig global_type_config;
+    
+    if (arg_count > 1) {
+        vm_runtime_error(vm, "set_strict_types expects 0 or 1 arguments");
+        *result = make_nil_value();
+        return;
+    }
+    
+    bool strict = true; // Default to strict if no argument
+    if (arg_count == 1) {
+        Value arg = vm_peek(vm, 0);
+        if (arg.type != VAL_BOOL) {
+            vm_runtime_error(vm, "set_strict_types argument must be a boolean");
+            *result = make_nil_value();
+            return;
+        }
+        strict = arg.as.boolean;
+    }
+    
+    global_type_config.strict_mode = strict;
+    *result = make_nil_value();
+}
+
+static void builtin_set_type_warnings_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    extern TypeCheckConfig global_type_config;
+    
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "set_type_warnings expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+    
+    Value arg = vm_peek(vm, 0);
+    if (arg.type != VAL_BOOL) {
+        vm_runtime_error(vm, "set_type_warnings argument must be a boolean");
+        *result = make_nil_value();
+        return;
+    }
+    
+    global_type_config.warn_on_conversion = arg.as.boolean;
+    *result = make_nil_value();
+}
+
+static void builtin_get_type_config_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    extern TypeCheckConfig global_type_config;
+    
+    if (arg_count != 0) {
+        vm_runtime_error(vm, "get_type_config expects no arguments");
+        *result = make_nil_value();
+        return;
+    }
+    
+    // Return a table with configuration
+    Table* config_table = create_table(8);
+    if (!config_table) {
+        vm_runtime_error(vm, "Failed to create config table");
+        *result = make_nil_value();
+        return;
+    }
+    
+    // Add strict_mode key-value pair
+    Value strict_key = make_string_value_from_cstr("strict_mode");
+    Value strict_value = make_bool_value(global_type_config.strict_mode);
+    table_set(config_table, strict_key, strict_value);
+    
+    // Add warn_on_conversion key-value pair
+    Value warn_key = make_string_value_from_cstr("warn_on_conversion");
+    Value warn_value = make_bool_value(global_type_config.warn_on_conversion);
+    table_set(config_table, warn_key, warn_value);
+    
+    *result = make_table_value(config_table);
+}
+
+ // VM Builtin function registry (Lua-inspired approach)
 static VMBuiltinEntry builtin_registry[] = {
+    // Core functions
     {"print", builtin_print_vm},
     {"typeof", builtin_typeof_vm},
-    // Add more builtins here as needed
+    {"int", builtin_int_vm},
+    {"float", builtin_float_vm},
+    {"str", builtin_str_vm},
+    
+    // Math functions
+    {"abs", builtin_abs_vm},
+    {"min", builtin_min_vm},
+    {"max", builtin_max_vm},
+    {"pow", builtin_pow_vm},
+    {"sqrt", builtin_sqrt_vm},
+    {"floor", builtin_floor_vm},
+    {"ceil", builtin_ceil_vm},
+    {"round", builtin_round_vm},
+    
+    // String functions
+    {"len", builtin_len_vm},
+    {"upper", builtin_upper_vm},
+    {"lower", builtin_lower_vm},
+    
+    // Utility functions
+    {"random", builtin_random_vm},
+    {"time", builtin_time_vm},
+    {"clock", builtin_clock_vm},
+    
+    // Table functions
+    {"table_insert", builtin_table_insert_vm},
+    {"table_remove", builtin_table_remove_vm},
+    {"table_has_key", builtin_table_has_key_vm},
+    {"table_size", builtin_table_size_vm},
+    {"setmetatable", builtin_setmetatable_vm},
+    {"getmetatable", builtin_getmetatable_vm},
+    {"pairs", builtin_pairs_vm},
+
+    // Array functions
+    {"array_create", builtin_array_create_vm},
+    {"array_push", builtin_array_push_vm},
+    {"array_pop", builtin_array_pop_vm},
+    {"array_get", builtin_array_get_vm},
+    {"array_set", builtin_array_set_vm},
+    {"array_length", builtin_array_length_vm},
+    {"array_slice", builtin_array_slice_vm},
+    {"array_concat", builtin_array_concat_vm},
+    {"array_reverse", builtin_array_reverse_vm},
+    {"array_find", builtin_array_find_vm},
+
+    // Type system functions
+    {"set_strict_types", builtin_set_strict_types_vm},
+    {"set_type_warnings", builtin_set_type_warnings_vm},
+    {"get_type_config", builtin_get_type_config_vm},
+    
     {NULL, NULL}  // Sentinel
 };
 
@@ -454,6 +1600,38 @@ static void vm_runtime_error(MobiusVM* vm, const char* format, ...) {
 static Value binary_arithmetic(MobiusVM* vm, Opcode op) {
     Value right = vm_pop(vm);
     Value left = vm_pop(vm);
+    
+    // Handle string concatenation for OP_ADD
+    if (op == OP_ADD && (left.type == VAL_STRING || right.type == VAL_STRING)) {
+        char* left_str = value_to_string(left);
+        char* right_str = value_to_string(right);
+        
+        if (!left_str || !right_str) {
+            free(left_str);
+            free(right_str);
+            vm_runtime_error(vm, "Memory allocation failed in string concatenation");
+            return make_nil_value();
+        }
+        
+        size_t len = strlen(left_str) + strlen(right_str) + 1;
+        char* result = malloc(len);
+        if (!result) {
+            free(left_str);
+            free(right_str);
+            vm_runtime_error(vm, "Memory allocation failed");
+            return make_nil_value();
+        }
+        
+        strcpy(result, left_str);
+        strcat(result, right_str);
+        
+        free(left_str);
+        free(right_str);
+        
+        Value final_result = make_string_value_from_cstr(result);
+        free(result);
+        return final_result;
+    }
     
     // Handle integer arithmetic
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
@@ -695,16 +1873,20 @@ int vm_execute(MobiusVM* vm, BytecodeChunk* chunk) {
             case OP_NEG: {
                 Value operand = vm_pop(vm);
                 if (operand.type == VAL_INTEGER) {
-                    // Use the correct integer field based on the numeric type
-                    int64_t value;
+                    // Extract value properly based on the actual type, but result should be int64_t
+                    int64_t value = 0;
                     switch (operand.as.integer.num_type) {
-                        case NUM_INT8:  value = -operand.as.integer.value.i8; break;
-                        case NUM_INT16: value = -operand.as.integer.value.i16; break;
-                        case NUM_INT32: value = -operand.as.integer.value.i32; break;
-                        case NUM_INT64: value = -operand.as.integer.value.i64; break;
-                        default: value = -operand.as.integer.value.i32; break;
+                        case NUM_INT8:   value = operand.as.integer.value.i8; break;
+                        case NUM_UINT8:  value = operand.as.integer.value.u8; break;
+                        case NUM_INT16:  value = operand.as.integer.value.i16; break;
+                        case NUM_UINT16: value = operand.as.integer.value.u16; break;
+                        case NUM_INT32:  value = operand.as.integer.value.i32; break;
+                        case NUM_UINT32: value = operand.as.integer.value.u32; break;
+                        case NUM_INT64:  value = operand.as.integer.value.i64; break;
+                        case NUM_UINT64: value = operand.as.integer.value.u64; break;
+                        default: value = operand.as.integer.value.i32; break;
                     }
-                    vm_push(vm, make_integer_value(operand.as.integer.num_type, value));
+                    vm_push(vm, make_integer_value(NUM_INT64, -value));
                 } else if (operand.type == VAL_FLOAT) {
                     vm_push(vm, make_float_value(-operand.as.float_val));
                 } else {
