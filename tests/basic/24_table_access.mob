@@ -1,0 +1,4 @@
+var table = {name: "test", value: 42}; 
+table["value"];
+
+
