@@ -1,0 +1,4 @@
+var table = {data: {x: 42}}; 
+table["data"];
+
+

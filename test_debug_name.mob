@@ -1,9 +1,0 @@
-// Debug module name parsing
-
-print("Testing module name parsing...");
-
-// Test with a simple existing module
-import "math";
-print("Math import successful");
-
-print("Test completed");
