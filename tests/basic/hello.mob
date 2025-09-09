@@ -15,7 +15,8 @@ print("Version:", version);
 print("Build:", build);
 
 // Control flow
-if (version >= 1.0) {
+if (version >= 1.0)
+{
     print("This is a stable release!");
     
     var score = build * version;
@@ -26,6 +27,12 @@ if (version >= 1.0) {
     }
 }
 
+for(var loop_count = 0; loop_count < 5; loop_count = loop_count + 1) 
+{
+    print("For loop: ", loop_count)
+}
+
+
 // Type conversions
 var pi = 3.14159;
 print("Pi as integer:", int(pi));
@@ -34,7 +41,8 @@ print("Name type:", typeof(name));
 
 // Loop example
 var count = 0;
-while (count < 5) {
+while (count < 5)
+{
     print("Count:", count);
     count = count + 1;
 }

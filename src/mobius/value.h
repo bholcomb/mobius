@@ -23,10 +23,6 @@ typedef struct RefCountedString {
     bool is_literal;      // True for string literals (never freed)
 } RefCountedString;
 
-// Dynamic array structure with reference counting (defined after Value)
-struct ArrayValue;
-
-
 // Value types for literals 
 typedef enum {
     VAL_NIL,
@@ -37,7 +33,7 @@ typedef enum {
     VAL_STRING,
     VAL_CHAR,
     VAL_ARRAY,
-    VAL_FUNCTION,           // Function (AST or builtin)
+    VAL_FUNCTION,
     VAL_TABLE,
     VAL_USERDATA,
     VAL_ENUM
@@ -49,24 +45,24 @@ typedef void (*UserdataDestructor)(void* ptr);
 
 // Type system enums (for type annotations)
 typedef enum {
-    MOBIUS_TYPE_UNKNOWN,    // No type specified/inferred
-    MOBIUS_TYPE_INT8,       // int8: -128 to 127
-    MOBIUS_TYPE_INT16,      // int16: -32,768 to 32,767
-    MOBIUS_TYPE_INT32,      // int32: ~2.1 billion range
-    MOBIUS_TYPE_INT64,      // int64: very large range
-    MOBIUS_TYPE_UINT8,      // uint8: 0 to 255
-    MOBIUS_TYPE_UINT16,     // uint16: 0 to 65,535
-    MOBIUS_TYPE_UINT32,     // uint32: ~4.3 billion
-    MOBIUS_TYPE_UINT64,     // uint64: very large positive range
-    MOBIUS_TYPE_FLOAT32,    // float32: single precision
-    MOBIUS_TYPE_FLOAT,      // float: double precision (alias for float64)
-} MobiusType;
+    NUMBER_TYPE_UNKNOWN,    // No type specified/inferred
+    NUMBER_TYPE_INT8,       // int8: -128 to 127
+    NUMBER_TYPE_INT16,      // int16: -32,768 to 32,767
+    NUMBER_TYPE_INT32,      // int32: ~2.1 billion range
+    NUMBER_TYPE_INT64,      // int64: very large range
+    NUMBER_TYPE_UINT8,      // uint8: 0 to 255
+    NUMBER_TYPE_UINT16,     // uint16: 0 to 65,535
+    NUMBER_TYPE_UINT32,     // uint32: ~4.3 billion
+    NUMBER_TYPE_UINT64,     // uint64: very large positive range
+    NUMBER_TYPE_FLOAT32,    // float32: single precision
+    NUMBER_TYPE_FLOAT64,      // float: double precision (alias for float64)
+} NumberType;
 
 // Type information structure
 typedef struct {
-    MobiusType type;
+    NumberType type;
     bool is_annotated;      // true if explicitly specified by user
-} TypeInfo;
+} NumberInfo;
 
 // Runtime value representation
 typedef struct {

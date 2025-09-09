@@ -24,20 +24,20 @@ typedef struct {
 } TypeConversionResult;
 
 // Type system functions
-const char* mobius_type_name(MobiusType type);
-bool is_integer_type(MobiusType type);
-bool is_unsigned_type(MobiusType type);
-bool is_float_type(MobiusType type);
-MobiusType token_to_mobius_type(TokenType token_type);
+const char* mobius_type_name(NumberType type);
+bool is_integer_type(NumberType type);
+bool is_unsigned_type(NumberType type);
+bool is_float_type(NumberType type);
+NumberType token_to_mobius_type(TokenType token_type);
 
 // Type validation and conversion
-TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_type, TypeCheckConfig config);
-bool types_are_compatible(MobiusType from, MobiusType to);
-int64_t get_type_min_value(MobiusType type);
-uint64_t get_type_max_value(MobiusType type);
+TypeConversionResult validate_and_convert_value(Value value, NumberInfo target_type, TypeCheckConfig config);
+bool types_are_compatible(NumberType from, NumberType to);
+int64_t get_type_min_value(NumberType type);
+uint64_t get_type_max_value(NumberType type);
 
-// Helper functions for creating TypeInfo
-TypeInfo make_unknown_type(void);
-TypeInfo make_annotated_type(MobiusType type);
+// Helper functions for creating NumberInfo
+NumberInfo make_unknown_type(void);
+NumberInfo make_annotated_type(NumberType type);
 
 #endif // MOBIUS_TYPES_H
