@@ -43,6 +43,14 @@ EvalResult builtin_clock(Environment* env, Value* args, size_t arg_count);
 // File I/O functions
 EvalResult builtin_load(Environment* env, Value* args, size_t arg_count);
 
+// Type system functions
+EvalResult builtin_set_strict_types(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_set_type_warnings(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_get_type_config(Environment* env, Value* args, size_t arg_count);
+
+// Module import function
+EvalResult builtin_import(Environment* env, Value* args, size_t arg_count);
+
 // Table functions
 EvalResult builtin_table_insert(Environment* env, Value* args, size_t arg_count);
 EvalResult builtin_table_remove(Environment* env, Value* args, size_t arg_count);
@@ -51,6 +59,18 @@ EvalResult builtin_table_size(Environment* env, Value* args, size_t arg_count);
 EvalResult builtin_setmetatable(Environment* env, Value* args, size_t arg_count);
 EvalResult builtin_getmetatable(Environment* env, Value* args, size_t arg_count);
 EvalResult builtin_pairs(Environment* env, Value* args, size_t arg_count);
+
+// Array functions
+EvalResult builtin_array_create(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_push(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_pop(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_get(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_set(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_length(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_slice(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_concat(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_reverse(Environment* env, Value* args, size_t arg_count);
+EvalResult builtin_array_find(Environment* env, Value* args, size_t arg_count);
 
 // Standard library management
 typedef struct {

@@ -18,7 +18,9 @@ static bool compile_table_literal_expr(CompilerContext* compiler, TableLiteralEx
 static bool compile_array_literal_expr(CompilerContext* compiler, ArrayLiteralExpr* expr);
 static bool compile_array_index_expr(CompilerContext* compiler, ArrayIndexExpr* expr);
 static bool compile_table_index_expr(CompilerContext* compiler, TableIndexExpr* expr);
+static bool compile_table_dot_expr(CompilerContext* compiler, TableDotExpr* expr);
 static bool compile_expression_stmt(CompilerContext* compiler, ExpressionStmt* stmt);
+static bool compile_print_stmt(CompilerContext* compiler, PrintStmt* stmt);
 static bool compile_var_stmt(CompilerContext* compiler, VarStmt* stmt);
 static bool compile_block_stmt(CompilerContext* compiler, BlockStmt* stmt);
 static bool compile_if_stmt(CompilerContext* compiler, IfStmt* stmt);
@@ -26,6 +28,9 @@ static bool compile_while_stmt(CompilerContext* compiler, WhileStmt* stmt);
 static bool compile_for_stmt(CompilerContext* compiler, ForStmt* stmt);
 static bool compile_function_stmt(CompilerContext* compiler, FunctionStmt* stmt);
 static bool compile_return_stmt(CompilerContext* compiler, ReturnStmt* stmt);
+static bool compile_switch_stmt(CompilerContext* compiler, SwitchStmt* stmt);
+static bool compile_break_stmt(CompilerContext* compiler, BreakStmt* stmt);
+static bool compile_import_stmt(CompilerContext* compiler, ImportStmt* stmt);
 
 // =============================================================================
 // COMPILER CONTEXT MANAGEMENT
@@ -87,6 +92,72 @@ static void emit_instruction(CompilerContext* compiler, Opcode opcode, uint16_t 
     bytecode_chunk_write(compiler->chunk, instruction);
 }
 
+// =============================================================================
+// LOCAL VARIABLE MANAGEMENT
+// =============================================================================
+
+static int add_local(CompilerContext* compiler, const char* name) {
+    if (compiler->local_count >= 256) {
+        return -1; // Too many locals
+    }
+    
+    int slot = compiler->local_count++;
+    compiler->locals[slot].name = strdup(name);
+    compiler->locals[slot].slot = slot;
+    compiler->locals[slot].scope_depth = compiler->scope_depth;
+    compiler->locals[slot].is_hot = false;
+    compiler->locals[slot].risc_v_reg_hint = -1;
+    compiler->locals[slot].is_captured = false;
+    
+    return slot;
+}
+
+static int resolve_local(CompilerContext* compiler, const char* name) {
+    // Search locals from most recent to oldest
+    for (int i = compiler->local_count - 1; i >= 0; i--) {
+        if (compiler->locals[i].name && strcmp(compiler->locals[i].name, name) == 0) {
+            return compiler->locals[i].slot;
+        }
+    }
+    return -1; // Not found
+}
+
+// Simple global to track current function being compiled (Lua-inspired approach)
+static const char* current_function_name = NULL;
+
+// Compiler-time function registry for recursive references
+typedef struct {
+    const char* name;
+    BytecodeFunction* function;
+} CompilerFunction;
+
+static CompilerFunction compiler_functions[256];
+static int compiler_function_count = 0;
+
+static void register_compiler_function(const char* name, BytecodeFunction* function) {
+    if (compiler_function_count < 256) {
+        compiler_functions[compiler_function_count].name = strdup(name);
+        compiler_functions[compiler_function_count].function = function;
+        compiler_function_count++;
+    }
+}
+
+static BytecodeFunction* find_compiler_function(const char* name) {
+    for (int i = 0; i < compiler_function_count; i++) {
+        if (strcmp(compiler_functions[i].name, name) == 0) {
+            return compiler_functions[i].function;
+        }
+    }
+    return NULL;
+}
+
+static void clear_compiler_functions(void) {
+    for (int i = 0; i < compiler_function_count; i++) {
+        free((void*)compiler_functions[i].name);
+    }
+    compiler_function_count = 0;
+}
+
 static void emit_constant(CompilerContext* compiler, Value value) {
     bytecode_chunk_write_constant(compiler->chunk, value);
     int constant_index = (int)compiler->chunk->constant_count - 1;
@@ -142,6 +213,9 @@ bool compile_expression(CompilerContext* compiler, Expr* expr) {
         case EXPR_TABLE_INDEX:
             return compile_table_index_expr(compiler, &expr->as.table_index);
             
+        case EXPR_TABLE_DOT:
+            return compile_table_dot_expr(compiler, &expr->as.table_dot);
+            
         default:
             compiler_error_at(compiler, "Unknown expression type");
             return false;
@@ -159,11 +233,14 @@ static bool compile_literal_expr(CompilerContext* compiler, LiteralExpr* expr) {
             break;
             
         case VAL_INTEGER: {
+            // All integer literals are now NUM_INT64 by default
             int64_t value = expr->value.as.integer.value.i64;
+            
+            // Optimize storage for small values
             if (value >= -128 && value <= 127) {
-                emit_instruction(compiler, OP_PUSH_INT8, (uint16_t)(uint8_t)value);
+                emit_instruction(compiler, OP_PUSH_INT8, (uint16_t)((int8_t)value));
             } else if (value >= -32768 && value <= 32767) {
-                emit_instruction(compiler, OP_PUSH_INT16, (uint16_t)value);
+                emit_instruction(compiler, OP_PUSH_INT16, (uint16_t)((int16_t)value));
             } else {
                 emit_constant(compiler, expr->value);
             }
@@ -205,8 +282,8 @@ static bool compile_binary_expr(CompilerContext* compiler, BinaryExpr* expr) {
         case TOKEN_LESS:          emit_byte(compiler, OP_LT); break;
         case TOKEN_LESS_EQUAL:    emit_byte(compiler, OP_LE); break;
         
-        case TOKEN_AND:           emit_byte(compiler, OP_LOGICAL_AND); break;
-        case TOKEN_OR:            emit_byte(compiler, OP_LOGICAL_OR); break;
+        case TOKEN_AND_AND:       emit_byte(compiler, OP_LOGICAL_AND); break;
+        case TOKEN_OR_OR:         emit_byte(compiler, OP_LOGICAL_OR); break;
         
         default:
             compiler_error_at(compiler, "Unknown binary operator");
@@ -244,11 +321,33 @@ static bool compile_unary_expr(CompilerContext* compiler, UnaryExpr* expr) {
 }
 
 static bool compile_variable_expr(CompilerContext* compiler, VariableExpr* expr) {
-    // For now, treat all variables as globals
-    // TODO: Implement local variable resolution
     const char* name = expr->name.identifier;
     
-    // Add variable name to string pool and emit load instruction
+    // Debug output removed for cleaner testing
+    
+    // First, try to resolve as local variable
+    int local_slot = resolve_local(compiler, name);
+    if (local_slot != -1) {
+        // Variable is a local - emit OP_LOAD_LOCAL
+        emit_instruction(compiler, OP_LOAD_LOCAL, (uint16_t)local_slot);
+        return true;
+    }
+    
+    // Check if this is a reference to a function being compiled (for recursion)
+    BytecodeFunction* compiler_func = find_compiler_function(name);
+    if (compiler_func) {
+        // This is a reference to a function being compiled - treat as global
+        int name_index = bytecode_chunk_add_string(compiler->chunk, name);
+        if (name_index >= 0) {
+            emit_instruction(compiler, OP_LOAD_GLOBAL, (uint16_t)name_index);
+            return true;
+        } else {
+            compiler_error_at(compiler, "Failed to add function name to string pool");
+            return false;
+        }
+    }
+    
+    // Not a local variable, treat as global
     int name_index = bytecode_chunk_add_string(compiler->chunk, name);
     if (name_index >= 0) {
         emit_instruction(compiler, OP_LOAD_GLOBAL, (uint16_t)name_index);
@@ -263,8 +362,17 @@ static bool compile_assignment_expr(CompilerContext* compiler, AssignmentExpr* e
     // Compile the value to assign
     if (!compile_expression(compiler, expr->value)) return false;
     
-    // For now, treat all variables as globals
     const char* name = expr->name.identifier;
+    
+    // First, try to resolve as local variable
+    int local_slot = resolve_local(compiler, name);
+    if (local_slot != -1) {
+        // Variable is a local - emit OP_STORE_LOCAL
+        emit_instruction(compiler, OP_STORE_LOCAL, (uint16_t)local_slot);
+        return true;
+    }
+    
+    // Not a local variable, treat as global
     int name_index = bytecode_chunk_add_string(compiler->chunk, name);
     if (name_index >= 0) {
         emit_instruction(compiler, OP_STORE_GLOBAL, (uint16_t)name_index);
@@ -300,8 +408,15 @@ static bool compile_table_literal_expr(CompilerContext* compiler, TableLiteralEx
         // Table is on stack, duplicate it for the set operation
         emit_byte(compiler, OP_DUP);
         
-        // Compile key
-        if (!compile_expression(compiler, expr->pairs[i].key)) return false;
+        // Compile key (handle NULL keys for array-style syntax)
+        if (expr->pairs[i].key == NULL) {
+            // Generate implicit numeric index for array-style syntax
+            Value index_value = make_integer_value(NUM_INT64, (int64_t)i);
+            emit_constant(compiler, index_value);
+        } else {
+            // Compile explicit key expression
+            if (!compile_expression(compiler, expr->pairs[i].key)) return false;
+        }
         
         // Compile value  
         if (!compile_expression(compiler, expr->pairs[i].value)) return false;
@@ -358,6 +473,21 @@ static bool compile_table_index_expr(CompilerContext* compiler, TableIndexExpr* 
     return true;
 }
 
+static bool compile_table_dot_expr(CompilerContext* compiler, TableDotExpr* expr) {
+    // Compile the table expression
+    if (!compile_expression(compiler, expr->table)) return false;
+    
+    // For dot access, the key is a compile-time constant string
+    // Convert the token identifier to a string value
+    Value key_value = make_string_value_from_cstr(expr->key.identifier);
+    emit_constant(compiler, key_value);
+    
+    // Emit table get instruction (pops table and key, pushes result)
+    emit_byte(compiler, OP_TABLE_GET);
+    
+    return true;
+}
+
 // =============================================================================
 // STATEMENT COMPILATION  
 // =============================================================================
@@ -368,6 +498,9 @@ bool compile_statement(CompilerContext* compiler, Stmt* stmt) {
     switch (stmt->type) {
         case STMT_EXPRESSION:
             return compile_expression_stmt(compiler, &stmt->as.expression);
+            
+        case STMT_PRINT:
+            return compile_print_stmt(compiler, &stmt->as.print);
             
         case STMT_VAR:
             return compile_var_stmt(compiler, &stmt->as.var);
@@ -390,6 +523,15 @@ bool compile_statement(CompilerContext* compiler, Stmt* stmt) {
         case STMT_RETURN:
             return compile_return_stmt(compiler, &stmt->as.return_stmt);
             
+        case STMT_SWITCH:
+            return compile_switch_stmt(compiler, &stmt->as.switch_stmt);
+            
+        case STMT_BREAK:
+            return compile_break_stmt(compiler, &stmt->as.break_stmt);
+            
+        case STMT_IMPORT:
+            return compile_import_stmt(compiler, &stmt->as.import_stmt);
+            
         default:
             compiler_error_at(compiler, "Unknown statement type");
             return false;
@@ -402,6 +544,16 @@ static bool compile_expression_stmt(CompilerContext* compiler, ExpressionStmt* s
     // Don't pop the result for the last statement - it becomes the return value
     // TODO: Only pop for non-final expression statements
     emit_byte(compiler, OP_POP);
+    return true;
+}
+
+static bool compile_print_stmt(CompilerContext* compiler, PrintStmt* stmt) {
+    // Compile the expression to print
+    if (!compile_expression(compiler, stmt->expression)) return false;
+    
+    // Emit print instruction
+    emit_byte(compiler, OP_PRINT);
+    
     return true;
 }
 
@@ -505,15 +657,171 @@ static bool compile_while_stmt(CompilerContext* compiler, WhileStmt* stmt) {
 }
 
 static bool compile_for_stmt(CompilerContext* compiler, ForStmt* stmt) {
-    // TODO: Implement for loop compilation
-    compiler_error_at(compiler, "For loops not yet implemented in bytecode compiler");
-    return false;
+    // Compile the initializer if present
+    if (stmt->initializer) {
+        if (!compile_statement(compiler, stmt->initializer)) return false;
+    }
+    
+    // Mark the start of the loop
+    size_t loop_start = compiler->chunk->count;
+    
+    // Compile the condition if present (default to true if none)
+    if (stmt->condition) {
+        if (!compile_expression(compiler, stmt->condition)) return false;
+        
+        // Jump out of loop if condition is false
+        emit_instruction(compiler, OP_JUMP_IF_FALSE, 0);  // Placeholder
+        size_t exit_jump = compiler->chunk->count - 1;
+        
+        // Pop the condition value
+        emit_byte(compiler, OP_POP);
+        
+        // Compile loop body
+        if (!compile_statement(compiler, stmt->body)) return false;
+        
+        // Compile increment expression if present
+        if (stmt->increment) {
+            if (!compile_expression(compiler, stmt->increment)) return false;
+            emit_byte(compiler, OP_POP);  // Discard increment result
+        }
+        
+        // Jump back to condition check
+        size_t loop_offset = compiler->chunk->count - loop_start + 1;
+        emit_instruction(compiler, OP_LOOP, (uint16_t)loop_offset);
+        
+        // Patch exit jump to point here
+        compiler->chunk->instructions[exit_jump].operand = (uint16_t)compiler->chunk->count;
+        
+        // Pop the condition value for the exit path
+        emit_byte(compiler, OP_POP);
+    } else {
+        // Infinite loop - compile body and jump back
+        if (!compile_statement(compiler, stmt->body)) return false;
+        
+        // Compile increment expression if present
+        if (stmt->increment) {
+            if (!compile_expression(compiler, stmt->increment)) return false;
+            emit_byte(compiler, OP_POP);  // Discard increment result
+        }
+        
+        // Jump back to start
+        size_t loop_offset = compiler->chunk->count - loop_start + 1;
+        emit_instruction(compiler, OP_LOOP, (uint16_t)loop_offset);
+    }
+    
+    return true;
 }
 
 static bool compile_function_stmt(CompilerContext* compiler, FunctionStmt* stmt) {
-    // TODO: Implement function compilation
-    compiler_error_at(compiler, "Functions not yet implemented in bytecode compiler");
-    return false;
+    // Create parameter names array
+    char** param_names = NULL;
+    if (stmt->param_count > 0) {
+        param_names = malloc(stmt->param_count * sizeof(char*));
+        if (!param_names) {
+            compiler_error_at(compiler, "Memory allocation failed for parameter names");
+            return false;
+        }
+        
+        for (size_t i = 0; i < stmt->param_count; i++) {
+            param_names[i] = (char*)stmt->params[i].identifier;
+        }
+    }
+    
+    // Create bytecode function object
+    BytecodeFunction* function = bytecode_function_create(stmt->name.identifier, param_names, stmt->param_count);
+    free(param_names);  // bytecode_function_create copies the names
+    
+    if (!function) {
+        compiler_error_at(compiler, "Failed to create bytecode function");
+        return false;
+    }
+    
+    // Compile function body to bytecode
+    function->bytecode = bytecode_chunk_create();
+    if (!function->bytecode) {
+        bytecode_function_free(function);
+        compiler_error_at(compiler, "Failed to create bytecode chunk for function");
+        return false;
+    }
+    
+    // Register function in compiler-time registry for recursive references
+    register_compiler_function(function->name, function);
+    
+    // Create compiler context for function body
+    CompilerContext* func_compiler = compiler_create(function->bytecode, NULL);
+    if (!func_compiler) {
+        bytecode_function_free(function);
+        compiler_error_at(compiler, "Failed to create function compiler context");
+        return false;
+    }
+    
+    // Lua-inspired: Set current function name for recursive reference resolution
+    const char* previous_function_name = current_function_name;
+    current_function_name = function->name;
+    
+    // Register function parameters as local variables
+    // Parameters are the first local variables (slots 0, 1, 2, ...)
+    for (size_t i = 0; i < stmt->param_count; i++) {
+        int slot = add_local(func_compiler, stmt->params[i].identifier);
+        if (slot == -1) {
+            current_function_name = previous_function_name; // Restore
+            compiler_free(func_compiler);
+            bytecode_function_free(function);
+            compiler_error_at(compiler, "Too many function parameters");
+            return false;
+        }
+    }
+    
+    // Compile each statement in the function body
+    bool success = true;
+    for (size_t i = 0; i < stmt->body_count; i++) {
+        if (!compile_statement(func_compiler, stmt->body[i])) {
+            success = false;
+            break;
+        }
+    }
+    
+    // Add return nil if no explicit return
+    if (success) {
+        emit_byte(func_compiler, OP_PUSH_NIL);
+        emit_byte(func_compiler, OP_RETURN);
+    }
+    
+    compiler_free(func_compiler);
+    
+    // Restore previous function name
+    current_function_name = previous_function_name;
+    
+    if (!success) {
+        bytecode_function_free(function);
+        compiler_error_at(compiler, "Failed to compile function body");
+        return false;
+    }
+    
+    // Store the function in constants and globals (runtime storage)
+    int name_index = bytecode_chunk_add_string(compiler->chunk, function->name);
+    if (name_index < 0) {
+        bytecode_function_free(function);
+        compiler_error_at(compiler, "Failed to add function name to string pool");
+        return false;
+    }
+    
+    // Create bytecode function value and add to constants
+    Value func_value;
+    func_value.type = VAL_BYTECODE_FUNCTION;
+    func_value.as.bytecode_func = function;
+    
+    // Increment reference count for runtime storage
+    function->ref_count++;
+    
+    bytecode_chunk_write_constant(compiler->chunk, func_value);
+    uint16_t constant_index = (uint16_t)(compiler->chunk->constant_count - 1);
+    
+    // Emit instructions to load and store the function at runtime
+    emit_instruction(compiler, OP_PUSH_CONSTANT, constant_index);
+    emit_instruction(compiler, OP_STORE_GLOBAL, (uint16_t)name_index);
+    
+    return true;
 }
 
 static bool compile_return_stmt(CompilerContext* compiler, ReturnStmt* stmt) {
@@ -524,6 +832,129 @@ static bool compile_return_stmt(CompilerContext* compiler, ReturnStmt* stmt) {
     }
     
     emit_byte(compiler, OP_RETURN);
+    return true;
+}
+
+static bool compile_switch_stmt(CompilerContext* compiler, SwitchStmt* stmt) {
+    // For simplicity, implement switch as a series of if-else statements
+    // Compile the discriminant once and store it
+    if (!compile_expression(compiler, stmt->discriminant)) return false;
+    
+    // Array to track jump addresses for case ends
+    size_t* case_end_jumps = malloc(stmt->case_count * sizeof(size_t));
+    if (!case_end_jumps && stmt->case_count > 0) {
+        compiler_error_at(compiler, "Memory allocation failed");
+        return false;
+    }
+    
+    // Compile each case as: if (discriminant == case_value) { body }
+    for (size_t i = 0; i < stmt->case_count; i++) {
+        SwitchCase* case_clause = stmt->cases[i];
+        
+        // For each pattern in the case (typically just one for simple cases)
+        for (size_t j = 0; j < case_clause->pattern_count; j++) {
+            // Duplicate discriminant for comparison
+            emit_byte(compiler, OP_DUP);
+            
+            // Compile the pattern value (assuming it's a literal for now)
+            CasePattern* pattern = case_clause->patterns[j];
+            if (pattern->type == PATTERN_VALUE) {
+                // Push the literal value for comparison
+                emit_constant(compiler, pattern->as.literal);
+                
+                // Compare discriminant with case value
+                emit_byte(compiler, OP_EQ);
+                
+                // Jump to next case if not equal
+                emit_instruction(compiler, OP_JUMP_IF_FALSE, 0);
+                size_t next_case_jump = compiler->chunk->count - 1;
+                
+                // Pop the comparison result since we're entering the case
+                emit_byte(compiler, OP_POP);
+                
+                // Compile case body
+                for (size_t k = 0; k < case_clause->body_count; k++) {
+                    if (!compile_statement(compiler, case_clause->body[k])) {
+                        free(case_end_jumps);
+                        return false;
+                    }
+                }
+                
+                // Jump to end of switch after case execution
+                emit_instruction(compiler, OP_JUMP, 0);
+                case_end_jumps[i] = compiler->chunk->count - 1;
+                
+                // Patch the next case jump to point here
+                compiler->chunk->instructions[next_case_jump].operand = (uint16_t)compiler->chunk->count;
+                
+                // Pop the comparison result for the non-matching path
+                emit_byte(compiler, OP_POP);
+            }
+        }
+    }
+    
+    // If we have a default case, compile it here
+    if (stmt->default_body_count > 0) {
+        for (size_t i = 0; i < stmt->default_body_count; i++) {
+            if (!compile_statement(compiler, stmt->default_body[i])) {
+                free(case_end_jumps);
+                return false;
+            }
+        }
+    }
+    
+    // Pop the discriminant value (it's still on the stack)
+    emit_byte(compiler, OP_POP);
+    
+    // Patch all case end jumps to point here
+    for (size_t i = 0; i < stmt->case_count; i++) {
+        if (case_end_jumps[i] > 0) {
+            compiler->chunk->instructions[case_end_jumps[i]].operand = (uint16_t)compiler->chunk->count;
+        }
+    }
+    
+    free(case_end_jumps);
+    return true;
+}
+
+static bool compile_break_stmt(CompilerContext* compiler, BreakStmt* stmt) {
+    // For simplicity, implement break as a no-op for now
+    // In a more complete implementation, this would jump to the end of the loop/switch
+    (void)compiler;  // Suppress unused parameter warning
+    (void)stmt;      // Suppress unused parameter warning
+    return true;
+}
+
+static bool compile_import_stmt(CompilerContext* compiler, ImportStmt* stmt) {
+    // For the bytecode backend, we need to handle imports at runtime
+    // Create a string constant for the module name and call a builtin import function
+    
+    // Push the module name as a string constant
+    // The module name is already parsed and stored in the token's literal.string field
+    const char* module_name = stmt->module_name.literal.string;
+    if (!module_name) {
+        compiler_error_at(compiler, "Invalid module name - null string");
+        return false;
+    }
+    
+    // Load the import builtin function from globals
+    int import_index = bytecode_chunk_add_string(compiler->chunk, "__import");
+    if (import_index < 0) {
+        compiler_error_at(compiler, "Failed to add import function name to string pool");
+        return false;
+    }
+    emit_instruction(compiler, OP_LOAD_GLOBAL, (uint16_t)import_index);
+    
+    // Then push the module name argument
+    Value module_name_value = make_string_value_from_cstr(module_name);
+    emit_constant(compiler, module_name_value);
+    
+    // Call the import function with 1 argument (module name)
+    emit_instruction(compiler, OP_CALL, 1);
+    
+    // Pop the result (import returns nil)
+    emit_byte(compiler, OP_POP);
+    
     return true;
 }
 
@@ -563,6 +994,9 @@ bool compile_ast_to_bytecode(Stmt** statements, size_t count, BytecodeChunk* chu
     
     bool had_error = compiler->had_error;
     compiler_free(compiler);
+    
+    // Clean up compiler function registry
+    clear_compiler_functions();
     
     return success && !had_error;
 }

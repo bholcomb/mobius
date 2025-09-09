@@ -2,6 +2,7 @@
 #include "table.h"
 #include "ast.h"  // For AST reference counting functions
 #include "token.h"  // For token copying functions
+#include "bytecode.h"  // For bytecode function management
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -371,6 +372,8 @@ const char* value_type_name(ValueType type) {
         case VAL_CHAR: return "char";
         case VAL_ARRAY: return "array";
         case VAL_FUNCTION: return "function";
+        case VAL_BYTECODE_FUNCTION: return "function";
+        case VAL_BUILTIN_FUNCTION: return "function";
         case VAL_TABLE: return "table";
         case VAL_USERDATA: return "userdata";
         default: return "unknown";
@@ -388,8 +391,15 @@ Value copy_value(Value value) {
         ArrayValue* retained_array = array_retain(value.as.array);
         return make_array_value(retained_array);
     } else if (value.type == VAL_FUNCTION && value.as.function) {
-        // For functions, we don't copy the function structure itself
-        // as they should be shared. Just return the same value.
+        // For AST functions, increment reference count (shared ownership)
+        value.as.function->ref_count++;
+        return value;
+    } else if (value.type == VAL_BYTECODE_FUNCTION && value.as.bytecode_func) {
+        // For bytecode functions, increment reference count (shared ownership)
+        value.as.bytecode_func->ref_count++;
+        return value;
+    } else if (value.type == VAL_BUILTIN_FUNCTION) {
+        // Builtin functions don't need reference counting - they're static
         return value;
     } else if (value.type == VAL_TABLE && value.as.table) {
         // For tables, increment reference count (shared ownership)
@@ -415,30 +425,34 @@ void free_value(Value value) {
     } else if (value.type == VAL_FUNCTION && value.as.function) {
         MobiusFunction* func = value.as.function;
         
-        // Free function name string
-        if (func->name) {
-            free(func->name);
-        }
+        // Decrement reference count
+        func->ref_count--;
         
-        // Free parameter name strings
-        if (func->param_names) {
-            for (size_t i = 0; i < func->param_count; i++) {
-                if (func->param_names[i]) {
-                    free(func->param_names[i]);
-                }
+        // Only free if reference count reaches zero
+        if (func->ref_count <= 0) {
+            // Free function name string
+            if (func->name) {
+                free(func->name);
             }
-            free(func->param_names);
+            
+            // Free parameter name strings
+            if (func->param_names) {
+                for (size_t i = 0; i < func->param_count; i++) {
+                    if (func->param_names[i]) {
+                        free(func->param_names[i]);
+                    }
+                }
+                free(func->param_names);
+            }
+            
+            
+            // Note: don't free closure environment - it's managed separately
+            free(func);
         }
-        
-        // Release AST body references using reference counting
-        // This properly manages the AST node lifecycle
-        if (func->body) {
-            ast_release_stmt_array(func->body, func->body_count);
-            free(func->body);  // Free the body array itself
-        }
-        
-        // Note: don't free closure environment - it's managed separately
-        free(func);
+    } else if (value.type == VAL_BYTECODE_FUNCTION && value.as.bytecode_func) {
+        bytecode_function_free(value.as.bytecode_func);
+    } else if (value.type == VAL_BUILTIN_FUNCTION) {
+        // Builtin functions are static - no cleanup needed
     } else if (value.type == VAL_TABLE && value.as.table) {
         Table* table = value.as.table;
         table->ref_count--;

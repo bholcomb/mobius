@@ -1328,6 +1328,7 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         function->body = NULL;
     }
     function->closure = env;  // Capture current environment as closure
+    function->ref_count = 1;  // Initialize reference count
     
     // Create function value
     Value func_value = make_function_value(function);

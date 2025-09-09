@@ -4,6 +4,8 @@
 #include "utility.h"
 #include "table.h"
 #include "token.h"
+#include "evaluator.h"
+#include "stdlib.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -168,6 +170,140 @@ int bytecode_chunk_add_string(BytecodeChunk* chunk, const char* string) {
 }
 
 // =============================================================================
+// BYTECODE FUNCTION MANAGEMENT
+// =============================================================================
+
+BytecodeFunction* bytecode_function_create(const char* name, char** param_names, size_t param_count) {
+    BytecodeFunction* func = malloc(sizeof(BytecodeFunction));
+    if (!func) return NULL;
+    
+    func->name = strdup(name);
+    if (!func->name) {
+        free(func);
+        return NULL;
+    }
+    
+    func->param_count = param_count;
+    if (param_count > 0) {
+        func->param_names = malloc(param_count * sizeof(char*));
+        if (!func->param_names) {
+            free(func->name);
+            free(func);
+            return NULL;
+        }
+        
+        for (size_t i = 0; i < param_count; i++) {
+            func->param_names[i] = strdup(param_names[i]);
+            if (!func->param_names[i]) {
+                // Cleanup previously allocated names
+                for (size_t j = 0; j < i; j++) {
+                    free(func->param_names[j]);
+                }
+                free(func->param_names);
+                free(func->name);
+                free(func);
+                return NULL;
+            }
+        }
+    } else {
+        func->param_names = NULL;
+    }
+    
+    func->bytecode = NULL;  // Will be set later
+    func->ref_count = 1;
+    
+    return func;
+}
+
+void bytecode_function_free(BytecodeFunction* func) {
+    if (!func) return;
+    
+    func->ref_count--;
+    if (func->ref_count > 0) return;
+    
+    free(func->name);
+    
+    if (func->param_names) {
+        for (size_t i = 0; i < func->param_count; i++) {
+            free(func->param_names[i]);
+        }
+        free(func->param_names);
+    }
+    
+    if (func->bytecode) {
+        bytecode_chunk_free(func->bytecode);
+    }
+    
+    free(func);
+}
+
+// =============================================================================
+// LUA-INSPIRED BUILTIN FUNCTION SYSTEM
+// =============================================================================
+
+// Use the VMBuiltinFunction typedef from value.h
+
+// Forward declaration
+static void vm_runtime_error(MobiusVM* vm, const char* format, ...);
+
+// VM Builtin function registry entry
+typedef struct {
+    const char* name;
+    VMBuiltinFunction func;
+} VMBuiltinEntry;
+
+// Lua-inspired builtin function implementations
+static void builtin_print_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    for (int i = 0; i < arg_count; i++) {
+        Value arg = vm_peek(vm, arg_count - 1 - i);  // Get args in correct order
+        char* str = value_to_string(arg);
+        if (str) {
+            printf("%s", str);
+            if (i < arg_count - 1) printf(" ");  // Space between arguments
+            free(str);
+        }
+    }
+    printf("\n");
+    *result = make_nil_value();
+}
+
+static void builtin_typeof_vm(MobiusVM* vm, int arg_count, void* result_ptr) {
+    Value* result = (Value*)result_ptr;
+    if (arg_count != 1) {
+        vm_runtime_error(vm, "typeof expects 1 argument");
+        *result = make_nil_value();
+        return;
+    }
+
+    Value arg = vm_peek(vm, 0);
+    const char* type_name = value_type_name(arg.type);
+    *result = make_string_value_from_cstr(type_name);
+}
+
+// VM Builtin function registry (Lua-inspired approach)
+static VMBuiltinEntry builtin_registry[] = {
+    {"print", builtin_print_vm},
+    {"typeof", builtin_typeof_vm},
+    // Add more builtins here as needed
+    {NULL, NULL}  // Sentinel
+};
+
+// Helper function to populate VM with builtin functions (Lua-inspired)
+static void vm_populate_builtins(MobiusVM* vm) {
+    if (!vm || !vm->globals) return;
+    
+    for (int i = 0; builtin_registry[i].name != NULL; i++) {
+        // Create a special builtin function value
+        Value builtin_value;
+        builtin_value.type = VAL_BUILTIN_FUNCTION;
+        builtin_value.as.builtin_func = builtin_registry[i].func;
+        
+        table_set(vm->globals, make_string_value_from_cstr(builtin_registry[i].name), builtin_value);
+    }
+}
+
+// =============================================================================
 // VIRTUAL MACHINE IMPLEMENTATION
 // =============================================================================
 
@@ -200,6 +336,9 @@ MobiusVM* vm_create(void) {
     
     // Initialize current chunk
     vm->current_chunk = NULL;
+    
+    // Populate with builtin functions (Lua-inspired approach)
+    vm_populate_builtins(vm);
     
     // Initialize RISC-V JIT support
     vm->jit_cache = NULL;
@@ -382,9 +521,30 @@ static Value binary_arithmetic(MobiusVM* vm, Opcode op) {
 }
 
 static bool call_value(MobiusVM* vm, Value callee, int arg_count) {
-    if (callee.type == VAL_FUNCTION) {
-        // TODO: Implement function calls with call frames
-        vm_runtime_error(vm, "Function calls not yet fully implemented");
+    if (callee.type == VAL_BUILTIN_FUNCTION) {
+        // Lua-inspired: Builtin functions use unified calling convention
+        VMBuiltinFunction builtin_func = callee.as.builtin_func;
+
+        // Call the builtin function - it will read args from stack via vm_peek
+        Value result;
+        builtin_func(vm, arg_count, &result);
+
+        // Pop arguments and function from stack
+        for (int i = 0; i <= arg_count; i++) {
+            vm_pop(vm);
+        }
+
+        // Push result onto stack
+        vm_push(vm, result);
+
+        return true;
+    } else if (callee.type == VAL_FUNCTION) {
+        // TODO: Implement AST function calls with call frames
+        vm_runtime_error(vm, "AST function calls not yet implemented");
+        return false;
+    } else if (callee.type == VAL_BYTECODE_FUNCTION) {
+        // TODO: Implement bytecode function calls with call frames
+        vm_runtime_error(vm, "Bytecode function calls not yet implemented");
         return false;
     } else {
         vm_runtime_error(vm, "Can only call functions");
@@ -927,9 +1087,16 @@ int vm_execute(MobiusVM* vm, BytecodeChunk* chunk) {
                 break;
             }
             
-            case OP_RETURN:
-                // For now, just return the top of stack
+            case OP_RETURN: {
+                // Handle return properly - pop the return value and exit
+                if (vm->stack_top > vm->stack) {
+                    Value return_value = vm_pop(vm);
+                    // For now, we'll just discard the return value
+                    // In a full implementation, this would be used by the caller
+                    free_value(return_value);
+                }
                 return VM_OK;
+            }
                 
             default:
                 vm_runtime_error(vm, "Unknown instruction: %d", instruction);

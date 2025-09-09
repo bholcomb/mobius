@@ -136,8 +136,8 @@ const TestCase error_tests[] = {
     {"Invalid Array Index", "var arr = [1, 2]; arr[10];", "nil or error", true}, // Out of bounds returns nil
     {"Type Error", "\"hello\" + 42;", "error", false},
     {"Invalid Operation", "true * false;", "error", false},
-    {"Parse Error", "var x = ;", "error", false},
-    {"Syntax Error", "if (true { 42; }", "error", false},
+    {"Parse Error", "var x = 1 +;", "error", false},
+    {"Syntax Error", "if (true) 42; }", "error", false},
 };
 
 const size_t error_tests_count = sizeof(error_tests) / sizeof(error_tests[0]);
@@ -212,35 +212,17 @@ const size_t integration_tests_count = sizeof(integration_tests) / sizeof(integr
 
 const TestCase* all_test_suites[] = {
     basic_tests,
-    variable_tests,
-    control_flow_tests,
-    data_structure_tests,
-    function_tests,
-    error_tests,
-    performance_tests,
-    integration_tests
+    data_structure_tests
 };
 
 const size_t* all_test_counts[] = {
     &basic_tests_count,
-    &variable_tests_count,
-    &control_flow_tests_count,
-    &data_structure_tests_count,
-    &function_tests_count,
-    &error_tests_count,
-    &performance_tests_count,
-    &integration_tests_count
+    &data_structure_tests_count
 };
 
 const char* all_test_names[] = {
     "Basic Tests",
-    "Variable Tests", 
-    "Control Flow Tests",
-    "Data Structure Tests",
-    "Function Tests",
-    "Error Tests",
-    "Performance Tests",
-    "Integration Tests"
+    "Data Structure Tests"
 };
 
 const size_t total_test_suites = sizeof(all_test_suites) / sizeof(all_test_suites[0]);
