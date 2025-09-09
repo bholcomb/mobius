@@ -5,19 +5,44 @@
 #include <stdint.h>
 #include <ctype.h>
 
+// Helper function to round up to next power of 2
+static size_t next_power_of_2(size_t n) {
+    if (n <= 1) return 1;
+    
+    n--;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    if (sizeof(size_t) > 4) {
+        n |= n >> 32;
+    }
+    n++;
+    
+    return n;
+}
+
 // Hash functions for different value types
 size_t hash_string_for_table(const char* str) {
-    size_t hash = 5381;
-    int c;
-    while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c; // hash * 33 + c
+    // FNV-1a hash - better distribution than djb2
+    size_t hash = 14695981039346656037ULL; // FNV offset basis
+    while (*str) {
+        hash ^= (unsigned char)*str++;
+        hash *= 1099511628211ULL; // FNV prime
     }
     return hash;
 }
 
 size_t hash_integer(int64_t value) {
-    // Simple hash for integers
-    return (size_t)(value ^ (value >> 32));
+    // Improved integer hashing (based on splitmix64)
+    uint64_t v = (uint64_t)value;
+    v ^= v >> 30;
+    v *= 0xbf58476d1ce4e5b9ULL;
+    v ^= v >> 27;
+    v *= 0x94d049bb133111ebULL;
+    v ^= v >> 31;
+    return (size_t)v;
 }
 
 size_t hash_float(double value) {
@@ -82,7 +107,8 @@ size_t hash_value(Value value, size_t capacity) {
             break;
     }
     
-    return hash % capacity;
+    // Use bitwise AND for power-of-2 capacities (faster than modulo)
+    return hash & (capacity - 1);
 }
 
 bool values_equal_for_table(Value a, Value b) {
@@ -116,36 +142,82 @@ bool values_equal_for_table(Value a, Value b) {
 }
 
 TableEntry* find_table_entry(TableEntry* entries, size_t capacity, Value key) {
-    size_t index = hash_value(key, capacity);
+    size_t ideal_index = hash_value(key, capacity);
+    size_t index = ideal_index;
+    uint32_t distance = 0;
     
     while (entries[index].is_occupied) {
         if (values_equal_for_table(entries[index].key, key)) {
             return &entries[index];
         }
-        index = (index + 1) % capacity; // Linear probing
+        
+        // If our probe distance exceeds the resident's distance,
+        // the key definitely isn't in the table (Robin Hood invariant)
+        if (distance > entries[index].distance) {
+            break;
+        }
+        
+        index = (index + 1) & (capacity - 1);
+        distance++;
     }
     
     return &entries[index];
 }
 
 void table_insert_entry(TableEntry* entries, size_t capacity, Value key, Value value) {
-    TableEntry* entry = find_table_entry(entries, capacity, key);
+    size_t ideal_index = hash_value(key, capacity);
+    size_t index = ideal_index;
+    uint32_t distance = 0;
     
-    if (!entry->is_occupied) {
-        entry->key = copy_value(key);
-        entry->is_occupied = true;
-    } else {
-        // Update existing entry - free old value
-        free_value(entry->value);
+    Value insert_key = copy_value(key);
+    Value insert_value = copy_value(value);
+    
+    while (true) {
+        // If we found an empty slot, insert here
+        if (!entries[index].is_occupied) {
+            entries[index].key = insert_key;
+            entries[index].value = insert_value;
+            entries[index].is_occupied = true;
+            entries[index].distance = distance;
+            return;
+        }
+        
+        // If we found the same key, update it
+        if (values_equal_for_table(entries[index].key, insert_key)) {
+            free_value(entries[index].value);
+            entries[index].value = insert_value;
+            free_value(insert_key); // Clean up the copy
+            return;
+        }
+        
+        // Robin Hood: if our distance is greater, displace the resident
+        if (distance > entries[index].distance) {
+            // Swap our entry with the resident
+            Value temp_key = entries[index].key;
+            Value temp_value = entries[index].value;
+            uint32_t temp_distance = entries[index].distance;
+            
+            entries[index].key = insert_key;
+            entries[index].value = insert_value;
+            entries[index].distance = distance;
+            
+            insert_key = temp_key;
+            insert_value = temp_value;
+            distance = temp_distance;
+        }
+        
+        index = (index + 1) & (capacity - 1);
+        distance++;
     }
-    
-    entry->value = copy_value(value);
 }
 
 Table* create_table(size_t initial_capacity) {
     if (initial_capacity < INITIAL_TABLE_CAPACITY) {
         initial_capacity = INITIAL_TABLE_CAPACITY;
     }
+    
+    // Ensure capacity is a power of 2 for efficient bitwise operations
+    initial_capacity = next_power_of_2(initial_capacity);
     
     Table* table = malloc(sizeof(Table));
     if (!table) return NULL;
@@ -184,6 +256,9 @@ void free_table(Table* table) {
 
 void table_resize(Table* table, size_t new_capacity) {
     if (!table || new_capacity <= table->capacity) return;
+    
+    // Ensure new capacity is a power of 2
+    new_capacity = next_power_of_2(new_capacity);
     
     TableEntry* old_entries = table->entries;
     size_t old_capacity = table->capacity;
