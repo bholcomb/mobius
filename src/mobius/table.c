@@ -68,8 +68,8 @@ size_t hash_value(Value value, size_t capacity) {
         case VAL_FLOAT32:
             hash = hash_float((double)value.as.float32_val);
             break;
-        case VAL_FLOAT:
-            hash = hash_float(value.as.float_val);
+        case VAL_FLOAT64:
+            hash = hash_float(value.as.float64_val);
             break;
         case VAL_STRING:
             hash = value.as.string ? hash_string_for_table(string_data(value.as.string)) : 0;
@@ -83,12 +83,6 @@ size_t hash_value(Value value, size_t capacity) {
             break;
         case VAL_FUNCTION:
             hash = (size_t)(uintptr_t)value.as.function;
-            break;
-        case VAL_BYTECODE_FUNCTION:
-            hash = (size_t)(uintptr_t)value.as.bytecode_func;
-            break;
-        case VAL_BUILTIN_FUNCTION:
-            hash = (size_t)(uintptr_t)value.as.builtin_func;
             break;
         case VAL_TABLE:
             hash = (size_t)(uintptr_t)value.as.table;
@@ -120,14 +114,12 @@ bool values_equal_for_table(Value a, Value b) {
         case VAL_INTEGER:
             return a.as.integer.value.i64 == b.as.integer.value.i64;
         case VAL_FLOAT32: return a.as.float32_val == b.as.float32_val;
-        case VAL_FLOAT: return a.as.float_val == b.as.float_val;
+        case VAL_FLOAT64: return a.as.float64_val == b.as.float64_val;
         case VAL_STRING:
             return string_equals(a.as.string, b.as.string);
         case VAL_CHAR: return a.as.character == b.as.character;
         case VAL_ARRAY: return a.as.array == b.as.array;  // Reference equality
         case VAL_FUNCTION: return a.as.function == b.as.function;
-        case VAL_BYTECODE_FUNCTION: return a.as.bytecode_func == b.as.bytecode_func;
-        case VAL_BUILTIN_FUNCTION: return a.as.builtin_func == b.as.builtin_func;
         case VAL_TABLE: return a.as.table == b.as.table;
         case VAL_USERDATA: 
             // Userdata equality: same pointer AND same type
@@ -142,73 +134,58 @@ bool values_equal_for_table(Value a, Value b) {
 }
 
 TableEntry* find_table_entry(TableEntry* entries, size_t capacity, Value key) {
-    size_t ideal_index = hash_value(key, capacity);
-    size_t index = ideal_index;
-    uint32_t distance = 0;
+    size_t index = hash_value(key, capacity);
+    size_t start_index = index;
     
-    while (entries[index].is_occupied) {
-        if (values_equal_for_table(entries[index].key, key)) {
+    do {
+        if (!entries[index].is_occupied) {
+            // Found empty slot
             return &entries[index];
         }
         
-        // If our probe distance exceeds the resident's distance,
-        // the key definitely isn't in the table (Robin Hood invariant)
-        if (distance > entries[index].distance) {
-            break;
+        if (values_equal_for_table(entries[index].key, key)) {
+            // Found matching key
+            return &entries[index];
         }
         
+        // Linear probe to next slot
         index = (index + 1) & (capacity - 1);
-        distance++;
-    }
+    } while (index != start_index);
     
-    return &entries[index];
+    // Table is full (this shouldn't happen with proper load factor management)
+    return &entries[start_index];
 }
 
 void table_insert_entry(TableEntry* entries, size_t capacity, Value key, Value value) {
-    size_t ideal_index = hash_value(key, capacity);
-    size_t index = ideal_index;
-    uint32_t distance = 0;
+    size_t index = hash_value(key, capacity);
+    size_t start_index = index;
     
-    Value insert_key = copy_value(key);
-    Value insert_value = copy_value(value);
-    
-    while (true) {
-        // If we found an empty slot, insert here
+    do {
         if (!entries[index].is_occupied) {
-            entries[index].key = insert_key;
-            entries[index].value = insert_value;
+            // Found empty slot, insert here
+            entries[index].key = copy_value(key);
+            entries[index].value = copy_value(value);
             entries[index].is_occupied = true;
-            entries[index].distance = distance;
             return;
         }
         
-        // If we found the same key, update it
-        if (values_equal_for_table(entries[index].key, insert_key)) {
+        if (values_equal_for_table(entries[index].key, key)) {
+            // Found existing key, update value
             free_value(entries[index].value);
-            entries[index].value = insert_value;
-            free_value(insert_key); // Clean up the copy
+            entries[index].value = copy_value(value);
             return;
         }
         
-        // Robin Hood: if our distance is greater, displace the resident
-        if (distance > entries[index].distance) {
-            // Swap our entry with the resident
-            Value temp_key = entries[index].key;
-            Value temp_value = entries[index].value;
-            uint32_t temp_distance = entries[index].distance;
-            
-            entries[index].key = insert_key;
-            entries[index].value = insert_value;
-            entries[index].distance = distance;
-            
-            insert_key = temp_key;
-            insert_value = temp_value;
-            distance = temp_distance;
-        }
-        
+        // Linear probe to next slot
         index = (index + 1) & (capacity - 1);
-        distance++;
-    }
+    } while (index != start_index);
+    
+    // Table is full - this shouldn't happen with proper load factor management
+    // For now, just overwrite the first slot we tried
+    free_value(entries[start_index].value);
+    entries[start_index].key = copy_value(key);
+    entries[start_index].value = copy_value(value);
+    entries[start_index].is_occupied = true;
 }
 
 Table* create_table(size_t initial_capacity) {
@@ -295,7 +272,7 @@ Value table_get(Table* table, Value key) {
     }
     
     TableEntry* entry = find_table_entry(table->entries, table->capacity, key);
-    if (entry->is_occupied) {
+    if (entry->is_occupied && values_equal_for_table(entry->key, key)) {
         return copy_value(entry->value);
     }
     
@@ -346,14 +323,14 @@ bool table_has_key(Table* table, Value key) {
     if (!table || table->size == 0) return false;
     
     TableEntry* entry = find_table_entry(table->entries, table->capacity, key);
-    return entry->is_occupied;
+    return entry->is_occupied && values_equal_for_table(entry->key, key);
 }
 
 bool table_remove(Table* table, Value key) {
     if (!table || table->size == 0) return false;
     
     TableEntry* entry = find_table_entry(table->entries, table->capacity, key);
-    if (!entry->is_occupied) return false;
+    if (!entry->is_occupied || !values_equal_for_table(entry->key, key)) return false;
     
     // Free the entry
     free_value(entry->key);

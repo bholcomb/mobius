@@ -14,279 +14,337 @@
 #define M_E 2.7182818284590452354
 #endif
 
+
+static int64_t extract_int64(Value val)
+{
+    int64_t value = 0;
+    switch (val.type)
+    {
+        case VAL_FLOAT32:
+            value = (int64_t)val.as.float32_val; break;
+        case VAL_FLOAT64:
+            value = (int64_t)val.as.float64_val; break;
+        case VAL_INTEGER:
+            switch (val.as.integer.num_type) {
+                case NUM_INT8:   value = (int64_t)val.as.integer.value.i8; break;
+                case NUM_UINT8:  value = (int64_t)val.as.integer.value.u8; break;
+                case NUM_INT16:  value = (int64_t)val.as.integer.value.i16; break;
+                case NUM_UINT16: value = (int64_t)val.as.integer.value.u16; break;
+                case NUM_INT32:  value = (int64_t)val.as.integer.value.i32; break;
+                case NUM_UINT32: value = (int64_t)val.as.integer.value.u32; break;
+                case NUM_INT64:  value = (int64_t)val.as.integer.value.i64; break;
+                case NUM_UINT64: value = (int64_t)val.as.integer.value.u64; break;
+                default: value = 0; break;
+            }
+            break;
+        default:
+            value = 0; break;
+    }
+    
+    return value;
+}
+
 // Helper function to extract numeric value from a Value
 static double extract_number(Value val) {
+    double value = 0.0;
     switch (val.type) {
-        case VAL_FLOAT:
-            return val.as.float_val;
+        case VAL_FLOAT32:
+            value = (double)val.as.float32_val; break;
+        case VAL_FLOAT64:
+            value = val.as.float64_val; break;
         case VAL_INTEGER:
             // Handle different integer types
             switch (val.as.integer.num_type) {
-                case NUM_INT8:   return (double)val.as.integer.value.i8;
-                case NUM_UINT8:  return (double)val.as.integer.value.u8;
-                case NUM_INT16:  return (double)val.as.integer.value.i16;
-                case NUM_UINT16: return (double)val.as.integer.value.u16;
-                case NUM_INT32:  return (double)val.as.integer.value.i32;
-                case NUM_UINT32: return (double)val.as.integer.value.u32;
-                case NUM_INT64:  return (double)val.as.integer.value.i64;
-                case NUM_UINT64: return (double)val.as.integer.value.u64;
-                default: return 0.0;
+                case NUM_INT8:   value = (double)val.as.integer.value.i8; break;
+                case NUM_UINT8:  value = (double)val.as.integer.value.u8; break;
+                case NUM_INT16:  value = (double)val.as.integer.value.i16; break;
+                case NUM_UINT16: value = (double)val.as.integer.value.u16; break;
+                case NUM_INT32:  value = (double)val.as.integer.value.i32; break;
+                case NUM_UINT32: value = (double)val.as.integer.value.u32; break;
+                case NUM_INT64:  value = (double)val.as.integer.value.i64; break;
+                case NUM_UINT64: value = (double)val.as.integer.value.u64; break;
+                default: value = 0.0; break;
             }
+            break;
         default:
-            return 0.0;
+            value = 0.0; break;
     }
+
+    return value;
 }
 
 // ============================================================================
 // TRIGONOMETRIC FUNCTIONS
 // ============================================================================
 
-EvalResult math_sin(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_sin(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("sin() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("sin() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(sin(val)));
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(sin(val)));
+    return make_success(1);
 }
 
-EvalResult math_cos(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_cos(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("cos() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("cos() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(cos(val)));
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(cos(val)));
+    return make_success(1);
 }
 
-EvalResult math_tan(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_tan(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("tan() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("tan() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(tan(val)));
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(tan(val)));
+    return make_success(1);
 }
 
-EvalResult math_asin(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_asin(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("asin() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("asin() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
+    double val = extract_number(num_val);
     if (val < -1.0 || val > 1.0) {
         return make_error("asin() argument must be between -1 and 1", 0, 0);
     }
-    return make_success(make_float_value(asin(val)));
+    env_push(env, make_float_value(asin(val)));
+    return make_success(1);
 }
 
-EvalResult math_acos(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_acos(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("acos() expects exactly 1 argument", 0, 0);
     }
-    
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("acos() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
+    double val = extract_number(num_val);
     if (val < -1.0 || val > 1.0) {
         return make_error("acos() argument must be between -1 and 1", 0, 0);
     }
-    return make_success(make_float_value(acos(val)));
+    env_push(env, make_float_value(acos(val)));
+    return make_success(1);
 }
 
-EvalResult math_atan(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_atan(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("atan() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("atan() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(atan(val)));
+    
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(atan(val)));
+    return make_success(1);
 }
 
-EvalResult math_atan2(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_atan2(Environment* env, int arg_count) {
     if (arg_count != 2) {
         return make_error("atan2() expects exactly 2 arguments", 0, 0);
     }
+
+    Value y_val = env_pop(env);
+    Value x_val = env_pop(env);
+  
     
-    if ((args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) ||
-        (args[1].type != VAL_FLOAT && args[1].type != VAL_INTEGER)) {
+    if ((x_val.type != VAL_FLOAT64 && x_val.type != VAL_INTEGER) ||
+        (y_val.type != VAL_FLOAT64 && y_val.type != VAL_INTEGER)) {
         return make_error("atan2() expects numeric arguments", 0, 0);
     }
     
-    double y = extract_number(args[0]);
-    double x = extract_number(args[1]);
-    return make_success(make_float_value(atan2(y, x)));
+    double y = extract_number(x_val);
+    double x = extract_number(y_val);
+    env_push(env, make_float_value(atan2(y, x)));
+    return make_success(1);
 }
 
 // ============================================================================
 // LOGARITHMIC AND EXPONENTIAL FUNCTIONS
 // ============================================================================
 
-EvalResult math_log(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_log(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("log() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("log() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
+    double val = extract_number(num_val);
     if (val <= 0.0) {
         return make_error("log() argument must be positive", 0, 0);
     }
-    return make_success(make_float_value(log(val)));
+    env_push(env, make_float_value(log(val)));
+    return make_success(1);
 }
 
-EvalResult math_log10(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_log10(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("log10() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("log10() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
+    double val = extract_number(num_val);
     if (val <= 0.0) {
         return make_error("log10() argument must be positive", 0, 0);
     }
-    return make_success(make_float_value(log10(val)));
+    env_push(env, make_float_value(log10(val)));
+    return make_success(1);
 }
 
-EvalResult math_exp(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_exp(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("exp() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("exp() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(exp(val)));
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(exp(val)));
+    return make_success(1);
 }
 
 // ============================================================================
 // HYPERBOLIC FUNCTIONS
 // ============================================================================
 
-EvalResult math_sinh(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_sinh(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("sinh() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("sinh() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(sinh(val)));
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(sinh(val)));
+    return make_success(1);
 }
 
-EvalResult math_cosh(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_cosh(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("cosh() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("cosh() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(cosh(val)));
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(cosh(val)));
+    return make_success(1);
 }
 
-EvalResult math_tanh(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_tanh(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("tanh() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_FLOAT && args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("tanh() expects a numeric argument", 0, 0);
     }
     
-    double val = extract_number(args[0]);
-    return make_success(make_float_value(tanh(val)));
+    double val = extract_number(num_val);
+    env_push(env, make_float_value(tanh(val)));
+    return make_success(1);
 }
 
 // ============================================================================
 // ADVANCED MATHEMATICAL FUNCTIONS
 // ============================================================================
 
-EvalResult math_factorial(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_factorial(Environment* env, int arg_count) {
     if (arg_count != 1) {
         return make_error("factorial() expects exactly 1 argument", 0, 0);
     }
     
-    if (args[0].type != VAL_INTEGER) {
+    Value num_val = env_pop(env);
+    if (num_val.type != VAL_INTEGER) {
         return make_error("factorial() expects an integer argument", 0, 0);
     }
     
-    int64_t n = args[0].as.integer.value.i32; // Simplified for demo
-    if (n < 0) {
+    // Extract value properly based on the actual type, but result should be int64_t
+    int64_t value = extract_int64(num_val);
+
+    if (value < 0) {
         return make_error("factorial() argument must be non-negative", 0, 0);
     }
-    if (n > 20) {
+    if (value > 20) {
         return make_error("factorial() argument too large (max 20)", 0, 0);
     }
     
     double result = 1.0;
-    for (int64_t i = 2; i <= n; i++) {
+    for (int64_t i = 2; i <= value; i++) {
         result *= (double)i;
     }
     
-    return make_success(make_float_value(result));
+    env_push(env, make_float_value(result));
+    return make_success(1);
 }
 
-EvalResult math_gcd(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_gcd(Environment* env, int arg_count) {
     if (arg_count != 2) {
         return make_error("gcd() expects exactly 2 arguments", 0, 0);
     }
     
-    if (args[0].type != VAL_INTEGER || args[1].type != VAL_INTEGER) {
+    Value b_val = env_pop(env);
+    Value a_val = env_pop(env);
+
+    if (a_val.type != VAL_INTEGER || b_val.type != VAL_INTEGER) {
         return make_error("gcd() expects integer arguments", 0, 0);
     }
     
-    int64_t a = llabs(args[0].as.integer.value.i32);
-    int64_t b = llabs(args[1].as.integer.value.i32);
+    int64_t a = extract_int64(a_val);
+    int64_t b = extract_int64(b_val);
     
     while (b != 0) {
         int64_t temp = b;
@@ -294,24 +352,28 @@ EvalResult math_gcd(Environment* env, Value* args, size_t arg_count) {
         a = temp;
     }
     
-    return make_success(make_integer_value(NUM_INT32, (int32_t)a));
+    env_push(env, make_integer_value(NUM_INT32, (int32_t)a));
+    return make_success(1);
 }
 
-EvalResult math_lcm(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
+EvalResult math_lcm(Environment* env, int arg_count) {
     if (arg_count != 2) {
         return make_error("lcm() expects exactly 2 arguments", 0, 0);
     }
+
+    Value b_val = env_pop(env);
+    Value a_val = env_pop(env);
     
-    if (args[0].type != VAL_INTEGER || args[1].type != VAL_INTEGER) {
+    if (a_val.type != VAL_INTEGER || b_val.type != VAL_INTEGER) {
         return make_error("lcm() expects integer arguments", 0, 0);
     }
     
-    int64_t a = llabs(args[0].as.integer.value.i32);
-    int64_t b = llabs(args[1].as.integer.value.i32);
+    int64_t a = extract_int64(a_val);
+    int64_t b = extract_int64(b_val);
     
     if (a == 0 || b == 0) {
-        return make_success(make_integer_value(NUM_INT32, 0));
+        env_push(env, make_integer_value(NUM_INT32, 0));
+        return make_success(1);
     }
     
     // Calculate GCD first
@@ -324,29 +386,28 @@ EvalResult math_lcm(Environment* env, Value* args, size_t arg_count) {
     }
     
     int64_t lcm_val = (a / gcd_val) * b;
-    return make_success(make_integer_value(NUM_INT32, (int32_t)lcm_val));
+    env_push(env, make_integer_value(NUM_INT32, (int32_t)lcm_val));
+    return make_success(1);
 }
 
 // ============================================================================
 // MATHEMATICAL CONSTANTS
 // ============================================================================
 
-EvalResult math_pi(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
-    (void)args; // Unused parameter
+EvalResult math_pi(Environment* env, int arg_count) {
     if (arg_count != 0) {
         return make_error("pi() expects no arguments", 0, 0);
     }
-    return make_success(make_float_value(M_PI));
+    env_push(env, make_float_value(M_PI));
+    return make_success(1);
 }
 
-EvalResult math_e(Environment* env, Value* args, size_t arg_count) {
-    (void)env; // Unused parameter
-    (void)args; // Unused parameter
+EvalResult math_e(Environment* env, int arg_count) {
     if (arg_count != 0) {
         return make_error("e() expects no arguments", 0, 0);
     }
-    return make_success(make_float_value(M_E));
+    env_push(env, make_float_value(M_E));
+    return make_success(1);
 }
 
 // ============================================================================

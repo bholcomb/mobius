@@ -1,0 +1,8 @@
+// Test wrong number of arguments error
+print("Testing wrong argument count...");
+func add(a, b) {
+    return a + b;
+}
+
+var sum = add(1, 2, 3);  // Too many arguments
+print("This should not print");

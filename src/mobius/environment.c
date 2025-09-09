@@ -8,6 +8,9 @@
 // Global environment instance
 Environment* global_env = NULL;
 
+// Initial stack capacity
+#define INITIAL_STACK_CAPACITY 256
+
 // Create a new environment
 Environment* create_environment(Environment* enclosing) {
     Environment* env = malloc(sizeof(Environment));
@@ -21,6 +24,17 @@ Environment* create_environment(Environment* enclosing) {
         return NULL;
     }
     
+    // Initialize stack
+    env->stack_capacity = INITIAL_STACK_CAPACITY;
+    env->stack = malloc(env->stack_capacity * sizeof(Value));
+    env->stack_top = 0;
+    
+    if (!env->stack) {
+        free_table(env->variables);
+        free(env);
+        return NULL;
+    }
+    
     return env;
 }
 
@@ -30,6 +44,10 @@ void free_environment(Environment* env) {
     
     // Free the table (this handles all variable cleanup)
     free_table(env->variables);
+    
+    // Free the stack (values are copied, so we don't need to free individual values)
+    free(env->stack);
+    
     free(env);
 }
 
@@ -133,4 +151,82 @@ void cleanup_global_environment() {
         free_environment(global_env);
         global_env = NULL;
     }
+}
+
+// =============================================================================
+// STACK OPERATIONS FOR EXPRESSION EVALUATION
+// =============================================================================
+
+// Ensure the stack has enough capacity for additional elements
+void env_ensure_stack_capacity(Environment* env, size_t needed) {
+    if (!env) return;
+    
+    size_t required = env->stack_top + needed;
+    if (required <= env->stack_capacity) {
+        return;  // Already have enough capacity
+    }
+    
+    // Double the capacity or use required size, whichever is larger
+    size_t new_capacity = env->stack_capacity * 2;
+    if (new_capacity < required) {
+        new_capacity = required;
+    }
+    
+    Value* new_stack = realloc(env->stack, new_capacity * sizeof(Value));
+    if (!new_stack) {
+        // Handle allocation failure - for now, just return
+        // In production, we might want to set an error flag
+        return;
+    }
+    
+    env->stack = new_stack;
+    env->stack_capacity = new_capacity;
+}
+
+// Push a value onto the stack
+void env_push(Environment* env, Value value) {
+    if (!env) return;
+    
+    env_ensure_stack_capacity(env, 1);
+    env->stack[env->stack_top] = copy_value(value);
+    env->stack_top++;
+}
+
+// Pop a value from the stack
+Value env_pop(Environment* env) {
+    if (!env || env->stack_top == 0) {
+        return make_nil_value();  // Stack underflow - return nil
+    }
+    
+    env->stack_top--;
+    return env->stack[env->stack_top];
+}
+
+// Peek at a value on the stack without removing it
+// offset 0 = top of stack, 1 = second from top, etc.
+Value env_peek(Environment* env, size_t offset) {
+    if (!env || env->stack_top == 0 || offset >= env->stack_top) {
+        return make_nil_value();  // Invalid offset
+    }
+    
+    // Return the value at the specified offset from the top
+    return env->stack[env->stack_top - 1 - offset];
+}
+
+// Get current stack size
+size_t env_stack_size(Environment* env) {
+    if (!env) return 0;
+    return env->stack_top;
+}
+
+// Clear the stack (useful for error recovery)
+void env_stack_clear(Environment* env) {
+    if (!env) return;
+    
+    // Free all values on the stack
+    for (size_t i = 0; i < env->stack_top; i++) {
+        free_value(env->stack[i]);
+    }
+    
+    env->stack_top = 0;
 }

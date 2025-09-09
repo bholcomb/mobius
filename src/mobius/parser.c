@@ -1204,7 +1204,7 @@ CasePattern* parse_case_pattern(Parser* parser) {
         } else if (strcmp(type_name, "int") == 0 || strcmp(type_name, "integer") == 0) {
             value_type = VAL_INTEGER;
         } else if (strcmp(type_name, "float") == 0) {
-            value_type = VAL_FLOAT;
+            value_type = VAL_FLOAT64;
         } else if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0) {
             value_type = VAL_BOOL;
         } else if (strcmp(type_name, "array") == 0) {

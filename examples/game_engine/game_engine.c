@@ -366,7 +366,10 @@ void print_game_status(GameEngine* game) {
 
 void create_demo_scripts(void) {
     // Create scripts directory if it doesn't exist
-    system("mkdir -p scripts");
+    int result = system("mkdir -p scripts");
+    if (result != 0) {
+        fprintf(stderr, "Warning: Failed to create scripts directory\n");
+    }
     
     // Create game initialization script
     FILE* init_script = fopen("scripts/game_init.mob", "w");

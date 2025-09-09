@@ -1,0 +1,4 @@
+// Test undefined function error
+print("Testing undefined function...");
+var result = nonexistent_function(42);
+print("This should not print");

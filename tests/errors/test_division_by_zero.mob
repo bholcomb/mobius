@@ -1,0 +1,4 @@
+// Test division by zero error
+print("Testing division by zero...");
+var result = 10 / 0;
+print("This should not print");

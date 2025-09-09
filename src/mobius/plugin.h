@@ -20,7 +20,7 @@ typedef struct {
 // Plugin function definition
 typedef struct {
     const char* name;           // Function name
-    BuiltinFunction function;   // Function pointer
+    LibraryFunction function;   // Function pointer
     size_t arity;              // Expected arguments (SIZE_MAX for variadic)
     const char* description;    // Function description
     const char* category;       // Function category (e.g., "math", "string")

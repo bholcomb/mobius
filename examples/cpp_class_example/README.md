@@ -94,9 +94,9 @@ public:
 ```cpp
 // Create Vector3 constructor function
 EvalResult vector3_new(Value* args, size_t arg_count) {
-    double x = (arg_count > 0) ? args[0].as.float_val : 0.0;
-    double y = (arg_count > 1) ? args[1].as.float_val : 0.0;
-    double z = (arg_count > 2) ? args[2].as.float_val : 0.0;
+    double x = (arg_count > 0) ? args[0].as.float64_val : 0.0;
+    double y = (arg_count > 1) ? args[1].as.float64_val : 0.0;
+    double z = (arg_count > 2) ? args[2].as.float64_val : 0.0;
     
     Vector3* vec = new Vector3(x, y, z);
     

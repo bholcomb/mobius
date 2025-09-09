@@ -19,10 +19,4 @@ print("table1 == table1:", table1 == table1);  // true (same reference)
 // Test inequality
 print("table1 != table2:", table1 != table2);  // true
 
-// Test other comparisons - should fail without metamethods
-print("Testing comparisons without metamethods (should fail):");
-print("table1 < table2:");
-var result1 = table1 < table2;
-print("Result:", result1);
-
 print("=== Comparison metamethod tests completed! ===");

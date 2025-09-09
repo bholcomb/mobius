@@ -1,0 +1,4 @@
+// Test undefined variable error
+print("Testing undefined variable...");
+var x = undefined_variable;
+print("This should not print");

@@ -20,7 +20,7 @@
 // Extended functionality
 #include "file_io.h"
 #include "repl.h"
-#include "stdlib.h"
+#include "library/library.h"
 
 // Plugin system
 #include "plugin.h"
