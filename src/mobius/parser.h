@@ -45,7 +45,6 @@ Stmt* parse_statement(Parser* parser);
 Stmt* parse_declaration(Parser* parser);
 Stmt* parse_var_declaration(Parser* parser);
 Stmt* parse_function_declaration(Parser* parser);
-Stmt* parse_class_declaration(Parser* parser);
 Stmt* parse_expression_statement(Parser* parser);
 // Print statement removed - print is now a built-in function
 Stmt* parse_block_statement(Parser* parser);

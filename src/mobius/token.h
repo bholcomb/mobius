@@ -63,11 +63,8 @@ typedef enum {
     TOKEN_AND,              // and (logical and)
     TOKEN_BREAK,            // break
     TOKEN_CASE,             // case
-    TOKEN_CLASS,            // class
-    TOKEN_CONST,            // const
     TOKEN_CONTINUE,         // continue
     TOKEN_DEFAULT,          // default
-    TOKEN_DO,               // do
     TOKEN_ELSE,             // else
     TOKEN_ELIF,             // elif (else if)
     TOKEN_ENUM,             // enum
@@ -76,28 +73,15 @@ typedef enum {
     TOKEN_FUNC,             // func (function definition)
     TOKEN_IF,               // if
     TOKEN_IMPORT,           // import
-    TOKEN_IN,               // in (for iteration, membership)
     TOKEN_IS,               // is (identity comparison and type matching)
-    TOKEN_LET,              // let (immutable binding)
-    TOKEN_MATCH,            // match (pattern matching)
     TOKEN_NIL,              // nil (null value)
     TOKEN_NOT,              // not (logical not)
     TOKEN_OR,               // or (logical or)
     TOKEN_RETURN,           // return
-    TOKEN_STATIC,           // static
-    TOKEN_SUPER,            // super
     TOKEN_SWITCH,           // switch
-    TOKEN_THIS,             // this
     TOKEN_TRUE,             // true
-    TOKEN_TRY,              // try
-    TOKEN_CATCH,            // catch
-    TOKEN_FINALLY,          // finally
-    TOKEN_THROW,            // throw
     TOKEN_VAR,              // var (mutable variable)
-    TOKEN_WHEN,             // when (conditional)  
     TOKEN_WHILE,            // while
-    TOKEN_WITH,             // with (context management)
-    TOKEN_YIELD,            // yield (generators)
 
     // Type annotation tokens
     TOKEN_TYPE_INT8,        // int8

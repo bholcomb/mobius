@@ -91,17 +91,12 @@ true false nil
 
 **Operators:**
 ```
-and or not in is
+and or not is
 ```
 
 **Type Annotations:**
 ```
 int8 int16 int32 int64 uint8 uint16 uint32 uint64 float32 float64
-```
-
-**Reserved (Future Use):**
-```
-class this super static let const do when with yield try catch finally throw match
 ```
 
 ### Numeric Literals
@@ -1437,7 +1432,7 @@ func calculator() {
                     if (calc.b != 0) {
                         result = calc.a / calc.b;
                     } else {
-                        print("Error: Division by zero");
+        print("Error: Division by zero");
                         continue;
                     }
                     break;

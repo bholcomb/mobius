@@ -22,11 +22,14 @@ static const char* token_names[] = {
     "IDENTIFIER", "STRING", "INTEGER", "FLOAT", "CHAR",
     
     // Keywords
-    "AND", "BREAK", "CASE", "CLASS", "CONST", "CONTINUE", "DEFAULT", "DO",
-    "ELSE", "ELIF", "FALSE", "FOR", "FUNC", "IF", "IMPORT", "IN", "IS",
-    "LET", "MATCH", "NIL", "NOT", "OR", "RETURN", "STATIC", "SUPER",
-    "SWITCH", "THIS", "TRUE", "TRY", "CATCH", "FINALLY", "THROW",
-    "VAR", "WHEN", "WHILE", "WITH", "YIELD",
+    "AND", "BREAK", "CASE", "CONTINUE", "DEFAULT", "ELSE", "ELIF", 
+    "ENUM", "FALSE", "FOR", "FUNC", "IF", "IMPORT", "IS", "NIL", 
+    "NOT", "OR", "RETURN", "SWITCH", "TRUE", "VAR", "WHILE",
+    
+    // Type annotation tokens
+    "TYPE_INT8", "TYPE_INT16", "TYPE_INT32", "TYPE_INT64",
+    "TYPE_UINT8", "TYPE_UINT16", "TYPE_UINT32", "TYPE_UINT64",
+    "TYPE_FLOAT32", "TYPE_FLOAT64",
     
     // Special tokens
     "NEWLINE", "EOF", "ERROR"
