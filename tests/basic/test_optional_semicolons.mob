@@ -1,0 +1,38 @@
+// Test optional semicolons - basic functionality
+// REQUIRE: x: 5
+// REQUIRE: y: 10
+// REQUIRE: a+b: 3
+// REQUIRE: x is positive
+// REQUIRE: doubled: 10
+// REQUIRE: loop: 0
+// REQUIRE: loop: 1
+// REQUIRE: loop: 2
+// REQUIRE: Test completed
+
+// Test optional semicolons
+var x = 5
+var y = 10
+
+print("x:", x)
+print("y:", y)
+
+// Test multiple statements on same line (should require semicolons)
+var a = 1; var b = 2; print("a+b:", a + b)
+
+// Test expressions without semicolons
+x + y
+42
+
+// Test control flow without semicolons
+if (x > 0) {
+    print("x is positive")
+    var result = x * 2
+    print("doubled:", result)
+}
+
+// Test for loop syntax (semicolons still required in for loop conditions)
+for (var i = 0; i < 3; i = i + 1) {
+    print("loop:", i)
+}
+
+print("Test completed")

@@ -178,8 +178,17 @@ ExecutionResult execute_program(ExecutionContext* ctx, Stmt** statements, size_t
             double execution_time = get_time_ms() - start_time;
             
             if (vm_result != 0) {
+                // Try to get more specific error information from VM
+                const char* vm_error = "Unknown VM error";
+                if (ctx->state.bytecode.vm->has_error && ctx->state.bytecode.vm->error_message) {
+                    vm_error = ctx->state.bytecode.vm->error_message;
+                }
+                
+                char detailed_error[256];
+                snprintf(detailed_error, sizeof(detailed_error), "Bytecode execution failed: %s (code: %d)", vm_error, vm_result);
+                
                 bytecode_chunk_free(chunk);
-                return make_error_result("Bytecode execution failed", 0, 0);
+                return make_error_result(detailed_error, 0, 0);
             }
             
             // Get result value from VM stack

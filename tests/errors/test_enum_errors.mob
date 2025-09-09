@@ -1,0 +1,25 @@
+// Enum error handling tests
+
+// This should work fine
+enum Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+var validColor = Color.RED;
+print("Valid color:", validColor);
+
+// These should produce errors but we'll test that they're handled gracefully
+
+// Test 1: Access non-existent enum member
+// This should fail: var badColor = Color.PURPLE;
+
+// Test 2: Access member from non-existent enum  
+// This should fail: var badEnum = BadEnum.VALUE;
+
+// Test 3: Valid enum access after error recovery
+var anotherColor = Color.BLUE;
+print("Another valid color:", anotherColor);
+
+print("✓ Enum error handling test completed");

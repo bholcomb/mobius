@@ -1,0 +1,40 @@
+// Enum with explicit types and values
+
+// Test different underlying types
+enum Status : uint8 {
+    SUCCESS = 0,
+    ERROR = 1,
+    PENDING = 2
+}
+
+enum Direction : int16 {
+    NORTH = -100,
+    EAST,
+    SOUTH = 50,
+    WEST
+}
+
+enum FileMode : uint32 {
+    READ = 1,
+    WRITE = 2,
+    EXECUTE = 4,
+    ALL = 7
+}
+
+// Test enum values
+var status = Status.SUCCESS;
+var direction = Direction.NORTH;
+var mode = FileMode.READ;
+
+print("Type-specific enums:");
+print("Status SUCCESS:", status);
+print("Direction NORTH:", direction);
+print("FileMode READ:", mode);
+
+// Test auto-increment with explicit values
+var east = Direction.EAST;
+var west = Direction.WEST;
+print("EAST (auto from -99):", east);
+print("WEST (auto from 51):", west);
+
+print("✓ Enum types test passed");

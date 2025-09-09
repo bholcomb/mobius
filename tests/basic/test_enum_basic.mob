@@ -1,0 +1,29 @@
+// Basic enum functionality test
+
+// Simple enum with auto-incremented values
+enum Color {
+    RED,
+    GREEN,
+    BLUE
+}
+
+// Test basic enum access
+var red = Color.RED;
+var green = Color.GREEN;
+var blue = Color.BLUE;
+
+print("Basic enum values:");
+print("RED:", red);
+print("GREEN:", green);
+print("BLUE:", blue);
+
+// Test enum comparison
+if (red == Color.RED) {
+    print("✓ Enum comparison works");
+}
+
+// Test enum assignment
+var myColor = Color.GREEN;
+print("My color:", myColor);
+
+print("✓ Basic enum test passed");

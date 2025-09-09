@@ -137,6 +137,10 @@ typedef enum {
     OP_CLOSURE          = 0x6C,  // Create closure (operand = function index)
     OP_CLOSE_UPVALUE    = 0x6D,  // Close upvalue
     
+    // Control Flow - Loop Control (0x6E-0x6F)
+    OP_BREAK            = 0x6E,  // Break out of loop (operand = loop end offset)
+    OP_CONTINUE         = 0x6F,  // Continue to next loop iteration (operand = loop start offset)
+    
     // Type Operations (0x70-0x7F)
     OP_TYPE_CHECK       = 0x70,  // Check value type (operand = expected type)
     OP_TYPE_CAST        = 0x71,  // Cast value type
@@ -157,6 +161,11 @@ typedef enum {
     OP_TRY_BEGIN        = 0x83,  // Begin try block
     OP_TRY_END          = 0x84,  // End try block
     OP_CATCH            = 0x85,  // Catch exception
+    
+    // Enum Operations (0x86-0x8F)
+    OP_ENUM_DEF         = 0x86,  // Define enum (operand = enum definition index)
+    OP_ENUM_ACCESS      = 0x87,  // Access enum member (operand = member info index)
+    OP_ENUM_STORE       = 0x88,  // Store enum definition in globals
     
     // Optimization Hints (0xF0-0xFE)
     OP_HOT_PATH         = 0xF0,  // Mark hot path for JIT
@@ -222,6 +231,17 @@ struct BytecodeChunk {
     char** string_pool;          // String literals
     size_t constant_count;
     size_t string_count;
+    
+    // Enum information
+    EnumDefinition** enum_definitions;  // Enum definitions
+    size_t enum_count;
+    
+    // Enum member access information
+    struct {
+        uint16_t enum_index;      // Index into enum_definitions
+        uint16_t member_index;    // Index of member within enum
+    } *enum_accesses;
+    size_t enum_access_count;
     
     // Debug information
     int* line_numbers;           // Source line numbers

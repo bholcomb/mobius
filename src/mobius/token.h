@@ -70,6 +70,7 @@ typedef enum {
     TOKEN_DO,               // do
     TOKEN_ELSE,             // else
     TOKEN_ELIF,             // elif (else if)
+    TOKEN_ENUM,             // enum
     TOKEN_FALSE,            // false
     TOKEN_FOR,              // for
     TOKEN_FUNC,             // func (function definition)

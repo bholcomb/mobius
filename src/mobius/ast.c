@@ -137,6 +137,17 @@ Expr* make_table_dot_expr(Expr* table, Token key) {
     return expr;
 }
 
+Expr* make_enum_access_expr(Token enum_name, Token member_name) {
+    Expr* expr = calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = EXPR_ENUM_ACCESS;
+    expr->ref_count = 1;  // Initialize reference count
+    expr->as.enum_access.enum_name = enum_name;
+    expr->as.enum_access.member_name = member_name;
+    return expr;
+}
+
 // Statement constructors
 Stmt* make_expression_stmt(Expr* expression) {
     Stmt* stmt = calloc(1, sizeof(Stmt));
@@ -257,6 +268,30 @@ Stmt* make_return_stmt(Token keyword, Expr* value) {
     return stmt;
 }
 
+Stmt* make_enum_stmt(Token keyword, Token name, NumericType underlying_type, 
+                     bool has_explicit_type, EnumMemberDef* members) {
+    Stmt* stmt = calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+    
+    stmt->type = STMT_ENUM;
+    stmt->ref_count = 1;  // Initialize reference count
+    stmt->as.enum_stmt.keyword = keyword;
+    stmt->as.enum_stmt.name = name;
+    stmt->as.enum_stmt.underlying_type = underlying_type;
+    stmt->as.enum_stmt.has_explicit_type = has_explicit_type;
+    stmt->as.enum_stmt.members = members;
+    return stmt;
+}
+
+EnumMemberDef* make_enum_member(Token name, Expr* value) {
+    EnumMemberDef* member = calloc(1, sizeof(EnumMemberDef));
+    if (!member) return NULL;
+    
+    member->name = name;
+    member->value = value;
+    member->next = NULL;
+    return member;
+}
 
 // Basic AST printing for debugging
 void print_expr(Expr* expr) {
@@ -346,6 +381,11 @@ void print_expr(Expr* expr) {
             printf("(dot ");
             print_expr(expr->as.table_dot.table);
             printf(".%s)", expr->as.table_dot.key.identifier ? expr->as.table_dot.key.identifier : "unknown");
+            break;
+        case EXPR_ENUM_ACCESS:
+            printf("(enum %s.%s)", 
+                   expr->as.enum_access.enum_name.identifier ? expr->as.enum_access.enum_name.identifier : "unknown",
+                   expr->as.enum_access.member_name.identifier ? expr->as.enum_access.member_name.identifier : "unknown");
             break;
     }
 }
@@ -442,8 +482,18 @@ void print_stmt(Stmt* stmt) {
         case STMT_BREAK:
             printf("break");
             break;
+        case STMT_CONTINUE:
+            printf("continue");
+            break;
         case STMT_IMPORT:
             printf("import \"%s\"", stmt->as.import_stmt.module_name.literal.string ? stmt->as.import_stmt.module_name.literal.string : "unknown");
+            break;
+        case STMT_ENUM:
+            printf("enum %s", stmt->as.enum_stmt.name.identifier ? stmt->as.enum_stmt.name.identifier : "unknown");
+            if (stmt->as.enum_stmt.has_explicit_type) {
+                printf(" : %s", numeric_type_name(stmt->as.enum_stmt.underlying_type));
+            }
+            printf(" { ... }");
             break;
     }
 }
@@ -504,6 +554,9 @@ void free_expr(Expr* expr) {
             break;
         case EXPR_TABLE_DOT:
             free_expr(expr->as.table_dot.table);
+            break;
+        case EXPR_ENUM_ACCESS:
+            // No dynamic allocations to free for enum access
             break;
     }
     free(expr);
@@ -619,9 +672,25 @@ void free_stmt(Stmt* stmt) {
         case STMT_BREAK:
             // Nothing to free for break statements
             break;
+        case STMT_CONTINUE:
+            // Nothing to free for continue statements
+            break;
         case STMT_IMPORT:
             // Nothing to free for import statements (tokens are not owned)
             break;
+        case STMT_ENUM: {
+            // Free enum members
+            EnumMemberDef* member = stmt->as.enum_stmt.members;
+            while (member) {
+                EnumMemberDef* next = member->next;
+                if (member->value) {
+                    free_expr(member->value);
+                }
+                free(member);
+                member = next;
+            }
+            break;
+        }
     }
     free(stmt);
 }
@@ -696,6 +765,7 @@ void ast_release_expr(Expr* expr) {
             case EXPR_TABLE_DOT:
                 ast_release_expr(expr->as.table_dot.table);
                 break;
+            case EXPR_ENUM_ACCESS:
             case EXPR_LITERAL:
             case EXPR_VARIABLE:
                 // These don't reference other expressions
@@ -839,9 +909,25 @@ void ast_release_stmt(Stmt* stmt) {
             case STMT_BREAK:
                 // Nothing to release for break statements
                 break;
+            case STMT_CONTINUE:
+                // Nothing to release for continue statements
+                break;
             case STMT_IMPORT:
                 // Nothing to release for import statements (tokens are not owned)
                 break;
+            case STMT_ENUM: {
+                // Release enum members
+                EnumMemberDef* member = stmt->as.enum_stmt.members;
+                while (member) {
+                    EnumMemberDef* next = member->next;
+                    if (member->value) {
+                        ast_release_expr(member->value);
+                    }
+                    free(member);
+                    member = next;
+                }
+                break;
+            }
         }
         
         free(stmt);
@@ -904,6 +990,16 @@ Stmt* make_break_stmt(Token keyword) {
     stmt->type = STMT_BREAK;
     stmt->ref_count = 1;  // Initialize reference count
     stmt->as.break_stmt.keyword = keyword;
+    return stmt;
+}
+
+Stmt* make_continue_stmt(Token keyword) {
+    Stmt* stmt = calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+    
+    stmt->type = STMT_CONTINUE;
+    stmt->ref_count = 1;  // Initialize reference count
+    stmt->as.continue_stmt.keyword = keyword;
     return stmt;
 }
 

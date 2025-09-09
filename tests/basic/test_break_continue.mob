@@ -1,0 +1,54 @@
+// Test break and continue keywords in loops
+// REQUIRE: Testing while loop with break
+// REQUIRE: i: 0
+// REQUIRE: i: 1
+// REQUIRE: i: 2
+// REQUIRE: Testing while loop with continue
+// REQUIRE: Continue at i: 1
+// REQUIRE: Continue at i: 3
+// REQUIRE: Testing for loop with break
+// REQUIRE: For loop i: 0
+// REQUIRE: For loop i: 1
+// REQUIRE: For loop i: 2
+// REQUIRE: Testing for loop with continue
+// REQUIRE: For continue at i: 1
+// REQUIRE: For continue at i: 3
+// REQUIRE: All tests completed
+
+print("Testing while loop with break")
+var i = 0
+while (i < 10) {
+    if (i == 3) {
+        break
+    }
+    print("i:", i)
+    i = i + 1
+}
+
+print("Testing while loop with continue")
+i = 0
+while (i < 5) {
+    i = i + 1
+    if (i == 2 || i == 4) {
+        continue
+    }
+    print("Continue at i:", i)
+}
+
+print("Testing for loop with break")
+for (var j = 0; j < 10; j = j + 1) {
+    if (j == 3) {
+        break
+    }
+    print("For loop i:", j)
+}
+
+print("Testing for loop with continue")
+for (var k = 0; k < 5; k = k + 1) {
+    if (k == 0 || k == 2 || k == 4) {
+        continue
+    }
+    print("For continue at i:", k)
+}
+
+print("All tests completed")

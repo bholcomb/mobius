@@ -26,6 +26,7 @@ static const Keyword keywords[] = {
     {"do",       TOKEN_DO},
     {"else",     TOKEN_ELSE},
     {"elif",     TOKEN_ELIF},
+    {"enum",     TOKEN_ENUM},
     {"false",    TOKEN_FALSE},
     {"finally",  TOKEN_FINALLY},
     {"for",      TOKEN_FOR},

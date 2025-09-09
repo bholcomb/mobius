@@ -21,6 +21,7 @@ EvalResult make_success(Value value) {
     result.has_error = false;
     result.has_returned = false;
     result.has_break = false;
+    result.has_continue = false;
     return result;
 }
 
@@ -30,6 +31,7 @@ EvalResult make_error(const char* message, int line, int column) {
     result.has_error = true;
     result.has_returned = false;
     result.has_break = false;
+    result.has_continue = false;
     
     // Duplicate the message to prevent corruption from stack-allocated strings
     if (message) {
@@ -80,6 +82,7 @@ EvalResult make_error_detailed(const char* message, const char* suggestion,
     result.has_error = true;
     result.has_returned = false;
     result.has_break = false;
+    result.has_continue = false;
     
     // Duplicate the message and suggestion to prevent corruption
     if (message) {
@@ -912,6 +915,8 @@ EvalResult evaluate_expr(Expr* expr, Environment* env) {
             return eval_array_literal_expr(&expr->as.array_literal, env);
         case EXPR_ARRAY_INDEX:
             return eval_array_index_expr(&expr->as.array_index, env);
+        case EXPR_ENUM_ACCESS:
+            return eval_enum_access_expr(&expr->as.enum_access, env);
         default:
             return make_error("Unknown expression type", 0, 0);
     }
@@ -985,6 +990,12 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
         if (result.has_returned) {
             break;
         }
+        
+        // If a break or continue statement was executed, break out of the block
+        // These will be handled by the containing loop
+        if (result.has_break || result.has_continue) {
+            break;
+        }
     }
     
     free_environment(block_env);
@@ -1022,6 +1033,23 @@ EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env) {
         result = evaluate_stmt(stmt->body, env);
         if (is_error(result)) {
             return result;
+        }
+        
+        // Handle break statement
+        if (result.has_break) {
+            result.has_break = false;  // Reset break flag
+            break;
+        }
+        
+        // Handle continue statement
+        if (result.has_continue) {
+            result.has_continue = false;  // Reset continue flag
+            continue;  // Go to next iteration
+        }
+        
+        // Handle return statement
+        if (result.has_returned) {
+            return result;  // Propagate return
         }
     }
     
@@ -1211,8 +1239,12 @@ EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
             return eval_switch_stmt(&stmt->as.switch_stmt, env);
         case STMT_BREAK:
             return eval_break_stmt(&stmt->as.break_stmt, env);
+        case STMT_CONTINUE:
+            return eval_continue_stmt(&stmt->as.continue_stmt, env);
         case STMT_IMPORT:
             return eval_import_stmt(&stmt->as.import_stmt, env);
+        case STMT_ENUM:
+            return eval_enum_stmt(&stmt->as.enum_stmt, env);
         default:
             return make_error("Unknown statement type", 0, 0);
     }
@@ -1258,13 +1290,31 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
             return result;
         }
         
-        // Execute increment
+        // Handle break statement
+        if (result.has_break) {
+            result.has_break = false;  // Reset break flag
+            break;
+        }
+        
+        // Handle return statement
+        if (result.has_returned) {
+            free_environment(for_env);
+            return result;  // Propagate return
+        }
+        
+        // Execute increment (always executed, even on continue)
         if (stmt->increment) {
             EvalResult increment_result = evaluate_expr(stmt->increment, for_env);
             if (is_error(increment_result)) {
                 free_environment(for_env);
                 return increment_result;
             }
+        }
+        
+        // Handle continue statement (after increment)
+        if (result.has_continue) {
+            result.has_continue = false;  // Reset continue flag
+            continue;  // Go to next iteration
         }
     }
     
@@ -1711,11 +1761,26 @@ EvalResult eval_break_stmt(BreakStmt* stmt, Environment* env) {
     (void)env;   // Unused parameter
     
     // Break statements are handled by the control flow structures (loops, switch)
-    // For now, we'll create a special result type to indicate break
     EvalResult result;
     result.has_error = false;
     result.has_returned = false;
-    result.has_break = true;  // We need to add this field to EvalResult
+    result.has_break = true;
+    result.has_continue = false;
+    result.value = make_nil_value();
+    return result;
+}
+
+// Continue statement evaluation
+EvalResult eval_continue_stmt(ContinueStmt* stmt, Environment* env) {
+    (void)stmt;  // Unused parameter
+    (void)env;   // Unused parameter
+    
+    // Continue statements are handled by the control flow structures (loops)
+    EvalResult result;
+    result.has_error = false;
+    result.has_returned = false;
+    result.has_break = false;
+    result.has_continue = true;
     result.value = make_nil_value();
     return result;
 }
@@ -2048,4 +2113,136 @@ int simple_compare_values(Value left, Value right) {
     
     // Different types - not comparable
     return 0;
+}
+
+// ============================================================================
+// ENUM EVALUATION IMPLEMENTATION
+// ============================================================================
+
+EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
+    if (!stmt) {
+        return make_error("Null enum statement", 0, 0);
+    }
+    
+    // Create the enum definition
+    const char* enum_name = stmt->name.identifier;
+    if (!enum_name) {
+        return make_error("Invalid enum name", stmt->name.line, stmt->name.column);
+    }
+    
+    EnumDefinition* enum_def = enum_definition_create(enum_name, stmt->underlying_type);
+    if (!enum_def) {
+        return make_error("Failed to create enum definition", stmt->name.line, stmt->name.column);
+    }
+    
+    // Process enum members
+    EnumMemberDef* member = stmt->members;
+    while (member) {
+        const char* member_name = member->name.identifier;
+        if (!member_name) {
+            enum_definition_release(enum_def);
+            return make_error("Invalid enum member name", member->name.line, member->name.column);
+        }
+        
+        // Evaluate member value if provided
+        if (member->value) {
+            EvalResult value_result = evaluate_expr(member->value, env);
+            if (value_result.has_error) {
+                enum_definition_release(enum_def);
+                return value_result;
+            }
+            
+            // Ensure the value is an integer
+            if (value_result.value.type != VAL_INTEGER) {
+                free_value(value_result.value);
+                enum_definition_release(enum_def);
+                return make_error("Enum member value must be an integer", member->name.line, member->name.column);
+            }
+            
+            // Extract integer value (assuming int32 for now)
+            int64_t int_value;
+            switch (value_result.value.as.integer.num_type) {
+                case NUM_INT8:  int_value = value_result.value.as.integer.value.i8; break;
+                case NUM_UINT8: int_value = value_result.value.as.integer.value.u8; break;
+                case NUM_INT16: int_value = value_result.value.as.integer.value.i16; break;
+                case NUM_UINT16: int_value = value_result.value.as.integer.value.u16; break;
+                case NUM_INT32: int_value = value_result.value.as.integer.value.i32; break;
+                case NUM_UINT32: int_value = value_result.value.as.integer.value.u32; break;
+                case NUM_INT64: int_value = value_result.value.as.integer.value.i64; break;
+                case NUM_UINT64: int_value = (int64_t)value_result.value.as.integer.value.u64; break;
+                default: int_value = 0; break;
+            }
+            
+            enum_definition_add_member(enum_def, member_name, int_value);
+            free_value(value_result.value);
+        } else {
+            // Auto-assign value
+            enum_definition_add_auto_member(enum_def, member_name);
+        }
+        
+        member = member->next;
+    }
+    
+    // Store the enum definition in the environment as a special variable
+    // We'll use a special naming convention: __enum_<name>
+    char enum_var_name[256];
+    snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", enum_name);
+    
+    Value enum_value = make_userdata_value(enum_def, (UserdataDestructor)enum_definition_release, "enum_definition", sizeof(EnumDefinition));
+    define_variable(env, enum_var_name, enum_value);
+    
+    return make_success(make_nil_value());
+}
+
+EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env) {
+    if (!expr) {
+        return make_error("Null enum access expression", 0, 0);
+    }
+    
+    const char* enum_name = expr->enum_name.identifier;
+    const char* member_name = expr->member_name.identifier;
+    
+    if (!enum_name || !member_name) {
+        return make_error("Invalid enum access", expr->enum_name.line, expr->enum_name.column);
+    }
+    
+    // Look up the enum definition in the environment
+    char enum_var_name[256];
+    snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", enum_name);
+    
+    bool found = false;
+    Value enum_value = get_variable(env, enum_var_name, &found);
+    if (!found || enum_value.type == VAL_NIL) {
+        // Fallback: check if it's a regular variable (for enum values stored as variables)
+        Value member_var = get_variable(env, member_name, &found);
+        if (found && member_var.type != VAL_NIL) {
+            return make_success(copy_value(member_var));
+        }
+        
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Undefined enum '%s'", enum_name);
+        return make_error(error_msg, expr->enum_name.line, expr->enum_name.column);
+    }
+    
+    if (enum_value.type != VAL_USERDATA || 
+        strcmp(enum_value.as.userdata.type_name, "enum_definition") != 0) {
+        return make_error("Invalid enum definition", expr->enum_name.line, expr->enum_name.column);
+    }
+    
+    EnumDefinition* enum_def = (EnumDefinition*)enum_value.as.userdata.ptr;
+    if (!enum_def) {
+        return make_error("Null enum definition", expr->enum_name.line, expr->enum_name.column);
+    }
+    
+    // Find the enum member
+    EnumMember* member = enum_definition_find_member(enum_def, member_name);
+    if (!member) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Undefined enum member '%s.%s'", enum_name, member_name);
+        return make_error(error_msg, expr->member_name.line, expr->member_name.column);
+    }
+    
+    // Create enum value
+    Value result = make_enum_value(enum_def, member->value);
+    return make_success(result);
 }
