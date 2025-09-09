@@ -652,7 +652,12 @@ Stmt* parse_if_statement(Parser* parser) {
     
     Stmt* then_branch = parse_statement(parser);
     Stmt* else_branch = NULL;
-    if (parser_match(parser, TOKEN_ELSE)) {
+    
+    // Handle elif as chained if-else statements
+    if (parser_match(parser, TOKEN_ELIF)) {
+        // Recursively parse the elif as another if statement
+        else_branch = parse_if_statement(parser);
+    } else if (parser_match(parser, TOKEN_ELSE)) {
         else_branch = parse_statement(parser);
     }
     
