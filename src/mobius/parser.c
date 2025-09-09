@@ -431,17 +431,9 @@ Expr* parse_call(Parser* parser) {
         } else if (parser_match(parser, TOKEN_DOT)) {
             Token key = consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'");
             
-            // Check if this is enum access (base expression is a simple variable)
-            if (expr->type == EXPR_VARIABLE) {
-                // Could be enum access: EnumName.MEMBER
-                // We'll create an enum access expression and let the evaluator decide
-                Token enum_name = expr->as.variable.name;
-                free_expr(expr);  // Free the variable expression
-                expr = make_enum_access_expr(enum_name, key);
-            } else {
-                // Regular table/object access
-                expr = make_table_dot_expr(expr, key);
-            }
+            // Always treat as table dot access initially
+            // The evaluator will handle enum access if the base turns out to be an enum
+            expr = make_table_dot_expr(expr, key);
         } else {
             break;
         }

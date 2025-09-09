@@ -53,6 +53,10 @@ typedef enum {
     OP_PUSH_STRING      = 0x09,  // Push string (operand = string table index)
     OP_PUSH_CHAR        = 0x0A,  // Push character (operand)
     OP_PUSH_CONSTANT    = 0x0B,  // Push constant (operand = constant index)
+    OP_PUSH_UINT8       = 0x0C,  // Push 8-bit unsigned integer (operand)
+    OP_PUSH_UINT16      = 0x0D,  // Push 16-bit unsigned integer (operand)
+    OP_PUSH_UINT32      = 0x0E,  // Push 32-bit unsigned integer (next 4 bytes)
+    OP_PUSH_UINT64      = 0x0F,  // Push 64-bit unsigned integer (next 8 bytes)
     
     OP_POP              = 0x10,  // Pop top value
     OP_DUP              = 0x11,  // Duplicate top value
@@ -136,10 +140,6 @@ typedef enum {
     OP_RETURN_NIL       = 0x6B,  // Return nil (optimized)
     OP_CLOSURE          = 0x6C,  // Create closure (operand = function index)
     OP_CLOSE_UPVALUE    = 0x6D,  // Close upvalue
-    
-    // Control Flow - Loop Control (0x6E-0x6F)
-    OP_BREAK            = 0x6E,  // Break out of loop (operand = loop end offset)
-    OP_CONTINUE         = 0x6F,  // Continue to next loop iteration (operand = loop start offset)
     
     // Type Operations (0x70-0x7F)
     OP_TYPE_CHECK       = 0x70,  // Check value type (operand = expected type)
@@ -418,6 +418,12 @@ bool execute_riscv_native(MobiusVM* vm, void* native_code);
 void bytecode_disassemble(BytecodeChunk* chunk, const char* name);
 int bytecode_disassemble_instruction(BytecodeChunk* chunk, int offset);
 void vm_print_stack(MobiusVM* vm);
+
+// VM utility functions used by builtin modules
+void vm_runtime_error(MobiusVM* vm, const char* format, ...);
+Value vm_peek(MobiusVM* vm, int distance);
+Value vm_pop(MobiusVM* vm);
+void vm_push(MobiusVM* vm, Value value);
 
 #endif // MOBIUS_BYTECODE_H
 
