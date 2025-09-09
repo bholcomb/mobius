@@ -2,22 +2,14 @@
 #define MOBIUS_ENVIRONMENT_H
 
 #include "ast.h"
+#include "table.h"
 #include <stddef.h>
 #include <stdbool.h>
 
-// Hash table entry for variable storage
-typedef struct EnvEntry {
-    char* name;             // Variable name (owned by this entry)
-    Value value;            // Variable value
-    bool is_defined;        // Whether the variable has been initialized
-    struct EnvEntry* next;  // For hash collision chaining
-} EnvEntry;
-
 // Environment structure for variable scoping
+// Now uses Table for consistent storage with bytecode VM
 typedef struct Environment {
-    EnvEntry** table;       // Hash table of variables
-    size_t capacity;        // Hash table capacity
-    size_t count;           // Number of variables in this environment
+    Table* variables;       // Table storing variable name->value mappings
     struct Environment* enclosing;  // Parent environment for scoping
 } Environment;
 
@@ -33,7 +25,6 @@ bool is_defined(Environment* env, const char* name);
 
 // Environment utilities
 void print_environment(Environment* env);
-size_t hash_string(const char* str, size_t capacity);
 
 // Global environment management
 extern Environment* global_env;
