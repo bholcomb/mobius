@@ -499,6 +499,7 @@ void vm_runtime_error(MobiusVM* vm, const char* format, ...) {
     va_end(args);
 }
 
+
 static Value binary_arithmetic(MobiusVM* vm, Opcode op) {
     Value right = vm_pop(vm);
     Value left = vm_pop(vm);
@@ -971,8 +972,18 @@ int vm_execute(MobiusVM* vm, BytecodeChunk* chunk) {
                 uint16_t name_index = READ_OPERAND();
                 if (name_index < chunk->string_count) {
                     const char* name = chunk->string_pool[name_index];
-                    Value value = table_get(vm->globals, make_string_value_from_cstr(name));
-                    vm_push(vm, value);  // table_get returns nil for undefined variables
+                    Value key = make_string_value_from_cstr(name);
+                    
+                    // Check if the variable exists in the global table
+                    if (!table_has_key(vm->globals, key)) {
+                        vm_runtime_error(vm, "Undefined variable '%s'", name);
+                        free_value(key);
+                        return VM_RUNTIME_ERROR;
+                    }
+                    
+                    Value value = table_get(vm->globals, key);
+                    free_value(key);
+                    vm_push(vm, value);
                 } else {
                     vm_runtime_error(vm, "Invalid global variable name index");
                     return VM_RUNTIME_ERROR;
