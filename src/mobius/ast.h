@@ -61,8 +61,9 @@ struct MobiusFunction {
 struct TableEntry {
     Value key;
     Value value;
-    struct TableEntry* next;  // For collision chaining
+    struct TableEntry* next;  // For collision chaining (unused in Robin Hood)
     bool is_occupied;
+    uint32_t distance;       // Distance from ideal position (for Robin Hood hashing)
 };
 
 // Table structure - pure hash table
