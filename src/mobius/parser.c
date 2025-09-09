@@ -1337,6 +1337,18 @@ Stmt* parse_enum_declaration(Parser* parser) {
     
     consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after enum body");
     
+    // Consume optional semicolon or newline (same as other declarations)
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after enum declaration")) {
+        // Error already reported, clean up
+        while (members) {
+            EnumMemberDef* next = members->next;
+            if (members->value) free_expr(members->value);
+            free(members);
+            members = next;
+        }
+        return NULL;
+    }
+    
     return make_enum_stmt(keyword, name, underlying_type, has_explicit_type, members);
 }
 
