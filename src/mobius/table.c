@@ -62,6 +62,9 @@ size_t hash_value(Value value, size_t capacity) {
         case VAL_BYTECODE_FUNCTION:
             hash = (size_t)(uintptr_t)value.as.bytecode_func;
             break;
+        case VAL_BUILTIN_FUNCTION:
+            hash = (size_t)(uintptr_t)value.as.builtin_func;
+            break;
         case VAL_TABLE:
             hash = (size_t)(uintptr_t)value.as.table;
             break;
@@ -93,6 +96,7 @@ bool values_equal_for_table(Value a, Value b) {
         case VAL_ARRAY: return a.as.array == b.as.array;  // Reference equality
         case VAL_FUNCTION: return a.as.function == b.as.function;
         case VAL_BYTECODE_FUNCTION: return a.as.bytecode_func == b.as.bytecode_func;
+        case VAL_BUILTIN_FUNCTION: return a.as.builtin_func == b.as.builtin_func;
         case VAL_TABLE: return a.as.table == b.as.table;
         case VAL_USERDATA: 
             // Userdata equality: same pointer AND same type
