@@ -184,7 +184,7 @@ typedef struct {
 typedef struct {
     Token name;
     Expr* initializer;  // Can be NULL for uninitialized variables
-    TypeInfo type_hint; // Optional type annotation
+    NumberInfo type_hint; // Optional type annotation
 } VarStmt;
 
 typedef struct {
@@ -374,7 +374,7 @@ Expr* make_enum_access_expr(Token enum_name, Token member_name);
 
 Stmt* make_expression_stmt(Expr* expression);
 Stmt* make_print_stmt(Expr* expression);
-Stmt* make_var_stmt(Token name, Expr* initializer, TypeInfo type_hint);
+Stmt* make_var_stmt(Token name, Expr* initializer, NumberInfo type_hint);
 Stmt* make_block_stmt(Stmt** statements, size_t count);
 Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch);
 Stmt* make_while_stmt(Expr* condition, Stmt* body);

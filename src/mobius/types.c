@@ -8,100 +8,100 @@
 #include <limits.h>
 
 // Type name mappings
-const char* mobius_type_name(MobiusType type) {
+const char* mobius_type_name(NumberType type) {
     switch (type) {
-        case MOBIUS_TYPE_UNKNOWN: return "unknown";
-        case MOBIUS_TYPE_INT8:    return "int8";
-        case MOBIUS_TYPE_INT16:   return "int16";
-        case MOBIUS_TYPE_INT32:   return "int32";
-        case MOBIUS_TYPE_INT64:   return "int64";
-        case MOBIUS_TYPE_UINT8:   return "uint8";
-        case MOBIUS_TYPE_UINT16:  return "uint16";
-        case MOBIUS_TYPE_UINT32:  return "uint32";
-        case MOBIUS_TYPE_UINT64:  return "uint64";
-        case MOBIUS_TYPE_FLOAT32: return "float32";
-        case MOBIUS_TYPE_FLOAT:   return "float";
+        case NUMBER_TYPE_UNKNOWN: return "unknown";
+        case NUMBER_TYPE_INT8:    return "int8";
+        case NUMBER_TYPE_INT16:   return "int16";
+        case NUMBER_TYPE_INT32:   return "int32";
+        case NUMBER_TYPE_INT64:   return "int64";
+        case NUMBER_TYPE_UINT8:   return "uint8";
+        case NUMBER_TYPE_UINT16:  return "uint16";
+        case NUMBER_TYPE_UINT32:  return "uint32";
+        case NUMBER_TYPE_UINT64:  return "uint64";
+        case NUMBER_TYPE_FLOAT32: return "float32";
+        case NUMBER_TYPE_FLOAT64:   return "float";
         default: return "invalid";
     }
 }
 
 // Type category checks
-bool is_integer_type(MobiusType type) {
-    return type >= MOBIUS_TYPE_INT8 && type <= MOBIUS_TYPE_UINT64;
+bool is_integer_type(NumberType type) {
+    return type >= NUMBER_TYPE_INT8 && type <= NUMBER_TYPE_UINT64;
 }
 
-bool is_unsigned_type(MobiusType type) {
-    return type >= MOBIUS_TYPE_UINT8 && type <= MOBIUS_TYPE_UINT64;
+bool is_unsigned_type(NumberType type) {
+    return type >= NUMBER_TYPE_UINT8 && type <= NUMBER_TYPE_UINT64;
 }
 
-bool is_float_type(MobiusType type) {
-    return type == MOBIUS_TYPE_FLOAT32 || type == MOBIUS_TYPE_FLOAT;
+bool is_float_type(NumberType type) {
+    return type == NUMBER_TYPE_FLOAT32 || type == NUMBER_TYPE_FLOAT64;
 }
 
 // Convert token type to Mobius type
-MobiusType token_to_mobius_type(TokenType token_type) {
+NumberType token_to_mobius_type(TokenType token_type) {
     switch (token_type) {
-        case TOKEN_TYPE_INT8:   return MOBIUS_TYPE_INT8;
-        case TOKEN_TYPE_INT16:  return MOBIUS_TYPE_INT16;
-        case TOKEN_TYPE_INT32:  return MOBIUS_TYPE_INT32;
-        case TOKEN_TYPE_INT64:  return MOBIUS_TYPE_INT64;
-        case TOKEN_TYPE_UINT8:  return MOBIUS_TYPE_UINT8;
-        case TOKEN_TYPE_UINT16: return MOBIUS_TYPE_UINT16;
-        case TOKEN_TYPE_UINT32: return MOBIUS_TYPE_UINT32;
-        case TOKEN_TYPE_UINT64: return MOBIUS_TYPE_UINT64;
-        case TOKEN_TYPE_FLOAT32: return MOBIUS_TYPE_FLOAT32;
-        case TOKEN_TYPE_FLOAT64: return MOBIUS_TYPE_FLOAT;
-        default: return MOBIUS_TYPE_UNKNOWN;
+        case TOKEN_TYPE_INT8:   return NUMBER_TYPE_INT8;
+        case TOKEN_TYPE_INT16:  return NUMBER_TYPE_INT16;
+        case TOKEN_TYPE_INT32:  return NUMBER_TYPE_INT32;
+        case TOKEN_TYPE_INT64:  return NUMBER_TYPE_INT64;
+        case TOKEN_TYPE_UINT8:  return NUMBER_TYPE_UINT8;
+        case TOKEN_TYPE_UINT16: return NUMBER_TYPE_UINT16;
+        case TOKEN_TYPE_UINT32: return NUMBER_TYPE_UINT32;
+        case TOKEN_TYPE_UINT64: return NUMBER_TYPE_UINT64;
+        case TOKEN_TYPE_FLOAT32: return NUMBER_TYPE_FLOAT32;
+        case TOKEN_TYPE_FLOAT64: return NUMBER_TYPE_FLOAT64;
+        default: return NUMBER_TYPE_UNKNOWN;
     }
 }
 
 // Get type range limits
-int64_t get_type_min_value(MobiusType type) {
+int64_t get_type_min_value(NumberType type) {
     switch (type) {
-        case MOBIUS_TYPE_INT8:   return INT8_MIN;
-        case MOBIUS_TYPE_INT16:  return INT16_MIN;
-        case MOBIUS_TYPE_INT32:  return INT32_MIN;
-        case MOBIUS_TYPE_INT64:  return INT64_MIN;
-        case MOBIUS_TYPE_UINT8:  return 0;
-        case MOBIUS_TYPE_UINT16: return 0;
-        case MOBIUS_TYPE_UINT32: return 0;
-        case MOBIUS_TYPE_UINT64: return 0;
+        case NUMBER_TYPE_INT8:   return INT8_MIN;
+        case NUMBER_TYPE_INT16:  return INT16_MIN;
+        case NUMBER_TYPE_INT32:  return INT32_MIN;
+        case NUMBER_TYPE_INT64:  return INT64_MIN;
+        case NUMBER_TYPE_UINT8:  return 0;
+        case NUMBER_TYPE_UINT16: return 0;
+        case NUMBER_TYPE_UINT32: return 0;
+        case NUMBER_TYPE_UINT64: return 0;
         default: return INT64_MIN;
     }
 }
 
-uint64_t get_type_max_value(MobiusType type) {
+uint64_t get_type_max_value(NumberType type) {
     switch (type) {
-        case MOBIUS_TYPE_INT8:   return INT8_MAX;
-        case MOBIUS_TYPE_INT16:  return INT16_MAX;
-        case MOBIUS_TYPE_INT32:  return INT32_MAX;
-        case MOBIUS_TYPE_INT64:  return INT64_MAX;
-        case MOBIUS_TYPE_UINT8:  return UINT8_MAX;
-        case MOBIUS_TYPE_UINT16: return UINT16_MAX;
-        case MOBIUS_TYPE_UINT32: return UINT32_MAX;
-        case MOBIUS_TYPE_UINT64: return UINT64_MAX;
+        case NUMBER_TYPE_INT8:   return INT8_MAX;
+        case NUMBER_TYPE_INT16:  return INT16_MAX;
+        case NUMBER_TYPE_INT32:  return INT32_MAX;
+        case NUMBER_TYPE_INT64:  return INT64_MAX;
+        case NUMBER_TYPE_UINT8:  return UINT8_MAX;
+        case NUMBER_TYPE_UINT16: return UINT16_MAX;
+        case NUMBER_TYPE_UINT32: return UINT32_MAX;
+        case NUMBER_TYPE_UINT64: return UINT64_MAX;
         default: return UINT64_MAX;
     }
 }
 
-// Helper functions for creating TypeInfo
-TypeInfo make_unknown_type(void) {
-    TypeInfo type_info = {MOBIUS_TYPE_UNKNOWN, false};
+// Helper functions for creating NumberInfo
+NumberInfo make_unknown_type(void) {
+    NumberInfo type_info = {NUMBER_TYPE_UNKNOWN, false};
     return type_info;
 }
 
-TypeInfo make_annotated_type(MobiusType type) {
-    TypeInfo type_info = {type, true};
+NumberInfo make_annotated_type(NumberType type) {
+    NumberInfo type_info = {type, true};
     return type_info;
 }
 
 // Check if types are compatible for conversion
-bool types_are_compatible(MobiusType from, MobiusType to) {
+bool types_are_compatible(NumberType from, NumberType to) {
     // Same type is always compatible
     if (from == to) return true;
     
     // Unknown type is compatible with anything
-    if (from == MOBIUS_TYPE_UNKNOWN || to == MOBIUS_TYPE_UNKNOWN) return true;
+    if (from == NUMBER_TYPE_UNKNOWN || to == NUMBER_TYPE_UNKNOWN) return true;
     
     // All integer types can convert to each other (with range checking)
     if (is_integer_type(from) && is_integer_type(to)) return true;
@@ -116,7 +116,7 @@ bool types_are_compatible(MobiusType from, MobiusType to) {
 }
 
 // Type conversion with range checking
-static bool value_fits_in_type(int64_t value, MobiusType target_type) {
+static bool value_fits_in_type(int64_t value, NumberType target_type) {
     int64_t min_val = get_type_min_value(target_type);
     uint64_t max_val = get_type_max_value(target_type);
     
@@ -129,26 +129,26 @@ static bool value_fits_in_type(int64_t value, MobiusType target_type) {
     }
 }
 
-static NumericType mobius_type_to_numeric_type(MobiusType type) {
+static NumericType mobius_type_to_numeric_type(NumberType type) {
     switch (type) {
-        case MOBIUS_TYPE_INT8:   return NUM_INT8;
-        case MOBIUS_TYPE_INT16:  return NUM_INT16;
-        case MOBIUS_TYPE_INT32:  return NUM_INT32;
-        case MOBIUS_TYPE_INT64:  return NUM_INT64;
-        case MOBIUS_TYPE_UINT8:  return NUM_UINT8;
-        case MOBIUS_TYPE_UINT16: return NUM_UINT16;
-        case MOBIUS_TYPE_UINT32: return NUM_UINT32;
-        case MOBIUS_TYPE_UINT64: return NUM_UINT64;
+        case NUMBER_TYPE_INT8:   return NUM_INT8;
+        case NUMBER_TYPE_INT16:  return NUM_INT16;
+        case NUMBER_TYPE_INT32:  return NUM_INT32;
+        case NUMBER_TYPE_INT64:  return NUM_INT64;
+        case NUMBER_TYPE_UINT8:  return NUM_UINT8;
+        case NUMBER_TYPE_UINT16: return NUM_UINT16;
+        case NUMBER_TYPE_UINT32: return NUM_UINT32;
+        case NUMBER_TYPE_UINT64: return NUM_UINT64;
         default: return NUM_INT64; // Default fallback
     }
 }
 
 // Main type validation and conversion function
-TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_type, TypeCheckConfig config) {
+TypeConversionResult validate_and_convert_value(Value value, NumberInfo target_type, TypeCheckConfig config) {
     TypeConversionResult result = {false, {0}, NULL, false};
     
     // If no type annotation, accept any value
-    if (!target_type.is_annotated || target_type.type == MOBIUS_TYPE_UNKNOWN) {
+    if (!target_type.is_annotated || target_type.type == NUMBER_TYPE_UNKNOWN) {
         result.success = true;
         result.converted_value = copy_value(value);
         result.was_converted = false;
@@ -162,7 +162,7 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
         
         if (value.type == VAL_INTEGER) {
             int_value = value.as.integer.value.i64;
-            conversion_needed = (target_type.type != MOBIUS_TYPE_INT64);
+            conversion_needed = (target_type.type != NUMBER_TYPE_INT64);
         } else if (value.type == VAL_FLOAT32) {
             if (config.strict_mode) {
                 result.error_message = mobius_strdup("Cannot convert float32 to integer in strict mode");
@@ -204,7 +204,7 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
     if (is_float_type(target_type.type)) {
         bool conversion_needed = false;
         
-        if (target_type.type == MOBIUS_TYPE_FLOAT32) {
+        if (target_type.type == NUMBER_TYPE_FLOAT32) {
             float float32_value = 0.0f;
             
             if (value.type == VAL_FLOAT32) {
@@ -231,7 +231,7 @@ TypeConversionResult validate_and_convert_value(Value value, TypeInfo target_typ
             }
             
             result.converted_value = make_float32_value(float32_value);
-        } else { // MOBIUS_TYPE_FLOAT (float64)
+        } else { // NUMBER_TYPE_FLOAT64 (float64)
             double float_value = 0.0;
             
             if (value.type == VAL_FLOAT64) {

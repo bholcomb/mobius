@@ -169,7 +169,7 @@ Stmt* make_print_stmt(Expr* expression) {
     return stmt;
 }
 
-Stmt* make_var_stmt(Token name, Expr* initializer, TypeInfo type_hint) {
+Stmt* make_var_stmt(Token name, Expr* initializer, NumberInfo type_hint) {
     Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     

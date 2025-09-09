@@ -558,35 +558,33 @@ Stmt* parse_expression_statement(Parser* parser) {
     return make_expression_stmt(expr);
 }
 
-// Print statement removed - print is now a built-in function
-
 // Parse optional type annotation: ": type"
-TypeInfo parse_type_annotation(Parser* parser) {
-    TypeInfo type_info = {MOBIUS_TYPE_UNKNOWN, false};
+NumberInfo parse_number_type_annotation(Parser* parser) {
+    NumberInfo type_info = {NUMBER_TYPE_UNKNOWN, false};
     
     if (parser_match(parser, TOKEN_COLON)) {
         type_info.is_annotated = true;
         
         if (parser_match(parser, TOKEN_TYPE_INT8)) {
-            type_info.type = MOBIUS_TYPE_INT8;
+            type_info.type = NUMBER_TYPE_INT8;
         } else if (parser_match(parser, TOKEN_TYPE_INT16)) {
-            type_info.type = MOBIUS_TYPE_INT16;
+            type_info.type = NUMBER_TYPE_INT16;
         } else if (parser_match(parser, TOKEN_TYPE_INT32)) {
-            type_info.type = MOBIUS_TYPE_INT32;
+            type_info.type = NUMBER_TYPE_INT32;
         } else if (parser_match(parser, TOKEN_TYPE_INT64)) {
-            type_info.type = MOBIUS_TYPE_INT64;
+            type_info.type = NUMBER_TYPE_INT64;
         } else if (parser_match(parser, TOKEN_TYPE_UINT8)) {
-            type_info.type = MOBIUS_TYPE_UINT8;
+            type_info.type = NUMBER_TYPE_UINT8;
         } else if (parser_match(parser, TOKEN_TYPE_UINT16)) {
-            type_info.type = MOBIUS_TYPE_UINT16;
+            type_info.type = NUMBER_TYPE_UINT16;
         } else if (parser_match(parser, TOKEN_TYPE_UINT32)) {
-            type_info.type = MOBIUS_TYPE_UINT32;
+            type_info.type = NUMBER_TYPE_UINT32;
         } else if (parser_match(parser, TOKEN_TYPE_UINT64)) {
-            type_info.type = MOBIUS_TYPE_UINT64;
+            type_info.type = NUMBER_TYPE_UINT64;
         } else if (parser_match(parser, TOKEN_TYPE_FLOAT32)) {
-            type_info.type = MOBIUS_TYPE_FLOAT32;
+            type_info.type = NUMBER_TYPE_FLOAT32;
         } else if (parser_match(parser, TOKEN_TYPE_FLOAT64)) {
-            type_info.type = MOBIUS_TYPE_FLOAT;
+            type_info.type = NUMBER_TYPE_FLOAT64;
         } else {
             parser_error(parser, parser_peek(parser), "Expected type name after ':'");
             type_info.is_annotated = false;
@@ -600,7 +598,7 @@ Stmt* parse_var_declaration(Parser* parser) {
     Token name = consume(parser, TOKEN_IDENTIFIER, "Expect variable name.");
     
     // Parse optional type annotation
-    TypeInfo type_hint = parse_type_annotation(parser);
+    NumberInfo type_hint = parse_number_type_annotation(parser);
     
     Expr* initializer = NULL;
     if (parser_match(parser, TOKEN_EQUAL)) {
@@ -649,6 +647,10 @@ Stmt* parse_if_statement(Parser* parser) {
     consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
     Expr* condition = parse_expression(parser);
     consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after if condition.");
+
+    while (parser_check(parser, TOKEN_NEWLINE)) {
+        parser_advance(parser);
+    }
     
     Stmt* then_branch = parse_statement(parser);
     Stmt* else_branch = NULL;
@@ -668,6 +670,11 @@ Stmt* parse_while_statement(Parser* parser) {
     consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
     Expr* condition = parse_expression(parser);
     consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    while (parser_check(parser, TOKEN_NEWLINE)) {
+        parser_advance(parser);
+    }
+
     Stmt* body = parse_statement(parser);
     
     return make_while_stmt(condition, body);
@@ -696,6 +703,10 @@ Stmt* parse_for_statement(Parser* parser) {
         increment = parse_expression(parser);
     }
     consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+    while (parser_check(parser, TOKEN_NEWLINE)) {
+        parser_advance(parser);
+    }
     
     Stmt* body = parse_statement(parser);
     
