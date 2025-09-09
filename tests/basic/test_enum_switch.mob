@@ -1,38 +1,79 @@
 // Enum usage with switch statements
 
 enum Day {
-    MONDAY,
-    TUESDAY,
-    WEDNESDAY,
-    THURSDAY,
-    FRIDAY,
-    SATURDAY,
-    SUNDAY
+    MONDAY = 1,
+    TUESDAY = 2,
+    WEDNESDAY = 3,
+    THURSDAY = 4,
+    FRIDAY = 5,
+    SATURDAY = 6,
+    SUNDAY = 7
 }
 
 var today = Day.WEDNESDAY;
 
 print("Today is:", today);
 
-// Test enum with conditional statements (switch with enums needs more work)
-if (today == Day.MONDAY) {
-    print("Start of work week");
-} elif (today == Day.WEDNESDAY) {
-    print("✓ Hump day!");
-} elif (today == Day.FRIDAY) {
-    print("TGIF!");
-} elif (today == Day.SATURDAY || today == Day.SUNDAY) {
-    print("Weekend!");
-} else {
-    print("Regular day");
+// Test enum with switch statement
+switch (today) {
+    case Day.MONDAY:
+        print("Start of work week");
+        break;
+    case Day.TUESDAY:
+        print("Tuesday grind");
+        break;
+    case Day.WEDNESDAY:
+        print("✓ Hump day!");
+        break;
+    case Day.THURSDAY:
+        print("Almost there");
+        break;
+    case Day.FRIDAY:
+        print("TGIF!");
+        break;
+    case Day.SATURDAY:
+    case Day.SUNDAY:
+        print("Weekend!");
+        break;
+    default:
+        print("Unknown day");
 }
 
-// Test different day
+// Test different day with another switch
 var weekend = Day.SUNDAY;
-if (weekend == Day.SATURDAY || weekend == Day.SUNDAY) {
-    print("✓ Weekend detected");
-} else {
-    print("Not weekend");
+switch (weekend) {
+    case Day.SATURDAY:
+    case Day.SUNDAY:
+        print("✓ Weekend detected");
+        break;
+    default:
+        print("Not weekend");
 }
 
-print("✓ Enum conditional test passed");
+// Test enum with integer values
+enum Priority: int32 {
+    LOW = 1,
+    MEDIUM = 5,
+    HIGH = 10,
+    CRITICAL = 15
+}
+
+var taskPriority = Priority.HIGH;
+switch (taskPriority) {
+    case Priority.LOW:
+        print("Handle when convenient");
+        break;
+    case Priority.MEDIUM:
+        print("Handle this week");
+        break;
+    case Priority.HIGH:
+        print("Handle today");
+        break;
+    case Priority.CRITICAL:
+        print("Drop everything and handle now!");
+        break;
+    default:
+        print("Unknown priority");
+}
+
+print("✓ Enum switch test completed");

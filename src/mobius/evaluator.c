@@ -967,6 +967,18 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
     char name[256];
     const char* identifier = stmt->name.identifier ? stmt->name.identifier : "unknown";
     snprintf(name, sizeof(name), "%s", identifier);
+    
+    // Check for namespace collision: an enum with the same name shouldn't exist
+    char enum_var_name[256];
+    snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", identifier);
+    bool enum_exists = false;
+    get_variable(env, enum_var_name, &enum_exists);
+    if (enum_exists) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Name collision: enum '%s' already exists, cannot declare variable with the same name", identifier);
+        return make_error(error_msg, stmt->name.line, stmt->name.column);
+    }
+    
     define_variable(env, name, value);
     
     return make_success(make_nil_value());
@@ -1627,17 +1639,51 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
 EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     // Evaluate the table expression
     EvalResult table_result = evaluate_expr(expr->table, env);
+    
+    // Check if this might be an enum access attempt when variable lookup fails
+    if (is_error(table_result) && expr->table->type == EXPR_VARIABLE) {
+        // The variable doesn't exist, might be an enum name
+        // Only try enum access if there's actually an enum with this name
+        const char* enum_name = expr->table->as.variable.name.identifier;
+        const char* member_name = expr->key.identifier;
+        
+        if (enum_name && member_name) {
+            // First check if an enum with this name exists
+            char enum_var_name[256];
+            snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", enum_name);
+            
+            bool enum_found = false;
+            Value enum_value = get_variable(env, enum_var_name, &enum_found);
+            
+            // Only proceed with enum access if the enum actually exists
+            if (enum_found && enum_value.type == VAL_USERDATA && 
+                strcmp(enum_value.as.userdata.type_name, "enum_definition") == 0) {
+                
+                EnumDefinition* enum_def = (EnumDefinition*)enum_value.as.userdata.ptr;
+                if (enum_def) {
+                    // Find the enum member
+                    EnumMember* member = enum_definition_find_member(enum_def, member_name);
+                    if (member) {
+                        // Create enum value
+                        Value result = make_enum_value(enum_def, member->value);
+                        return make_success(result);
+                    } else {
+                        char error_msg[256];
+                        snprintf(error_msg, sizeof(error_msg), "Undefined enum member '%s.%s'", enum_name, member_name);
+                        return make_error(error_msg, 0, 0);
+                    }
+                }
+            }
+        }
+        
+        // Not an enum access or enum doesn't exist, return the original variable error
+        return table_result;
+    }
+    
     if (is_error(table_result)) {
         return table_result;
     }
     
-    // Check if this is actually an enum access attempt
-    if (expr->table->type == EXPR_VARIABLE && table_result.value.type == VAL_NIL) {
-        // The variable doesn't exist, might be an enum name
-        // For now, just treat it as a normal table access error
-        free_value(table_result.value);
-        return make_error("Undefined variable", 0, 0);
-    }
     
     if (table_result.value.type != VAL_TABLE) {
         free_value(table_result.value);
@@ -2132,10 +2178,31 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
         return make_error("Null enum statement", 0, 0);
     }
     
+    
     // Create the enum definition
     const char* enum_name = stmt->name.identifier;
     if (!enum_name) {
         return make_error("Invalid enum name", stmt->name.line, stmt->name.column);
+    }
+    
+    // Check for namespace collision: a variable with the same name shouldn't exist
+    bool variable_exists = false;
+    get_variable(env, enum_name, &variable_exists);
+    if (variable_exists) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Name collision: variable '%s' already exists, cannot declare enum with the same name", enum_name);
+        return make_error(error_msg, stmt->name.line, stmt->name.column);
+    }
+    
+    // Also check if an enum with this name already exists
+    char check_enum_var_name[256];
+    snprintf(check_enum_var_name, sizeof(check_enum_var_name), "__enum_%s", enum_name);
+    bool enum_exists = false;
+    get_variable(env, check_enum_var_name, &enum_exists);
+    if (enum_exists) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Enum '%s' is already declared", enum_name);
+        return make_error(error_msg, stmt->name.line, stmt->name.column);
     }
     
     EnumDefinition* enum_def = enum_definition_create(enum_name, stmt->underlying_type);
@@ -2167,18 +2234,21 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
                 return make_error("Enum member value must be an integer", member->name.line, member->name.column);
             }
             
-            // Extract integer value (assuming int32 for now)
-            int64_t int_value;
+            // Extract integer value - use the unified approach since all are stored as int64_t
+            int64_t int_value = 0;
             switch (value_result.value.as.integer.num_type) {
-                case NUM_INT8:  int_value = value_result.value.as.integer.value.i8; break;
-                case NUM_UINT8: int_value = value_result.value.as.integer.value.u8; break;
-                case NUM_INT16: int_value = value_result.value.as.integer.value.i16; break;
-                case NUM_UINT16: int_value = value_result.value.as.integer.value.u16; break;
-                case NUM_INT32: int_value = value_result.value.as.integer.value.i32; break;
-                case NUM_UINT32: int_value = value_result.value.as.integer.value.u32; break;
+                case NUM_INT8:  int_value = (int64_t)value_result.value.as.integer.value.i8; break;
+                case NUM_UINT8: int_value = (int64_t)value_result.value.as.integer.value.u8; break;
+                case NUM_INT16: int_value = (int64_t)value_result.value.as.integer.value.i16; break;
+                case NUM_UINT16: int_value = (int64_t)value_result.value.as.integer.value.u16; break;
+                case NUM_INT32: int_value = (int64_t)value_result.value.as.integer.value.i32; break;
+                case NUM_UINT32: int_value = (int64_t)value_result.value.as.integer.value.u32; break;
                 case NUM_INT64: int_value = value_result.value.as.integer.value.i64; break;
                 case NUM_UINT64: int_value = (int64_t)value_result.value.as.integer.value.u64; break;
-                default: int_value = 0; break;
+                default: 
+                    free_value(value_result.value);
+                    enum_definition_release(enum_def);
+                    return make_error("Unsupported integer type for enum", member->name.line, member->name.column);
             }
             
             enum_definition_add_member(enum_def, member_name, int_value);
