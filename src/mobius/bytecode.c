@@ -38,6 +38,12 @@ BytecodeChunk* bytecode_chunk_create(void) {
     chunk->constant_count = 0;
     chunk->string_count = 0;
     
+    // Initialize enum information
+    chunk->enum_definitions = NULL;
+    chunk->enum_count = 0;
+    chunk->enum_accesses = NULL;
+    chunk->enum_access_count = 0;
+    
     // Initialize debug information
     chunk->line_numbers = NULL;
     chunk->source_files = NULL;
@@ -89,6 +95,15 @@ void bytecode_chunk_free(BytecodeChunk* chunk) {
     for (size_t i = 0; i < chunk->function_count; i++) {
         free(chunk->functions[i].name);
     }
+    
+    // Free enum information
+    if (chunk->enum_definitions) {
+        for (size_t i = 0; i < chunk->enum_count; i++) {
+            enum_definition_release(chunk->enum_definitions[i]);
+        }
+        free(chunk->enum_definitions);
+    }
+    free(chunk->enum_accesses);
     
     free(chunk);
 }
@@ -2415,6 +2430,40 @@ int vm_execute(MobiusVM* vm, BytecodeChunk* chunk) {
                     free_value(return_value);
                 }
                 return VM_OK;
+            }
+            
+            case OP_ENUM_DEF: {
+                uint8_t enum_index = READ_OPERAND();
+                if (enum_index >= chunk->enum_count) {
+                    vm_runtime_error(vm, "Invalid enum definition index");
+                    return VM_RUNTIME_ERROR;
+                }
+                // Enum definition is stored at compile time, nothing to do at runtime
+                break;
+            }
+            
+            
+            case OP_ENUM_STORE: {
+                uint8_t name_index = READ_OPERAND();
+                Value enum_value = vm_pop(vm);
+                
+                if (name_index >= chunk->string_count) {
+                    vm_runtime_error(vm, "Invalid string index for enum store");
+                    return VM_RUNTIME_ERROR;
+                }
+                
+                // Get enum variable name (for future global storage integration)
+                // const char* enum_var_name = chunk->string_pool[name_index];
+                
+                // Store in global environment
+                // For simplicity, we'll use a basic global storage mechanism
+                // In a full implementation, you'd integrate with the environment system
+                
+                // For now, just acknowledge the storage - enum definitions are available
+                // through the chunk's enum_definitions array
+                (void)name_index;  // Suppress unused warning
+                free_value(enum_value);
+                break;
             }
                 
             default:

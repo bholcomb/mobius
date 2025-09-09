@@ -56,6 +56,7 @@ Stmt* parse_return_statement(Parser* parser);
 Stmt* parse_switch_statement(Parser* parser);
 Stmt* parse_break_statement(Parser* parser);
 Stmt* parse_import_statement(Parser* parser);
+Stmt* parse_enum_declaration(Parser* parser);
 
 // Switch statement parsing helpers
 SwitchCase* parse_switch_case(Parser* parser);

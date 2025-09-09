@@ -1,0 +1,77 @@
+// Comprehensive enum integration test
+
+enum HttpStatus : uint16 {
+    OK = 200,
+    NOT_FOUND = 404,
+    SERVER_ERROR = 500
+}
+
+enum LogLevel : uint8 {
+    DEBUG = 0,
+    INFO = 1,
+    WARN = 2,
+    ERROR = 3
+}
+
+func checkStatus(status) {
+    switch (status) {
+        case HttpStatus.OK:
+            return "Success";
+        case HttpStatus.NOT_FOUND:
+            return "Resource not found";
+        case HttpStatus.SERVER_ERROR:
+            return "Internal server error";
+        default:
+            return "Unknown status";
+    }
+}
+
+func log(level, message) {
+    var prefix;
+    switch (level) {
+        case LogLevel.DEBUG:
+            prefix = "[DEBUG]";
+            break;
+        case LogLevel.INFO:
+            prefix = "[INFO]";
+            break;
+        case LogLevel.WARN:
+            prefix = "[WARN]";
+            break;
+        case LogLevel.ERROR:
+            prefix = "[ERROR]";
+            break;
+        default:
+            prefix = "[UNKNOWN]";
+    }
+    print(prefix, message);
+}
+
+// Test enum usage in functions
+var status = HttpStatus.OK;
+var result = checkStatus(status);
+log(LogLevel.INFO, result);
+
+status = HttpStatus.NOT_FOUND;
+result = checkStatus(status);
+log(LogLevel.WARN, result);
+
+status = HttpStatus.SERVER_ERROR;
+result = checkStatus(status);
+log(LogLevel.ERROR, result);
+
+// Test enum comparison and logic
+if (status == HttpStatus.SERVER_ERROR) {
+    log(LogLevel.ERROR, "Server needs attention!");
+}
+
+// Test enum arrays manually 
+var status1 = HttpStatus.OK;
+var status2 = HttpStatus.NOT_FOUND;
+var status3 = HttpStatus.SERVER_ERROR;
+
+log(LogLevel.INFO, checkStatus(status1));
+log(LogLevel.INFO, checkStatus(status2));
+log(LogLevel.INFO, checkStatus(status3));
+
+print("✓ Comprehensive enum test passed");

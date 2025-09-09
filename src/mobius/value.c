@@ -100,6 +100,14 @@ Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* 
     return value;
 }
 
+Value make_enum_value(EnumDefinition* definition, int64_t val) {
+    Value value = {0};
+    value.type = VAL_ENUM;
+    value.as.enum_val.definition = enum_definition_retain(definition);
+    value.as.enum_val.value = (int32_t)val;  // Store as int32 for now
+    return value;
+}
+
 // Value utility functions
 bool is_truthy(Value value) {
     switch (value.type) {
@@ -126,6 +134,7 @@ bool is_truthy(Value value) {
         case VAL_FUNCTION: return value.as.function != NULL;
         case VAL_TABLE: return value.as.table != NULL;
         case VAL_USERDATA: return value.as.userdata.ptr != NULL;
+        case VAL_ENUM: return true;  // Enums are always truthy
         default: return false;
     }
 }
@@ -197,6 +206,10 @@ bool values_equal(Value a, Value b) {
             // Userdata equality: same pointer AND same type
             return a.as.userdata.ptr == b.as.userdata.ptr && 
                    a.as.userdata.type_name == b.as.userdata.type_name;
+        case VAL_ENUM:
+            // Enum equality: same definition and same value
+            return a.as.enum_val.definition == b.as.enum_val.definition &&
+                   a.as.enum_val.value == b.as.enum_val.value;
         default: return false;
     }
 }
@@ -269,6 +282,15 @@ void print_value(Value value) {
                 printf("<userdata (null)>");
             }
             break;
+        case VAL_ENUM: {
+            const char* member_name = enum_value_name(value);
+            if (member_name) {
+                printf("%s.%s", value.as.enum_val.definition->name, member_name);
+            } else {
+                printf("%s(%d)", value.as.enum_val.definition->name, value.as.enum_val.value);
+            }
+            break;
+        }
         default:
             printf("unknown_value");
             break;
@@ -352,6 +374,17 @@ char* value_to_string(Value value) {
             result = malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
+        case VAL_ENUM: {
+            const char* member_name = enum_value_name(value);
+            if (member_name) {
+                snprintf(buffer, sizeof(buffer), "%s.%s", value.as.enum_val.definition->name, member_name);
+            } else {
+                snprintf(buffer, sizeof(buffer), "%s(%d)", value.as.enum_val.definition->name, value.as.enum_val.value);
+            }
+            result = malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
+        }
         default:
             result = malloc(8);
             if (result) strcpy(result, "unknown");
@@ -376,6 +409,7 @@ const char* value_type_name(ValueType type) {
         case VAL_BUILTIN_FUNCTION: return "function";
         case VAL_TABLE: return "table";
         case VAL_USERDATA: return "userdata";
+        case VAL_ENUM: return "enum";
         default: return "unknown";
     }
 }
@@ -408,6 +442,10 @@ Value copy_value(Value value) {
     } else if (value.type == VAL_USERDATA) {
         // For userdata, we don't manage the memory - the external code does
         // Just return the same value (shared reference)
+        return value;
+    } else if (value.type == VAL_ENUM && value.as.enum_val.definition) {
+        // For enums, increment the definition reference count
+        value.as.enum_val.definition = enum_definition_retain(value.as.enum_val.definition);
         return value;
     } else {
         // For other types (primitives), simple copy is sufficient
@@ -467,6 +505,9 @@ void free_value(Value value) {
         // cleans up or when the MobiusState is freed
         // 
         // This prevents double-free issues when userdata values are copied
+    } else if (value.type == VAL_ENUM && value.as.enum_val.definition) {
+        // For enums, release the definition reference
+        enum_definition_release(value.as.enum_val.definition);
     }
 }
 
@@ -656,4 +697,128 @@ void array_resize(ArrayValue* array, size_t new_capacity) {
     
     array->elements = new_elements;
     array->capacity = new_capacity;
+}
+
+// ============================================================================
+// ENUM IMPLEMENTATION
+// ============================================================================
+
+EnumDefinition* enum_definition_create(const char* name, NumericType underlying_type) {
+    EnumDefinition* enum_def = calloc(1, sizeof(EnumDefinition));
+    if (!enum_def) return NULL;
+    
+    enum_def->name = malloc(strlen(name) + 1);
+    if (!enum_def->name) {
+        free(enum_def);
+        return NULL;
+    }
+    strcpy(enum_def->name, name);
+    
+    enum_def->underlying_type = underlying_type;
+    enum_def->members = NULL;
+    enum_def->ref_count = 1;
+    enum_def->next_auto_value = 0;
+    
+    return enum_def;
+}
+
+EnumDefinition* enum_definition_retain(EnumDefinition* enum_def) {
+    if (enum_def) {
+        enum_def->ref_count++;
+    }
+    return enum_def;
+}
+
+void enum_definition_release(EnumDefinition* enum_def) {
+    if (!enum_def) return;
+    
+    enum_def->ref_count--;
+    if (enum_def->ref_count <= 0) {
+        // Free all members
+        EnumMember* member = enum_def->members;
+        while (member) {
+            EnumMember* next = member->next;
+            free(member->name);
+            free(member);
+            member = next;
+        }
+        
+        // Free the name
+        free(enum_def->name);
+        
+        // Free the definition
+        free(enum_def);
+    }
+}
+
+void enum_definition_add_member(EnumDefinition* enum_def, const char* name, int64_t value) {
+    if (!enum_def || !name) return;
+    
+    EnumMember* member = malloc(sizeof(EnumMember));
+    if (!member) return;
+    
+    member->name = malloc(strlen(name) + 1);
+    if (!member->name) {
+        free(member);
+        return;
+    }
+    strcpy(member->name, name);
+    
+    member->value = value;
+    member->next = enum_def->members;
+    enum_def->members = member;
+    
+    // Update next auto value
+    enum_def->next_auto_value = value + 1;
+}
+
+void enum_definition_add_auto_member(EnumDefinition* enum_def, const char* name) {
+    if (!enum_def || !name) return;
+    
+    enum_definition_add_member(enum_def, name, enum_def->next_auto_value);
+}
+
+EnumMember* enum_definition_find_member(EnumDefinition* enum_def, const char* name) {
+    if (!enum_def || !name) return NULL;
+    
+    EnumMember* member = enum_def->members;
+    while (member) {
+        if (strcmp(member->name, name) == 0) {
+            return member;
+        }
+        member = member->next;
+    }
+    
+    return NULL;
+}
+
+EnumMember* enum_definition_find_member_by_value(EnumDefinition* enum_def, int64_t value) {
+    if (!enum_def) return NULL;
+    
+    EnumMember* member = enum_def->members;
+    while (member) {
+        if (member->value == value) {
+            return member;
+        }
+        member = member->next;
+    }
+    
+    return NULL;
+}
+
+bool enum_values_equal(Value a, Value b) {
+    if (a.type != VAL_ENUM || b.type != VAL_ENUM) return false;
+    return a.as.enum_val.definition == b.as.enum_val.definition &&
+           a.as.enum_val.value == b.as.enum_val.value;
+}
+
+const char* enum_value_name(Value enum_val) {
+    if (enum_val.type != VAL_ENUM || !enum_val.as.enum_val.definition) return NULL;
+    
+    EnumMember* member = enum_definition_find_member_by_value(
+        enum_val.as.enum_val.definition, 
+        enum_val.as.enum_val.value
+    );
+    
+    return member ? member->name : NULL;
 }

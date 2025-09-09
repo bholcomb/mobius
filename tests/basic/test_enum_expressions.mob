@@ -1,0 +1,35 @@
+// Enum with expression values
+
+enum Priority {
+    LOW = 1,
+    MEDIUM = 5,  // Explicit value
+    HIGH = 10    // Explicit value
+}
+
+// Test enum with computed values
+var low = Priority.LOW;
+var medium = Priority.MEDIUM;
+var high = Priority.HIGH;
+
+print("Explicit value enum values:");
+print("LOW:", low);
+print("MEDIUM:", medium);  
+print("HIGH:", high);
+
+// Test using enums in expressions
+var currentPrio = Priority.MEDIUM;
+if (currentPrio == Priority.MEDIUM) {
+    print("✓ Current priority is medium");
+}
+
+// Test multiple enum declarations
+enum Size {
+    SMALL,
+    MEDIUM,  // Different from Priority.MEDIUM
+    LARGE
+}
+
+var size = Size.MEDIUM;
+print("Size MEDIUM:", size);
+
+print("✓ Enum expressions test passed");

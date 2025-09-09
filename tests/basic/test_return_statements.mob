@@ -1,0 +1,22 @@
+// Test return statements with optional semicolons
+// REQUIRE: Function with no return: nil
+// REQUIRE: Function with return value: 42
+// REQUIRE: Function with return on newline: 100
+
+func test_no_return() {
+    var x = 5
+    // No explicit return
+}
+
+func test_return_value() {
+    return 42
+}
+
+func test_return_newline() {
+    var result = 100
+    return result
+}
+
+print("Function with no return:", test_no_return())
+print("Function with return value:", test_return_value())
+print("Function with return on newline:", test_return_newline())

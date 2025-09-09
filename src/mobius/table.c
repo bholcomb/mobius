@@ -75,6 +75,11 @@ size_t hash_value(Value value, size_t capacity) {
                 hash ^= hash_string_for_table(value.as.userdata.type_name);
             }
             break;
+        case VAL_ENUM:
+            // Hash enum by definition pointer and value
+            hash = (size_t)(uintptr_t)value.as.enum_val.definition;
+            hash ^= (size_t)value.as.enum_val.value;
+            break;
     }
     
     return hash % capacity;
@@ -102,6 +107,10 @@ bool values_equal_for_table(Value a, Value b) {
             // Userdata equality: same pointer AND same type
             return a.as.userdata.ptr == b.as.userdata.ptr && 
                    a.as.userdata.type_name == b.as.userdata.type_name;
+        case VAL_ENUM:
+            // Enum equality: same definition and same value
+            return a.as.enum_val.definition == b.as.enum_val.definition &&
+                   a.as.enum_val.value == b.as.enum_val.value;
     }
     return false;
 }

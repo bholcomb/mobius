@@ -4,6 +4,9 @@
 #include <stdarg.h>
 #include <string.h>
 
+// Forward declarations
+Stmt* parse_continue_statement(Parser* parser);
+
 // Parser initialization
 void init_parser(Parser* parser, Token* tokens, size_t token_count) {
     parser->tokens = tokens;
@@ -104,6 +107,45 @@ Token consume(Parser* parser, TokenType type, const char* message) {
     parser_error_at_current(parser, message);
     Token error_token = {TOKEN_ERROR, message, (int)strlen(message), 0, 0, {{0}}};
     return error_token;
+}
+
+// Helper function to consume statement terminator (semicolon or newline)
+// Returns true if terminator was found, false if error
+bool consume_statement_terminator(Parser* parser, const char* message) {
+    // If we're at end of file, that's a valid terminator
+    if (parser_at_end(parser)) {
+        return true;
+    }
+    
+    // If we have a semicolon, consume it
+    if (parser_check(parser, TOKEN_SEMICOLON)) {
+        parser_advance(parser);
+        return true;
+    }
+    
+    // If we have a newline, consume it
+    if (parser_check(parser, TOKEN_NEWLINE)) {
+        parser_advance(parser);
+        return true;
+    }
+    
+    // If we're at a closing brace (end of block), that's also valid
+    if (parser_check(parser, TOKEN_RIGHT_BRACE)) {
+        return true;
+    }
+    
+    // Check if there's more content on the same line that would require a semicolon
+    Token current = parser_peek(parser);
+    Token previous = parser_previous(parser);
+    
+    // If both tokens are on the same line, we need a semicolon
+    if (current.line == previous.line && !parser_at_end(parser)) {
+        parser_error_at_current(parser, message);
+        return false;
+    }
+    
+    // Otherwise, newline is implicit and we're good
+    return true;
 }
 
 void synchronize(Parser* parser) {
@@ -388,7 +430,18 @@ Expr* parse_call(Parser* parser) {
             expr = make_array_index_expr(expr, index);
         } else if (parser_match(parser, TOKEN_DOT)) {
             Token key = consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'");
-            expr = make_table_dot_expr(expr, key);
+            
+            // Check if this is enum access (base expression is a simple variable)
+            if (expr->type == EXPR_VARIABLE) {
+                // Could be enum access: EnumName.MEMBER
+                // We'll create an enum access expression and let the evaluator decide
+                Token enum_name = expr->as.variable.name;
+                free_expr(expr);  // Free the variable expression
+                expr = make_enum_access_expr(enum_name, key);
+            } else {
+                // Regular table/object access
+                expr = make_table_dot_expr(expr, key);
+            }
         } else {
             break;
         }
@@ -506,7 +559,11 @@ Expr* parse_expression(Parser* parser) {
 // Statement parsing
 Stmt* parse_expression_statement(Parser* parser) {
     Expr* expr = parse_expression(parser);
-    consume(parser, TOKEN_SEMICOLON, "Expect ';' after expression.");
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after expression")) {
+        // Error already reported by consume_statement_terminator
+        free_expr(expr);
+        return NULL;
+    }
     return make_expression_stmt(expr);
 }
 
@@ -559,7 +616,11 @@ Stmt* parse_var_declaration(Parser* parser) {
         initializer = parse_expression(parser);
     }
     
-    consume(parser, TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after variable declaration")) {
+        // Error already reported, clean up
+        if (initializer) free_expr(initializer);
+        return NULL;
+    }
     return make_var_stmt(name, initializer, type_hint);
 }
 
@@ -714,6 +775,10 @@ Stmt* parse_statement(Parser* parser) {
         return parse_break_statement(parser);
     }
     
+    if (parser_match(parser, TOKEN_CONTINUE)) {
+        return parse_continue_statement(parser);
+    }
+    
     if (parser_match(parser, TOKEN_IMPORT)) {
         return parse_import_statement(parser);
     }
@@ -728,6 +793,10 @@ Stmt* parse_declaration(Parser* parser) {
     
     if (parser_match(parser, TOKEN_VAR)) {
         return parse_var_declaration(parser);
+    }
+    
+    if (parser_match(parser, TOKEN_ENUM)) {
+        return parse_enum_declaration(parser);
     }
     
     return parse_statement(parser);
@@ -878,19 +947,33 @@ Stmt* parse_return_statement(Parser* parser) {
     Token keyword = parser_previous(parser);
     
     Expr* value = NULL;
-    if (!parser_check(parser, TOKEN_SEMICOLON) && !parser_check(parser, TOKEN_NEWLINE)) {
+    if (!parser_check(parser, TOKEN_SEMICOLON) && !parser_check(parser, TOKEN_NEWLINE) && 
+        !parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
         value = parse_expression(parser);
     }
     
-    consume(parser, TOKEN_SEMICOLON, "Expected ';' after return value");
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after return statement")) {
+        if (value) free_expr(value);
+        return NULL;
+    }
     
     return make_return_stmt(keyword, value);
 }
 
 Stmt* parse_break_statement(Parser* parser) {
     Token keyword = parser_previous(parser);
-    consume(parser, TOKEN_SEMICOLON, "Expected ';' after 'break'");
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after 'break'")) {
+        return NULL;
+    }
     return make_break_stmt(keyword);
+}
+
+Stmt* parse_continue_statement(Parser* parser) {
+    Token keyword = parser_previous(parser);
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after 'continue'")) {
+        return NULL;
+    }
+    return make_continue_stmt(keyword);
 }
 
 Stmt* parse_import_statement(Parser* parser) {
@@ -902,7 +985,9 @@ Stmt* parse_import_statement(Parser* parser) {
     }
     
     Token module_name = parser_advance(parser);
-    consume(parser, TOKEN_SEMICOLON, "Expected ';' after import statement");
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after import statement")) {
+        return NULL;
+    }
     
     return make_import_stmt(keyword, module_name);
 }
@@ -1083,6 +1168,22 @@ CasePattern* parse_case_pattern(Parser* parser) {
         parser_advance(parser);
         Value value = make_nil_value();
         return make_value_pattern(value);
+    } else if (parser_check(parser, TOKEN_IDENTIFIER)) {
+        // Check if this is an enum access pattern (EnumName.MEMBER)
+        if (parser->current + 1 < parser->token_count && 
+            parser->tokens[parser->current + 1].type == TOKEN_DOT) {
+            
+            Token enum_name = parser_advance(parser);  // consume enum name
+            parser_advance(parser);  // consume '.'
+            Token member_name = consume(parser, TOKEN_IDENTIFIER, "Expect member name after '.'");
+            
+            // Create an enum access expression and wrap it in an expression pattern
+            Expr* enum_expr = make_enum_access_expr(enum_name, member_name);
+            return make_expression_pattern(TOKEN_EQUAL_EQUAL, enum_expr);
+        } else {
+            parser_error_at_current(parser, "Expect literal value in case pattern");
+            return make_wildcard_pattern();
+        }
     } else if (parser_check(parser, TOKEN_IS)) {
         // Type matching pattern: is string, is array, etc.
         parser_advance(parser); // consume 'is'
@@ -1128,6 +1229,119 @@ CasePattern* parse_case_pattern(Parser* parser) {
         parser_error_at_current(parser, "Expect literal value in case pattern");
         return make_wildcard_pattern();
     }
+}
+
+// Parse enum member: NAME or NAME = value
+EnumMemberDef* parse_enum_member(Parser* parser) {
+    if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+        parser_error_at_current(parser, "Expect enum member name");
+        return NULL;
+    }
+    
+    Token name = parser_advance(parser);
+    Expr* value = NULL;
+    
+    if (parser_match(parser, TOKEN_EQUAL)) {
+        value = parse_expression(parser);
+    }
+    
+    return make_enum_member(name, value);
+}
+
+// Parse enum declaration: enum Name : type { MEMBER1, MEMBER2 = value, ... }
+Stmt* parse_enum_declaration(Parser* parser) {
+    Token keyword = parser_previous(parser);  // The 'enum' token
+    
+    // Parse enum name
+    if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+        parser_error_at_current(parser, "Expect enum name");
+        return NULL;
+    }
+    Token name = parser_advance(parser);
+    
+    // Parse optional underlying type
+    NumericType underlying_type = NUM_INT32;  // Default to int32
+    bool has_explicit_type = false;
+    
+    if (parser_match(parser, TOKEN_COLON)) {
+        has_explicit_type = true;
+        
+        if (parser_match(parser, TOKEN_TYPE_INT8)) {
+            underlying_type = NUM_INT8;
+        } else if (parser_match(parser, TOKEN_TYPE_UINT8)) {
+            underlying_type = NUM_UINT8;
+        } else if (parser_match(parser, TOKEN_TYPE_INT16)) {
+            underlying_type = NUM_INT16;
+        } else if (parser_match(parser, TOKEN_TYPE_UINT16)) {
+            underlying_type = NUM_UINT16;
+        } else if (parser_match(parser, TOKEN_TYPE_INT32)) {
+            underlying_type = NUM_INT32;
+        } else if (parser_match(parser, TOKEN_TYPE_UINT32)) {
+            underlying_type = NUM_UINT32;
+        } else if (parser_match(parser, TOKEN_TYPE_INT64)) {
+            underlying_type = NUM_INT64;
+        } else if (parser_match(parser, TOKEN_TYPE_UINT64)) {
+            underlying_type = NUM_UINT64;
+        } else {
+            parser_error_at_current(parser, "Expect integer type after ':'");
+            return NULL;
+        }
+    }
+    
+    // Parse enum body
+    consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before enum body");
+    
+    EnumMemberDef* members = NULL;
+    EnumMemberDef* last_member = NULL;
+    
+    // Skip newlines
+    while (parser_check(parser, TOKEN_NEWLINE)) {
+        parser_advance(parser);
+    }
+    
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        EnumMemberDef* member = parse_enum_member(parser);
+        if (!member) {
+            // Error in parsing member, cleanup and return
+            while (members) {
+                EnumMemberDef* next = members->next;
+                if (members->value) free_expr(members->value);
+                free(members);
+                members = next;
+            }
+            return NULL;
+        }
+        
+        // Add to linked list
+        if (!members) {
+            members = member;
+            last_member = member;
+        } else {
+            last_member->next = member;
+            last_member = member;
+        }
+        
+        // Skip newlines
+        while (parser_check(parser, TOKEN_NEWLINE)) {
+            parser_advance(parser);
+        }
+        
+        // Handle comma separator
+        if (parser_check(parser, TOKEN_COMMA)) {
+            parser_advance(parser);
+            // Skip newlines after comma
+            while (parser_check(parser, TOKEN_NEWLINE)) {
+                parser_advance(parser);
+            }
+        } else if (!parser_check(parser, TOKEN_RIGHT_BRACE)) {
+            parser_error_at_current(parser, "Expect ',' between enum members");
+            break;
+        }
+    }
+    
+    consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after enum body");
+    
+    return make_enum_stmt(keyword, name, underlying_type, has_explicit_type, members);
 }
 
 void free_parse_result(ParseResult* result) {

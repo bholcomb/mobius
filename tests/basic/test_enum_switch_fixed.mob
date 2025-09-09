@@ -1,0 +1,47 @@
+// Enum usage with switch statements - FIXED
+
+enum Day {
+    MONDAY,
+    TUESDAY,
+    WEDNESDAY,
+    THURSDAY,
+    FRIDAY,
+    SATURDAY,
+    SUNDAY
+}
+
+var today = Day.WEDNESDAY;
+
+print("Today is:", today);
+
+// Test enum with switch statement
+switch (today) {
+    case Day.MONDAY:
+        print("Start of work week");
+        break;
+    case Day.WEDNESDAY:
+        print("✓ Hump day!");
+        break;
+    case Day.FRIDAY:
+        print("TGIF!");
+        break;
+    case Day.SATURDAY:
+    case Day.SUNDAY:
+        print("Weekend!");
+        break;
+    default:
+        print("Regular day");
+}
+
+// Test different day
+var weekend = Day.SUNDAY;
+switch (weekend) {
+    case Day.SATURDAY:
+    case Day.SUNDAY:
+        print("✓ Weekend detected");
+        break;
+    default:
+        print("Not weekend");
+}
+
+print("✓ Enum switch test passed");

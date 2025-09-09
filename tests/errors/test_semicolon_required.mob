@@ -1,0 +1,10 @@
+// Test that semicolons are still required for multiple statements on same line
+// This should produce a parse error
+
+var x = 5
+print("x:", x)
+
+// This should fail - multiple statements on same line without semicolon
+var a = 1 var b = 2
+
+print("Should not reach this")

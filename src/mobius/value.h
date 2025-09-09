@@ -12,6 +12,8 @@ typedef struct MobiusFunction MobiusFunction;
 typedef struct Table Table;
 typedef struct TableEntry TableEntry;
 typedef struct ArrayValue ArrayValue;
+typedef struct EnumValue EnumValue;
+typedef struct EnumDefinition EnumDefinition;
 
 // Reference counted string structure
 typedef struct RefCountedString {
@@ -41,7 +43,8 @@ typedef enum {
     VAL_BYTECODE_FUNCTION,  // Bytecode function (for bytecode execution)
     VAL_BUILTIN_FUNCTION,   // Builtin C function (for VM builtins)
     VAL_TABLE,
-    VAL_USERDATA
+    VAL_USERDATA,
+    VAL_ENUM
 } ValueType;
 
 // Forward declaration for userdata destructor
@@ -103,6 +106,10 @@ typedef struct {
             const char* type_name;            // Type identifier for runtime checks
             size_t size;                      // Size of the data (for debugging/GC)
         } userdata;
+        struct {
+            EnumDefinition* definition;   // Shared enum definition
+            int32_t value;               // The actual enum value
+        } enum_val;
     } as;
 } Value;
 
@@ -160,6 +167,36 @@ Value array_get(ArrayValue* array, size_t index);
 void array_set(ArrayValue* array, size_t index, Value value);
 size_t array_length(ArrayValue* array);
 void array_resize(ArrayValue* array, size_t new_capacity);
+
+// Enum value member structure
+typedef struct EnumMember {
+    char* name;                    // Member name (e.g., "RED")
+    int64_t value;                // Member value (stored as largest type)
+    struct EnumMember* next;      // Linked list for easy iteration
+} EnumMember;
+
+// Enum definition structure
+struct EnumDefinition {
+    char* name;                   // Enum name (e.g., "Color")
+    NumericType underlying_type;  // Underlying integer type (int32 default)
+    EnumMember* members;          // Linked list of enum members
+    int ref_count;               // Reference count for memory management
+    int64_t next_auto_value;     // Next auto-assigned value
+};
+
+// Enum utility functions
+EnumDefinition* enum_definition_create(const char* name, NumericType underlying_type);
+EnumDefinition* enum_definition_retain(EnumDefinition* enum_def);
+void enum_definition_release(EnumDefinition* enum_def);
+void enum_definition_add_member(EnumDefinition* enum_def, const char* name, int64_t value);
+void enum_definition_add_auto_member(EnumDefinition* enum_def, const char* name);
+EnumMember* enum_definition_find_member(EnumDefinition* enum_def, const char* name);
+EnumMember* enum_definition_find_member_by_value(EnumDefinition* enum_def, int64_t value);
+
+// Enum value functions
+Value make_enum_value(EnumDefinition* definition, int64_t value);
+bool enum_values_equal(Value a, Value b);
+const char* enum_value_name(Value enum_val);
 
 #endif // MOBIUS_VALUE_H
 

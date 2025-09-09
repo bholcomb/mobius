@@ -42,6 +42,7 @@ typedef struct {
     bool has_error;
     bool has_returned;  // Flag to indicate if a return statement was executed
     bool has_break;     // Flag to indicate if a break statement was executed
+    bool has_continue;  // Flag to indicate if a continue statement was executed
     RuntimeError error;
 } EvalResult;
 
@@ -79,6 +80,7 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env);
 EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env);
 EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env);
 EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env);
+EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env);
 
 // Statement evaluation
 EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env);
@@ -153,6 +155,8 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
 // Switch statement support
 EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env);
 EvalResult eval_break_stmt(BreakStmt* stmt, Environment* env);
+EvalResult eval_continue_stmt(ContinueStmt* stmt, Environment* env);
 EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env);
+EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env);
 
 #endif // MOBIUS_EVALUATOR_H

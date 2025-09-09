@@ -22,7 +22,8 @@ typedef enum {
     EXPR_ARRAY_INDEX,
     EXPR_TABLE_LITERAL,
     EXPR_TABLE_INDEX,
-    EXPR_TABLE_DOT
+    EXPR_TABLE_DOT,
+    EXPR_ENUM_ACCESS
 } ExprType;
 
 // Statement types
@@ -39,7 +40,9 @@ typedef enum {
     STMT_RETURN,
     STMT_SWITCH,
     STMT_BREAK,
-    STMT_IMPORT
+    STMT_CONTINUE,
+    STMT_IMPORT,
+    STMT_ENUM
 } StmtType;
 
 // Forward declarations for AST structures (core types in value.h)
@@ -142,6 +145,12 @@ typedef struct {
     Token key;  // Identifier after the dot
 } TableDotExpr;
 
+// Enum access expression (EnumName.MEMBER)
+typedef struct {
+    Token enum_name;    // The enum name
+    Token member_name;  // The member name after the dot
+} EnumAccessExpr;
+
 // Main expression structure
 struct Expr {
     ExprType type;
@@ -159,6 +168,7 @@ struct Expr {
         TableLiteralExpr table_literal;
         TableIndexExpr table_index;
         TableDotExpr table_dot;
+        EnumAccessExpr enum_access;
     } as;
 };
 
@@ -304,11 +314,32 @@ typedef struct {
     Token keyword;              // The 'break' token for error reporting
 } BreakStmt;
 
+// Continue statement
+typedef struct {
+    Token keyword;              // The 'continue' token for error reporting
+} ContinueStmt;
+
 // Import statement
 typedef struct {
     Token keyword;              // The 'import' token for error reporting
     Token module_name;          // Module name string literal
 } ImportStmt;
+
+// Enum member definition
+typedef struct EnumMemberDef {
+    Token name;                    // Member name token
+    Expr* value;                   // Optional explicit value (can be NULL)
+    struct EnumMemberDef* next;    // Linked list
+} EnumMemberDef;
+
+// Enum statement
+typedef struct {
+    Token keyword;                 // The 'enum' token for error reporting
+    Token name;                    // Enum name
+    NumericType underlying_type;   // Underlying integer type (NUM_INT32 default)
+    bool has_explicit_type;        // Whether type was explicitly specified
+    EnumMemberDef* members;        // Linked list of enum members
+} EnumStmt;
 
 // Main statement structure
 struct Stmt {
@@ -327,7 +358,9 @@ struct Stmt {
         ReturnStmt return_stmt;
         SwitchStmt switch_stmt;
         BreakStmt break_stmt;
+        ContinueStmt continue_stmt;
         ImportStmt import_stmt;
+        EnumStmt enum_stmt;
     } as;
 };
 
@@ -344,6 +377,7 @@ Expr* make_array_index_expr(Expr* array, Expr* index);
 Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count);
 Expr* make_table_index_expr(Expr* table, Expr* index);
 Expr* make_table_dot_expr(Expr* table, Token key);
+Expr* make_enum_access_expr(Token enum_name, Token member_name);
 
 Stmt* make_expression_stmt(Expr* expression);
 Stmt* make_print_stmt(Expr* expression);
@@ -360,7 +394,13 @@ Stmt* make_return_stmt(Token keyword, Expr* value);
 Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count,
                       Stmt** default_body, size_t default_body_count);
 Stmt* make_break_stmt(Token keyword);
+Stmt* make_continue_stmt(Token keyword);
 Stmt* make_import_stmt(Token keyword, Token module_name);
+Stmt* make_enum_stmt(Token keyword, Token name, NumericType underlying_type, 
+                     bool has_explicit_type, EnumMemberDef* members);
+
+// Enum helper functions
+EnumMemberDef* make_enum_member(Token name, Expr* value);
 
 // Pattern and case creation functions
 CasePattern* make_value_pattern(Value literal);
