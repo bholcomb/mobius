@@ -1631,6 +1631,14 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
         return table_result;
     }
     
+    // Check if this is actually an enum access attempt
+    if (expr->table->type == EXPR_VARIABLE && table_result.value.type == VAL_NIL) {
+        // The variable doesn't exist, might be an enum name
+        // For now, just treat it as a normal table access error
+        free_value(table_result.value);
+        return make_error("Undefined variable", 0, 0);
+    }
+    
     if (table_result.value.type != VAL_TABLE) {
         free_value(table_result.value);
         return make_error("Cannot access property of non-table value", 0, 0);
