@@ -30,6 +30,7 @@ MOBIUS_SOURCES = \
 	$(SRCDIR)/mobius/types.c \
 	$(SRCDIR)/mobius/utility.c \
 	$(SRCDIR)/mobius/value.c \
+	$(SRCDIR)/mobius/enumValue.c \
 	$(SRCDIR)/mobius/library/library.c \
 	$(SRCDIR)/mobius/library/core.c \
 	$(SRCDIR)/mobius/library/math.c \
