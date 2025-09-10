@@ -6,6 +6,7 @@
 #include "table.h"
 #include "types.h"
 #include "stack_trace.h"
+#include "enumValue.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
