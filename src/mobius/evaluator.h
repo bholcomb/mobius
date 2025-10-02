@@ -37,10 +37,9 @@ typedef struct {
     StackTrace* stack_trace;   // Call stack at time of error
 } RuntimeError;
 
-// Evaluation result
+// Evaluation result (stack-based only - no .value field)
 typedef struct {
-    Value value;        // For traditional AST evaluation
-    int return_count;   // Number of values pushed onto stack (for library functions)
+    int return_count;   // Number of values pushed onto stack
     bool has_error;
     bool has_returned;  // Flag to indicate if a return statement was executed
     bool has_break;     // Flag to indicate if a break statement was executed
@@ -102,7 +101,7 @@ ModuleRegistry* get_global_module_registry(void);
 
 // Utility functions
 EvalResult make_success(int return_count);        // For library functions using stack-based returns
-EvalResult make_success_with_value(Value value);  // For AST evaluation that returns values traditionally
+EvalResult make_success_with_value(Environment* env, Value value);  // Pushes value and returns success
 EvalResult make_error(const char* message, int line, int column);
 EvalResult make_error_detailed(const char* message, const char* suggestion, 
                               ErrorCategory category, int line, int column,
@@ -115,14 +114,12 @@ Value convert_to_number(Value value);
 bool are_types_compatible(ValueType a, ValueType b);
 
 // Arithmetic operations
-EvalResult add_values(Value left, Value right);
-EvalResult subtract_values(Value left, Value right);
-EvalResult multiply_values(Value left, Value right);
-EvalResult divide_values(Value left, Value right, int line, int column);
-EvalResult modulo_values(Value left, Value right, int line, int column);
-
-// Comparison operations
-EvalResult compare_values(Value left, Value right, TokenType op);
+EvalResult add_values(Environment* env, Value left, Value right);
+EvalResult subtract_values(Environment* env, Value left, Value right);
+EvalResult multiply_values(Environment* env, Value left, Value right);
+EvalResult divide_values(Environment* env, Value left, Value right, int line, int column);
+EvalResult modulo_values(Environment* env, Value left, Value right, int line, int column);
+EvalResult compare_values(Environment* env, Value left, Value right, TokenType op);
 EvalResult logical_and(Value left, Value right);
 EvalResult logical_or(Value left, Value right);
 EvalResult logical_not(Value value);
