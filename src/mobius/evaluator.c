@@ -768,7 +768,8 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                     // Call the native function directly
                     stack_trace_push(func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
                     LibraryFunction native_func = (LibraryFunction)func_value.as.native_function;
-                    EvalResult result = native_func(env, expr->arg_count);
+                    global_context->env = env;  // Set current environment in context
+                    EvalResult result = native_func(global_context, expr->arg_count);
                     stack_trace_pop();
                     
                     // Native functions use stack-based returns - result is on stack
@@ -861,7 +862,8 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
             stack_trace_push(full_name, NULL, 0, 0, true, false, NULL);
             
             // Call the unified library function
-            EvalResult result = lib_func(env, expr->arg_count);
+            global_context->env = env;  // Set current environment in context
+            EvalResult result = lib_func(global_context, expr->arg_count);
             
             // Pop builtin function call from stack trace
             stack_trace_pop();
@@ -939,7 +941,8 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                      is_qualified ? module_name : NULL);
     
     // Call the function using stack-based interface
-    EvalResult result = builtin(env, expr->arg_count);
+    global_context->env = env;  // Set current environment in context
+    EvalResult result = builtin(global_context, expr->arg_count);
     
     // Pop builtin function call from stack trace
     stack_trace_pop();

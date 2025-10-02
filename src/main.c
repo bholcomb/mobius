@@ -109,6 +109,16 @@ int main(int argc, char *argv[]) {
     // Set global registry for evaluator
     set_global_module_registry(registry);
     
+    // Initialize global execution context
+    if (!global_context) {
+        global_context = create_execution_context(256);
+        if (!global_context) {
+            fprintf(stderr, "Failed to create execution context\n");
+            free_module_registry(registry);
+            return 1;
+        }
+    }
+    
     // Only show startup messages when not running a script file
     if (!script_file) {
         printf("Mobius Scripting Language Interpreter v0.1.0\n");

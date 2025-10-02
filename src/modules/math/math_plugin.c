@@ -1,6 +1,7 @@
 #include "../../mobius/plugin.h"
 #include "../../mobius/ast.h"
 #include "../../mobius/evaluator.h"
+#include "../../mobius/environment.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,22 +78,23 @@ static double extract_number(Value val) {
 // TRIGONOMETRIC FUNCTIONS
 // ============================================================================
 
-EvalResult math_sin(Environment* env, int arg_count) {
+EvalResult math_sin(ExecutionContext* ctx, int arg_count) {
+    // ctx is now passed as parameter
     if (arg_count != 1) {
         return make_error("sin() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("sin() expects a numeric argument", 0, 0);
     }
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(sin(val)));
+    ctx_push(ctx, make_float_value(sin(val)));
     return make_success(1);
 }
 
-EvalResult math_cos(Environment* env, int arg_count) {
+EvalResult math_cos(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("cos() expects exactly 1 argument", 0, 0);
     }
@@ -107,7 +109,7 @@ EvalResult math_cos(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_tan(Environment* env, int arg_count) {
+EvalResult math_tan(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("tan() expects exactly 1 argument", 0, 0);
     }
@@ -122,7 +124,7 @@ EvalResult math_tan(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_asin(Environment* env, int arg_count) {
+EvalResult math_asin(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("asin() expects exactly 1 argument", 0, 0);
     }
@@ -140,7 +142,7 @@ EvalResult math_asin(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_acos(Environment* env, int arg_count) {
+EvalResult math_acos(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("acos() expects exactly 1 argument", 0, 0);
     }
@@ -158,7 +160,7 @@ EvalResult math_acos(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_atan(Environment* env, int arg_count) {
+EvalResult math_atan(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("atan() expects exactly 1 argument", 0, 0);
     }
@@ -198,7 +200,7 @@ EvalResult math_atan2(Environment* env, int arg_count) {
 // LOGARITHMIC AND EXPONENTIAL FUNCTIONS
 // ============================================================================
 
-EvalResult math_log(Environment* env, int arg_count) {
+EvalResult math_log(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("log() expects exactly 1 argument", 0, 0);
     }
@@ -234,7 +236,7 @@ EvalResult math_log10(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_exp(Environment* env, int arg_count) {
+EvalResult math_exp(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("exp() expects exactly 1 argument", 0, 0);
     }
@@ -253,7 +255,7 @@ EvalResult math_exp(Environment* env, int arg_count) {
 // HYPERBOLIC FUNCTIONS
 // ============================================================================
 
-EvalResult math_sinh(Environment* env, int arg_count) {
+EvalResult math_sinh(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("sinh() expects exactly 1 argument", 0, 0);
     }
@@ -268,7 +270,7 @@ EvalResult math_sinh(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_cosh(Environment* env, int arg_count) {
+EvalResult math_cosh(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("cosh() expects exactly 1 argument", 0, 0);
     }
@@ -283,7 +285,7 @@ EvalResult math_cosh(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_tanh(Environment* env, int arg_count) {
+EvalResult math_tanh(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("tanh() expects exactly 1 argument", 0, 0);
     }
@@ -302,7 +304,7 @@ EvalResult math_tanh(Environment* env, int arg_count) {
 // ADVANCED MATHEMATICAL FUNCTIONS
 // ============================================================================
 
-EvalResult math_factorial(Environment* env, int arg_count) {
+EvalResult math_factorial(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("factorial() expects exactly 1 argument", 0, 0);
     }
@@ -331,7 +333,7 @@ EvalResult math_factorial(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_gcd(Environment* env, int arg_count) {
+EvalResult math_gcd(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 2) {
         return make_error("gcd() expects exactly 2 arguments", 0, 0);
     }
@@ -356,7 +358,7 @@ EvalResult math_gcd(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_lcm(Environment* env, int arg_count) {
+EvalResult math_lcm(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 2) {
         return make_error("lcm() expects exactly 2 arguments", 0, 0);
     }
@@ -394,7 +396,7 @@ EvalResult math_lcm(Environment* env, int arg_count) {
 // MATHEMATICAL CONSTANTS
 // ============================================================================
 
-EvalResult math_pi(Environment* env, int arg_count) {
+EvalResult math_pi(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 0) {
         return make_error("pi() expects no arguments", 0, 0);
     }
@@ -402,7 +404,7 @@ EvalResult math_pi(Environment* env, int arg_count) {
     return make_success(1);
 }
 
-EvalResult math_e(Environment* env, int arg_count) {
+EvalResult math_e(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 0) {
         return make_error("e() expects no arguments", 0, 0);
     }

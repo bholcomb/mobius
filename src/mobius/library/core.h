@@ -8,11 +8,11 @@
 // =============================================================================
 
 // Core functions using unified library interface
-EvalResult lib_print(Environment* env, int arg_count);
-EvalResult lib_typeof(Environment* env, int arg_count);
-EvalResult lib_int(Environment* env, int arg_count);
-EvalResult lib_float(Environment* env, int arg_count);
-EvalResult lib_str(Environment* env, int arg_count);
+EvalResult lib_print(ExecutionContext* ctx, int arg_count);
+EvalResult lib_typeof(ExecutionContext* ctx, int arg_count);
+EvalResult lib_int(ExecutionContext* ctx, int arg_count);
+EvalResult lib_float(ExecutionContext* ctx, int arg_count);
+EvalResult lib_str(ExecutionContext* ctx, int arg_count);
 
 
 #endif // MOBIUS_LIBRARY_CORE_H

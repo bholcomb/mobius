@@ -14,19 +14,19 @@
 // UNIFIED UTILITY FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_random(Environment* env, int arg_count) {
+EvalResult lib_random(ExecutionContext* ctx, int arg_count) {
     if (arg_count > 2) {
         return make_error("random expects 0, 1, or 2 arguments", 0, 0);
     }
     
     if (arg_count == 0) {
         // Return random float between 0 and 1
-        ctx_push(global_context, make_float_value((double)rand() / RAND_MAX));
+        ctx_push(ctx, make_float_value((double)rand() / RAND_MAX));
         return make_success(1);
     } else if (arg_count == 1) {
         // Return random integer between 0 and n-1
-        Value arg = ctx_peek(global_context, 0);
-        ctx_pop(global_context); // Remove argument
+        Value arg = ctx_peek(ctx, 0);
+        ctx_pop(ctx); // Remove argument
         
         if (arg.type != VAL_INTEGER) {
             return make_error("random expects an integer argument", 0, 0);
@@ -35,16 +35,16 @@ EvalResult lib_random(Environment* env, int arg_count) {
         if (max_val <= 0) {
             return make_error("random expects a positive integer", 0, 0);
         }
-        ctx_push(global_context, make_integer_value(NUM_INT64, rand() % max_val));
+        ctx_push(ctx, make_integer_value(NUM_INT64, rand() % max_val));
         return make_success(1);
     } else if (arg_count == 2) {
         // Return random integer between min and max (inclusive)
-        Value max_arg = ctx_peek(global_context, 0);
-        Value min_arg = ctx_peek(global_context, 1);
+        Value max_arg = ctx_peek(ctx, 0);
+        Value min_arg = ctx_peek(ctx, 1);
         
         // Remove arguments
-        ctx_pop(global_context);
-        ctx_pop(global_context);
+        ctx_pop(ctx);
+        ctx_pop(ctx);
         
         if (min_arg.type != VAL_INTEGER || max_arg.type != VAL_INTEGER) {
             return make_error("random expects integer arguments", 0, 0);
@@ -59,38 +59,38 @@ EvalResult lib_random(Environment* env, int arg_count) {
         
         int64_t range = max_val - min_val + 1;
         int64_t result = min_val + (rand() % range);
-        ctx_push(global_context, make_integer_value(NUM_INT64, result));
+        ctx_push(ctx, make_integer_value(NUM_INT64, result));
         return make_success(1);
     }
     
     return make_error("random: unexpected argument count", 0, 0);
 }
 
-EvalResult lib_time(Environment* env, int arg_count) {
+EvalResult lib_time(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 0) {
         return make_error("time expects no arguments", 0, 0);
     }
     
-    ctx_push(global_context, make_integer_value(NUM_INT64, (int64_t)time(NULL)));
+    ctx_push(ctx, make_integer_value(NUM_INT64, (int64_t)time(NULL)));
     return make_success(1);
 }
 
-EvalResult lib_clock(Environment* env, int arg_count) {
+EvalResult lib_clock(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 0) {
         return make_error("clock expects no arguments", 0, 0);
     }
     
-    ctx_push(global_context, make_float_value((double)clock() / CLOCKS_PER_SEC));
+    ctx_push(ctx, make_float_value((double)clock() / CLOCKS_PER_SEC));
     return make_success(1);
 }
 
-EvalResult lib_load(Environment* env, int arg_count) {
+EvalResult lib_load(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("load expects exactly 1 argument (filename)", 0, 0);
     }
     
-    Value filename_val = ctx_peek(global_context, 0);
-    ctx_pop(global_context); // Remove argument
+    Value filename_val = ctx_peek(ctx, 0);
+    ctx_pop(ctx); // Remove argument
     
     if (filename_val.type != VAL_STRING) {
         return make_error("load argument must be a string", 0, 0);
@@ -135,7 +135,7 @@ EvalResult lib_load(Environment* env, int arg_count) {
     
     // Execute the loaded script in the current environment
     // This allows loaded functions and variables to be available in the calling script
-    EvalResult eval_result = evaluate_program(parse_result.statements, parse_result.count, env);
+    EvalResult eval_result = evaluate_program(parse_result.statements, parse_result.count, ctx->env);
     
     // Restore previous source context
     set_source_context(old_context);
@@ -149,18 +149,18 @@ EvalResult lib_load(Environment* env, int arg_count) {
     }
     
     // Return true to indicate successful loading
-    ctx_push(global_context, make_bool_value(true));
+    ctx_push(ctx, make_bool_value(true));
     return make_success(1);
 }
 
 // Get identity (memory address) of a value - useful for comparing table/array references
-EvalResult lib_id(Environment* env, int arg_count) {
+EvalResult lib_id(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("id() expects exactly 1 argument", 0, 0);
     }
     
-    Value arg = ctx_peek(global_context, 0);
-    ctx_pop(global_context);
+    Value arg = ctx_peek(ctx, 0);
+    ctx_pop(ctx);
     
     uintptr_t addr = 0;
     switch (arg.type) {
@@ -183,6 +183,6 @@ EvalResult lib_id(Environment* env, int arg_count) {
     }
     
     free_value(arg);
-    ctx_push(global_context, make_integer_value(NUM_INT64, (int64_t)addr));
+    ctx_push(ctx, make_integer_value(NUM_INT64, (int64_t)addr));
     return make_success(1);
 }

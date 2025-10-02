@@ -75,7 +75,7 @@ static void reverse_string(char* str) {
  * Count words in a string
  * word_count(text) -> integer
  */
-EvalResult text_word_count(Environment* env, int arg_count) {
+EvalResult text_word_count(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("word_count() expects exactly 1 argument", 0, 0);
     }
@@ -109,7 +109,7 @@ EvalResult text_word_count(Environment* env, int arg_count) {
  * Count lines in a string
  * line_count(text) -> integer
  */
-EvalResult text_line_count(Environment* env, int arg_count) {
+EvalResult text_line_count(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("line_count() expects exactly 1 argument", 0, 0);
     }
@@ -142,7 +142,7 @@ EvalResult text_line_count(Environment* env, int arg_count) {
  * Count occurrences of a character
  * char_count(text, character) -> integer
  */
-EvalResult text_char_count(Environment* env, int arg_count) {
+EvalResult text_char_count(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 2) {
         return make_error("char_count() expects exactly 2 arguments", 0, 0);
     }
@@ -176,7 +176,7 @@ EvalResult text_char_count(Environment* env, int arg_count) {
  * Reverse a string
  * reverse(text) -> string
  */
-EvalResult text_reverse(Environment* env, int arg_count) {
+EvalResult text_reverse(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("reverse() expects exactly 1 argument", 0, 0);
     }
@@ -204,7 +204,7 @@ EvalResult text_reverse(Environment* env, int arg_count) {
  * Convert to title case
  * title_case(text) -> string
  */
-EvalResult text_title_case(Environment* env, int arg_count) {
+EvalResult text_title_case(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("title_case() expects exactly 1 argument", 0, 0);
     }
@@ -245,7 +245,7 @@ EvalResult text_title_case(Environment* env, int arg_count) {
  * Remove whitespace from both ends
  * trim(text) -> string
  */
-EvalResult text_trim(Environment* env, int arg_count) {
+EvalResult text_trim(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("trim() expects exactly 1 argument", 0, 0);
     }
@@ -290,7 +290,7 @@ EvalResult text_trim(Environment* env, int arg_count) {
  * Replace all occurrences of a substring
  * replace_all(text, old_substr, new_substr) -> string
  */
-EvalResult text_replace_all(Environment* env, int arg_count) {
+EvalResult text_replace_all(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 3) {
         return make_error("replace_all() expects exactly 3 arguments", 0, 0);
     }
@@ -366,8 +366,8 @@ EvalResult text_replace_all(Environment* env, int arg_count) {
  * Pad string to specified width with character
  * pad_left(text, width, pad_char) -> string
  */
-EvalResult text_pad_left(Environment* env, int arg_count) {
-    (void)env; // Unused parameter
+EvalResult text_pad_left(ExecutionContext* ctx, int arg_count) {
+    (void)ctx; // Unused parameter
     if (arg_count != 3) {
         return make_error("pad_left() expects exactly 3 arguments", 0, 0);
     }
@@ -418,8 +418,8 @@ EvalResult text_pad_left(Environment* env, int arg_count) {
  * Split string by delimiter
  * split(text, delimiter) -> string (comma-separated for this example)
  */
-EvalResult text_split(Environment* env, int arg_count) {
-    (void)env; // Unused parameter
+EvalResult text_split(ExecutionContext* ctx, int arg_count) {
+    (void)ctx; // Unused parameter
     if (arg_count != 2) {
         return make_error("split() expects exactly 2 arguments", 0, 0);
     }

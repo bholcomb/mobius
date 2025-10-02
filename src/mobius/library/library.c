@@ -114,8 +114,8 @@ LibraryFunction lookup_library_function(const char* name) {
 // =============================================================================
 
 // Call a library function with argument validation
-EvalResult call_library_function(const char* name, Environment* env, int arg_count) {
-    if (!name || !env) {
+EvalResult call_library_function(const char* name, ExecutionContext* ctx, int arg_count) {
+    if (!name || !ctx) {
         return make_error("Invalid function call parameters", 0, 0);
     }
     
@@ -141,7 +141,7 @@ EvalResult call_library_function(const char* name, Environment* env, int arg_cou
             }
             
             // Call the function
-            return entry->func(env, arg_count);
+            return entry->func(ctx, arg_count);
         }
         entry++;
     }

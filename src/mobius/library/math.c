@@ -11,12 +11,12 @@
 // UNIFIED MATH FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_abs(Environment* env, int arg_count) {
+EvalResult lib_abs(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("abs expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     Value result;
     
     if (arg.type == VAL_INTEGER) {
@@ -42,23 +42,23 @@ EvalResult lib_abs(Environment* env, int arg_count) {
     }
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, result);
+    ctx_push(ctx, result);
     
     return make_success(1);
 }
 
-EvalResult lib_min(Environment* env, int arg_count) {
+EvalResult lib_min(ExecutionContext* ctx, int arg_count) {
     if (arg_count < 2) {
         return make_error("min expects at least 2 arguments", 0, 0);
     }
 
-    Value min_val = ctx_peek(global_context, arg_count - 1);  // First argument
+    Value min_val = ctx_peek(ctx, arg_count - 1);  // First argument
     
     for (int i = arg_count - 2; i >= 0; i--) {
-        Value current = ctx_peek(global_context, i);
+        Value current = ctx_peek(ctx, i);
         
         // Compare numeric values
         bool is_less = false;
@@ -103,24 +103,24 @@ EvalResult lib_min(Environment* env, int arg_count) {
     
     // Pop all arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(global_context);
+        ctx_pop(ctx);
     }
     
     // Push result onto stack
-    ctx_push(global_context, min_val);
+    ctx_push(ctx, min_val);
     
     return make_success(1);
 }
 
-EvalResult lib_max(Environment* env, int arg_count) {
+EvalResult lib_max(ExecutionContext* ctx, int arg_count) {
     if (arg_count < 2) {
         return make_error("max expects at least 2 arguments", 0, 0);
     }
 
-    Value max_val = ctx_peek(global_context, arg_count - 1);  // First argument
+    Value max_val = ctx_peek(ctx, arg_count - 1);  // First argument
     
     for (int i = arg_count - 2; i >= 0; i--) {
-        Value current = ctx_peek(global_context, i);
+        Value current = ctx_peek(ctx, i);
         
         // Compare numeric values (similar logic to min but reversed)
         bool is_greater = false;
@@ -165,22 +165,22 @@ EvalResult lib_max(Environment* env, int arg_count) {
     
     // Pop all arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(global_context);
+        ctx_pop(ctx);
     }
     
     // Push result onto stack
-    ctx_push(global_context, max_val);
+    ctx_push(ctx, max_val);
     
     return make_success(1);
 }
 
-EvalResult lib_pow(Environment* env, int arg_count) {
+EvalResult lib_pow(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 2) {
         return make_error("pow expects 2 arguments", 0, 0);
     }
 
-    Value base = ctx_peek(global_context, 1);
-    Value exponent = ctx_peek(global_context, 0);
+    Value base = ctx_peek(ctx, 1);
+    Value exponent = ctx_peek(ctx, 0);
     
     double base_val, exp_val;
     
@@ -233,21 +233,21 @@ EvalResult lib_pow(Environment* env, int arg_count) {
     double result_val = pow(base_val, exp_val);
     
     // Pop arguments from stack
-    ctx_pop(global_context);
-    ctx_pop(global_context);
+    ctx_pop(ctx);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, make_float_value(result_val));
+    ctx_push(ctx, make_float_value(result_val));
     
     return make_success(1);
 }
 
-EvalResult lib_sqrt(Environment* env, int arg_count) {
+EvalResult lib_sqrt(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("sqrt expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     double val;
     
     // Convert to double
@@ -278,20 +278,20 @@ EvalResult lib_sqrt(Environment* env, int arg_count) {
     }
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, make_float_value(sqrt(val)));
+    ctx_push(ctx, make_float_value(sqrt(val)));
     
     return make_success(1);
 }
 
-EvalResult lib_floor(Environment* env, int arg_count) {
+EvalResult lib_floor(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("floor expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     double val;
     
     // Convert to double
@@ -301,28 +301,28 @@ EvalResult lib_floor(Environment* env, int arg_count) {
         val = (double)arg.as.float32_val;
     } else if (arg.type == VAL_INTEGER) {
         // Integer floor is just the integer itself
-        ctx_pop(global_context);
-        ctx_push(global_context, arg);
+        ctx_pop(ctx);
+        ctx_push(ctx, arg);
         return make_success(1);
     } else {
         return make_error("floor expects a numeric argument", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, make_float_value(floor(val)));
+    ctx_push(ctx, make_float_value(floor(val)));
     
     return make_success(1);
 }
 
-EvalResult lib_ceil(Environment* env, int arg_count) {
+EvalResult lib_ceil(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("ceil expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     double val;
     
     // Convert to double
@@ -332,28 +332,28 @@ EvalResult lib_ceil(Environment* env, int arg_count) {
         val = (double)arg.as.float32_val;
     } else if (arg.type == VAL_INTEGER) {
         // Integer ceil is just the integer itself
-        ctx_pop(global_context);
-        ctx_push(global_context, arg);
+        ctx_pop(ctx);
+        ctx_push(ctx, arg);
         return make_success(1);
     } else {
         return make_error("ceil expects a numeric argument", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, make_float_value(ceil(val)));
+    ctx_push(ctx, make_float_value(ceil(val)));
     
     return make_success(1);
 }
 
-EvalResult lib_round(Environment* env, int arg_count) {
+EvalResult lib_round(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("round expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     double val;
     
     // Convert to double
@@ -363,18 +363,18 @@ EvalResult lib_round(Environment* env, int arg_count) {
         val = (double)arg.as.float32_val;
     } else if (arg.type == VAL_INTEGER) {
         // Integer round is just the integer itself
-        ctx_pop(global_context);
-        ctx_push(global_context, arg);
+        ctx_pop(ctx);
+        ctx_push(ctx, arg);
         return make_success(1);
     } else {
         return make_error("round expects a numeric argument", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, make_float_value(round(val)));
+    ctx_push(ctx, make_float_value(round(val)));
     
     return make_success(1);
 }
