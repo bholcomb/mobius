@@ -310,6 +310,8 @@ typedef struct {
 typedef struct {
     Token keyword;              // The 'import' token for error reporting
     Token module_name;          // Module name string literal
+    Token alias;                // Optional alias (identifier or dotted path like math.complex)
+    bool has_alias;             // Whether an alias was provided
 } ImportStmt;
 
 // Enum member definition
@@ -380,7 +382,7 @@ Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count
                       Stmt** default_body, size_t default_body_count);
 Stmt* make_break_stmt(Token keyword);
 Stmt* make_continue_stmt(Token keyword);
-Stmt* make_import_stmt(Token keyword, Token module_name);
+Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_alias);
 Stmt* make_enum_stmt(Token keyword, Token name, NumericType underlying_type, 
                      bool has_explicit_type, EnumMemberDef* members);
 

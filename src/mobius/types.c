@@ -145,7 +145,7 @@ static NumericType mobius_type_to_numeric_type(NumberType type) {
 
 // Main type validation and conversion function
 TypeConversionResult validate_and_convert_value(Value value, NumberInfo target_type, TypeCheckConfig config) {
-    TypeConversionResult result = {false, {0}, NULL, false};
+    TypeConversionResult result = {false, make_nil_value(), NULL, false};
     
     // If no type annotation, accept any value
     if (!target_type.is_annotated || target_type.type == NUMBER_TYPE_UNKNOWN) {

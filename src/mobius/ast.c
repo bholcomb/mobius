@@ -492,6 +492,10 @@ void print_stmt(Stmt* stmt) {
             break;
         case STMT_IMPORT:
             printf("import \"%s\"", stmt->as.import_stmt.module_name.literal.string ? stmt->as.import_stmt.module_name.literal.string : "unknown");
+            if (stmt->as.import_stmt.has_alias) {
+                printf(" as %s", stmt->as.import_stmt.alias.identifier ? stmt->as.import_stmt.alias.identifier : stmt->as.import_stmt.alias.literal.string);
+            }
+            break;
             break;
         case STMT_ENUM:
             printf("enum %s", stmt->as.enum_stmt.name.identifier ? stmt->as.enum_stmt.name.identifier : "unknown");
@@ -994,7 +998,7 @@ Stmt* make_continue_stmt(Token keyword) {
     return stmt;
 }
 
-Stmt* make_import_stmt(Token keyword, Token module_name) {
+Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_alias) {
     Stmt* stmt = calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
@@ -1002,6 +1006,8 @@ Stmt* make_import_stmt(Token keyword, Token module_name) {
     stmt->ref_count = 1;  // Initialize reference count
     stmt->as.import_stmt.keyword = keyword;
     stmt->as.import_stmt.module_name = module_name;
+    stmt->as.import_stmt.alias = alias;
+    stmt->as.import_stmt.has_alias = has_alias;
     return stmt;
 }
 

@@ -1,0 +1,10 @@
+// Test that unqualified plugin function calls fail with helpful error
+// This should produce an error suggesting the qualified name
+
+import "math";
+
+// This should fail with a helpful error message
+// Error should say: "Function 'sin' requires module namespace"
+// Suggestion should say: "Use qualified name: math.sin()"
+sin(0);
+

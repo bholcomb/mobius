@@ -23,29 +23,32 @@ print("upper(text) =", upper(text));
 print("random() =", random());
 print("time() =", time());
 
-print("\n📦 Math Extension Functions (Plugin-only):");
-print("sin(pi() / 2) =", sin(pi() / 2));
-print("cos(0) =", cos(0));
-print("tan(pi() / 4) =", tan(pi() / 4));
+import "math";
 
-print("log(e()) =", log(e()));
-print("log10(100) =", log10(100));
-print("exp(1) =", exp(1));
+print("\n📦 Math Extension Functions (Plugin-only, via namespace):");
+print("math.sin(math.pi() / 2) =", math.sin(math.pi() / 2));
+print("math.cos(0) =", math.cos(0));
+print("math.tan(math.pi() / 4) =", math.tan(math.pi() / 4));
 
-print("factorial(5) =", factorial(5));
-print("gcd(12, 8) =", gcd(12, 8));
-print("lcm(4, 6) =", lcm(4, 6));
+print("math.log(math.e()) =", math.log(math.e()));
+print("math.log10(100) =", math.log10(100));
+print("math.exp(1) =", math.exp(1));
+
+print("math.factorial(5) =", math.factorial(5));
+print("math.gcd(12, 8) =", math.gcd(12, 8));
+print("math.lcm(4, 6) =", math.lcm(4, 6));
 
 print("Math constants:");
-print("pi() =", pi());
-print("e() =", e());
+print("math.pi() =", math.pi());
+print("math.e() =", math.e());
 
 print("\n✅ Architecture Benefits:");
 print("1. Built-in functions always work (no plugin needed)");
-print("2. Extensions add specialized functionality");
+print("2. Extensions add specialized functionality via namespaces");
 print("3. Clean separation of core vs extended features");
 print("4. Plugin failure doesn't break basic functionality");
+print("5. Namespaces prevent naming conflicts");
 
 print("\n🎯 This is how plugins should work!");
-print("   - Core stdlib: Always available, essential functions");
-print("   - Extensions: Add specialized domain-specific functions");
+print("   - Core stdlib: Always available, essential functions (no namespace)");
+print("   - Extensions: Add specialized domain-specific functions (with namespace)");

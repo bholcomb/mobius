@@ -129,7 +129,10 @@ void free_module_registry(ModuleRegistry* registry) {
     
     // Free function table
     for (size_t i = 0; i < registry->function_count; i++) {
-        free(registry->function_table[i].name);
+        // name is NULL for namespaced functions, so only free if not NULL
+        if (registry->function_table[i].name) {
+            free(registry->function_table[i].name);
+        }
         free(registry->function_table[i].qualified_name);
     }
     free(registry->function_table);
@@ -284,6 +287,7 @@ bool is_module_loaded(ModuleRegistry* registry, const char* name) {
 }
 
 // Add function to lookup table
+// Plugin functions are NAMESPACED - only accessible via qualified name (module.function)
 bool add_function_to_table(ModuleRegistry* registry, const char* module_name, PluginFunction* func) {
     if (!registry || !module_name || !func) return false;
     
@@ -300,37 +304,41 @@ bool add_function_to_table(ModuleRegistry* registry, const char* module_name, Pl
     
     FunctionEntry* entry = &registry->function_table[registry->function_count];
     
-    // Allocate and copy function name
-    entry->name = malloc(strlen(func->name) + 1);
-    if (!entry->name) return false;
-    strcpy(entry->name, func->name);
+    // NAMESPACE ENFORCEMENT: Don't store unqualified name
+    // Plugin functions can ONLY be accessed via qualified name
+    entry->name = NULL;
     
-    // Create qualified name (module.function)
+    // Create qualified name (module.function) - REQUIRED for access
     size_t qualified_len = strlen(module_name) + strlen(func->name) + 2;
     entry->qualified_name = malloc(qualified_len);
     if (!entry->qualified_name) {
-        free(entry->name);
         return false;
     }
     snprintf(entry->qualified_name, qualified_len, "%s.%s", module_name, func->name);
     
     entry->function = func;
     entry->module = find_module(registry, module_name);
+    entry->is_namespaced = true;  // All plugin functions are namespaced
     
     registry->function_count++;
     return true;
 }
 
 // Lookup function by name (searches all modules)
+// NAMESPACE ENFORCEMENT: This function returns NULL for all plugin functions
+// Plugin functions MUST be accessed via qualified name (module.function)
+// Only kept for backward compatibility - should not be used for plugins
 PluginFunction* lookup_function(ModuleRegistry* registry, const char* name) {
     if (!registry || !name) return NULL;
     
-    for (size_t i = 0; i < registry->function_count; i++) {
-        if (strcmp(registry->function_table[i].name, name) == 0) {
-            return registry->function_table[i].function;
-        }
-    }
-    return NULL;
+    // Plugin functions are namespaced - they cannot be looked up by unqualified name
+    // This function will always return NULL for plugin functions
+    // Use lookup_qualified_function() instead
+    
+    (void)registry;  // Unused - plugin functions require namespace
+    (void)name;      // Unused - plugin functions require namespace
+    
+    return NULL;  // All plugin functions require namespace
 }
 
 // Lookup qualified function (module.function)
@@ -389,10 +397,12 @@ void print_available_functions(ModuleRegistry* registry) {
     
     printf("Available Functions (%zu):\n", registry->function_count);
     printf("=====================================\n");
+    printf("Note: All plugin functions require namespace (module.function)\n\n");
     
     for (size_t i = 0; i < registry->function_count; i++) {
         FunctionEntry* entry = &registry->function_table[i];
-        printf("🔧 %s (%s)\n", entry->name, entry->qualified_name);
+        // Show only qualified name since plugins are namespaced
+        printf("🔧 %s\n", entry->qualified_name);
         if (entry->function->description) {
             printf("   %s\n", entry->function->description);
         }
