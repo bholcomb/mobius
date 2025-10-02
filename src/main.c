@@ -5,6 +5,7 @@
 #include "mobius/mobius.h"
 #include "mobius/stack_trace.h"
 #include "mobius/file_io.h"
+#include "mobius/library/stdlib_init.h"
 
 int execute_file(const char* filename) {
     // Read the file
@@ -50,6 +51,9 @@ int execute_file(const char* filename) {
         free_file_result(&file_result);
         return 1;
     }
+    
+    // Register standard library functions
+    register_stdlib_functions(env);
     
     // Execute statements
     int result = 0;

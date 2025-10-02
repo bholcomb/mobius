@@ -788,7 +788,66 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                 return make_error("Table method calls not yet supported", 0, 0);
             }
         } else {
-            return make_error("Complex table method calls not supported", 0, 0);
+            // Handle nested table access like math.trig.sin()
+            // Evaluate the table part first (e.g., math.trig)
+            EvalResult table_result = evaluate_expr(dot_expr->table, env);
+            if (is_error(table_result)) {
+                return table_result;
+            }
+            
+            // Pop the table from the stack
+            if (table_result.return_count > 0) {
+                Value table_value = ctx_pop(global_context);
+                
+                if (table_value.type != VAL_TABLE) {
+                    free_value(table_value);
+                    return make_error("Cannot call method on non-table value", 
+                        dot_expr->key.line, dot_expr->key.column);
+                }
+                
+                // Look up the function in the table
+                const char* func_name = dot_expr->key.identifier;
+                Value func_key = make_string_value_from_cstr(func_name);
+                Value func_value = table_get(table_value.as.table, func_key);
+                free_value(func_key);
+                free_value(table_value);
+                
+                // If we found a native function, call it
+                if (func_value.type == VAL_NATIVE_FUNCTION && func_value.as.native_function) {
+                    // Evaluate arguments onto stack
+                    for (size_t i = 0; i < expr->arg_count; i++) {
+                        EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
+                        if (is_error(arg_result)) {
+                            // Clean up any arguments already on stack
+                            for (size_t j = 0; j < i; j++) {
+                                ctx_pop(global_context);
+                            }
+                            return arg_result;
+                        }
+                    }
+                    
+                    // Call the native function directly
+                    stack_trace_push(func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
+                    LibraryFunction native_func = (LibraryFunction)func_value.as.native_function;
+                    global_context->env = env;  // Set current environment in context
+                    EvalResult result = native_func(global_context, expr->arg_count);
+                    stack_trace_pop();
+                    
+                    return result;
+                } else if (func_value.type == VAL_FUNCTION) {
+                    // User-defined function - call it
+                    return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+                } else {
+                    char error_msg[256];
+                    snprintf(error_msg, sizeof(error_msg), 
+                        "'%s' is not a function (type: %s)", 
+                        func_name, value_type_name(func_value.type));
+                    return make_error(error_msg, dot_expr->key.line, dot_expr->key.column);
+                }
+            }
+            
+            return make_error("Table expression did not return a value", 
+                dot_expr->key.line, dot_expr->key.column);
         }
     }
     // Handle simple function() or qualified_name() syntax  
@@ -834,12 +893,36 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     } else {
         // Regular function call: function()
         
-        // First check if it's a user-defined function
+        // First check if it's a user-defined or imported native function
         bool found = false;
         Value func_value = get_variable(env, full_name, &found);
-        if (found && func_value.type == VAL_FUNCTION && func_value.as.function) {
-            // Call user-defined function
-            return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+        if (found) {
+            if (func_value.type == VAL_FUNCTION && func_value.as.function) {
+                // Call user-defined function
+                return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+            } else if (func_value.type == VAL_NATIVE_FUNCTION && func_value.as.native_function) {
+                // Call native function imported to global scope
+                // Evaluate arguments onto stack
+                for (size_t i = 0; i < expr->arg_count; i++) {
+                    EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
+                    if (is_error(arg_result)) {
+                        // Clean up any arguments already on stack
+                        for (size_t j = 0; j < i; j++) {
+                            ctx_pop(global_context);
+                        }
+                        return arg_result;
+                    }
+                }
+                
+                // Call the native function
+                stack_trace_push(full_name, NULL, 0, 0, true, false, NULL);
+                LibraryFunction native_func = (LibraryFunction)func_value.as.native_function;
+                global_context->env = env;
+                EvalResult result = native_func(global_context, expr->arg_count);
+                stack_trace_pop();
+                
+                return result;
+            }
         }
         
         // First try the new unified library
@@ -2160,7 +2243,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     // Transfer it to the caller's stack
     if (!is_error(result) && result.has_returned && result.return_count > 0) {
         // Return value is already on global stack from evaluate_expr
-        free_environment(func_env);
+    free_environment(func_env);
         return make_success(1);  // Indicate 1 value on stack
     } else {
         free_environment(func_env);
@@ -2731,7 +2814,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                     for (size_t i = 0; i < path_len; i++) free(path_components[i]);
                     free(path_components);
                 }
-                return make_success_with_value(make_nil_value());
+        return make_success_with_value(make_nil_value());
             }
         }
     }

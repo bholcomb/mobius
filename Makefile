@@ -38,7 +38,8 @@ MOBIUS_SOURCES = \
 	$(SRCDIR)/mobius/library/table_lib.c \
 	$(SRCDIR)/mobius/library/array.c \
 	$(SRCDIR)/mobius/library/types.c \
-	$(SRCDIR)/mobius/library/util.c
+	$(SRCDIR)/mobius/library/util.c \
+	$(SRCDIR)/mobius/library/stdlib_init.c
 
 # All library sources combined  
 ALL_LIB_SOURCES = $(MOBIUS_SOURCES)

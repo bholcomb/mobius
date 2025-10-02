@@ -9,48 +9,8 @@
 // =============================================================================
 // UNIFIED TYPE SYSTEM FUNCTION IMPLEMENTATIONS
 // =============================================================================
-
-EvalResult lib_set_strict_types(ExecutionContext* ctx, int arg_count) {
-    extern TypeCheckConfig global_type_config;
-    
-    if (arg_count > 1) {
-        return make_error("set_strict_types expects 0 or 1 arguments", 0, 0);
-    }
-    
-    bool strict = true; // Default to strict if no argument
-    if (arg_count == 1) {
-        Value arg = ctx_peek(ctx, 0);
-        ctx_pop(ctx); // Remove argument
-        
-        if (arg.type != VAL_BOOL) {
-            return make_error("set_strict_types argument must be a boolean", 0, 0);
-        }
-        strict = arg.as.boolean;
-    }
-    
-    global_type_config.strict_mode = strict;
-    ctx_push(ctx, make_nil_value());
-    return make_success(1);
-}
-
-EvalResult lib_set_type_warnings(ExecutionContext* ctx, int arg_count) {
-    extern TypeCheckConfig global_type_config;
-    
-    if (arg_count != 1) {
-        return make_error("set_type_warnings expects exactly 1 argument", 0, 0);
-    }
-    
-    Value arg = ctx_peek(ctx, 0);
-    ctx_pop(ctx); // Remove argument
-    
-    if (arg.type != VAL_BOOL) {
-        return make_error("set_type_warnings argument must be a boolean", 0, 0);
-    }
-    
-    global_type_config.warn_on_conversion = arg.as.boolean;
-    ctx_push(ctx, make_nil_value());
-    return make_success(1);
-}
+// Note: set_strict_types() and set_type_warnings() have been removed.
+// Use #pragma strict_types true/false instead.
 
 EvalResult lib_get_type_config(ExecutionContext* ctx, int arg_count) {
     extern TypeCheckConfig global_type_config;

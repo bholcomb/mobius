@@ -6,7 +6,7 @@ var config = get_type_config();
 print("strict_mode:", config["strict_mode"]);
 
 print("\n1. Enable strict mode");
-set_strict_types(true);
+#pragma strict_types true
 
 print("Trying to convert float64 to float32 in strict mode...");
 var should_fail: float32 = 3.14159265359;

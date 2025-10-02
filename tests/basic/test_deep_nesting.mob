@@ -1,0 +1,54 @@
+// Test deeply nested namespace imports
+print("=== Testing Deeply Nested Namespace Imports ===");
+
+// Test 1: Four-level deep nesting
+print("\n1. Testing a.b.c.d namespace...");
+import "math" as a.b.c.d
+
+// Verify all levels were created
+print("a exists:", typeof(a) == "table");
+print("a.b exists:", typeof(a.b) == "table");
+print("a.b.c exists:", typeof(a.b.c) == "table");
+print("a.b.c.d exists:", typeof(a.b.c.d) == "table");
+
+// Test calling through deep nesting
+var result = a.b.c.d.sin(0);
+print("a.b.c.d.sin(0) =", result);
+
+if (result != 0.0) {
+    print("❌ FAIL: Expected 0.0");
+} else {
+    print("✅ PASS: Deep nesting (4 levels) works!");
+}
+
+// Test 2: Add another module to different branch of same tree
+print("\n2. Testing adding to different branch...");
+import "text_processing" as a.b.e
+
+print("a.b.e exists:", typeof(a.b.e) == "table");
+print("a.b.c.d still exists:", typeof(a.b.c.d) == "table");
+
+var reversed = a.b.e.reverse("test");
+print("a.b.e.reverse('test') =", reversed);
+
+if (reversed != "tset") {
+    print("❌ FAIL: Expected 'tset'");
+} else {
+    print("✅ PASS: Adding to different branch works!");
+}
+
+// Test 3: Five-level deep nesting
+print("\n3. Testing x.y.z.w.v namespace...");
+import "math" as x.y.z.w.v
+
+var cos_result = x.y.z.w.v.cos(0);
+print("x.y.z.w.v.cos(0) =", cos_result);
+
+if (cos_result != 1.0) {
+    print("❌ FAIL: Expected 1.0");
+} else {
+    print("✅ PASS: Deep nesting (5 levels) works!");
+}
+
+print("\n=== All Deep Nesting Tests Complete ===");
+

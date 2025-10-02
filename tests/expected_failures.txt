@@ -24,3 +24,4 @@ tests/errors/test_increment_errors.mob
 tests/errors/test_namespace_requirement.mob
 tests/errors/test_pragma_errors.mob
 tests/errors/test_pragma_invalid_value.mob
+tests/errors/test_namespace_error.mob
