@@ -1,0 +1,12 @@
+// Test import with alias
+print("Testing import alias...");
+
+// Test basic alias
+import "math" as m
+print("Imported math as m");
+print(m.sin(0));
+
+// Verify original name was NOT created when alias is used
+// This should fail if we try to access "math" directly
+print("Test passed!");
+

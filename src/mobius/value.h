@@ -34,6 +34,7 @@ typedef enum {
     VAL_CHAR,
     VAL_ARRAY,
     VAL_FUNCTION,
+    VAL_NATIVE_FUNCTION,
     VAL_TABLE,
     VAL_USERDATA,
     VAL_ENUM
@@ -41,6 +42,11 @@ typedef enum {
 
 // Forward declaration for userdata destructor
 typedef void (*UserdataDestructor)(void* ptr);
+
+// Forward declaration for native function type (defined in evaluator.h as LibraryFunction)
+// Native functions have signature: EvalResult func(Environment* env, int arg_count)
+// We use a void* here to avoid circular dependency, will cast in evaluator
+typedef void* NativeFunction;
 
 
 // Type system enums (for type annotations)
@@ -86,6 +92,7 @@ typedef struct {
 
         ArrayValue* array;                      // 8 bytes
         MobiusFunction* function;               // 8 bytes
+        NativeFunction native_function;         // 8 bytes
         struct Table* table;                           // 8 bytes
         struct {
             void* ptr;                        // Opaque pointer to user data 
@@ -121,6 +128,7 @@ Value make_string_value(RefCountedString* string);
 Value make_char_value(char value);
 Value make_array_value(ArrayValue* array);
 Value make_function_value(MobiusFunction* function);
+Value make_native_function_value(NativeFunction function);
 Value make_table_value(struct Table* table);
 Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
 

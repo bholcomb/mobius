@@ -15,6 +15,15 @@
 // Global type checking configuration
 TypeCheckConfig global_type_config = {false, false};
 
+// Global override behavior for imports
+typedef enum {
+    OVERRIDE_ERROR,    // Default: error on override
+    OVERRIDE_WARN,     // Warn but continue on override
+    OVERRIDE_QUIET     // Silent override
+} OverrideBehavior;
+
+static OverrideBehavior global_override_behavior = OVERRIDE_ERROR;
+
 // Utility functions
 EvalResult make_success(int return_count) {
     EvalResult result = {0};
@@ -392,13 +401,13 @@ EvalResult eval_variable_expr_stack(VariableExpr* expr, Environment* env) {
 // Stack-based binary evaluation - pops operands, computes, pushes result
 EvalResult eval_binary_expr_stack(BinaryExpr* expr, Environment* env) {
     // Evaluate left operand (pushes onto stack)
-    EvalResult left_result = evaluate_expr_stack(expr->left, env);
+    EvalResult left_result = evaluate_expr(expr->left, env);
     if (is_error(left_result)) {
         return left_result;
     }
     
     // Evaluate right operand (pushes onto stack)
-    EvalResult right_result = evaluate_expr_stack(expr->right, env);
+    EvalResult right_result = evaluate_expr(expr->right, env);
     if (is_error(right_result)) {
         return right_result;
     }
@@ -473,7 +482,7 @@ EvalResult eval_binary_expr_stack(BinaryExpr* expr, Environment* env) {
 // Stack-based unary evaluation - pops operand, computes, pushes result
 EvalResult eval_unary_expr_stack(UnaryExpr* expr, Environment* env) {
     // Evaluate operand (pushes onto stack)
-    EvalResult operand_result = evaluate_expr_stack(expr->right, env);
+    EvalResult operand_result = evaluate_expr(expr->right, env);
     if (is_error(operand_result)) {
         return operand_result;
     }
@@ -539,7 +548,7 @@ EvalResult eval_unary_expr_stack(UnaryExpr* expr, Environment* env) {
 // Stack-based grouping evaluation - just evaluates the inner expression
 EvalResult eval_grouping_expr_stack(GroupingExpr* expr, Environment* env) {
     // Grouping just evaluates the inner expression
-    return evaluate_expr_stack(expr->expression, env);
+    return evaluate_expr(expr->expression, env);
 }
 
 // =============================================================================
@@ -715,7 +724,7 @@ EvalResult builtin_typeof_stack(Environment* env, int arg_count) {
 #include "library/library.h"
 
 // Stack-based function call evaluation
-EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
+EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     char full_name[256];
     int call_line = 0;
     int call_column = 0;
@@ -727,13 +736,69 @@ EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
         
         // Check if the table part is a module name (VARIABLE expression)
         if (dot_expr->table->type == EXPR_VARIABLE) {
-            const char* module_name = dot_expr->table->as.variable.name.identifier;
+            const char* table_name = dot_expr->table->as.variable.name.identifier;
             const char* func_name = dot_expr->key.identifier;
             
-            // Check if this is a loaded module
-            if (registry && is_module_loaded(registry, module_name)) {
+            // Check if this is a loaded module (either direct name or alias)
+            const char* actual_module_name = table_name;
+            bool is_module = false;
+            
+            if (registry && is_module_loaded(registry, table_name)) {
+                // Direct module name
+                is_module = true;
+            } else {
+                // Check if this is an aliased module by looking for __module_name__ in the table
+                bool found = false;
+                Value table_value = get_variable(env, table_name, &found);
+                if (found && table_value.type == VAL_TABLE) {
+                    Value module_key = make_string_value_from_cstr("__module_name__");
+                    Value module_value = table_get(table_value.as.table, module_key);
+                    free_value(module_key);
+                    
+                    if (module_value.type == VAL_STRING && module_value.as.string && module_value.as.string->data) {
+                        actual_module_name = module_value.as.string->data;
+                        is_module = true;
+                    }
+                }
+            }
+            
+            // First try to look up the function directly in the table
+            bool found = false;
+            Value table_value = get_variable(env, table_name, &found);
+            if (found && table_value.type == VAL_TABLE) {
+                Value func_key = make_string_value_from_cstr(func_name);
+                Value func_value = table_get(table_value.as.table, func_key);
+                free_value(func_key);
+                
+                // If we found a native function in the table, call it directly
+                if (func_value.type == VAL_NATIVE_FUNCTION && func_value.as.native_function) {
+                    // Evaluate arguments onto stack
+                    for (size_t i = 0; i < expr->arg_count; i++) {
+                        EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
+                        if (is_error(arg_result)) {
+                            // Clean up any arguments already on stack
+                            for (size_t j = 0; j < i; j++) {
+                                env_pop(env);
+                            }
+                            return arg_result;
+                        }
+                    }
+                    
+                    // Call the native function directly
+                    stack_trace_push(func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
+                    LibraryFunction native_func = (LibraryFunction)func_value.as.native_function;
+                    EvalResult result = native_func(env, expr->arg_count);
+                    stack_trace_pop();
+                    
+                    // Native functions use stack-based returns - result is on stack
+                    return result;
+                }
+            }
+            
+            // Fall back to module resolution for backward compatibility
+            if (is_module) {
                 // This is module.function() - construct qualified name
-                snprintf(full_name, sizeof(full_name), "%s.%s", module_name, func_name);
+                snprintf(full_name, sizeof(full_name), "%s.%s", actual_module_name, func_name);
                 call_line = dot_expr->key.line;
                 call_column = dot_expr->key.column;
             } else {
@@ -811,7 +876,7 @@ EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
         if (lib_func) {
             // Evaluate arguments onto stack
             for (size_t i = 0; i < expr->arg_count; i++) {
-                EvalResult arg_result = evaluate_expr_stack(expr->arguments[i], env);
+                EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
                 if (is_error(arg_result)) {
                     // Clean up any arguments already on stack
                     for (size_t j = 0; j < i; j++) {
@@ -887,7 +952,7 @@ EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
     
     // OLD PATH: Evaluate arguments onto stack for adapter
     for (size_t i = 0; i < expr->arg_count; i++) {
-        EvalResult arg_result = evaluate_expr_stack(expr->arguments[i], env);
+        EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
         if (is_error(arg_result)) {
             // Clean up any arguments already on stack
             for (size_t j = 0; j < i; j++) {
@@ -912,39 +977,116 @@ EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
     return result;
 }
 
-// Main stack-based expression evaluator
-EvalResult evaluate_expr_stack(Expr* expr, Environment* env) {
+// Main expression evaluator (stack-based)
+EvalResult evaluate_expr(Expr* expr, Environment* env) {
     if (!expr) {
         return make_error("Null expression", 0, 0);
     }
     
     switch (expr->type) {
-        case EXPR_LITERAL:
-            return eval_literal_expr_stack(&expr->as.literal, env);
-        case EXPR_VARIABLE:
-            return eval_variable_expr_stack(&expr->as.variable, env);
-        case EXPR_BINARY:
-            return eval_binary_expr_stack(&expr->as.binary, env);
-        case EXPR_UNARY:
-            return eval_unary_expr_stack(&expr->as.unary, env);
-        case EXPR_GROUPING:
-            return eval_grouping_expr_stack(&expr->as.grouping, env);
-        case EXPR_CALL:
-            return eval_call_expr_stack(&expr->as.call, env);
-        case EXPR_INCREMENT:
-        case EXPR_DECREMENT:
-            return eval_increment_expr_stack(&expr->as.increment, env);
-        // For now, fall back to old evaluation for unsupported expressions
-        // We'll convert these one by one
-        default: {
-            EvalResult result = evaluate_expr(expr, env);
+        case EXPR_LITERAL: {
+            EvalResult result = eval_literal_expr(&expr->as.literal, env);
             if (!is_error(result)) {
                 env_push(env, result.value);
-                free_value(result.value);
                 return make_success(1);
             }
             return result;
         }
+        case EXPR_VARIABLE: {
+            EvalResult result = eval_variable_expr(&expr->as.variable, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_BINARY: {
+            EvalResult result = eval_binary_expr(&expr->as.binary, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_UNARY: {
+            EvalResult result = eval_unary_expr(&expr->as.unary, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_ASSIGNMENT: {
+            EvalResult result = eval_assignment_expr(&expr->as.assignment, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_GROUPING:
+            return eval_grouping_expr(&expr->as.grouping, env);
+        case EXPR_CALL:
+            return eval_call_expr(&expr->as.call, env);
+        case EXPR_TABLE_LITERAL: {
+            EvalResult result = eval_table_literal_expr(&expr->as.table_literal, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_TABLE_INDEX: {
+            EvalResult result = eval_table_index_expr(&expr->as.table_index, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_TABLE_DOT: {
+            EvalResult result = eval_table_dot_expr(&expr->as.table_dot, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_ARRAY_LITERAL: {
+            EvalResult result = eval_array_literal_expr(&expr->as.array_literal, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_ARRAY_INDEX: {
+            EvalResult result = eval_array_index_expr(&expr->as.array_index, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_ENUM_ACCESS: {
+            EvalResult result = eval_enum_access_expr(&expr->as.enum_access, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        case EXPR_INCREMENT:
+        case EXPR_DECREMENT: {
+            EvalResult result = eval_increment_expr(&expr->as.increment, env);
+            if (!is_error(result)) {
+                env_push(env, result.value);
+                return make_success(1);
+            }
+            return result;
+        }
+        default:
+            return make_error("Unknown expression type", 0, 0);
     }
 }
 
@@ -977,18 +1119,20 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
     if (is_error(value_result)) {
         return value_result;
     }
+    Value value = env_pop(env);
     
     char name[256];
     const char* identifier = expr->name.identifier ? expr->name.identifier : "unknown";
     snprintf(name, sizeof(name), "%s", identifier);
     
-    if (!assign_variable(env, name, value_result.value)) {
+    if (!assign_variable(env, name, value)) {
+        free_value(value);
         return make_error_detailed_with_source("Undefined variable in assignment", 
                                                "Make sure the variable is declared before use",
                                                ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL);
     }
     
-    return make_success_with_value(value_result.value);
+    return make_success_with_value(value);
 }
 
 EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
@@ -1516,43 +1660,52 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
     if (is_error(left_result)) {
         return left_result;
     }
+    Value left = env_pop(env);
     
     EvalResult right_result = evaluate_expr(expr->right, env);
     if (is_error(right_result)) {
+        free_value(left);  // Clean up left operand
         return right_result;
     }
+    Value right = env_pop(env);
     
     switch (expr->op.type) {
         case TOKEN_PLUS:
-            return add_values(left_result.value, right_result.value);
+            return add_values(left, right);
         case TOKEN_MINUS:
-            return subtract_values(left_result.value, right_result.value);
+            return subtract_values(left, right);
         case TOKEN_STAR:
-            return multiply_values(left_result.value, right_result.value);
+            return multiply_values(left, right);
         case TOKEN_SLASH:
-                return divide_values(left_result.value, right_result.value, expr->op.line, expr->op.column);
+                return divide_values(left, right, expr->op.line, expr->op.column);
         case TOKEN_PERCENT:
-                return modulo_values(left_result.value, right_result.value, expr->op.line, expr->op.column);
+                return modulo_values(left, right, expr->op.line, expr->op.column);
         case TOKEN_EQUAL_EQUAL:
         case TOKEN_BANG_EQUAL:
         case TOKEN_GREATER:
         case TOKEN_GREATER_EQUAL:
         case TOKEN_LESS:
         case TOKEN_LESS_EQUAL:
-            return compare_values(left_result.value, right_result.value, expr->op.type);
+            return compare_values(left, right, expr->op.type);
         case TOKEN_AND:
         case TOKEN_AND_AND:
-            if (!is_truthy(left_result.value)) {
-                return make_success_with_value(left_result.value);
+            if (!is_truthy(left)) {
+                free_value(right);  // Clean up unused value
+                return make_success_with_value(left);
             }
-            return make_success_with_value(right_result.value);
+            free_value(left);  // Clean up unused value
+            return make_success_with_value(right);
         case TOKEN_OR:
         case TOKEN_OR_OR:
-            if (is_truthy(left_result.value)) {
-                return make_success_with_value(left_result.value);
+            if (is_truthy(left)) {
+                free_value(right);  // Clean up unused value
+                return make_success_with_value(left);
             }
-            return make_success_with_value(right_result.value);
+            free_value(left);  // Clean up unused value
+            return make_success_with_value(right);
         default:
+            free_value(left);
+            free_value(right);
             return make_error_with_source("Unknown binary operator", expr->op.line, expr->op.column);
     }
 }
@@ -1562,88 +1715,60 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
     if (is_error(operand_result)) {
         return operand_result;
     }
+    Value operand = env_pop(env);
     
     switch (expr->op.type) {
         case TOKEN_MINUS:
-            if (operand_result.value.type == VAL_FLOAT64) {
-                return make_success_with_value(make_float_value(-operand_result.value.as.float64_val));
-            } else if (operand_result.value.type == VAL_INTEGER) {
+            if (operand.type == VAL_FLOAT64) {
+                return make_success_with_value(make_float_value(-operand.as.float64_val));
+            } else if (operand.type == VAL_INTEGER) {
                 // Extract value properly based on the actual type, but result should be int64_t
                 int64_t value = 0;
-                switch (operand_result.value.as.integer.num_type) {
-                    case NUM_INT8:   value = operand_result.value.as.integer.value.i8; break;
-                    case NUM_UINT8:  value = operand_result.value.as.integer.value.u8; break;
-                    case NUM_INT16:  value = operand_result.value.as.integer.value.i16; break;
-                    case NUM_UINT16: value = operand_result.value.as.integer.value.u16; break;
-                    case NUM_INT32:  value = operand_result.value.as.integer.value.i32; break;
-                    case NUM_UINT32: value = operand_result.value.as.integer.value.u32; break;
-                    case NUM_INT64:  value = operand_result.value.as.integer.value.i64; break;
-                    case NUM_UINT64: value = operand_result.value.as.integer.value.u64; break;
-                    default: value = operand_result.value.as.integer.value.i32; break;
+                switch (operand.as.integer.num_type) {
+                    case NUM_INT8:   value = operand.as.integer.value.i8; break;
+                    case NUM_UINT8:  value = operand.as.integer.value.u8; break;
+                    case NUM_INT16:  value = operand.as.integer.value.i16; break;
+                    case NUM_UINT16: value = operand.as.integer.value.u16; break;
+                    case NUM_INT32:  value = operand.as.integer.value.i32; break;
+                    case NUM_UINT32: value = operand.as.integer.value.u32; break;
+                    case NUM_INT64:  value = operand.as.integer.value.i64; break;
+                    case NUM_UINT64: value = operand.as.integer.value.u64; break;
+                    default: value = operand.as.integer.value.i32; break;
                 }
+                free_value(operand);
                 return make_success_with_value(make_integer_value(NUM_INT64, -value));
             } else {
+                free_value(operand);
                 return make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
             }
         case TOKEN_PLUS:
             // Unary plus is identity for numbers
-            if (operand_result.value.type == VAL_FLOAT64 || operand_result.value.type == VAL_INTEGER) {
-                return make_success_with_value(operand_result.value);
+            if (operand.type == VAL_FLOAT64 || operand.type == VAL_INTEGER) {
+                return make_success_with_value(operand);
             } else {
+                free_value(operand);
                 return make_error("Cannot apply unary plus to non-numeric value", expr->op.line, expr->op.column);
             }
         case TOKEN_BANG:
-        case TOKEN_NOT:
-            return make_success_with_value(make_bool_value(!is_truthy(operand_result.value)));
+        case TOKEN_NOT: {
+            bool truthy = is_truthy(operand);
+            free_value(operand);
+            return make_success_with_value(make_bool_value(!truthy));
+        }
         default:
+            free_value(operand);
             return make_error("Unknown unary operator", expr->op.line, expr->op.column);
-    }
-}
-
-// Main expression evaluator
-EvalResult evaluate_expr(Expr* expr, Environment* env) {
-    if (!expr) {
-        return make_error("Null expression", 0, 0);
-    }
-    
-    switch (expr->type) {
-        case EXPR_LITERAL:
-            return eval_literal_expr(&expr->as.literal, env);
-        case EXPR_VARIABLE:
-            return eval_variable_expr(&expr->as.variable, env);
-        case EXPR_ASSIGNMENT:
-            return eval_assignment_expr(&expr->as.assignment, env);
-        case EXPR_BINARY:
-            return eval_binary_expr(&expr->as.binary, env);
-        case EXPR_UNARY:
-            return eval_unary_expr(&expr->as.unary, env);
-        case EXPR_GROUPING:
-            return eval_grouping_expr(&expr->as.grouping, env);
-        case EXPR_CALL:
-            return eval_call_expr(&expr->as.call, env);
-        case EXPR_TABLE_LITERAL:
-            return eval_table_literal_expr(&expr->as.table_literal, env);
-        case EXPR_TABLE_INDEX:
-            return eval_table_index_expr(&expr->as.table_index, env);
-        case EXPR_TABLE_DOT:
-            return eval_table_dot_expr(&expr->as.table_dot, env);
-        case EXPR_ARRAY_LITERAL:
-            return eval_array_literal_expr(&expr->as.array_literal, env);
-        case EXPR_ARRAY_INDEX:
-            return eval_array_index_expr(&expr->as.array_index, env);
-        case EXPR_ENUM_ACCESS:
-            return eval_enum_access_expr(&expr->as.enum_access, env);
-        case EXPR_INCREMENT:
-        case EXPR_DECREMENT:
-            return eval_increment_expr(&expr->as.increment, env);
-        default:
-            return make_error("Unknown expression type", 0, 0);
     }
 }
 
 // Statement evaluation
 EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env) {
-    return evaluate_expr(stmt->expression, env);
+    // Use stack-based evaluation and pop result into .value
+    EvalResult result = evaluate_expr(stmt->expression, env);
+    if (!is_error(result) && result.return_count > 0) {
+        result.value = env_pop(env);
+    }
+    return result;
 }
 
 EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
@@ -1836,186 +1961,6 @@ void register_builtins(Environment* env) {
     (void)env;
 }
 
-EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
-    return eval_call_expr_with_registry(expr, env, global_registry);
-}
-
-EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, ModuleRegistry* registry) {
-    char full_name[256];
-    int call_line = 0;
-    int call_column = 0;
-    
-    // Handle module.function() syntax (TABLE_DOT expression)
-    if (expr->callee->type == EXPR_TABLE_DOT) {
-        TableDotExpr* dot_expr = &expr->callee->as.table_dot;
-        
-        // Check if the table part is a module name (VARIABLE expression)
-        if (dot_expr->table->type == EXPR_VARIABLE) {
-            const char* module_name = dot_expr->table->as.variable.name.identifier;
-            const char* func_name = dot_expr->key.identifier;
-            
-            // Check if this is a loaded module
-            if (registry && is_module_loaded(registry, module_name)) {
-                // This is module.function() - construct qualified name
-                snprintf(full_name, sizeof(full_name), "%s.%s", module_name, func_name);
-                call_line = dot_expr->key.line;
-                call_column = dot_expr->key.column;
-            } else {
-                // Not a module, might be a table method call - not supported yet
-                return make_error("Table method calls not yet supported", 0, 0);
-            }
-        } else {
-            return make_error("Complex table method calls not supported", 0, 0);
-        }
-    }
-    // Handle simple function() or qualified_name() syntax  
-    else if (expr->callee->type == EXPR_VARIABLE) {
-        VariableExpr* var_expr = &expr->callee->as.variable;
-        const char* identifier = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
-        snprintf(full_name, sizeof(full_name), "%s", identifier);
-        call_line = var_expr->name.line;
-        call_column = var_expr->name.column;
-    }
-    else {
-        return make_error("Only variable and module.function calls supported", 0, 0);
-    }
-    
-    // Parse qualified name (module.function)
-    char module_name[128] = {0};
-    char function_name[128] = {0};
-    bool is_qualified = parse_qualified_name(full_name, module_name, function_name);
-    
-    LibraryFunction builtin = NULL;
-    
-    if (is_qualified) {
-        // Qualified function call: module.function()
-        if (registry) {
-            builtin = lookup_qualified_plugin_function(registry, module_name, function_name);
-        }
-        
-        if (!builtin) {
-            char error_msg[512];
-            snprintf(error_msg, sizeof(error_msg), "Unknown function '%s' in module '%s'", 
-                    function_name, module_name);
-            
-            return make_error_detailed(
-                error_msg,
-                "Check if the module is loaded and the function name is correct",
-                ERROR_UNDEFINED,
-                call_line,
-                call_column,
-                NULL,
-                NULL
-            );
-        }
-    } else {
-        // Regular function call: function()
-        
-        // First check if it's a user-defined function
-        bool found = false;
-        Value func_value = get_variable(env, full_name, &found);
-        if (found && func_value.type == VAL_FUNCTION && func_value.as.function) {
-            return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
-        }
-        
-        // Then check stdlib (plugins require namespace)
-        builtin = lookup_builtin(full_name);
-        
-        if (!builtin) {
-            // Check if this function exists in any loaded module (to give helpful error)
-            char suggested_name[256] = {0};
-            if (registry) {
-                for (size_t i = 0; i < registry->function_count; i++) {
-                    const char* qualified = registry->function_table[i].qualified_name;
-                    // Check if the qualified name ends with our function name
-                    size_t qual_len = strlen(qualified);
-                    size_t func_len = strlen(full_name);
-                    if (qual_len > func_len && 
-                        qualified[qual_len - func_len - 1] == '.' &&
-                        strcmp(qualified + qual_len - func_len, full_name) == 0) {
-                        // Found it! Save the qualified name
-                        snprintf(suggested_name, sizeof(suggested_name), "%s", qualified);
-                        break;
-                    }
-                }
-            }
-            
-            char error_msg[512];
-            char suggestion[512];
-            
-            if (suggested_name[0]) {
-                // Function exists in a module - suggest qualified name
-                snprintf(error_msg, sizeof(error_msg), 
-                        "Function '%s' requires module namespace", full_name);
-                snprintf(suggestion, sizeof(suggestion),
-                        "Use qualified name: %s()", suggested_name);
-            } else {
-                // Function truly doesn't exist
-                snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
-                snprintf(suggestion, sizeof(suggestion),
-                        "Check the function name spelling or make sure it's declared before use");
-            }
-            
-            return make_error_detailed(
-                error_msg,
-                suggestion,
-                ERROR_UNDEFINED,
-                call_line,
-                call_column,
-                NULL,
-                NULL
-            );
-        }
-    }
-    
-    // Evaluate and push arguments onto stack
-    for (size_t i = 0; i < expr->arg_count; i++) {
-        EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
-        if (is_error(arg_result)) {
-            // Pop any arguments already pushed
-            for (size_t j = 0; j < i; j++) {
-                env_pop(env);
-            }
-            return arg_result;
-        }
-        env_push(env, arg_result.value);
-    }
-    
-    // Push builtin function call onto stack trace
-    const char* func_name = is_qualified ? function_name : full_name;
-    stack_trace_push(func_name, NULL, 0, 0, true, is_qualified, 
-                     is_qualified ? module_name : NULL);
-    
-    // Call the function using stack-based interface
-    EvalResult result = builtin(env, expr->arg_count);
-    
-    // Pop builtin function call from stack trace
-    stack_trace_pop();
-    
-    // Handle library functions that use stack-based returns
-    if (!is_error(result) && result.return_count == 0) {
-        // Function pushed no values to stack, return nil for compatibility with old evaluation
-        result.value = make_nil_value();
-        return result;
-    } else if (!is_error(result) && result.return_count == 1) {
-        // Function pushed one value to stack, pop it and return as traditional value
-        result.value = env_pop(env);
-        return result;
-    } else if (!is_error(result) && result.return_count > 1) {
-        // Function returned multiple values - for now, just return the top one
-        // TODO: Handle multiple return values properly
-        result.value = env_pop(env);
-        // Pop the rest for now
-        for (int i = 1; i < result.return_count; i++) {
-            Value discarded = env_pop(env);
-            free_value(discarded);
-        }
-        return result;
-    }
-    
-    return result;
-}
-
 // Main statement evaluator
 EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
     if (!stmt) {
@@ -2047,6 +1992,8 @@ EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
             return eval_continue_stmt(&stmt->as.continue_stmt, env);
         case STMT_IMPORT:
             return eval_import_stmt(&stmt->as.import_stmt, env);
+        case STMT_PRAGMA:
+            return eval_pragma_stmt(&stmt->as.pragma_stmt, env);
         case STMT_ENUM:
             return eval_enum_stmt(&stmt->as.enum_stmt, env);
         default:
@@ -2253,18 +2200,26 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     // Create new environment for function execution (with closure as parent)
     Environment* func_env = create_environment(function->closure);
     
-    // Evaluate and bind arguments to parameters
+    // Evaluate and bind arguments to parameters using stack-based evaluation
     for (size_t i = 0; i < arg_count; i++) {
         EvalResult arg_result = evaluate_expr(arguments[i], env);
         if (is_error(arg_result)) {
+            // Clean up any arguments already on stack
+            for (size_t j = 0; j < i; j++) {
+                env_pop(env);
+            }
             stack_trace_pop();
             free_environment(func_env);
             return arg_result;
         }
-        
-        // Extract parameter name
-        // Bind parameter using the stored parameter name
-        define_variable(func_env, function->param_names[i], arg_result.value);
+        // Argument is now on stack
+    }
+    
+    // Pop arguments from stack and bind to parameters
+    // Pop in reverse order since stack is LIFO
+    for (size_t i = arg_count; i > 0; i--) {
+        Value arg_value = env_pop(env);
+        define_variable(func_env, function->param_names[i-1], arg_value);
     }
     
     // Execute function body
@@ -2284,21 +2239,22 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
         }
     }
     
-    // Deep copy the result value before freeing the function environment
-    // This prevents use-after-free bugs when the result contains references
-    // to values that will be freed with the function environment
-    EvalResult final_result;
-    if (is_error(result)) {
-        final_result = result; // Errors don't need deep copying
-    } else {
-        final_result = make_success_with_value(copy_value(result.value));
-    }
-    
     // Pop function call from stack trace
     stack_trace_pop();
     
-    free_environment(func_env);
-    return final_result;
+    // Push return value onto stack (stack-based calling convention)
+    if (!is_error(result)) {
+        // Deep copy the result value before freeing the function environment
+        // This prevents use-after-free bugs when the result contains references
+        // to values that will be freed with the function environment
+        Value return_value = copy_value(result.value);
+        free_environment(func_env);
+        env_push(env, return_value);
+        return make_success(1);  // Indicate 1 value pushed onto stack
+    } else {
+        free_environment(func_env);
+        return result;  // Return error directly
+    }
 }
 
 // Global source code context for error reporting
@@ -2405,25 +2361,27 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
     if (is_error(table_result)) {
         return table_result;
     }
+    Value table_value = env_pop(env);
     
-    if (table_result.value.type != VAL_TABLE) {
-        free_value(table_result.value);
+    if (table_value.type != VAL_TABLE) {
+        free_value(table_value);
         return make_error("Cannot index non-table value", 0, 0);
     }
     
     // Evaluate the index expression
     EvalResult index_result = evaluate_expr(expr->index, env);
     if (is_error(index_result)) {
-        free_value(table_result.value);
+        free_value(table_value);
         return index_result;
     }
+    Value index_value = env_pop(env);
     
     // Get the value from the table
-    Value result = table_get(table_result.value.as.table, index_result.value);
+    Value result = table_get(table_value.as.table, index_value);
     
     // Clean up
-    free_value(index_result.value);
-    // Don't free table_result.value here - the table is still referenced
+    free_value(index_value);
+    // Don't free table_value here - the table is still referenced
     
     return make_success_with_value(result);
 }
@@ -2475,17 +2433,18 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     if (is_error(table_result)) {
         return table_result;
     }
+    Value table_value = env_pop(env);
     
     
-    if (table_result.value.type != VAL_TABLE) {
-        free_value(table_result.value);
+    if (table_value.type != VAL_TABLE) {
+        free_value(table_value);
         return make_error("Cannot access property of non-table value", 0, 0);
     }
     
     // Create a string key from the identifier token
     char* key_str = malloc(expr->key.length + 1);
     if (!key_str) {
-        free_value(table_result.value);
+        free_value(table_value);
         return make_error("Memory allocation failed", 0, 0);
     }
     const char* key_identifier = expr->key.identifier ? expr->key.identifier : "unknown";
@@ -2496,11 +2455,11 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     free(key_str);
     
     // Get the value from the table
-    Value result = table_get(table_result.value.as.table, key);
+    Value result = table_get(table_value.as.table, key);
     
     // Clean up
     free_value(key);
-    // Don't free table_result.value here - the table is still referenced
+    // Don't free table_value here - the table is still referenced
     
     return make_success_with_value(result);
 }
@@ -2517,12 +2476,27 @@ EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
     for (size_t i = 0; i < expr->element_count; i++) {
         EvalResult element_result = evaluate_expr(expr->elements[i], env);
         if (is_error(element_result)) {
+            // Clean up any elements already on stack
+            for (size_t j = 0; j < i; j++) {
+                env_pop(env);
+            }
             array_release(array);
             return element_result;
         }
-        
-        // Add element to array (array_push handles capacity expansion)
-        array_push(array, element_result.value);
+        // Element is now on stack
+    }
+    
+    // Pop elements from stack in reverse order and add to array
+    for (size_t i = expr->element_count; i > 0; i--) {
+        Value element = env_pop(env);
+        array_push(array, element);
+    }
+    
+    // Reverse the array since we pushed in LIFO order
+    for (size_t i = 0; i < array->length / 2; i++) {
+        Value temp = array->elements[i];
+        array->elements[i] = array->elements[array->length - 1 - i];
+        array->elements[array->length - 1 - i] = temp;
     }
     
     return make_success_with_value(make_array_value(array));
@@ -2534,31 +2508,33 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
     if (is_error(target_result)) {
         return target_result;
     }
+    Value target_value = env_pop(env);
     
     // Evaluate the index expression
     EvalResult index_result = evaluate_expr(expr->index, env);
     if (is_error(index_result)) {
-        free_value(target_result.value);
+        free_value(target_value);
         return index_result;
     }
+    Value index_value = env_pop(env);
     
     // Handle both arrays and tables
-    if (target_result.value.type == VAL_ARRAY) {
+    if (target_value.type == VAL_ARRAY) {
         // Array indexing logic
-        if (index_result.value.type != VAL_INTEGER) {
-            free_value(target_result.value);
-            free_value(index_result.value);
+        if (index_value.type != VAL_INTEGER) {
+            free_value(target_value);
+            free_value(index_value);
             return make_error("Array index must be an integer", 0, 0);
         }
         
         // Get the index value
-        int64_t index = index_result.value.as.integer.value.i64;
-        ArrayValue* array = target_result.value.as.array;
+        int64_t index = index_value.as.integer.value.i64;
+        ArrayValue* array = target_value.as.array;
         
         // Check bounds
         if (index < 0 || (size_t)index >= array->length) {
-            free_value(target_result.value);
-            free_value(index_result.value);
+            free_value(target_value);
+            free_value(index_value);
             return make_error("Array index out of bounds", 0, 0);
         }
         
@@ -2566,25 +2542,25 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         Value result = array_get(array, (size_t)index);
         
         // Clean up
-        free_value(index_result.value);
-        // Don't free target_result.value here - the array is still referenced
+        free_value(index_value);
+        // Don't free target_value here - the array is still referenced
         
         return make_success_with_value(result);
         
-    } else if (target_result.value.type == VAL_TABLE) {
+    } else if (target_value.type == VAL_TABLE) {
         // Table indexing logic (same as before)
-        Value result = table_get(target_result.value.as.table, index_result.value);
+        Value result = table_get(target_value.as.table, index_value);
         
         // Clean up
-        free_value(index_result.value);
-        // Don't free target_result.value here - the table is still referenced
+        free_value(index_value);
+        // Don't free target_value here - the table is still referenced
         
         return make_success_with_value(result);
         
     } else {
         // Neither array nor table
-        free_value(target_result.value);
-        free_value(index_result.value);
+        free_value(target_value);
+        free_value(index_value);
         return make_error("Cannot index non-array/non-table value", 0, 0);
     }
 }
@@ -2631,10 +2607,167 @@ EvalResult eval_continue_stmt(ContinueStmt* stmt, Environment* env) {
     return result;
 }
 
+// Helper: Parse namespace path into components
+// Returns allocated array of strings (caller must free), NULL on error
+// Sets *count to number of components
+static char** parse_namespace_path(const char* path, size_t* count, bool* is_global) {
+    *count = 0;
+    *is_global = false;
+    
+    if (!path || strlen(path) == 0) {
+        return NULL;
+    }
+    
+    // Check for special _GLOBAL identifier
+    if (strcmp(path, "_GLOBAL") == 0) {
+        *is_global = true;
+        return NULL;  // No path components for global import
+    }
+    
+    // Count components (separated by dots)
+    size_t component_count = 1;
+    for (const char* p = path; *p; p++) {
+        if (*p == '.') component_count++;
+    }
+    
+    // Allocate array for components
+    char** components = calloc(component_count, sizeof(char*));
+    if (!components) return NULL;
+    
+    // Split path by dots
+    char* path_copy = strdup(path);
+    if (!path_copy) {
+        free(components);
+        return NULL;
+    }
+    
+    char* token = strtok(path_copy, ".");
+    size_t index = 0;
+    while (token && index < component_count) {
+        // Validate component is valid identifier
+        if (strlen(token) == 0) {
+            // Empty component (e.g., "math..complex")
+            for (size_t i = 0; i < index; i++) free(components[i]);
+            free(components);
+            free(path_copy);
+            return NULL;
+        }
+        components[index++] = strdup(token);
+        token = strtok(NULL, ".");
+    }
+    
+    free(path_copy);
+    *count = index;
+    return components;
+}
+
+// Helper: Get or create nested table
+// Walks the namespace path, creating tables as needed
+// Returns the final target table, or NULL on error
+static Table* get_or_create_nested_table(Environment* env, char** path, size_t path_len, 
+                                         int line, int column, EvalResult* error_result) {
+    if (path_len == 0) return NULL;
+    
+    // Start with the first component
+    bool found = false;
+    Value current_value = get_variable(env, path[0], &found);
+    
+    Table* current_table = NULL;
+    if (found && current_value.type == VAL_TABLE) {
+        // Table already exists
+        current_table = current_value.as.table;
+    } else if (found) {
+        // Variable exists but is not a table - error
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), 
+            "Cannot create nested namespace '%s': '%s' is not a table", 
+            path[0], path[0]);
+        *error_result = make_error(error_msg, line, column);
+        return NULL;
+    } else {
+        // Create new table for first component
+        current_table = create_table(16);
+        if (!current_table) {
+            *error_result = make_error("Failed to create namespace table", line, column);
+            return NULL;
+        }
+        Value table_value = make_table_value(current_table);
+        define_variable(env, path[0], table_value);
+    }
+    
+    // Walk through remaining path components
+    for (size_t i = 1; i < path_len; i++) {
+        // Try to get the next component from current table
+        Value key = make_string_value_from_cstr(path[i]);
+        Value next_value = table_get(current_table, key);
+        free_value(key);
+        
+        if (next_value.type == VAL_TABLE) {
+            // Table exists, continue
+            current_table = next_value.as.table;
+        } else if (next_value.type == VAL_NIL) {
+            // Doesn't exist, create new table
+            Table* new_table = create_table(16);
+            if (!new_table) {
+                *error_result = make_error("Failed to create nested namespace table", line, column);
+                return NULL;
+            }
+            Value new_table_value = make_table_value(new_table);
+            Value key2 = make_string_value_from_cstr(path[i]);
+            table_set(current_table, key2, new_table_value);
+            free_value(key2);
+            current_table = new_table;
+        } else {
+            // Exists but is not a table - error
+            char error_msg[512];
+            snprintf(error_msg, sizeof(error_msg), 
+                "Cannot create nested namespace: intermediate path component '%s' is not a table", 
+                path[i]);
+            *error_result = make_error(error_msg, line, column);
+            return NULL;
+        }
+    }
+    
+    return current_table;
+}
+
+// Helper: Check if function override is allowed
+// Returns true if should continue, false if should abort
+// Handles error/warn/quiet modes
+static bool check_function_override(const char* func_name, Table* target_table, 
+                                    int line, int column, EvalResult* error_result) {
+    // Check if function already exists in target table
+    Value key = make_string_value_from_cstr(func_name);
+    Value existing = table_get(target_table, key);
+    free_value(key);
+    
+    if (existing.type == VAL_NIL) {
+        // No override, all good
+        return true;
+    }
+    
+    // Function exists - check override behavior
+    switch (global_override_behavior) {
+        case OVERRIDE_ERROR: {
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg), 
+                "Function '%s' already exists in target namespace (use #pragma override_behavior to change)",
+                func_name);
+            *error_result = make_error(error_msg, line, column);
+            return false;
+        }
+        case OVERRIDE_WARN:
+            fprintf(stderr, "Warning: Overriding existing function '%s' in namespace\n", func_name);
+            return true;
+        case OVERRIDE_QUIET:
+            return true;
+    }
+    
+    return true;
+}
+
 // Import statement evaluation
 EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
-    (void)env;  // Unused parameter for now
-    
     ModuleRegistry* registry = get_global_module_registry();
     if (!registry) {
         return make_error("Module registry not initialized", 0, 0);
@@ -2646,74 +2779,280 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         return make_error("Invalid module name - null string", stmt->keyword.line, stmt->keyword.column);
     }
     
-    // Additional validation for module name
+    // Validate module name
     size_t name_len = strlen(module_name);
     if (name_len == 0) {
         return make_error("Invalid module name - empty string", stmt->keyword.line, stmt->keyword.column);
     }
-    if (name_len > 100) {  // Sanity check
+    if (name_len > 100) {
         return make_error("Invalid module name - too long", stmt->keyword.line, stmt->keyword.column);
     }
     
-    // Check if the module table already exists in THIS environment
-    bool found = false;
-    Value existing_module = get_variable(env, module_name, &found);
-    if (found && existing_module.type == VAL_TABLE) {
-        // Module table already exists in this environment, nothing to do
-        return make_success_with_value(make_nil_value());
-    }
-    
-    // Try to load the module plugin (if not already loaded globally)
-    if (!is_module_loaded(registry, module_name)) {
-        PluginLoadResult result = load_module_by_name(registry, module_name);
-        if (result.status != PLUGIN_STATUS_LOADED) {
-            // Create a detailed error message with module name
-            char error_msg[256];
-            snprintf(error_msg, sizeof(error_msg), "FATAL: Import failed - module '%s' not found", module_name);
-            return make_error(error_msg, stmt->keyword.line, stmt->keyword.column);
+    // Determine the target name/path (alias or original module name)
+    const char* target_name = module_name;  // Default to module name
+    if (stmt->has_alias) {
+        // Use alias instead
+        if (stmt->alias.type == TOKEN_STRING && stmt->alias.literal.string) {
+            target_name = stmt->alias.literal.string;
+        } else if (stmt->alias.identifier) {
+            target_name = stmt->alias.identifier;
+        } else {
+            return make_error("Invalid alias", stmt->keyword.line, stmt->keyword.column);
         }
     }
     
-    // Create a module table and populate it with the module's functions
-    // (Only reached if module doesn't exist in current environment)
-    // This allows users to access module functions via module.function syntax
-    // and also enables: var f = module.function; f();
-    Table* module_table = create_table(16);  // Start with capacity of 16
-    if (!module_table) {
-        return make_error("Failed to create module table", stmt->keyword.line, stmt->keyword.column);
-    }
+    // Parse the target namespace path
+    size_t path_len = 0;
+    bool is_global = false;
+    char** path_components = parse_namespace_path(target_name, &path_len, &is_global);
     
-    // Populate the table with references to module functions
-    // For now, we store function names as strings - later we'll support callable refs
-    int functions_added = 0;
-    for (size_t i = 0; i < registry->function_count; i++) {
-        FunctionEntry* entry = &registry->function_table[i];
-        // Check if this function belongs to this module
-        if (entry->qualified_name) {
-            char entry_module[128] = {0};
-            char entry_func[128] = {0};
-            if (parse_qualified_name(entry->qualified_name, entry_module, entry_func)) {
-                if (strcmp(entry_module, module_name) == 0) {
-                    // This function belongs to our module - add it to the table
-                    Value func_key = make_string_value_from_cstr(entry_func);
-                    // For now, store a nil value - later we'll support native function values
-                    Value func_value = make_nil_value();
-                    table_set(module_table, func_key, func_value);
-                    free_value(func_key);
-                    functions_added++;
+    // Check if we've already imported to this exact location
+    if (!is_global) {
+        const char* check_name = (path_components && path_len > 0) ? path_components[0] : target_name;
+        bool found = false;
+        Value existing = get_variable(env, check_name, &found);
+        
+        if (found && path_len == 1) {
+            // Simple case: single-level namespace already exists
+            if (existing.type == VAL_TABLE) {
+                // Already imported, nothing to do
+                if (path_components) {
+                    for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+                    free(path_components);
                 }
+                return make_success_with_value(make_nil_value());
             }
         }
     }
     
-    // Define the module table in the environment so it's accessible as a variable
-    Value table_value = make_table_value(module_table);
-    define_variable(env, module_name, table_value);
+    // Load the module plugin (if not already loaded globally)
+    if (!is_module_loaded(registry, module_name)) {
+        PluginLoadResult result = load_module_by_name(registry, module_name);
+        if (result.status != PLUGIN_STATUS_LOADED) {
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg), "FATAL: Import failed - module '%s' not found", module_name);
+            if (path_components) {
+                for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+                free(path_components);
+            }
+            return make_error(error_msg, stmt->keyword.line, stmt->keyword.column);
+        }
+    }
     
-    (void)functions_added;  // Suppress unused variable warning
+    // Determine target table (global env, nested table, or new table)
+    Table* target_table = NULL;
+    EvalResult nested_error = {0};
     
-    // Import successful - return nil value
+    if (is_global) {
+        // _GLOBAL import: functions go directly into global environment
+        // We'll handle this specially below
+        target_table = NULL;
+    } else if (path_components && path_len > 0) {
+        // Nested namespace: get or create nested tables
+        target_table = get_or_create_nested_table(env, path_components, path_len, 
+                                                   stmt->keyword.line, stmt->keyword.column, &nested_error);
+        if (!target_table) {
+            // Cleanup
+            for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+            free(path_components);
+            return nested_error;
+        }
+    } else {
+        // Simple single-name import: create new table
+        target_table = create_table(16);
+        if (!target_table) {
+            if (path_components) {
+                for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+                free(path_components);
+            }
+            return make_error("Failed to create module table", stmt->keyword.line, stmt->keyword.column);
+        }
+    }
+    
+    // If we have a target table (not global), store the original module name
+    // so module.function() calls can be resolved correctly
+    if (!is_global && target_table) {
+        Value module_key = make_string_value_from_cstr("__module_name__");
+        Value module_value = make_string_value_from_cstr(module_name);
+        table_set(target_table, module_key, module_value);
+        free_value(module_key);
+        free_value(module_value);
+    }
+    
+    // Populate functions from the module
+    int functions_added = 0;
+    for (size_t i = 0; i < registry->function_count; i++) {
+        FunctionEntry* entry = &registry->function_table[i];
+        if (!entry->qualified_name) continue;
+        
+        char entry_module[128] = {0};
+        char entry_func[128] = {0};
+        if (!parse_qualified_name(entry->qualified_name, entry_module, entry_func)) continue;
+        if (strcmp(entry_module, module_name) != 0) continue;
+        
+        // Get the actual function pointer from the plugin function struct
+        if (!entry->function || !entry->function->function) continue;
+        LibraryFunction func_ptr = entry->function->function;
+        
+        // This function belongs to our module
+        if (is_global) {
+            // Define function directly in global environment
+            // Check for override
+            bool found = false;
+            get_variable(env, entry_func, &found);
+            if (found) {
+                EvalResult override_error = {0};
+                if (!check_function_override(entry_func, NULL, 
+                                            stmt->keyword.line, stmt->keyword.column, &override_error)) {
+                    if (path_components) {
+                        for (size_t j = 0; j < path_len; j++) free(path_components[j]);
+                        free(path_components);
+                    }
+                    return override_error;
+                }
+            }
+            // Define as native function value
+            Value func_value = make_native_function_value((void*)func_ptr);
+            define_variable(env, entry_func, func_value);
+            functions_added++;
+        } else {
+            // Add to target table
+            // Check for override
+            EvalResult override_error = {0};
+            if (!check_function_override(entry_func, target_table, 
+                                        stmt->keyword.line, stmt->keyword.column, &override_error)) {
+                if (path_components) {
+                    for (size_t j = 0; j < path_len; j++) free(path_components[j]);
+                    free(path_components);
+                }
+                return override_error;
+            }
+            
+            // Store native function value in table
+            Value func_key = make_string_value_from_cstr(entry_func);
+            Value func_value = make_native_function_value((void*)func_ptr);
+            table_set(target_table, func_key, func_value);
+            free_value(func_key);
+            functions_added++;
+        }
+    }
+    
+    // If not global import and we created a new table (not nested), define it
+    if (!is_global && target_table && path_len <= 1) {
+        Value table_value = make_table_value(target_table);
+        const char* var_name = (path_components && path_len > 0) ? path_components[0] : target_name;
+        define_variable(env, var_name, table_value);
+    }
+    
+    // Cleanup
+    if (path_components) {
+        for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+        free(path_components);
+    }
+    
+    (void)functions_added;
     return make_success_with_value(make_nil_value());
+}
+
+// Pragma statement evaluation
+EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
+    (void)env;  // Pragma affects global state, not environment
+    
+    if (!stmt->name.identifier) {
+        return make_error("Invalid pragma - missing name", stmt->keyword.line, stmt->keyword.column);
+    }
+    
+    const char* pragma_name = stmt->name.identifier;
+    
+    // Handle strict_types pragma
+    if (strcmp(pragma_name, "strict_types") == 0) {
+        // Value should be true or false
+        if (stmt->value.type == TOKEN_TRUE) {
+            global_type_config.strict_mode = true;
+        } else if (stmt->value.type == TOKEN_FALSE) {
+            global_type_config.strict_mode = false;
+        } else if (stmt->value.identifier) {
+            if (strcmp(stmt->value.identifier, "true") == 0) {
+                global_type_config.strict_mode = true;
+            } else if (strcmp(stmt->value.identifier, "false") == 0) {
+                global_type_config.strict_mode = false;
+            } else {
+                char error_msg[256];
+                snprintf(error_msg, sizeof(error_msg), 
+                    "Invalid value for pragma strict_types: '%s' (expected true or false)", 
+                    stmt->value.identifier);
+                return make_error(error_msg, stmt->name.line, stmt->name.column);
+            }
+        } else {
+            return make_error("Invalid value for pragma strict_types (expected true or false)", 
+                stmt->name.line, stmt->name.column);
+        }
+        return make_success_with_value(make_nil_value());
+    }
+    
+    // Handle type_warnings pragma
+    if (strcmp(pragma_name, "type_warnings") == 0) {
+        // Value should be true or false
+        if (stmt->value.type == TOKEN_TRUE) {
+            global_type_config.warn_on_conversion = true;
+        } else if (stmt->value.type == TOKEN_FALSE) {
+            global_type_config.warn_on_conversion = false;
+        } else if (stmt->value.identifier) {
+            if (strcmp(stmt->value.identifier, "true") == 0) {
+                global_type_config.warn_on_conversion = true;
+            } else if (strcmp(stmt->value.identifier, "false") == 0) {
+                global_type_config.warn_on_conversion = false;
+            } else {
+                char error_msg[256];
+                snprintf(error_msg, sizeof(error_msg), 
+                    "Invalid value for pragma type_warnings: '%s' (expected true or false)", 
+                    stmt->value.identifier);
+                return make_error(error_msg, stmt->name.line, stmt->name.column);
+            }
+        } else {
+            return make_error("Invalid value for pragma type_warnings (expected true or false)", 
+                stmt->name.line, stmt->name.column);
+        }
+        return make_success_with_value(make_nil_value());
+    }
+    
+    // Handle override_behavior pragma
+    if (strcmp(pragma_name, "override_behavior") == 0) {
+        // Value should be "error", "warn", or "quiet"
+        const char* value = NULL;
+        if (stmt->value.identifier) {
+            value = stmt->value.identifier;
+        } else if (stmt->value.literal.string) {
+            value = stmt->value.literal.string;
+        }
+        
+        if (!value) {
+            return make_error("Invalid value for pragma override_behavior", 
+                stmt->name.line, stmt->name.column);
+        }
+        
+        if (strcmp(value, "error") == 0) {
+            global_override_behavior = OVERRIDE_ERROR;
+        } else if (strcmp(value, "warn") == 0) {
+            global_override_behavior = OVERRIDE_WARN;
+        } else if (strcmp(value, "quiet") == 0) {
+            global_override_behavior = OVERRIDE_QUIET;
+        } else {
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg), 
+                "Invalid value for pragma override_behavior: '%s' (expected 'error', 'warn', or 'quiet')", 
+                value);
+            return make_error(error_msg, stmt->name.line, stmt->name.column);
+        }
+        return make_success_with_value(make_nil_value());
+    }
+    
+    // Unknown pragma
+    char error_msg[256];
+    snprintf(error_msg, sizeof(error_msg), 
+        "Unknown pragma: '%s' (supported pragmas: strict_types, type_warnings, override_behavior)", 
+        pragma_name);
+    return make_error(error_msg, stmt->name.line, stmt->name.column);
 }
 
 // Switch statement evaluation

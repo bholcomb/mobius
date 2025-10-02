@@ -1,0 +1,6 @@
+// Test pragma error handling
+
+// Test unknown pragma
+#pragma unknown_pragma value
+print("Should not reach here");
+

@@ -4,8 +4,20 @@
 #include <stdarg.h>
 #include <string.h>
 
+// Helper: duplicate a string (standard C99 compatible)
+static char* duplicate_string(const char* str) {
+    if (!str) return NULL;
+    size_t len = strlen(str);
+    char* dup = malloc(len + 1);
+    if (dup) {
+        memcpy(dup, str, len + 1);
+    }
+    return dup;
+}
+
 // Forward declarations
 Stmt* parse_continue_statement(Parser* parser);
+Stmt* parse_pragma_statement(Parser* parser);
 
 // Parser initialization
 void init_parser(Parser* parser, Token* tokens, size_t token_count) {
@@ -823,6 +835,10 @@ Stmt* parse_statement(Parser* parser) {
         return parse_import_statement(parser);
     }
     
+    if (parser_match(parser, TOKEN_HASH)) {
+        return parse_pragma_statement(parser);
+    }
+    
     return parse_expression_statement(parser);
 }
 
@@ -1033,10 +1049,34 @@ Stmt* parse_import_statement(Parser* parser) {
     if (parser_match(parser, TOKEN_IDENTIFIER) && 
         parser_previous(parser).identifier && 
         strcmp(parser_previous(parser).identifier, "as") == 0) {
-        // We found 'as' keyword, now expect identifier or string for alias
+        // We found 'as' keyword, now expect identifier, dotted path, or string for alias
         if (parser_check(parser, TOKEN_IDENTIFIER)) {
             alias = parser_advance(parser);
             has_alias = true;
+            
+            // Check for dotted path (e.g., math.complex or a.b.c)
+            // We'll build up the full path as a string in alias.literal.string
+            if (parser_check(parser, TOKEN_DOT)) {
+                // Build a dotted path string
+                char path_buffer[256];
+                snprintf(path_buffer, sizeof(path_buffer), "%s", alias.identifier);
+                
+                while (parser_match(parser, TOKEN_DOT)) {
+                    if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+                        parser_error_at_current(parser, "Expect identifier after '.' in alias path");
+                        return NULL;
+                    }
+                    Token part = parser_advance(parser);
+                    size_t current_len = strlen(path_buffer);
+                    snprintf(path_buffer + current_len, sizeof(path_buffer) - current_len, 
+                             ".%s", part.identifier);
+                }
+                
+                // Store the dotted path as a string literal in alias
+                // We need to allocate and store this string
+                alias.literal.string = duplicate_string(path_buffer);
+                alias.type = TOKEN_STRING;  // Mark it as a string type for later processing
+            }
         } else if (parser_check(parser, TOKEN_STRING)) {
             alias = parser_advance(parser);
             has_alias = true;
@@ -1051,6 +1091,48 @@ Stmt* parse_import_statement(Parser* parser) {
     }
     
     return make_import_stmt(keyword, module_name, alias, has_alias);
+}
+
+Stmt* parse_pragma_statement(Parser* parser) {
+    Token hash_token = parser_previous(parser);  // The # token
+    
+    // Expect 'pragma' keyword (as identifier)
+    if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+        parser_error_at_current(parser, "Expect 'pragma' after '#'");
+        return NULL;
+    }
+    
+    Token keyword_token = parser_advance(parser);
+    if (!keyword_token.identifier || strcmp(keyword_token.identifier, "pragma") != 0) {
+        parser_error(parser, keyword_token, "Expect 'pragma' after '#'");
+        return NULL;
+    }
+    
+    // Expect pragma name (identifier)
+    if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+        parser_error_at_current(parser, "Expect pragma name after '#pragma'");
+        return NULL;
+    }
+    Token name = parser_advance(parser);
+    
+    // Expect pragma value (identifier, string, or boolean keyword)
+    Token value = {0};
+    if (parser_check(parser, TOKEN_IDENTIFIER)) {
+        value = parser_advance(parser);
+    } else if (parser_check(parser, TOKEN_STRING)) {
+        value = parser_advance(parser);
+    } else if (parser_check(parser, TOKEN_TRUE) || parser_check(parser, TOKEN_FALSE)) {
+        value = parser_advance(parser);
+    } else {
+        parser_error_at_current(parser, "Expect value after pragma name");
+        return NULL;
+    }
+    
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after pragma")) {
+        return NULL;
+    }
+    
+    return make_pragma_stmt(hash_token, name, value);
 }
 
 // Forward declarations for switch parsing functions

@@ -43,7 +43,8 @@ typedef enum {
     STMT_BREAK,
     STMT_CONTINUE,
     STMT_IMPORT,
-    STMT_ENUM
+    STMT_ENUM,
+    STMT_PRAGMA
 } StmtType;
 
 // Forward declarations for AST structures (core types in value.h)
@@ -314,6 +315,13 @@ typedef struct {
     bool has_alias;             // Whether an alias was provided
 } ImportStmt;
 
+// Pragma statement
+typedef struct {
+    Token keyword;              // The 'pragma' token for error reporting
+    Token name;                 // Pragma name (e.g., 'strict_types', 'override_behavior')
+    Token value;                // Pragma value (varies by pragma)
+} PragmaStmt;
+
 // Enum member definition
 typedef struct EnumMemberDef {
     Token name;                    // Member name token
@@ -349,6 +357,7 @@ struct Stmt {
         ContinueStmt continue_stmt;
         ImportStmt import_stmt;
         EnumStmt enum_stmt;
+        PragmaStmt pragma_stmt;
     } as;
 };
 
@@ -385,6 +394,7 @@ Stmt* make_continue_stmt(Token keyword);
 Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_alias);
 Stmt* make_enum_stmt(Token keyword, Token name, NumericType underlying_type, 
                      bool has_explicit_type, EnumMemberDef* members);
+Stmt* make_pragma_stmt(Token keyword, Token name, Token value);
 
 // Enum helper functions
 EnumMemberDef* make_enum_member(Token name, Expr* value);
