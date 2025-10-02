@@ -27,7 +27,6 @@ static OverrideBehavior global_override_behavior = OVERRIDE_ERROR;
 // Utility functions
 EvalResult make_success(int return_count) {
     EvalResult result = {0};
-    result.value = make_nil_value();
     result.return_count = return_count;
     result.has_error = false;
     result.has_returned = false;
@@ -36,20 +35,14 @@ EvalResult make_success(int return_count) {
     return result;
 }
 
-EvalResult make_success_with_value(Value value) {
-    EvalResult result = {0};
-    result.value = value;
-    result.return_count = 0;  // Traditional evaluation doesn't use stack returns
-    result.has_error = false;
-    result.has_returned = false;
-    result.has_break = false;
-    result.has_continue = false;
-    return result;
+// Helper to push value and return success (replaces old make_success_with_value)
+EvalResult make_success_with_value(Environment* env, Value value) {
+    env_push(env, value);
+    return make_success(1);
 }
 
 EvalResult make_error(const char* message, int line, int column) {
     EvalResult result = {0};
-    result.value = make_nil_value();
     result.return_count = 0;
     result.has_error = true;
     result.has_returned = false;
@@ -101,7 +94,6 @@ EvalResult make_error_detailed(const char* message, const char* suggestion,
                               ErrorCategory category, int line, int column,
                               const char* function_name, const char* source_line) {
     EvalResult result = {0};
-    result.value = make_nil_value();
     result.return_count = 0;
     result.has_error = true;
     result.has_returned = false;
@@ -357,8 +349,7 @@ void print_runtime_error_with_context(RuntimeError error, const char* filename) 
 
 // Expression evaluation
 EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env) {
-    (void)env;  // Unused parameter
-    return make_success_with_value(copy_value(expr->value));
+    return make_success_with_value(env, copy_value(expr->value));
 }
 
 // =============================================================================
@@ -419,19 +410,19 @@ EvalResult eval_binary_expr_stack(BinaryExpr* expr, Environment* env) {
     EvalResult result;
     switch (expr->op.type) {
         case TOKEN_PLUS:
-            result = add_values(left, right);
+            result = add_values(env, left, right);
             break;
         case TOKEN_MINUS:
-            result = subtract_values(left, right);
+            result = subtract_values(env, left, right);
             break;
         case TOKEN_STAR:
-            result = multiply_values(left, right);
+            result = multiply_values(env, left, right);
             break;
         case TOKEN_SLASH:
-            result = divide_values(left, right, expr->op.line, expr->op.column);
+            result = divide_values(env, left, right, expr->op.line, expr->op.column);
             break;
         case TOKEN_PERCENT:
-            result = modulo_values(left, right, expr->op.line, expr->op.column);
+            result = modulo_values(env, left, right, expr->op.line, expr->op.column);
             break;
         case TOKEN_EQUAL_EQUAL:
         case TOKEN_BANG_EQUAL:
@@ -439,7 +430,7 @@ EvalResult eval_binary_expr_stack(BinaryExpr* expr, Environment* env) {
         case TOKEN_GREATER_EQUAL:
         case TOKEN_LESS:
         case TOKEN_LESS_EQUAL:
-            result = compare_values(left, right, expr->op.type);
+            result = compare_values(env, left, right, expr->op.type);
             break;
         case TOKEN_AND:
         case TOKEN_AND_AND:
@@ -468,15 +459,8 @@ EvalResult eval_binary_expr_stack(BinaryExpr* expr, Environment* env) {
     free_value(left);
     free_value(right);
     
-    if (is_error(result)) {
-        return result;
-    }
-    
-    // Push result onto stack
-    env_push(env, result.value);
-    free_value(result.value);  // env_push copies the value
-    
-    return make_success(1);  // Success indicator, 1 value pushed onto stack
+    // Result already pushed by arithmetic function
+    return result;
 }
 
 // Stack-based unary evaluation - pops operand, computes, pushes result
@@ -494,7 +478,7 @@ EvalResult eval_unary_expr_stack(UnaryExpr* expr, Environment* env) {
     switch (expr->op.type) {
         case TOKEN_MINUS:
             if (operand.type == VAL_FLOAT64) {
-                result = make_success_with_value(make_float_value(-operand.as.float64_val));
+                result = make_success_with_value(env, make_float_value(-operand.as.float64_val));
             } else if (operand.type == VAL_INTEGER) {
                 // Extract value properly based on the actual type, but result should be int64_t
                 int64_t value = 0;
@@ -509,7 +493,7 @@ EvalResult eval_unary_expr_stack(UnaryExpr* expr, Environment* env) {
                     case NUM_UINT64: value = operand.as.integer.value.u64; break;
                     default: value = operand.as.integer.value.i32; break;
                 }
-                result = make_success_with_value(make_integer_value(NUM_INT64, -value));
+                result = make_success_with_value(env, make_integer_value(NUM_INT64, -value));
             } else {
                 result = make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
             }
@@ -517,14 +501,14 @@ EvalResult eval_unary_expr_stack(UnaryExpr* expr, Environment* env) {
         case TOKEN_PLUS:
             // Unary plus is identity for numbers
             if (operand.type == VAL_FLOAT64 || operand.type == VAL_INTEGER) {
-                result = make_success_with_value(operand);
+                result = make_success_with_value(env, operand);
             } else {
                 result = make_error("Cannot apply unary plus to non-numeric value", expr->op.line, expr->op.column);
             }
             break;
         case TOKEN_BANG:
         case TOKEN_NOT:
-            result = make_success_with_value(make_bool_value(!is_truthy(operand)));
+            result = make_success_with_value(env, make_bool_value(!is_truthy(operand)));
             break;
         default:
             result = make_error("Unknown unary operator", expr->op.line, expr->op.column);
@@ -538,11 +522,8 @@ EvalResult eval_unary_expr_stack(UnaryExpr* expr, Environment* env) {
         return result;
     }
     
-    // Push result onto stack
-    env_push(env, result.value);
-    free_value(result.value);  // env_push copies the value
-    
-    return make_success(1);  // Success indicator, 1 value pushed onto stack
+    // Result already pushed by make_success_with_value
+    return result;
 }
 
 // Stack-based grouping evaluation - just evaluates the inner expression
@@ -863,11 +844,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
             call_expr->as.call = *expr;
             EvalResult result = evaluate_expr(call_expr, env);
             free(call_expr);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                free_value(result.value);
-                return make_success(1);
-            }
+            // Result already on stack from evaluate_expr
             return result;
         }
         
@@ -984,107 +961,35 @@ EvalResult evaluate_expr(Expr* expr, Environment* env) {
     }
     
     switch (expr->type) {
-        case EXPR_LITERAL: {
-            EvalResult result = eval_literal_expr(&expr->as.literal, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_VARIABLE: {
-            EvalResult result = eval_variable_expr(&expr->as.variable, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_BINARY: {
-            EvalResult result = eval_binary_expr(&expr->as.binary, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_UNARY: {
-            EvalResult result = eval_unary_expr(&expr->as.unary, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_ASSIGNMENT: {
-            EvalResult result = eval_assignment_expr(&expr->as.assignment, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
+        case EXPR_LITERAL:
+            return eval_literal_expr(&expr->as.literal, env);
+        case EXPR_VARIABLE:
+            return eval_variable_expr(&expr->as.variable, env);
+        case EXPR_BINARY:
+            return eval_binary_expr(&expr->as.binary, env);
+        case EXPR_UNARY:
+            return eval_unary_expr(&expr->as.unary, env);
+        case EXPR_ASSIGNMENT:
+            return eval_assignment_expr(&expr->as.assignment, env);
         case EXPR_GROUPING:
             return eval_grouping_expr(&expr->as.grouping, env);
         case EXPR_CALL:
             return eval_call_expr(&expr->as.call, env);
-        case EXPR_TABLE_LITERAL: {
-            EvalResult result = eval_table_literal_expr(&expr->as.table_literal, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_TABLE_INDEX: {
-            EvalResult result = eval_table_index_expr(&expr->as.table_index, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_TABLE_DOT: {
-            EvalResult result = eval_table_dot_expr(&expr->as.table_dot, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_ARRAY_LITERAL: {
-            EvalResult result = eval_array_literal_expr(&expr->as.array_literal, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_ARRAY_INDEX: {
-            EvalResult result = eval_array_index_expr(&expr->as.array_index, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
-        case EXPR_ENUM_ACCESS: {
-            EvalResult result = eval_enum_access_expr(&expr->as.enum_access, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
+        case EXPR_TABLE_LITERAL:
+            return eval_table_literal_expr(&expr->as.table_literal, env);
+        case EXPR_TABLE_INDEX:
+            return eval_table_index_expr(&expr->as.table_index, env);
+        case EXPR_TABLE_DOT:
+            return eval_table_dot_expr(&expr->as.table_dot, env);
+        case EXPR_ARRAY_LITERAL:
+            return eval_array_literal_expr(&expr->as.array_literal, env);
+        case EXPR_ARRAY_INDEX:
+            return eval_array_index_expr(&expr->as.array_index, env);
+        case EXPR_ENUM_ACCESS:
+            return eval_enum_access_expr(&expr->as.enum_access, env);
         case EXPR_INCREMENT:
-        case EXPR_DECREMENT: {
-            EvalResult result = eval_increment_expr(&expr->as.increment, env);
-            if (!is_error(result)) {
-                env_push(env, result.value);
-                return make_success(1);
-            }
-            return result;
-        }
+        case EXPR_DECREMENT:
+            return eval_increment_expr(&expr->as.increment, env);
         default:
             return make_error("Unknown expression type", 0, 0);
     }
@@ -1111,7 +1016,7 @@ EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
         );
     }
     
-    return make_success_with_value(value);
+    return make_success_with_value(env, value);
 }
 
 EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
@@ -1132,7 +1037,7 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
                                                ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL);
     }
     
-    return make_success_with_value(value);
+    return make_success_with_value(env, value);
 }
 
 EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
@@ -1228,24 +1133,19 @@ EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env) {
     
     // Return appropriate value based on prefix/postfix
     if (expr->is_prefix) {
-        return make_success_with_value(new_value);  // Return new value (++i)
+        return make_success_with_value(env, new_value);  // Return new value (++i)
     } else {
-        return make_success_with_value(current);     // Return old value (i++)
+        return make_success_with_value(env, current);     // Return old value (i++)
     }
 }
 
 EvalResult eval_increment_expr_stack(IncrementExpr* expr, Environment* env) {
-    EvalResult result = eval_increment_expr(expr, env);
-    if (!is_error(result)) {
-        env_push(env, result.value);
-        free_value(result.value);
-        return make_success(1);
-    }
-    return result;
+    // Result already on stack from eval_increment_expr
+    return eval_increment_expr(expr, env);
 }
 
 // Arithmetic operations
-EvalResult add_values(Value left, Value right) {
+EvalResult add_values(Environment* env, Value left, Value right) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -1287,7 +1187,7 @@ EvalResult add_values(Value left, Value right) {
         
         Value final_result = make_string_value_from_cstr(result);
         free(result);
-        return make_success_with_value(final_result);
+        return make_success_with_value(env, final_result);
     }
     
     // Numeric addition
@@ -1341,9 +1241,9 @@ EvalResult add_values(Value left, Value right) {
         
         // Return appropriate result type
         if (use_double) {
-            return make_success_with_value(make_float_value(left_val + right_val));
+            return make_success_with_value(env, make_float_value(left_val + right_val));
         } else {
-            return make_success_with_value(make_float32_value((float)(left_val + right_val)));
+            return make_success_with_value(env, make_float32_value((float)(left_val + right_val)));
         }
     }
     
@@ -1376,7 +1276,7 @@ EvalResult add_values(Value left, Value right) {
             default: right_val = 0; break;
         }
         
-        return make_success_with_value(make_integer_value(NUM_INT64, left_val + right_val));
+        return make_success_with_value(env, make_integer_value(NUM_INT64, left_val + right_val));
     }
     
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
@@ -1385,7 +1285,7 @@ EvalResult add_values(Value left, Value right) {
     return make_error("Cannot add these types", 0, 0);
 }
 
-EvalResult subtract_values(Value left, Value right) {
+EvalResult subtract_values(Environment* env, Value left, Value right) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -1421,14 +1321,14 @@ EvalResult subtract_values(Value left, Value right) {
             }
         }
         
-        return make_success_with_value(make_float_value(left_val - right_val));
+        return make_success_with_value(env, make_float_value(left_val - right_val));
     }
     
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
         // Simplified integer subtraction (assuming int32 for now)
         int64_t left_val = left.as.integer.value.i32;
         int64_t right_val = right.as.integer.value.i32;
-        return make_success_with_value(make_integer_value(NUM_INT32, left_val - right_val));
+        return make_success_with_value(env, make_integer_value(NUM_INT32, left_val - right_val));
     }
     
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
@@ -1437,7 +1337,7 @@ EvalResult subtract_values(Value left, Value right) {
     return make_error("Cannot subtract these types", 0, 0);
 }
 
-EvalResult multiply_values(Value left, Value right) {
+EvalResult multiply_values(Environment* env, Value left, Value right) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -1455,13 +1355,13 @@ EvalResult multiply_values(Value left, Value right) {
     if (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64) {
         double left_val = (left.type == VAL_FLOAT64) ? left.as.float64_val : left.as.integer.value.i32;
         double right_val = (right.type == VAL_FLOAT64) ? right.as.float64_val : right.as.integer.value.i32;
-        return make_success_with_value(make_float_value(left_val * right_val));
+        return make_success_with_value(env, make_float_value(left_val * right_val));
     }
     
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
         int64_t left_val = left.as.integer.value.i32;
         int64_t right_val = right.as.integer.value.i32;
-        return make_success_with_value(make_integer_value(NUM_INT32, left_val * right_val));
+        return make_success_with_value(env, make_integer_value(NUM_INT32, left_val * right_val));
     }
     
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
@@ -1470,7 +1370,7 @@ EvalResult multiply_values(Value left, Value right) {
     return make_error("Cannot multiply these types", 0, 0);
 }
 
-EvalResult divide_values(Value left, Value right, int line, int column) {
+EvalResult divide_values(Environment* env, Value left, Value right, int line, int column) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -1503,10 +1403,10 @@ EvalResult divide_values(Value left, Value right, int line, int column) {
         );
     }
     
-    return make_success_with_value(make_float_value(left_val / right_val));
+    return make_success_with_value(env, make_float_value(left_val / right_val));
 }
 
-EvalResult modulo_values(Value left, Value right, int line, int column) {
+EvalResult modulo_values(Environment* env, Value left, Value right, int line, int column) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -1538,7 +1438,7 @@ EvalResult modulo_values(Value left, Value right, int line, int column) {
             );
         }
         
-        return make_success_with_value(make_integer_value(NUM_INT32, left_val % right_val));
+        return make_success_with_value(env, make_integer_value(NUM_INT32, left_val % right_val));
     }
     
     // Handle float modulo using fmod
@@ -1559,13 +1459,13 @@ EvalResult modulo_values(Value left, Value right, int line, int column) {
             );
         }
         
-        return make_success_with_value(make_float_value(fmod(left_val, right_val)));
+        return make_success_with_value(env, make_float_value(fmod(left_val, right_val)));
     }
     
     return make_error("Cannot modulo these types", 0, 0);
 }
 
-EvalResult compare_values(Value left, Value right, TokenType op) {
+EvalResult compare_values(Environment* env, Value left, Value right, TokenType op) {
     bool result = false;
     
     // Check for table metamethods first
@@ -1652,7 +1552,7 @@ EvalResult compare_values(Value left, Value right, TokenType op) {
         }
     }
     
-    return make_success_with_value(make_bool_value(result));
+    return make_success_with_value(env, make_bool_value(result));
 }
 
 EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
@@ -1671,38 +1571,38 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
     
     switch (expr->op.type) {
         case TOKEN_PLUS:
-            return add_values(left, right);
+            return add_values(env, left, right);
         case TOKEN_MINUS:
-            return subtract_values(left, right);
+            return subtract_values(env, left, right);
         case TOKEN_STAR:
-            return multiply_values(left, right);
+            return multiply_values(env, left, right);
         case TOKEN_SLASH:
-                return divide_values(left, right, expr->op.line, expr->op.column);
+                return divide_values(env, left, right, expr->op.line, expr->op.column);
         case TOKEN_PERCENT:
-                return modulo_values(left, right, expr->op.line, expr->op.column);
+                return modulo_values(env, left, right, expr->op.line, expr->op.column);
         case TOKEN_EQUAL_EQUAL:
         case TOKEN_BANG_EQUAL:
         case TOKEN_GREATER:
         case TOKEN_GREATER_EQUAL:
         case TOKEN_LESS:
         case TOKEN_LESS_EQUAL:
-            return compare_values(left, right, expr->op.type);
+            return compare_values(env, left, right, expr->op.type);
         case TOKEN_AND:
         case TOKEN_AND_AND:
             if (!is_truthy(left)) {
                 free_value(right);  // Clean up unused value
-                return make_success_with_value(left);
+                return make_success_with_value(env, left);
             }
             free_value(left);  // Clean up unused value
-            return make_success_with_value(right);
+            return make_success_with_value(env, right);
         case TOKEN_OR:
         case TOKEN_OR_OR:
             if (is_truthy(left)) {
                 free_value(right);  // Clean up unused value
-                return make_success_with_value(left);
+                return make_success_with_value(env, left);
             }
             free_value(left);  // Clean up unused value
-            return make_success_with_value(right);
+            return make_success_with_value(env, right);
         default:
             free_value(left);
             free_value(right);
@@ -1720,7 +1620,7 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
     switch (expr->op.type) {
         case TOKEN_MINUS:
             if (operand.type == VAL_FLOAT64) {
-                return make_success_with_value(make_float_value(-operand.as.float64_val));
+                return make_success_with_value(env, make_float_value(-operand.as.float64_val));
             } else if (operand.type == VAL_INTEGER) {
                 // Extract value properly based on the actual type, but result should be int64_t
                 int64_t value = 0;
@@ -1736,7 +1636,7 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
                     default: value = operand.as.integer.value.i32; break;
                 }
                 free_value(operand);
-                return make_success_with_value(make_integer_value(NUM_INT64, -value));
+                return make_success_with_value(env, make_integer_value(NUM_INT64, -value));
             } else {
                 free_value(operand);
                 return make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
@@ -1744,7 +1644,7 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
         case TOKEN_PLUS:
             // Unary plus is identity for numbers
             if (operand.type == VAL_FLOAT64 || operand.type == VAL_INTEGER) {
-                return make_success_with_value(operand);
+                return make_success_with_value(env, operand);
             } else {
                 free_value(operand);
                 return make_error("Cannot apply unary plus to non-numeric value", expr->op.line, expr->op.column);
@@ -1753,7 +1653,7 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
         case TOKEN_NOT: {
             bool truthy = is_truthy(operand);
             free_value(operand);
-            return make_success_with_value(make_bool_value(!truthy));
+            return make_success_with_value(env, make_bool_value(!truthy));
         }
         default:
             free_value(operand);
@@ -1763,12 +1663,13 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
 
 // Statement evaluation
 EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env) {
-    // Use stack-based evaluation and pop result into .value
     EvalResult result = evaluate_expr(stmt->expression, env);
+    // Pop the expression result off the stack (we don't need it for statements)
     if (!is_error(result) && result.return_count > 0) {
-        result.value = env_pop(env);
+        Value discard = env_pop(env);
+        free_value(discard);
     }
-    return result;
+    return make_success(0);
 }
 
 EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
@@ -1779,7 +1680,10 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
         if (is_error(init_result)) {
             return init_result;
         }
-        value = init_result.value;
+        // Stack-based evaluation: pop the value from the stack
+        if (init_result.return_count > 0) {
+            value = env_pop(env);
+        }
     }
     
     // Validate and convert type if annotation is provided
@@ -1827,7 +1731,7 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
     
     define_variable(env, name, value);
     
-    return make_success_with_value(make_nil_value());
+    return make_success_with_value(env, make_nil_value());
 }
 
 EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
@@ -1836,7 +1740,7 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
         return make_error("Memory allocation failed", 0, 0);
     }
     
-    EvalResult result = make_success_with_value(make_nil_value());
+    EvalResult result = make_success_with_value(env, make_nil_value());
     
     for (size_t i = 0; i < stmt->count; i++) {
         result = evaluate_stmt(stmt->statements[i], block_env);
@@ -1866,25 +1770,32 @@ EvalResult eval_if_stmt(IfStmt* stmt, Environment* env) {
         return condition_result;
     }
     
-    if (is_truthy(condition_result.value)) {
+    Value condition_val = env_pop(env);
+    bool condition = is_truthy(condition_val);
+    free_value(condition_val);
+    
+    if (condition) {
         return evaluate_stmt(stmt->then_branch, env);  // This will propagate has_returned
     } else if (stmt->else_branch) {
         return evaluate_stmt(stmt->else_branch, env);  // This will propagate has_returned
     }
     
-    return make_success_with_value(make_nil_value());
+    return make_success(0);
 }
 
 EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env) {
-    EvalResult result = make_success_with_value(make_nil_value());
-    
+    EvalResult result;
     while (true) {
         EvalResult condition_result = evaluate_expr(stmt->condition, env);
         if (is_error(condition_result)) {
             return condition_result;
         }
         
-        if (!is_truthy(condition_result.value)) {
+        Value condition_val = env_pop(env);
+        bool condition = is_truthy(condition_val);
+        free_value(condition_val);
+        
+        if (!condition) {
             break;
         }
         
@@ -2008,7 +1919,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
         return make_error("Memory allocation failed", 0, 0);
     }
     
-    EvalResult result = make_success_with_value(make_nil_value());
+    EvalResult result = make_success(0);
     
     // Execute initializer
     if (stmt->initializer) {
@@ -2029,7 +1940,11 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
                 return condition_result;
             }
             
-            if (!is_truthy(condition_result.value)) {
+            Value condition_val = env_pop(for_env);
+            bool condition = is_truthy(condition_val);
+            free_value(condition_val);
+            
+            if (!condition) {
                 break;
             }
         }
@@ -2150,7 +2065,7 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
     // Define the function in the current environment using the stored name
     define_variable(env, function->name, func_value);
     
-    return make_success_with_value(make_nil_value());
+    return make_success(0);
 }
 
 // Return statement evaluation: return [expression]
@@ -2162,11 +2077,14 @@ EvalResult eval_return_stmt(ReturnStmt* stmt, Environment* env) {
         if (is_error(result)) {
             return result;
         }
-        return_value = result.value;
+        // Pop return value from stack
+        if (result.return_count > 0) {
+            return_value = env_pop(env);
+        }
     }
     
     // Create a result with the return flag set
-    EvalResult result = make_success_with_value(return_value);
+    EvalResult result = make_success_with_value(env, return_value);
     result.has_returned = true;
     return result;
 }
@@ -2223,7 +2141,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     }
     
     // Execute function body
-    EvalResult result = make_success_with_value(make_nil_value());
+    EvalResult result = make_success_with_value(env, make_nil_value());
     
     for (size_t i = 0; i < function->body_count; i++) {
         result = evaluate_stmt(function->body[i], func_env);
@@ -2242,18 +2160,17 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     // Pop function call from stack trace
     stack_trace_pop();
     
-    // Push return value onto stack (stack-based calling convention)
-    if (!is_error(result)) {
-        // Deep copy the result value before freeing the function environment
-        // This prevents use-after-free bugs when the result contains references
-        // to values that will be freed with the function environment
-        Value return_value = copy_value(result.value);
+    // Return value is already on func_env's stack (if any)
+    // Transfer it to the caller's stack
+    if (!is_error(result) && result.return_count > 0) {
+        // Pop from function environment and push to caller environment
+        Value return_value = env_pop(func_env);
         free_environment(func_env);
         env_push(env, return_value);
         return make_success(1);  // Indicate 1 value pushed onto stack
     } else {
         free_environment(func_env);
-        return result;  // Return error directly
+        return make_success(0);  // No return value
     }
 }
 
@@ -2292,7 +2209,7 @@ EvalResult make_error_detailed_with_source(const char* message, const char* sugg
 
 // Evaluate a program (array of statements)
 EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
-    EvalResult result = make_success_with_value(make_nil_value());
+    EvalResult result = make_success(0);
     
     for (size_t i = 0; i < count; i++) {
         result = evaluate_stmt(statements[i], env);
@@ -2300,7 +2217,7 @@ EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
             print_runtime_error(result.error);
             // Continue execution instead of breaking for better error recovery
             // In a real language, you might want to break on certain error types
-            result = make_success_with_value(make_nil_value()); // Reset result for next statement
+            result = make_success_with_value(env, make_nil_value()); // Reset result for next statement
         }
     }
     
@@ -2327,7 +2244,7 @@ EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
             free_table(table);
             return value_result;
         }
-        value = value_result.value;
+        value = env_pop(env);
         
         // Evaluate the key (if provided, otherwise use index)
         if (pair->key) {
@@ -2337,7 +2254,7 @@ EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
                 free_value(value);
                 return key_result;
             }
-            key = key_result.value;
+            key = env_pop(env);
         } else {
             // Use index as key for array-style initialization
             key = make_integer_value(NUM_INT64, (int64_t)i);
@@ -2352,7 +2269,7 @@ EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
         }
     }
     
-    return make_success_with_value(make_table_value(table));
+    return make_success_with_value(env, make_table_value(table));
 }
 
 EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
@@ -2383,7 +2300,7 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
     free_value(index_value);
     // Don't free table_value here - the table is still referenced
     
-    return make_success_with_value(result);
+    return make_success_with_value(env, result);
 }
 
 EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
@@ -2416,7 +2333,7 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
                     if (member) {
                         // Create enum value
                         Value result = make_enum_value(enum_def, member->value);
-                        return make_success_with_value(result);
+                        return make_success_with_value(env, result);
                     } else {
                         char error_msg[256];
                         snprintf(error_msg, sizeof(error_msg), "Undefined enum member '%s.%s'", enum_name, member_name);
@@ -2461,7 +2378,7 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     free_value(key);
     // Don't free table_value here - the table is still referenced
     
-    return make_success_with_value(result);
+    return make_success_with_value(env, result);
 }
 
 // Array evaluation functions
@@ -2499,7 +2416,7 @@ EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
         array->elements[array->length - 1 - i] = temp;
     }
     
-    return make_success_with_value(make_array_value(array));
+    return make_success_with_value(env, make_array_value(array));
 }
 
 EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
@@ -2545,7 +2462,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         free_value(index_value);
         // Don't free target_value here - the array is still referenced
         
-        return make_success_with_value(result);
+        return make_success_with_value(env, result);
         
     } else if (target_value.type == VAL_TABLE) {
         // Table indexing logic (same as before)
@@ -2555,7 +2472,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         free_value(index_value);
         // Don't free target_value here - the table is still referenced
         
-        return make_success_with_value(result);
+        return make_success_with_value(env, result);
         
     } else {
         // Neither array nor table
@@ -2588,7 +2505,7 @@ EvalResult eval_break_stmt(BreakStmt* stmt, Environment* env) {
     result.has_returned = false;
     result.has_break = true;
     result.has_continue = false;
-    result.value = make_nil_value();
+    result.return_count = 0;
     return result;
 }
 
@@ -2603,7 +2520,7 @@ EvalResult eval_continue_stmt(ContinueStmt* stmt, Environment* env) {
     result.has_returned = false;
     result.has_break = false;
     result.has_continue = true;
-    result.value = make_nil_value();
+    result.return_count = 0;
     return result;
 }
 
@@ -2820,7 +2737,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                     for (size_t i = 0; i < path_len; i++) free(path_components[i]);
                     free(path_components);
                 }
-                return make_success_with_value(make_nil_value());
+                return make_success_with_value(env, make_nil_value());
             }
         }
     }
@@ -2951,7 +2868,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     }
     
     (void)functions_added;
-    return make_success_with_value(make_nil_value());
+    return make_success_with_value(env, make_nil_value());
 }
 
 // Pragma statement evaluation
@@ -2987,7 +2904,7 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
             return make_error("Invalid value for pragma strict_types (expected true or false)", 
                 stmt->name.line, stmt->name.column);
         }
-        return make_success_with_value(make_nil_value());
+        return make_success_with_value(env, make_nil_value());
     }
     
     // Handle type_warnings pragma
@@ -3013,7 +2930,7 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
             return make_error("Invalid value for pragma type_warnings (expected true or false)", 
                 stmt->name.line, stmt->name.column);
         }
-        return make_success_with_value(make_nil_value());
+        return make_success_with_value(env, make_nil_value());
     }
     
     // Handle override_behavior pragma
@@ -3044,7 +2961,7 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
                 value);
             return make_error(error_msg, stmt->name.line, stmt->name.column);
         }
-        return make_success_with_value(make_nil_value());
+        return make_success_with_value(env, make_nil_value());
     }
     
     // Unknown pragma
@@ -3063,7 +2980,7 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
         return discriminant_result;
     }
     
-    Value switch_value = discriminant_result.value;
+    Value switch_value = env_pop(env);
     
     // Try each case in order
     for (size_t i = 0; i < stmt->case_count; i++) {
@@ -3085,16 +3002,17 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
                 // Check guard clause if present
                 if (case_clause->guard) {
                     EvalResult guard_result = evaluate_expr(case_clause->guard, case_env);
-                    if (guard_result.has_error || !is_truthy(guard_result.value)) {
-                        if (guard_result.has_error) {
-                            free_value(switch_value);
-                            free_environment(case_env);
-                            return guard_result;
-                        }
-                        free_value(guard_result.value);
+                    if (guard_result.has_error) {
+                        free_value(switch_value);
+                        free_environment(case_env);
+                        return guard_result;
+                    }
+                    Value guard_val = env_pop(case_env);
+                    bool guard_passed = is_truthy(guard_val);
+                    free_value(guard_val);
+                    if (!guard_passed) {
                         continue;  // Guard failed, try next pattern
                     }
-                    free_value(guard_result.value);
                 }
                 
                 // Pattern and guard matched
@@ -3109,10 +3027,9 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
         
         if (case_matches) {
             // Execute case body
-            EvalResult case_result = make_success_with_value(make_nil_value());
+            EvalResult case_result = make_success(0);
             
             for (size_t j = 0; j < case_clause->body_count; j++) {
-                free_value(case_result.value);
                 case_result = evaluate_stmt(case_clause->body[j], case_env);
                 
                 if (case_result.has_error || case_result.has_returned) {
@@ -3147,10 +3064,9 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
     
     // No case matched, try default
     if (stmt->default_body) {
-        EvalResult default_result = make_success_with_value(make_nil_value());
+        EvalResult default_result = make_success(0);
         
         for (size_t i = 0; i < stmt->default_body_count; i++) {
-            free_value(default_result.value);
             default_result = evaluate_stmt(stmt->default_body[i], env);
             
             if (default_result.has_error || default_result.has_returned || default_result.has_break) {
@@ -3168,7 +3084,7 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
     
     // No match and no default
     free_value(switch_value);
-    return make_success_with_value(make_nil_value());
+    return make_success_with_value(env, make_nil_value());
 }
 
 // Pattern matching implementation
@@ -3214,59 +3130,68 @@ PatternMatchResult match_pattern(CasePattern* pattern, Value value, Environment*
 bool evaluate_expression_pattern(CasePattern* pattern, Value value, Environment* env) {
     EvalResult rhs_result = evaluate_expr(pattern->as.expr_pattern.expression, env);
     if (rhs_result.has_error) {
-        free_value(rhs_result.value);
         return false;
     }
     
+    Value rhs_val = env_pop(env);
     TokenType op = pattern->as.expr_pattern.op;
     bool result = false;
     
     switch (op) {
         case TOKEN_EQUAL_EQUAL:
-            result = values_equal(value, rhs_result.value);
+            result = values_equal(value, rhs_val);
             break;
         case TOKEN_BANG_EQUAL:
-            result = !values_equal(value, rhs_result.value);
+            result = !values_equal(value, rhs_val);
             break;
         case TOKEN_GREATER:
-            result = simple_compare_values(value, rhs_result.value) > 0;
+            result = simple_compare_values(value, rhs_val) > 0;
             break;
         case TOKEN_GREATER_EQUAL:
-            result = simple_compare_values(value, rhs_result.value) >= 0;
+            result = simple_compare_values(value, rhs_val) >= 0;
             break;
         case TOKEN_LESS:
-            result = simple_compare_values(value, rhs_result.value) < 0;
+            result = simple_compare_values(value, rhs_val) < 0;
             break;
         case TOKEN_LESS_EQUAL:
-            result = simple_compare_values(value, rhs_result.value) <= 0;
+            result = simple_compare_values(value, rhs_val) <= 0;
             break;
         default:
             result = false;
             break;
     }
     
-    free_value(rhs_result.value);
+    free_value(rhs_val);
     return result;
 }
 
 // Range matching (e.g., 1..10)
 bool value_in_range(Value value, CasePattern* pattern) {
+    // Note: These evaluations need a temporary environment
+    // For now, we'll assume range patterns use literals
+    // TODO: Support complex expressions in range patterns with proper environment
+    Environment* temp_env = create_environment(NULL);
+    if (!temp_env) {
+        return false;
+    }
+    
     // Evaluate start and end expressions
-    EvalResult start_result = evaluate_expr(pattern->as.range_pattern.start, NULL);
+    EvalResult start_result = evaluate_expr(pattern->as.range_pattern.start, temp_env);
     if (start_result.has_error) {
-        free_value(start_result.value);
+        free_environment(temp_env);
         return false;
     }
+    Value start_val = env_pop(temp_env);
     
-    EvalResult end_result = evaluate_expr(pattern->as.range_pattern.end, NULL);
+    EvalResult end_result = evaluate_expr(pattern->as.range_pattern.end, temp_env);
     if (end_result.has_error) {
-        free_value(start_result.value);
-        free_value(end_result.value);
+        free_value(start_val);
+        free_environment(temp_env);
         return false;
     }
+    Value end_val = env_pop(temp_env);
     
-    Value start_val = start_result.value;
-    Value end_val = end_result.value;
+    free_environment(temp_env);
     bool inclusive = pattern->as.range_pattern.inclusive;
     bool in_range = false;
     
@@ -3282,8 +3207,8 @@ bool value_in_range(Value value, CasePattern* pattern) {
         in_range = (cmp_start >= 0) && (cmp_end < 0);
     }
     
-    free_value(start_result.value);
-    free_value(end_result.value);
+    free_value(start_val);
+    free_value(end_val);
     return in_range;
 }
 
@@ -3400,32 +3325,34 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
                 return value_result;
             }
             
+            Value enum_value = env_pop(env);
+            
             // Ensure the value is an integer
-            if (value_result.value.type != VAL_INTEGER) {
-                free_value(value_result.value);
+            if (enum_value.type != VAL_INTEGER) {
+                free_value(enum_value);
                 enum_definition_release(enum_def);
                 return make_error("Enum member value must be an integer", member->name.line, member->name.column);
             }
             
             // Extract integer value - use the unified approach since all are stored as int64_t
             int64_t int_value = 0;
-            switch (value_result.value.as.integer.num_type) {
-                case NUM_INT8:  int_value = (int64_t)value_result.value.as.integer.value.i8; break;
-                case NUM_UINT8: int_value = (int64_t)value_result.value.as.integer.value.u8; break;
-                case NUM_INT16: int_value = (int64_t)value_result.value.as.integer.value.i16; break;
-                case NUM_UINT16: int_value = (int64_t)value_result.value.as.integer.value.u16; break;
-                case NUM_INT32: int_value = (int64_t)value_result.value.as.integer.value.i32; break;
-                case NUM_UINT32: int_value = (int64_t)value_result.value.as.integer.value.u32; break;
-                case NUM_INT64: int_value = value_result.value.as.integer.value.i64; break;
-                case NUM_UINT64: int_value = (int64_t)value_result.value.as.integer.value.u64; break;
+            switch (enum_value.as.integer.num_type) {
+                case NUM_INT8:  int_value = (int64_t)enum_value.as.integer.value.i8; break;
+                case NUM_UINT8: int_value = (int64_t)enum_value.as.integer.value.u8; break;
+                case NUM_INT16: int_value = (int64_t)enum_value.as.integer.value.i16; break;
+                case NUM_UINT16: int_value = (int64_t)enum_value.as.integer.value.u16; break;
+                case NUM_INT32: int_value = (int64_t)enum_value.as.integer.value.i32; break;
+                case NUM_UINT32: int_value = (int64_t)enum_value.as.integer.value.u32; break;
+                case NUM_INT64: int_value = enum_value.as.integer.value.i64; break;
+                case NUM_UINT64: int_value = (int64_t)enum_value.as.integer.value.u64; break;
                 default: 
-                    free_value(value_result.value);
+                    free_value(enum_value);
                     enum_definition_release(enum_def);
                     return make_error("Unsupported integer type for enum", member->name.line, member->name.column);
             }
             
             enum_definition_add_member(enum_def, member_name, int_value);
-            free_value(value_result.value);
+            free_value(enum_value);
         } else {
             // Auto-assign value
             enum_definition_add_auto_member(enum_def, member_name);
@@ -3442,7 +3369,7 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
     Value enum_value = make_userdata_value(enum_def, (UserdataDestructor)enum_definition_release, "enum_definition", sizeof(EnumDefinition));
     define_variable(env, enum_var_name, enum_value);
     
-    return make_success_with_value(make_nil_value());
+    return make_success_with_value(env, make_nil_value());
 }
 
 EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env) {
@@ -3467,7 +3394,7 @@ EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env) {
         // Fallback: check if it's a regular variable (for enum values stored as variables)
         Value member_var = get_variable(env, member_name, &found);
         if (found && member_var.type != VAL_NIL) {
-            return make_success_with_value(copy_value(member_var));
+            return make_success_with_value(env, copy_value(member_var));
         }
         
         char error_msg[256];
@@ -3495,5 +3422,5 @@ EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env) {
     
     // Create enum value
     Value result = make_enum_value(enum_def, member->value);
-    return make_success_with_value(result);
+    return make_success_with_value(env, result);
 }
