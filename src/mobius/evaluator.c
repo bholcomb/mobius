@@ -1661,8 +1661,10 @@ EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env) {
     if (!is_error(result) && result.return_count > 0) {
         Value discard = env_pop(env);
         free_value(discard);
+        return make_success(0);
     }
-    return make_success(0);
+    // If there was an error, propagate it
+    return result;
 }
 
 EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
