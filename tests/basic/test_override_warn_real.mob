@@ -1,0 +1,20 @@
+// Test #pragma override_behavior "warn" with actual override
+print("=== Testing Override Behavior: WARN (real override) ===");
+
+// Set override behavior to warn
+#pragma override_behavior "warn"
+
+// Define a custom sin function
+func sin(x) {
+    return 999;
+}
+
+print("Custom sin(0) =", sin(0));
+
+// Now import math which also has sin() - should warn
+print("\nImporting math (should warn about sin override)...");
+import "math" as _GLOBAL
+
+print("After import, sin(0) =", sin(0));
+print("\n✅ Test complete!");
+

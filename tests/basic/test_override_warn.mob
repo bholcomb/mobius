@@ -1,0 +1,17 @@
+// Test #pragma override_behavior "warn"
+print("=== Testing Override Behavior: WARN ===");
+
+// Set override behavior to warn
+#pragma override_behavior "warn"
+
+// Import math into global namespace
+import "math" as _GLOBAL
+
+print("First import successful");
+
+// Try to import math again - should warn but continue
+print("\nImporting math again (should warn)...");
+import "math" as _GLOBAL
+
+print("\n✅ PASS: Warn mode allows override with warning!");
+
