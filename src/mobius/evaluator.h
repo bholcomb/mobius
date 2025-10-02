@@ -5,6 +5,7 @@
 #include "environment.h"
 #include "types.h"
 #include "stack_trace.h"
+#include "value.h"
 #include <stdbool.h>
 
 // Forward declaration for plugin system
