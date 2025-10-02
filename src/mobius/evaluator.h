@@ -102,7 +102,7 @@ ModuleRegistry* get_global_module_registry(void);
 
 // Utility functions
 EvalResult make_success(int return_count);        // For library functions using stack-based returns
-EvalResult make_success_with_value(Environment* env, Value value);  // Pushes value and returns success
+EvalResult make_success_with_value(Value value);  // Pushes value onto global stack and returns success
 EvalResult make_error(const char* message, int line, int column);
 EvalResult make_error_detailed(const char* message, const char* suggestion, 
                               ErrorCategory category, int line, int column,

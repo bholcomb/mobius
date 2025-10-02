@@ -15,13 +15,13 @@ EvalResult lib_len(Environment* env, int arg_count) {
         return make_error("len expects exactly 1 argument", 0, 0);
     }
     
-    Value arg = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value arg = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
     
     if (arg.type == VAL_STRING && arg.as.string) {
-        env_push(env, make_integer_value(NUM_INT64, (int64_t)string_length(arg.as.string)));
+        ctx_push(global_context, make_integer_value(NUM_INT64, (int64_t)string_length(arg.as.string)));
     } else if (arg.type == VAL_ARRAY && arg.as.array) {
-        env_push(env, make_integer_value(NUM_INT64, (int64_t)arg.as.array->length));
+        ctx_push(global_context, make_integer_value(NUM_INT64, (int64_t)arg.as.array->length));
     } else {
         return make_error("len expects a string or array argument", 0, 0);
     }
@@ -34,8 +34,8 @@ EvalResult lib_upper(Environment* env, int arg_count) {
         return make_error("upper expects exactly 1 argument", 0, 0);
     }
     
-    Value arg = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value arg = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
     
     if (arg.type != VAL_STRING || !arg.as.string) {
         return make_error("upper expects a string argument", 0, 0);
@@ -60,7 +60,7 @@ EvalResult lib_upper(Environment* env, int arg_count) {
         return make_error("String creation failed", 0, 0);
     }
     
-    env_push(env, make_string_value(result_string));
+    ctx_push(global_context, make_string_value(result_string));
     return make_success(1);
 }
 
@@ -69,8 +69,8 @@ EvalResult lib_lower(Environment* env, int arg_count) {
         return make_error("lower expects exactly 1 argument", 0, 0);
     }
     
-    Value arg = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value arg = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
     
     if (arg.type != VAL_STRING || !arg.as.string) {
         return make_error("lower expects a string argument", 0, 0);
@@ -95,7 +95,7 @@ EvalResult lib_lower(Environment* env, int arg_count) {
         return make_error("String creation failed", 0, 0);
     }
     
-    env_push(env, make_string_value(result_string));
+    ctx_push(global_context, make_string_value(result_string));
     return make_success(1);
 }
 
@@ -104,13 +104,13 @@ EvalResult lib_substr(Environment* env, int arg_count) {
         return make_error("substr expects exactly 3 arguments (string, start, length)", 0, 0);
     }
     
-    Value length_val = env_peek(env, 0);
-    Value start_val = env_peek(env, 1);
-    Value string_val = env_peek(env, 2);
+    Value length_val = ctx_peek(global_context, 0);
+    Value start_val = ctx_peek(global_context, 1);
+    Value string_val = ctx_peek(global_context, 2);
     
     // Remove arguments
     for (int i = 0; i < 3; i++) {
-        env_pop(env);
+        ctx_pop(global_context);
     }
     
     if (string_val.type != VAL_STRING || !string_val.as.string) {
@@ -132,7 +132,7 @@ EvalResult lib_substr(Environment* env, int arg_count) {
     }
     
     if (start < 0 || start >= (int64_t)input_len || length < 0) {
-        env_push(env, make_string_value_from_cstr(""));
+        ctx_push(global_context, make_string_value_from_cstr(""));
         return make_success(1);
     }
     
@@ -156,7 +156,7 @@ EvalResult lib_substr(Environment* env, int arg_count) {
         return make_error("String creation failed", 0, 0);
     }
     
-    env_push(env, make_string_value(result_string));
+    ctx_push(global_context, make_string_value(result_string));
     return make_success(1);
 }
 
@@ -168,7 +168,7 @@ EvalResult lib_concat(Environment* env, int arg_count) {
     // Calculate total length
     size_t total_length = 0;
     for (int i = 0; i < arg_count; i++) {
-        Value arg = env_peek(env, i);
+        Value arg = ctx_peek(global_context, i);
         if (arg.type == VAL_STRING && arg.as.string) {
             total_length += string_length(arg.as.string);
         } else {
@@ -183,7 +183,7 @@ EvalResult lib_concat(Environment* env, int arg_count) {
     
     size_t offset = 0;
     for (int i = arg_count - 1; i >= 0; i--) {
-        Value arg = env_peek(env, i);
+        Value arg = ctx_peek(global_context, i);
         const char* str_data = string_data(arg.as.string);
         size_t str_len = string_length(arg.as.string);
         memcpy(result_data + offset, str_data, str_len);
@@ -193,7 +193,7 @@ EvalResult lib_concat(Environment* env, int arg_count) {
     
     // Remove arguments
     for (int i = 0; i < arg_count; i++) {
-        env_pop(env);
+        ctx_pop(global_context);
     }
     
     RefCountedString* result_string = string_create(result_data);
@@ -203,7 +203,7 @@ EvalResult lib_concat(Environment* env, int arg_count) {
         return make_error("String creation failed", 0, 0);
     }
     
-    env_push(env, make_string_value(result_string));
+    ctx_push(global_context, make_string_value(result_string));
     return make_success(1);
 }
 
@@ -212,12 +212,12 @@ EvalResult lib_contains(Environment* env, int arg_count) {
         return make_error("contains expects exactly 2 arguments (haystack, needle)", 0, 0);
     }
     
-    Value needle_val = env_peek(env, 0);
-    Value haystack_val = env_peek(env, 1);
+    Value needle_val = ctx_peek(global_context, 0);
+    Value haystack_val = ctx_peek(global_context, 1);
     
     // Remove arguments
-    env_pop(env);
-    env_pop(env);
+    ctx_pop(global_context);
+    ctx_pop(global_context);
     
     if (haystack_val.type != VAL_STRING || !haystack_val.as.string ||
         needle_val.type != VAL_STRING || !needle_val.as.string) {
@@ -228,7 +228,7 @@ EvalResult lib_contains(Environment* env, int arg_count) {
     const char* needle = string_data(needle_val.as.string);
     
     bool found = strstr(haystack, needle) != NULL;
-    env_push(env, make_bool_value(found));
+    ctx_push(global_context, make_bool_value(found));
     
     return make_success(1);
 }

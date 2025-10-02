@@ -6,16 +6,26 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-// Environment structure for variable scoping and stack-based execution
-// Now uses Table for consistent storage with bytecode VM
+// Execution context - encapsulates all execution state
+// This allows for multi-threading and coroutines in the future
+typedef struct ExecutionContext {
+    // Execution stack
+    Value* stack;           // Stack array
+    size_t stack_top;       // Current stack position (0 = empty)
+    size_t stack_capacity;  // Allocated stack size
+    
+    // Future extensions:
+    // - Call frame stack for debugging/profiling
+    // - Thread ID
+    // - Coroutine state
+    // - Exception handling state
+} ExecutionContext;
+
+// Environment structure for variable scoping only
+// Stack is now global in ExecutionStack
 typedef struct Environment {
     Table* variables;       // Table storing variable name->value mappings
     struct Environment* enclosing;  // Parent environment for scoping
-    
-    // Stack-based execution (like bytecode VM)
-    Value* stack;           // Execution stack for expressions and function calls
-    size_t stack_top;       // Current stack position (0 = empty)
-    size_t stack_capacity;  // Allocated stack size
 } Environment;
 
 // Environment creation and management
@@ -28,13 +38,20 @@ Value get_variable(Environment* env, const char* name, bool* found);
 bool assign_variable(Environment* env, const char* name, Value value);
 bool is_defined(Environment* env, const char* name);
 
-// Stack operations for expression evaluation
-void env_push(Environment* env, Value value);
-Value env_pop(Environment* env);
-Value env_peek(Environment* env, size_t offset);  // 0 = top, 1 = second from top
-void env_ensure_stack_capacity(Environment* env, size_t needed);
-size_t env_stack_size(Environment* env);
-void env_stack_clear(Environment* env);
+// Execution context operations
+ExecutionContext* create_execution_context(size_t initial_stack_capacity);
+void free_execution_context(ExecutionContext* ctx);
+
+// Stack operations on execution context
+void ctx_push(ExecutionContext* ctx, Value value);
+Value ctx_pop(ExecutionContext* ctx);
+Value ctx_peek(ExecutionContext* ctx, size_t offset);  // 0 = top, 1 = second from top
+void ctx_ensure_stack_capacity(ExecutionContext* ctx, size_t needed);
+size_t ctx_stack_size(ExecutionContext* ctx);
+void ctx_stack_clear(ExecutionContext* ctx);
+
+// Global execution context (one per thread in the future)
+extern ExecutionContext* global_context;
 
 // Environment utilities
 void print_environment(Environment* env);

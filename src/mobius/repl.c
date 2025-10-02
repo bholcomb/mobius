@@ -178,7 +178,7 @@ bool process_repl_line(ReplState* state, const char* line) {
                 print_runtime_error(result.error);
             } else if (result.return_count > 0) {
                 // Pop and print the value (unless it's nil)
-                Value val = env_pop(state->env);
+                Value val = ctx_pop(global_context);
                 if (val.type != VAL_NIL) {
                     print_value(val);
                     printf("\n");
