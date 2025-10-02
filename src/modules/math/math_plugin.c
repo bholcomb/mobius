@@ -99,13 +99,13 @@ EvalResult math_cos(ExecutionContext* ctx, int arg_count) {
         return make_error("cos() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("cos() expects a numeric argument", 0, 0);
     }
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(cos(val)));
+    ctx_push(ctx, make_float_value(cos(val)));
     return make_success(1);
 }
 
@@ -114,13 +114,13 @@ EvalResult math_tan(ExecutionContext* ctx, int arg_count) {
         return make_error("tan() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("tan() expects a numeric argument", 0, 0);
     }
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(tan(val)));
+    ctx_push(ctx, make_float_value(tan(val)));
     return make_success(1);
 }
 
@@ -129,7 +129,7 @@ EvalResult math_asin(ExecutionContext* ctx, int arg_count) {
         return make_error("asin() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("asin() expects a numeric argument", 0, 0);
     }
@@ -138,7 +138,7 @@ EvalResult math_asin(ExecutionContext* ctx, int arg_count) {
     if (val < -1.0 || val > 1.0) {
         return make_error("asin() argument must be between -1 and 1", 0, 0);
     }
-    ctx_push(global_context, make_float_value(asin(val)));
+    ctx_push(ctx, make_float_value(asin(val)));
     return make_success(1);
 }
 
@@ -147,7 +147,7 @@ EvalResult math_acos(ExecutionContext* ctx, int arg_count) {
         return make_error("acos() expects exactly 1 argument", 0, 0);
     }
 
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("acos() expects a numeric argument", 0, 0);
     }
@@ -156,7 +156,7 @@ EvalResult math_acos(ExecutionContext* ctx, int arg_count) {
     if (val < -1.0 || val > 1.0) {
         return make_error("acos() argument must be between -1 and 1", 0, 0);
     }
-    ctx_push(global_context, make_float_value(acos(val)));
+    ctx_push(ctx, make_float_value(acos(val)));
     return make_success(1);
 }
 
@@ -165,24 +165,24 @@ EvalResult math_atan(ExecutionContext* ctx, int arg_count) {
         return make_error("atan() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("atan() expects a numeric argument", 0, 0);
     }
     
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(atan(val)));
+    ctx_push(ctx, make_float_value(atan(val)));
     return make_success(1);
 }
 
-EvalResult math_atan2(Environment* env, int arg_count) {
+EvalResult math_atan2(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 2) {
         return make_error("atan2() expects exactly 2 arguments", 0, 0);
     }
 
-    Value y_val = ctx_pop(global_context);
-    Value x_val = ctx_pop(global_context);
+    Value y_val = ctx_pop(ctx);
+    Value x_val = ctx_pop(ctx);
   
     
     if ((x_val.type != VAL_FLOAT64 && x_val.type != VAL_INTEGER) ||
@@ -192,7 +192,7 @@ EvalResult math_atan2(Environment* env, int arg_count) {
     
     double y = extract_number(x_val);
     double x = extract_number(y_val);
-    ctx_push(global_context, make_float_value(atan2(y, x)));
+    ctx_push(ctx, make_float_value(atan2(y, x)));
     return make_success(1);
 }
 
@@ -205,7 +205,7 @@ EvalResult math_log(ExecutionContext* ctx, int arg_count) {
         return make_error("log() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("log() expects a numeric argument", 0, 0);
     }
@@ -214,16 +214,16 @@ EvalResult math_log(ExecutionContext* ctx, int arg_count) {
     if (val <= 0.0) {
         return make_error("log() argument must be positive", 0, 0);
     }
-    ctx_push(global_context, make_float_value(log(val)));
+    ctx_push(ctx, make_float_value(log(val)));
     return make_success(1);
 }
 
-EvalResult math_log10(Environment* env, int arg_count) {
+EvalResult math_log10(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("log10() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("log10() expects a numeric argument", 0, 0);
     }
@@ -232,7 +232,7 @@ EvalResult math_log10(Environment* env, int arg_count) {
     if (val <= 0.0) {
         return make_error("log10() argument must be positive", 0, 0);
     }
-    ctx_push(global_context, make_float_value(log10(val)));
+    ctx_push(ctx, make_float_value(log10(val)));
     return make_success(1);
 }
 
@@ -241,13 +241,13 @@ EvalResult math_exp(ExecutionContext* ctx, int arg_count) {
         return make_error("exp() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("exp() expects a numeric argument", 0, 0);
     }
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(exp(val)));
+    ctx_push(ctx, make_float_value(exp(val)));
     return make_success(1);
 }
 
@@ -260,13 +260,13 @@ EvalResult math_sinh(ExecutionContext* ctx, int arg_count) {
         return make_error("sinh() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("sinh() expects a numeric argument", 0, 0);
     }
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(sinh(val)));
+    ctx_push(ctx, make_float_value(sinh(val)));
     return make_success(1);
 }
 
@@ -275,13 +275,13 @@ EvalResult math_cosh(ExecutionContext* ctx, int arg_count) {
         return make_error("cosh() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("cosh() expects a numeric argument", 0, 0);
     }
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(cosh(val)));
+    ctx_push(ctx, make_float_value(cosh(val)));
     return make_success(1);
 }
 
@@ -290,13 +290,13 @@ EvalResult math_tanh(ExecutionContext* ctx, int arg_count) {
         return make_error("tanh() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_FLOAT64 && num_val.type != VAL_INTEGER) {
         return make_error("tanh() expects a numeric argument", 0, 0);
     }
     
     double val = extract_number(num_val);
-    ctx_push(global_context, make_float_value(tanh(val)));
+    ctx_push(ctx, make_float_value(tanh(val)));
     return make_success(1);
 }
 
@@ -309,7 +309,7 @@ EvalResult math_factorial(ExecutionContext* ctx, int arg_count) {
         return make_error("factorial() expects exactly 1 argument", 0, 0);
     }
     
-    Value num_val = ctx_pop(global_context);
+    Value num_val = ctx_pop(ctx);
     if (num_val.type != VAL_INTEGER) {
         return make_error("factorial() expects an integer argument", 0, 0);
     }
@@ -329,7 +329,7 @@ EvalResult math_factorial(ExecutionContext* ctx, int arg_count) {
         result *= (double)i;
     }
     
-    ctx_push(global_context, make_float_value(result));
+    ctx_push(ctx, make_float_value(result));
     return make_success(1);
 }
 
@@ -338,8 +338,8 @@ EvalResult math_gcd(ExecutionContext* ctx, int arg_count) {
         return make_error("gcd() expects exactly 2 arguments", 0, 0);
     }
     
-    Value b_val = ctx_pop(global_context);
-    Value a_val = ctx_pop(global_context);
+    Value b_val = ctx_pop(ctx);
+    Value a_val = ctx_pop(ctx);
 
     if (a_val.type != VAL_INTEGER || b_val.type != VAL_INTEGER) {
         return make_error("gcd() expects integer arguments", 0, 0);
@@ -354,7 +354,7 @@ EvalResult math_gcd(ExecutionContext* ctx, int arg_count) {
         a = temp;
     }
     
-    ctx_push(global_context, make_integer_value(NUM_INT32, (int32_t)a));
+    ctx_push(ctx, make_integer_value(NUM_INT32, (int32_t)a));
     return make_success(1);
 }
 
@@ -363,8 +363,8 @@ EvalResult math_lcm(ExecutionContext* ctx, int arg_count) {
         return make_error("lcm() expects exactly 2 arguments", 0, 0);
     }
 
-    Value b_val = ctx_pop(global_context);
-    Value a_val = ctx_pop(global_context);
+    Value b_val = ctx_pop(ctx);
+    Value a_val = ctx_pop(ctx);
     
     if (a_val.type != VAL_INTEGER || b_val.type != VAL_INTEGER) {
         return make_error("lcm() expects integer arguments", 0, 0);
@@ -374,7 +374,7 @@ EvalResult math_lcm(ExecutionContext* ctx, int arg_count) {
     int64_t b = extract_int64(b_val);
     
     if (a == 0 || b == 0) {
-        ctx_push(global_context, make_integer_value(NUM_INT32, 0));
+        ctx_push(ctx, make_integer_value(NUM_INT32, 0));
         return make_success(1);
     }
     
@@ -388,7 +388,7 @@ EvalResult math_lcm(ExecutionContext* ctx, int arg_count) {
     }
     
     int64_t lcm_val = (a / gcd_val) * b;
-    ctx_push(global_context, make_integer_value(NUM_INT32, (int32_t)lcm_val));
+    ctx_push(ctx, make_integer_value(NUM_INT32, (int32_t)lcm_val));
     return make_success(1);
 }
 
@@ -400,7 +400,7 @@ EvalResult math_pi(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 0) {
         return make_error("pi() expects no arguments", 0, 0);
     }
-    ctx_push(global_context, make_float_value(M_PI));
+    ctx_push(ctx, make_float_value(M_PI));
     return make_success(1);
 }
 
@@ -408,7 +408,7 @@ EvalResult math_e(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 0) {
         return make_error("e() expects no arguments", 0, 0);
     }
-    ctx_push(global_context, make_float_value(M_E));
+    ctx_push(ctx, make_float_value(M_E));
     return make_success(1);
 }
 
