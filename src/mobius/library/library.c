@@ -70,6 +70,7 @@ static const LibraryEntry library_registry[] = {
     {"time", lib_time, 0, 0},                         // No args
     {"clock", lib_clock, 0, 0},                       // No args
     {"load", lib_load, 1, 1},                         // Exactly 1 arg
+    {"id", lib_id, 1, 1},                             // Exactly 1 arg - get identity/address
     
     // Sentinel
     {NULL, NULL, 0, 0}

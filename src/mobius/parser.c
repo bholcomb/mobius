@@ -1025,11 +1025,32 @@ Stmt* parse_import_statement(Parser* parser) {
     }
     
     Token module_name = parser_advance(parser);
+    
+    // Check for optional 'as' clause
+    Token alias = {0};
+    bool has_alias = false;
+    
+    if (parser_match(parser, TOKEN_IDENTIFIER) && 
+        parser_previous(parser).identifier && 
+        strcmp(parser_previous(parser).identifier, "as") == 0) {
+        // We found 'as' keyword, now expect identifier or string for alias
+        if (parser_check(parser, TOKEN_IDENTIFIER)) {
+            alias = parser_advance(parser);
+            has_alias = true;
+        } else if (parser_check(parser, TOKEN_STRING)) {
+            alias = parser_advance(parser);
+            has_alias = true;
+        } else {
+            parser_error_at_current(parser, "Expect identifier or string after 'as'");
+            return NULL;
+        }
+    }
+    
     if (!consume_statement_terminator(parser, "Expect ';' or newline after import statement")) {
         return NULL;
     }
     
-    return make_import_stmt(keyword, module_name);
+    return make_import_stmt(keyword, module_name, alias, has_alias);
 }
 
 // Forward declarations for switch parsing functions

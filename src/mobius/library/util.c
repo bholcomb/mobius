@@ -152,3 +152,37 @@ EvalResult lib_load(Environment* env, int arg_count) {
     env_push(env, make_bool_value(true));
     return make_success(1);
 }
+
+// Get identity (memory address) of a value - useful for comparing table/array references
+EvalResult lib_id(Environment* env, int arg_count) {
+    if (arg_count != 1) {
+        return make_error("id() expects exactly 1 argument", 0, 0);
+    }
+    
+    Value arg = env_peek(env, 0);
+    env_pop(env);
+    
+    uintptr_t addr = 0;
+    switch (arg.type) {
+        case VAL_TABLE:
+            addr = (uintptr_t)arg.as.table;
+            break;
+        case VAL_ARRAY:
+            addr = (uintptr_t)arg.as.array;
+            break;
+        case VAL_FUNCTION:
+            addr = (uintptr_t)arg.as.function;
+            break;
+        case VAL_USERDATA:
+            addr = (uintptr_t)arg.as.userdata.ptr;
+            break;
+        default:
+            // For value types, just return 0
+            addr = 0;
+            break;
+    }
+    
+    free_value(arg);
+    env_push(env, make_integer_value(NUM_INT64, (int64_t)addr));
+    return make_success(1);
+}

@@ -9,14 +9,14 @@ func test_successful_imports() {
     // Import text processing module  
     import "text_processing";
     
-    // Test that functions are available
-    var sqrt_result = sqrt(25);
-    var reverse_result = reverse("test");
+    // Test that functions are available with qualified names
+    var factorial_result = math.factorial(5);
+    var reverse_result = text_processing.reverse("test");
     
-    print("sqrt(25) =", sqrt_result);
-    print("reverse('test') =", reverse_result);
+    print("math.factorial(5) =", factorial_result);
+    print("text_processing.reverse('test') =", reverse_result);
     
-    return sqrt_result == 5 && reverse_result == "tset";
+    return factorial_result == 120 && reverse_result == "tset";
 }
 
 func test_duplicate_imports() {
@@ -27,9 +27,9 @@ func test_duplicate_imports() {
     import "math";
     import "math";
     
-    // Should still work
-    var result = cos(0);
-    print("cos(0) =", result);
+    // Should still work with qualified name
+    var result = math.cos(0);
+    print("math.cos(0) =", result);
     
     return result == 1;
 }

@@ -20,10 +20,11 @@ struct LoadedModule {
 
 // Function lookup entry for fast resolution
 typedef struct {
-    char* name;                 // Function name
-    char* qualified_name;       // Full name (module.function)
+    char* name;                 // Function name (NULL for namespaced functions)
+    char* qualified_name;       // Full name (module.function) - REQUIRED
     PluginFunction* function;   // Function pointer
     LoadedModule* module;       // Source module
+    bool is_namespaced;         // True if function requires namespace (module.func)
 } FunctionEntry;
 
 // Module registry - central plugin management

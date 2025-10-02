@@ -1,0 +1,18 @@
+// Test module namespace requirement
+// This tests that plugin functions work with qualified names
+
+import "math";
+
+// Test 1: Qualified function call should work
+print("Test 1: Qualified function calls");
+var result1 = math.sin(0);
+print("math.sin(0) =", result1);
+
+var result2 = math.pi();
+print("math.pi() =", result2);
+
+var result3 = math.factorial(5);
+print("math.factorial(5) =", result3);
+
+print("All namespace tests passed!");
+

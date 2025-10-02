@@ -716,15 +716,45 @@ EvalResult builtin_typeof_stack(Environment* env, int arg_count) {
 
 // Stack-based function call evaluation
 EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
-    // Only support variable expressions as callees for now
-    if (expr->callee->type != EXPR_VARIABLE) {
-        return make_error("Only variable function calls supported", 0, 0);
-    }
-    
-    VariableExpr* var_expr = &expr->callee->as.variable;
     char full_name[256];
-    const char* identifier = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
-    snprintf(full_name, sizeof(full_name), "%s", identifier);
+    int call_line = 0;
+    int call_column = 0;
+    ModuleRegistry* registry = get_global_module_registry();
+    
+    // Handle module.function() syntax (TABLE_DOT expression)
+    if (expr->callee->type == EXPR_TABLE_DOT) {
+        TableDotExpr* dot_expr = &expr->callee->as.table_dot;
+        
+        // Check if the table part is a module name (VARIABLE expression)
+        if (dot_expr->table->type == EXPR_VARIABLE) {
+            const char* module_name = dot_expr->table->as.variable.name.identifier;
+            const char* func_name = dot_expr->key.identifier;
+            
+            // Check if this is a loaded module
+            if (registry && is_module_loaded(registry, module_name)) {
+                // This is module.function() - construct qualified name
+                snprintf(full_name, sizeof(full_name), "%s.%s", module_name, func_name);
+                call_line = dot_expr->key.line;
+                call_column = dot_expr->key.column;
+            } else {
+                // Not a module, might be a table method call - not supported yet
+                return make_error("Table method calls not yet supported", 0, 0);
+            }
+        } else {
+            return make_error("Complex table method calls not supported", 0, 0);
+        }
+    }
+    // Handle simple function() or qualified_name() syntax  
+    else if (expr->callee->type == EXPR_VARIABLE) {
+        VariableExpr* var_expr = &expr->callee->as.variable;
+        const char* identifier = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
+        snprintf(full_name, sizeof(full_name), "%s", identifier);
+        call_line = var_expr->name.line;
+        call_column = var_expr->name.column;
+    }
+    else {
+        return make_error("Only variable and module.function calls supported", 0, 0);
+    }
     
     // Parse qualified name (module.function)
     char module_name[128] = {0};
@@ -735,7 +765,6 @@ EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
     
     if (is_qualified) {
         // Qualified function call: module.function()
-        ModuleRegistry* registry = get_global_module_registry();
         if (registry) {
             builtin = lookup_qualified_plugin_function(registry, module_name, function_name);
         }
@@ -749,8 +778,8 @@ EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
                 error_msg,
                 "Check if the module is loaded and the function name is correct",
                 ERROR_UNDEFINED,
-                var_expr->name.line,
-                var_expr->name.column,
+                call_line,
+                call_column,
                 NULL,
                 NULL
             );
@@ -805,19 +834,51 @@ EvalResult eval_call_expr_stack(CallExpr* expr, Environment* env) {
             return result;
         }
         
-        // Fall back to old plugins and stdlib
+        // Fall back to stdlib (plugins require namespace)
         builtin = lookup_builtin(full_name);
         
         if (!builtin) {
+            // Check if this function exists in any loaded module (to give helpful error)
+            char suggested_name[256] = {0};
+            ModuleRegistry* reg = get_global_module_registry();
+            if (reg) {
+                for (size_t i = 0; i < reg->function_count; i++) {
+                    const char* qualified = reg->function_table[i].qualified_name;
+                    // Check if the qualified name ends with our function name
+                    size_t qual_len = strlen(qualified);
+                    size_t func_len = strlen(full_name);
+                    if (qual_len > func_len && 
+                        qualified[qual_len - func_len - 1] == '.' &&
+                        strcmp(qualified + qual_len - func_len, full_name) == 0) {
+                        // Found it! Save the qualified name
+                        snprintf(suggested_name, sizeof(suggested_name), "%s", qualified);
+                        break;
+                    }
+                }
+            }
+            
             char error_msg[512];
-            snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
+            char suggestion[512];
+            
+            if (suggested_name[0]) {
+                // Function exists in a module - suggest qualified name
+                snprintf(error_msg, sizeof(error_msg), 
+                        "Function '%s' requires module namespace", full_name);
+                snprintf(suggestion, sizeof(suggestion),
+                        "Use qualified name: %s()", suggested_name);
+            } else {
+                // Function truly doesn't exist
+                snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
+                snprintf(suggestion, sizeof(suggestion),
+                        "Check the function name spelling or make sure it's declared before use");
+            }
             
             return make_error_detailed(
                 error_msg,
-                "Check the function name spelling or make sure it's declared before use",
+                suggestion,
                 ERROR_UNDEFINED,
-                var_expr->name.line,
-                var_expr->name.column,
+                call_line,
+                call_column,
                 NULL,
                 NULL
             );
@@ -937,6 +998,8 @@ EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
 // Helper function to increment/decrement an integer value
 Value increment_integer(Value val, bool is_increment, int line, int column, bool* success) {
     *success = false;
+    (void)line;
+    (void)column;
     
     if (val.type != VAL_INTEGER) {
         return make_nil_value();
@@ -1741,15 +1804,11 @@ ModuleRegistry* get_global_module_registry(void) {
 
 // Built-in function lookup - first checks plugins, then falls back to library
 LibraryFunction lookup_builtin(const char* name) {
-    // First try plugin system if available
-    if (global_registry) {
-        PluginFunction* plugin_func = lookup_function(global_registry, name);
-        if (plugin_func) {
-            return plugin_func->function;
-        }
-    }
+    // NAMESPACE ENFORCEMENT: Do NOT search plugins by unqualified name
+    // Plugin functions MUST be accessed via qualified name (module.function)
+    // This ensures no naming conflicts between modules
     
-    // Then check the unified library registry
+    // Only check the standard library (global functions like print, typeof, etc.)
     return lookup_library_function(name);
 }
 
@@ -1782,15 +1841,44 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
 }
 
 EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, ModuleRegistry* registry) {
-    // Only support variable expressions as callees for now
-    if (expr->callee->type != EXPR_VARIABLE) {
-        return make_error("Only variable function calls supported", 0, 0);
-    }
-    
-    VariableExpr* var_expr = &expr->callee->as.variable;
     char full_name[256];
-    const char* identifier = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
-    snprintf(full_name, sizeof(full_name), "%s", identifier);
+    int call_line = 0;
+    int call_column = 0;
+    
+    // Handle module.function() syntax (TABLE_DOT expression)
+    if (expr->callee->type == EXPR_TABLE_DOT) {
+        TableDotExpr* dot_expr = &expr->callee->as.table_dot;
+        
+        // Check if the table part is a module name (VARIABLE expression)
+        if (dot_expr->table->type == EXPR_VARIABLE) {
+            const char* module_name = dot_expr->table->as.variable.name.identifier;
+            const char* func_name = dot_expr->key.identifier;
+            
+            // Check if this is a loaded module
+            if (registry && is_module_loaded(registry, module_name)) {
+                // This is module.function() - construct qualified name
+                snprintf(full_name, sizeof(full_name), "%s.%s", module_name, func_name);
+                call_line = dot_expr->key.line;
+                call_column = dot_expr->key.column;
+            } else {
+                // Not a module, might be a table method call - not supported yet
+                return make_error("Table method calls not yet supported", 0, 0);
+            }
+        } else {
+            return make_error("Complex table method calls not supported", 0, 0);
+        }
+    }
+    // Handle simple function() or qualified_name() syntax  
+    else if (expr->callee->type == EXPR_VARIABLE) {
+        VariableExpr* var_expr = &expr->callee->as.variable;
+        const char* identifier = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
+        snprintf(full_name, sizeof(full_name), "%s", identifier);
+        call_line = var_expr->name.line;
+        call_column = var_expr->name.column;
+    }
+    else {
+        return make_error("Only variable and module.function calls supported", 0, 0);
+    }
     
     // Parse qualified name (module.function)
     char module_name[128] = {0};
@@ -1814,8 +1902,8 @@ EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, Module
                 error_msg,
                 "Check if the module is loaded and the function name is correct",
                 ERROR_UNDEFINED,
-                var_expr->name.line,
-                var_expr->name.column,
+                call_line,
+                call_column,
                 NULL,
                 NULL
             );
@@ -1830,19 +1918,50 @@ EvalResult eval_call_expr_with_registry(CallExpr* expr, Environment* env, Module
             return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
         }
         
-        // Then check plugins, falling back to stdlib
+        // Then check stdlib (plugins require namespace)
         builtin = lookup_builtin(full_name);
         
         if (!builtin) {
+            // Check if this function exists in any loaded module (to give helpful error)
+            char suggested_name[256] = {0};
+            if (registry) {
+                for (size_t i = 0; i < registry->function_count; i++) {
+                    const char* qualified = registry->function_table[i].qualified_name;
+                    // Check if the qualified name ends with our function name
+                    size_t qual_len = strlen(qualified);
+                    size_t func_len = strlen(full_name);
+                    if (qual_len > func_len && 
+                        qualified[qual_len - func_len - 1] == '.' &&
+                        strcmp(qualified + qual_len - func_len, full_name) == 0) {
+                        // Found it! Save the qualified name
+                        snprintf(suggested_name, sizeof(suggested_name), "%s", qualified);
+                        break;
+                    }
+                }
+            }
+            
             char error_msg[512];
-            snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
+            char suggestion[512];
+            
+            if (suggested_name[0]) {
+                // Function exists in a module - suggest qualified name
+                snprintf(error_msg, sizeof(error_msg), 
+                        "Function '%s' requires module namespace", full_name);
+                snprintf(suggestion, sizeof(suggestion),
+                        "Use qualified name: %s()", suggested_name);
+            } else {
+                // Function truly doesn't exist
+                snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
+                snprintf(suggestion, sizeof(suggestion),
+                        "Check the function name spelling or make sure it's declared before use");
+            }
             
             return make_error_detailed(
                 error_msg,
-                "Check the function name spelling or make sure it's declared before use",
+                suggestion,
                 ERROR_UNDEFINED,
-                var_expr->name.line,
-                var_expr->name.column,
+                call_line,
+                call_column,
                 NULL,
                 NULL
             );
@@ -2536,20 +2655,62 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         return make_error("Invalid module name - too long", stmt->keyword.line, stmt->keyword.column);
     }
     
-    // Check if module is already loaded
-    if (is_module_loaded(registry, module_name)) {
-        // Module already loaded, this is fine - just return success
+    // Check if the module table already exists in THIS environment
+    bool found = false;
+    Value existing_module = get_variable(env, module_name, &found);
+    if (found && existing_module.type == VAL_TABLE) {
+        // Module table already exists in this environment, nothing to do
         return make_success_with_value(make_nil_value());
     }
     
-    // Try to load the module by name
-    PluginLoadResult result = load_module_by_name(registry, module_name);
-    if (result.status != PLUGIN_STATUS_LOADED) {
-        // Create a detailed error message with module name
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "FATAL: Import failed - module '%s' not found", module_name);
-        return make_error(error_msg, stmt->keyword.line, stmt->keyword.column);
+    // Try to load the module plugin (if not already loaded globally)
+    if (!is_module_loaded(registry, module_name)) {
+        PluginLoadResult result = load_module_by_name(registry, module_name);
+        if (result.status != PLUGIN_STATUS_LOADED) {
+            // Create a detailed error message with module name
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg), "FATAL: Import failed - module '%s' not found", module_name);
+            return make_error(error_msg, stmt->keyword.line, stmt->keyword.column);
+        }
     }
+    
+    // Create a module table and populate it with the module's functions
+    // (Only reached if module doesn't exist in current environment)
+    // This allows users to access module functions via module.function syntax
+    // and also enables: var f = module.function; f();
+    Table* module_table = create_table(16);  // Start with capacity of 16
+    if (!module_table) {
+        return make_error("Failed to create module table", stmt->keyword.line, stmt->keyword.column);
+    }
+    
+    // Populate the table with references to module functions
+    // For now, we store function names as strings - later we'll support callable refs
+    int functions_added = 0;
+    for (size_t i = 0; i < registry->function_count; i++) {
+        FunctionEntry* entry = &registry->function_table[i];
+        // Check if this function belongs to this module
+        if (entry->qualified_name) {
+            char entry_module[128] = {0};
+            char entry_func[128] = {0};
+            if (parse_qualified_name(entry->qualified_name, entry_module, entry_func)) {
+                if (strcmp(entry_module, module_name) == 0) {
+                    // This function belongs to our module - add it to the table
+                    Value func_key = make_string_value_from_cstr(entry_func);
+                    // For now, store a nil value - later we'll support native function values
+                    Value func_value = make_nil_value();
+                    table_set(module_table, func_key, func_value);
+                    free_value(func_key);
+                    functions_added++;
+                }
+            }
+        }
+    }
+    
+    // Define the module table in the environment so it's accessible as a variable
+    Value table_value = make_table_value(module_table);
+    define_variable(env, module_name, table_value);
+    
+    (void)functions_added;  // Suppress unused variable warning
     
     // Import successful - return nil value
     return make_success_with_value(make_nil_value());

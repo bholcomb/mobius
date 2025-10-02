@@ -20,3 +20,5 @@ tests/errors/test_arithmetic_no_metamethod.mob
 tests/errors/test_semicolon_required.mob
 tests/errors/test_nested_stack_trace.mob
 tests/integration/test_load_errors.mob
+tests/errors/test_increment_errors.mob
+tests/errors/test_namespace_requirement.mob
