@@ -23,7 +23,9 @@ typedef enum {
     EXPR_TABLE_LITERAL,
     EXPR_TABLE_INDEX,
     EXPR_TABLE_DOT,
-    EXPR_ENUM_ACCESS
+    EXPR_ENUM_ACCESS,
+    EXPR_INCREMENT,
+    EXPR_DECREMENT
 } ExprType;
 
 // Statement types
@@ -55,24 +57,6 @@ struct MobiusFunction {
     size_t body_count;        // Number of statements in body
     struct Environment* closure;  // Lexical scope
     int ref_count;            // Reference counter for memory management
-};
-
-// Table entry for hash table
-struct TableEntry {
-    Value key;
-    Value value;
-    struct TableEntry* next;  // For collision chaining (unused in Robin Hood)
-    bool is_occupied;
-    uint32_t distance;       // Distance from ideal position (for Robin Hood hashing)
-};
-
-// Table structure - pure hash table
-struct Table {
-    TableEntry* entries;      // Hash table entries
-    size_t size;             // Number of key-value pairs
-    size_t capacity;         // Size of entries array
-    struct Table* metatable; // For operator overloading
-    int ref_count;           // Reference counting for memory management
 };
 
 // Expression structures
@@ -151,6 +135,14 @@ typedef struct {
     Token member_name;  // The member name after the dot
 } EnumAccessExpr;
 
+// Increment/Decrement expression (++i, i++, --i, i--)
+typedef struct {
+    Token name;         // Variable name being modified
+    bool is_prefix;     // true for ++i/--i, false for i++/i--
+    bool is_increment;  // true for ++, false for --
+    Token op;           // The ++ or -- token (for error reporting)
+} IncrementExpr;
+
 // Main expression structure
 struct Expr {
     ExprType type;
@@ -169,6 +161,7 @@ struct Expr {
         TableIndexExpr table_index;
         TableDotExpr table_dot;
         EnumAccessExpr enum_access;
+        IncrementExpr increment;
     } as;
 };
 
@@ -371,6 +364,7 @@ Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count);
 Expr* make_table_index_expr(Expr* table, Expr* index);
 Expr* make_table_dot_expr(Expr* table, Token key);
 Expr* make_enum_access_expr(Token enum_name, Token member_name);
+Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token op);
 
 Stmt* make_expression_stmt(Expr* expression);
 Stmt* make_print_stmt(Expr* expression);

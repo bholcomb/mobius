@@ -870,6 +870,9 @@ EvalResult evaluate_expr_stack(Expr* expr, Environment* env) {
             return eval_grouping_expr_stack(&expr->as.grouping, env);
         case EXPR_CALL:
             return eval_call_expr_stack(&expr->as.call, env);
+        case EXPR_INCREMENT:
+        case EXPR_DECREMENT:
+            return eval_increment_expr_stack(&expr->as.increment, env);
         // For now, fall back to old evaluation for unsupported expressions
         // We'll convert these one by one
         default: {
@@ -929,6 +932,109 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
 
 EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
     return evaluate_expr(expr->expression, env);
+}
+
+// Helper function to increment/decrement an integer value
+Value increment_integer(Value val, bool is_increment, int line, int column, bool* success) {
+    *success = false;
+    
+    if (val.type != VAL_INTEGER) {
+        return make_nil_value();
+    }
+    
+    int64_t delta = is_increment ? 1 : -1;
+    *success = true;
+    
+    // Preserve the numeric type and update the value
+    switch (val.as.integer.num_type) {
+        case NUM_INT8: {
+            int64_t new_val = val.as.integer.value.i8 + delta;
+            return make_integer_value(NUM_INT8, new_val);
+        }
+        case NUM_UINT8: {
+            int64_t new_val = val.as.integer.value.u8 + delta;
+            return make_integer_value(NUM_UINT8, new_val);
+        }
+        case NUM_INT16: {
+            int64_t new_val = val.as.integer.value.i16 + delta;
+            return make_integer_value(NUM_INT16, new_val);
+        }
+        case NUM_UINT16: {
+            int64_t new_val = val.as.integer.value.u16 + delta;
+            return make_integer_value(NUM_UINT16, new_val);
+        }
+        case NUM_INT32: {
+            int64_t new_val = val.as.integer.value.i32 + delta;
+            return make_integer_value(NUM_INT32, new_val);
+        }
+        case NUM_UINT32: {
+            int64_t new_val = val.as.integer.value.u32 + delta;
+            return make_integer_value(NUM_UINT32, new_val);
+        }
+        case NUM_INT64: {
+            int64_t new_val = val.as.integer.value.i64 + delta;
+            return make_integer_value(NUM_INT64, new_val);
+        }
+        case NUM_UINT64: {
+            uint64_t new_val = val.as.integer.value.u64 + (uint64_t)delta;
+            return make_integer_value(NUM_UINT64, new_val);
+        }
+        default:
+            *success = false;
+            return make_nil_value();
+    }
+}
+
+EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env) {
+    const char* var_name = expr->name.identifier ? expr->name.identifier : "unknown";
+    
+    // Get current value
+    bool found;
+    Value current = get_variable(env, var_name, &found);
+    
+    if (!found) {
+        char error_msg[256];
+        snprintf(error_msg, sizeof(error_msg), "Undefined variable '%s'", var_name);
+        return make_error(error_msg, expr->op.line, expr->op.column);
+    }
+    
+    // Check if it's an integer
+    if (current.type != VAL_INTEGER) {
+        return make_error("Increment/decrement can only be applied to integers", 
+                        expr->op.line, expr->op.column);
+    }
+    
+    // Compute new value
+    bool success;
+    Value new_value = increment_integer(current, expr->is_increment, 
+                                       expr->op.line, expr->op.column, &success);
+    
+    if (!success) {
+        return make_error("Failed to increment/decrement value", 
+                        expr->op.line, expr->op.column);
+    }
+    
+    // Update the variable
+    if (!assign_variable(env, var_name, new_value)) {
+        return make_error("Failed to update variable", expr->op.line, expr->op.column);
+    }
+    
+    // Return appropriate value based on prefix/postfix
+    if (expr->is_prefix) {
+        return make_success_with_value(new_value);  // Return new value (++i)
+    } else {
+        return make_success_with_value(current);     // Return old value (i++)
+    }
+}
+
+EvalResult eval_increment_expr_stack(IncrementExpr* expr, Environment* env) {
+    EvalResult result = eval_increment_expr(expr, env);
+    if (!is_error(result)) {
+        env_push(env, result.value);
+        free_value(result.value);
+        return make_success(1);
+    }
+    return result;
 }
 
 // Arithmetic operations
@@ -1464,6 +1570,9 @@ EvalResult evaluate_expr(Expr* expr, Environment* env) {
             return eval_array_index_expr(&expr->as.array_index, env);
         case EXPR_ENUM_ACCESS:
             return eval_enum_access_expr(&expr->as.enum_access, env);
+        case EXPR_INCREMENT:
+        case EXPR_DECREMENT:
+            return eval_increment_expr(&expr->as.increment, env);
         default:
             return make_error("Unknown expression type", 0, 0);
     }

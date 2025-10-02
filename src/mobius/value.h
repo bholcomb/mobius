@@ -9,11 +9,11 @@
 
 // Forward declarations (MobiusFunction, Table, etc. will be defined elsewhere)
 typedef struct MobiusFunction MobiusFunction;
-typedef struct Table Table;
-typedef struct TableEntry TableEntry;
 typedef struct ArrayValue ArrayValue;
 typedef struct EnumValue EnumValue;
 typedef struct EnumDefinition EnumDefinition;
+struct Table;
+struct TableEntry;
 
 // Reference counted string structure
 typedef struct RefCountedString {
@@ -86,7 +86,7 @@ typedef struct {
 
         ArrayValue* array;                      // 8 bytes
         MobiusFunction* function;               // 8 bytes
-        Table* table;                           // 8 bytes
+        struct Table* table;                           // 8 bytes
         struct {
             void* ptr;                        // Opaque pointer to user data 
             UserdataDestructor destructor;    // Cleanup function (can be NULL)
@@ -100,7 +100,6 @@ typedef struct {
         } enum_val;                             //12 bytes
 
     } as;
-
     ValueType type;                             //1 byte
 } Value;
 
@@ -122,7 +121,7 @@ Value make_string_value(RefCountedString* string);
 Value make_char_value(char value);
 Value make_array_value(ArrayValue* array);
 Value make_function_value(MobiusFunction* function);
-Value make_table_value(Table* table);
+Value make_table_value(struct Table* table);
 Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
 
 // Value utility functions

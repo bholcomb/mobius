@@ -81,6 +81,8 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env);
 EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env);
 EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env);
 EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env);
+EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env);
+EvalResult eval_increment_expr_stack(IncrementExpr* expr, Environment* env);
 
 // Statement evaluation
 EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env);

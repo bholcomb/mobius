@@ -433,7 +433,24 @@ Expr* parse_call(Parser* parser) {
             // Always treat as table dot access initially
             // The evaluator will handle enum access if the base turns out to be an enum
             expr = make_table_dot_expr(expr, key);
-        } else {
+        } 
+        // Handle postfix increment/decrement
+        else if (parser_match_any(parser, 2, TOKEN_PLUS_PLUS, TOKEN_MINUS_MINUS)) {
+            Token op = parser_previous(parser);
+            
+            // Can only apply to variable expressions
+            if (expr->type != EXPR_VARIABLE) {
+                parser_error(parser, op, "Postfix operator can only be applied to variables");
+                free_expr(expr);
+                return NULL;
+            }
+            
+            Token name = expr->as.variable.name;
+            bool is_increment = (op.type == TOKEN_PLUS_PLUS);
+            free_expr(expr);
+            expr = make_increment_expr(name, false, is_increment, op);
+        }
+        else {
             break;
         }
     }
@@ -442,6 +459,22 @@ Expr* parse_call(Parser* parser) {
 }
 
 Expr* parse_unary(Parser* parser) {
+    // Handle prefix increment/decrement
+    if (parser_match_any(parser, 2, TOKEN_PLUS_PLUS, TOKEN_MINUS_MINUS)) {
+        Token op = parser_previous(parser);
+        
+        // Expect an identifier
+        if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+            parser_error_at_current(parser, "Expect variable name after prefix operator");
+            return NULL;
+        }
+        
+        Token name = parser_advance(parser);
+        bool is_increment = (op.type == TOKEN_PLUS_PLUS);
+        return make_increment_expr(name, true, is_increment, op);
+    }
+    
+    // Handle other unary operators
     if (parser_match_any(parser, 4, TOKEN_BANG, TOKEN_MINUS, TOKEN_NOT, TOKEN_PLUS)) {
         Token op = parser_previous(parser);
         Expr* right = parse_unary(parser);
