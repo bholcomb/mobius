@@ -28,6 +28,7 @@ typedef enum {
     TOKEN_PIPE,             // |
     TOKEN_CARET,            // ^
     TOKEN_TILDE,            // ~
+    TOKEN_HASH,             // #
 
     // One or two character tokens
     TOKEN_BANG,             // !

@@ -83,6 +83,13 @@ Value make_function_value(MobiusFunction* function) {
     return value;
 }
 
+Value make_native_function_value(NativeFunction function) {
+    Value value = {0};
+    value.type = VAL_NATIVE_FUNCTION;
+    value.as.native_function = function;
+    return value;
+}
+
 Value make_table_value(Table* table) {
     Value value = {0};
     value.type = VAL_TABLE;
@@ -132,6 +139,7 @@ bool is_truthy(Value value) {
         case VAL_CHAR: return value.as.character != '\0';
         case VAL_ARRAY: return value.as.array != NULL && array_length(value.as.array) > 0;
         case VAL_FUNCTION: return value.as.function != NULL;
+        case VAL_NATIVE_FUNCTION: return value.as.native_function != NULL;
         case VAL_TABLE: return value.as.table != NULL;
         case VAL_USERDATA: return value.as.userdata.ptr != NULL;
         case VAL_ENUM: return true;  // Enums are always truthy
@@ -201,6 +209,7 @@ bool values_equal(Value a, Value b) {
             // Array equality: same reference (arrays are reference types)
             return a.as.array == b.as.array;
         case VAL_FUNCTION: return a.as.function == b.as.function;
+        case VAL_NATIVE_FUNCTION: return a.as.native_function == b.as.native_function;
         case VAL_TABLE: return a.as.table == b.as.table; // Reference equality
         case VAL_USERDATA: 
             // Userdata equality: same pointer AND same type
@@ -275,6 +284,9 @@ void print_value(Value value) {
             } else {
                 printf("<func (null)>");
             }
+            break;
+        case VAL_NATIVE_FUNCTION:
+            printf("<native function>");
             break;
         case VAL_TABLE:
             if (value.as.table) {
@@ -378,6 +390,11 @@ char* value_to_string(Value value) {
             result = malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
+        case VAL_NATIVE_FUNCTION:
+            snprintf(buffer, sizeof(buffer), "<native function>");
+            result = malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
         case VAL_TABLE:
             snprintf(buffer, sizeof(buffer), "<table>");
             result = malloc(strlen(buffer) + 1);
@@ -425,6 +442,7 @@ const char* value_type_name(ValueType type) {
         case VAL_CHAR: return "char";
         case VAL_ARRAY: return "array";
         case VAL_FUNCTION: return "function";
+        case VAL_NATIVE_FUNCTION: return "function";
         case VAL_TABLE: return "table";
         case VAL_USERDATA: return "userdata";
         case VAL_ENUM: return "enum";
@@ -497,6 +515,8 @@ void free_value(Value value) {
             
             free(func);
         }
+    } else if (value.type == VAL_NATIVE_FUNCTION) {
+        // Native functions are just function pointers, nothing to free
     } else if (value.type == VAL_TABLE && value.as.table) {
         Table* table = value.as.table;
         table->ref_count--;

@@ -1,0 +1,5 @@
+// Test pragma with invalid value
+
+#pragma override_behavior invalid_value
+print("Should not reach here");
+

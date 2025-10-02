@@ -1,0 +1,33 @@
+// Test basic pragma functionality
+print("Testing pragma system...");
+
+// Test strict_types pragma
+#pragma strict_types true
+print("strict_types enabled");
+
+#pragma strict_types false
+print("strict_types disabled");
+
+// Test type_warnings pragma
+#pragma type_warnings true
+print("type_warnings enabled");
+
+#pragma type_warnings false
+print("type_warnings disabled");
+
+// Test override_behavior pragma
+#pragma override_behavior error
+print("override_behavior set to error (default)");
+
+#pragma override_behavior warn
+print("override_behavior set to warn");
+
+#pragma override_behavior quiet
+print("override_behavior set to quiet");
+
+// Reset to default
+#pragma override_behavior error
+print("override_behavior reset to error");
+
+print("All pragma tests passed!");
+

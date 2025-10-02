@@ -496,6 +496,11 @@ void print_stmt(Stmt* stmt) {
                 printf(" as %s", stmt->as.import_stmt.alias.identifier ? stmt->as.import_stmt.alias.identifier : stmt->as.import_stmt.alias.literal.string);
             }
             break;
+        case STMT_PRAGMA:
+            printf("#pragma %s %s", 
+                stmt->as.pragma_stmt.name.identifier ? stmt->as.pragma_stmt.name.identifier : "unknown",
+                stmt->as.pragma_stmt.value.identifier ? stmt->as.pragma_stmt.value.identifier : 
+                    (stmt->as.pragma_stmt.value.literal.string ? stmt->as.pragma_stmt.value.literal.string : "unknown"));
             break;
         case STMT_ENUM:
             printf("enum %s", stmt->as.enum_stmt.name.identifier ? stmt->as.enum_stmt.name.identifier : "unknown");
@@ -681,6 +686,9 @@ void free_stmt(Stmt* stmt) {
             break;
         case STMT_IMPORT:
             // Nothing to free for import statements (tokens are not owned)
+            break;
+        case STMT_PRAGMA:
+            // Nothing to free for pragma statements (tokens are not owned)
             break;
         case STMT_ENUM: {
             // Free enum members
@@ -910,6 +918,9 @@ void ast_release_stmt(Stmt* stmt) {
             case STMT_IMPORT:
                 // Nothing to release for import statements (tokens are not owned)
                 break;
+            case STMT_PRAGMA:
+                // Nothing to release for pragma statements (tokens are not owned)
+                break;
             case STMT_ENUM: {
                 // Release enum members
                 EnumMemberDef* member = stmt->as.enum_stmt.members;
@@ -1008,6 +1019,18 @@ Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_a
     stmt->as.import_stmt.module_name = module_name;
     stmt->as.import_stmt.alias = alias;
     stmt->as.import_stmt.has_alias = has_alias;
+    return stmt;
+}
+
+Stmt* make_pragma_stmt(Token keyword, Token name, Token value) {
+    Stmt* stmt = calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+    
+    stmt->type = STMT_PRAGMA;
+    stmt->ref_count = 1;  // Initialize reference count
+    stmt->as.pragma_stmt.keyword = keyword;
+    stmt->as.pragma_stmt.name = name;
+    stmt->as.pragma_stmt.value = value;
     return stmt;
 }
 

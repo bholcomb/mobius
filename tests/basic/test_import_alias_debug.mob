@@ -1,0 +1,17 @@
+// Debug test for import alias
+print("Testing import alias...");
+
+import "math" as m;
+print("Module m imported");
+print("Type of m:", typeof(m));
+
+// Try to access sin from the table
+print("Type of m.sin:", typeof(m.sin));
+print("m.sin value:", m.sin);
+
+// Try to call it
+print("Calling m.sin(0)...");
+var result = m.sin(0);
+print("Result:", result);
+print("Type of result:", typeof(result));
+

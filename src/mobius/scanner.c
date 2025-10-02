@@ -319,6 +319,7 @@ Token scan_token(Scanner* scanner) {
         case '~': return make_simple_token(scanner, TOKEN_TILDE);
         case '%': return make_simple_token(scanner, TOKEN_PERCENT);
         case '^': return make_simple_token(scanner, TOKEN_CARET);
+        case '#': return make_simple_token(scanner, TOKEN_HASH);
         case '\n': return make_simple_token(scanner, TOKEN_NEWLINE);
         
         // One or two character tokens
