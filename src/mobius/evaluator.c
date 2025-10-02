@@ -837,15 +837,8 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
         bool found = false;
         Value func_value = get_variable(env, full_name, &found);
         if (found && func_value.type == VAL_FUNCTION && func_value.as.function) {
-            // TODO: Implement stack-based user function calls
-            // For now, fall back to old evaluation
-            Expr* call_expr = malloc(sizeof(Expr));
-            call_expr->type = EXPR_CALL;
-            call_expr->as.call = *expr;
-            EvalResult result = evaluate_expr(call_expr, env);
-            free(call_expr);
-            // Result already on stack from evaluate_expr
-            return result;
+            // Call user-defined function
+            return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
         }
         
         // First try the new unified library
