@@ -35,9 +35,9 @@ static void print_with_escapes(const char* str) {
 // UNIFIED CORE FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_print(Environment* env, int arg_count) {
+EvalResult lib_print(ExecutionContext* ctx, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
-        Value arg = ctx_peek(global_context, arg_count - 1 - i);  // Get args in correct order
+        Value arg = ctx_peek(ctx, arg_count - 1 - i);  // Get args in correct order
         
         // Handle strings specially to process escape sequences
         if (arg.type == VAL_STRING && arg.as.string) {
@@ -56,36 +56,36 @@ EvalResult lib_print(Environment* env, int arg_count) {
     
     // Pop arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(global_context);
+        ctx_pop(ctx);
     }
     
     return make_success(0);
 }
 
-EvalResult lib_typeof(Environment* env, int arg_count) {
+EvalResult lib_typeof(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("typeof expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     const char* type_name = value_type_name(arg.type);
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
     Value result = make_string_value_from_cstr(type_name);
-    ctx_push(global_context, result);
+    ctx_push(ctx, result);
     
     return make_success(1);
 }
 
-EvalResult lib_int(Environment* env, int arg_count) {
+EvalResult lib_int(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("int expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_pop(global_context);
+    Value arg = ctx_pop(ctx);
     Value result;
     
     switch (arg.type) {
@@ -121,17 +121,17 @@ EvalResult lib_int(Environment* env, int arg_count) {
     }
        
     // Push result onto stack
-    ctx_push(global_context, result);
+    ctx_push(ctx, result);
     
     return make_success(1);
 }
 
-EvalResult lib_float(Environment* env, int arg_count) {
+EvalResult lib_float(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("float expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     Value result;
     
     switch (arg.type) {
@@ -177,20 +177,20 @@ EvalResult lib_float(Environment* env, int arg_count) {
     }
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, result);
+    ctx_push(ctx, result);
     
     return make_success(1);
 }
 
-EvalResult lib_str(Environment* env, int arg_count) {
+EvalResult lib_str(ExecutionContext* ctx, int arg_count) {
     if (arg_count != 1) {
         return make_error("str expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(global_context, 0);
+    Value arg = ctx_peek(ctx, 0);
     char* temp_str = value_to_string(arg);
     Value result;
     
@@ -202,10 +202,10 @@ EvalResult lib_str(Environment* env, int arg_count) {
     }
     
     // Pop argument from stack
-    ctx_pop(global_context);
+    ctx_pop(ctx);
     
     // Push result onto stack
-    ctx_push(global_context, result);
+    ctx_push(ctx, result);
     
     return make_success(1);
 }

@@ -51,7 +51,7 @@ typedef struct {
 // Library function type (for builtin function interface)
 // Uses EvalResult.return_count to indicate number of values pushed onto stack
 // Uses EvalResult.has_error and EvalResult.error for error handling
-typedef EvalResult (*LibraryFunction)(Environment* env, int arg_count);
+typedef EvalResult (*LibraryFunction)(ExecutionContext* ctx, int arg_count);
 
 // Main evaluation functions (all use stack-based calling convention)
 EvalResult evaluate_expr(Expr* expr, Environment* env);

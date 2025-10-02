@@ -6,27 +6,32 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+// Forward declarations
+typedef struct Environment Environment;
+typedef struct ExecutionContext ExecutionContext;
+
 // Execution context - encapsulates all execution state
 // This allows for multi-threading and coroutines in the future
-typedef struct ExecutionContext {
+struct ExecutionContext {
     // Execution stack
     Value* stack;           // Stack array
     size_t stack_top;       // Current stack position (0 = empty)
     size_t stack_capacity;  // Allocated stack size
+    Environment* env;       // Current environment being executed
     
     // Future extensions:
     // - Call frame stack for debugging/profiling
     // - Thread ID
     // - Coroutine state
     // - Exception handling state
-} ExecutionContext;
+};
 
 // Environment structure for variable scoping only
 // Stack is now global in ExecutionStack
-typedef struct Environment {
+struct Environment {
     Table* variables;       // Table storing variable name->value mappings
     struct Environment* enclosing;  // Parent environment for scoping
-} Environment;
+};
 
 // Environment creation and management
 Environment* create_environment(Environment* enclosing);
@@ -52,6 +57,9 @@ void ctx_stack_clear(ExecutionContext* ctx);
 
 // Global execution context (one per thread in the future)
 extern ExecutionContext* global_context;
+
+// Function to get global context (for use in dynamically loaded plugins)
+ExecutionContext* get_global_context(void);
 
 // Environment utilities
 void print_environment(Environment* env);

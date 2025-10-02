@@ -11,6 +11,11 @@ Environment* global_env = NULL;
 // Global execution context (one per thread in the future)
 ExecutionContext* global_context = NULL;
 
+// Function to get global context (for use in dynamically loaded plugins)
+ExecutionContext* get_global_context(void) {
+    return global_context;
+}
+
 // Initial stack capacity
 #define INITIAL_STACK_CAPACITY 256
 
@@ -22,6 +27,7 @@ ExecutionContext* create_execution_context(size_t initial_stack_capacity) {
     ctx->stack_capacity = initial_stack_capacity;
     ctx->stack = malloc(ctx->stack_capacity * sizeof(Value));
     ctx->stack_top = 0;
+    ctx->env = NULL;  // Will be set by evaluator before each call
     
     if (!ctx->stack) {
         free(ctx);
