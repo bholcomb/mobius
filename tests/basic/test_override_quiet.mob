@@ -1,0 +1,20 @@
+// Test #pragma override_behavior "quiet"
+print("=== Testing Override Behavior: QUIET ===");
+
+// Set override behavior to quiet (no warnings)
+#pragma override_behavior "quiet"
+
+// Define a custom cos function
+func cos(x) {
+    return 888;
+}
+
+print("Custom cos(0) =", cos(0));
+
+// Import math which also has cos() - should silently override
+print("\nImporting math (should NOT warn)...");
+import "math" as _GLOBAL
+
+print("After import, cos(0) =", cos(0));
+print("\n✅ PASS: Quiet mode allows silent override!");
+

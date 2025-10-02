@@ -2730,12 +2730,21 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
 // Handles error/warn/quiet modes
 static bool check_function_override(const char* func_name, Table* target_table, 
                                     int line, int column, EvalResult* error_result) {
-    // Check if function already exists in target table
-    Value key = make_string_value_from_cstr(func_name);
-    Value existing = table_get(target_table, key);
-    free_value(key);
+    // For global imports, target_table is NULL and caller has already checked existence
+    // For table imports, we check if function exists in the target table
+    bool exists = false;
     
-    if (existing.type == VAL_NIL) {
+    if (target_table) {
+        Value key = make_string_value_from_cstr(func_name);
+        Value existing = table_get(target_table, key);
+        free_value(key);
+        exists = (existing.type != VAL_NIL);
+    } else {
+        // Global import - caller has already determined function exists
+        exists = true;
+    }
+    
+    if (!exists) {
         // No override, all good
         return true;
     }
