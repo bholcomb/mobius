@@ -167,16 +167,30 @@ bool process_repl_line(ReplState* state, const char* line) {
     
     // Execute the statements
     for (size_t i = 0; i < parse_result.count; i++) {
-        EvalResult result = evaluate_stmt(parse_result.statements[i], state->env);
+        Stmt* stmt = parse_result.statements[i];
         
-        if (is_error(result)) {
-            print_runtime_error(result.error);
+        // For REPL, handle expression statements specially - evaluate and print
+        if (stmt->type == STMT_EXPRESSION) {
+            ExpressionStmt* expr_stmt = &stmt->as.expression;
+            EvalResult result = evaluate_expr(expr_stmt->expression, state->env);
+            
+            if (is_error(result)) {
+                print_runtime_error(result.error);
+            } else if (result.return_count > 0) {
+                // Pop and print the value (unless it's nil)
+                Value val = env_pop(state->env);
+                if (val.type != VAL_NIL) {
+                    print_value(val);
+                    printf("\n");
+                }
+                free_value(val);
+            }
         } else {
-            // For expression statements, print the result value (unless it's nil)
-            if (parse_result.statements[i]->type == STMT_EXPRESSION &&
-                result.value.type != VAL_NIL) {
-                print_value(result.value);
-                printf("\n");
+            // For other statements, evaluate normally
+            EvalResult result = evaluate_stmt(stmt, state->env);
+            
+            if (is_error(result)) {
+                print_runtime_error(result.error);
             }
         }
     }
