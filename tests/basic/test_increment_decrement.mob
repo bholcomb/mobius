@@ -1,0 +1,58 @@
+// Test pre-increment
+var a = 5;
+print(++a);  // Should print 6
+print(a);    // Should print 6
+
+// Test post-increment
+var b = 5;
+print(b++);  // Should print 5
+print(b);    // Should print 6
+
+// Test pre-decrement
+var c = 10;
+print(--c);  // Should print 9
+print(c);    // Should print 9
+
+// Test post-decrement
+var d = 10;
+print(d--);  // Should print 10
+print(d);    // Should print 9
+
+// Test in expressions
+var e = 0;
+var f = ++e + 10;  // e becomes 1, f = 1 + 10 = 11
+print(e);    // Should print 1
+print(f);    // Should print 11
+
+// Test post-increment in expression
+var g = 5;
+var h = g++ + 10;  // h = 5 + 10 = 15, g becomes 6
+print(g);    // Should print 6
+print(h);    // Should print 15
+
+// Test in loop (common use case)
+for (var i = 0; i < 3; i++) {
+    print(i);  // Should print 0, 1, 2
+}
+
+// Test with different integer types
+var small: int8 = 100;
+small++;
+print(small);  // Should print 101
+
+var large: int64 = 1000000;
+--large;
+print(large);  // Should print 999999
+
+// Test multiple increments
+var x = 0;
+x++;
+x++;
+++x;
+print(x);  // Should print 3
+
+// Test decrement from 0
+var y = 0;
+y--;
+print(y);  // Should print -1
+

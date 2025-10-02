@@ -1,0 +1,4 @@
+// Test error: increment on non-integer (string)
+var str = "hello";
+str++;  // Should error: Increment/decrement can only be applied to integers
+

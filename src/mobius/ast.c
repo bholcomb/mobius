@@ -148,6 +148,19 @@ Expr* make_enum_access_expr(Token enum_name, Token member_name) {
     return expr;
 }
 
+Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token op) {
+    Expr* expr = calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = is_increment ? EXPR_INCREMENT : EXPR_DECREMENT;
+    expr->ref_count = 1;  // Initialize reference count
+    expr->as.increment.name = name;
+    expr->as.increment.is_prefix = is_prefix;
+    expr->as.increment.is_increment = is_increment;
+    expr->as.increment.op = op;
+    return expr;
+}
+
 // Statement constructors
 Stmt* make_expression_stmt(Expr* expression) {
     Stmt* stmt = calloc(1, sizeof(Stmt));
@@ -374,6 +387,18 @@ void print_expr(Expr* expr) {
                    expr->as.enum_access.enum_name.identifier ? expr->as.enum_access.enum_name.identifier : "unknown",
                    expr->as.enum_access.member_name.identifier ? expr->as.enum_access.member_name.identifier : "unknown");
             break;
+        case EXPR_INCREMENT:
+            printf("(%s%s)", 
+                   expr->as.increment.is_prefix ? "++" : "",
+                   expr->as.increment.name.identifier ? expr->as.increment.name.identifier : "unknown");
+            if (!expr->as.increment.is_prefix) printf("++");
+            break;
+        case EXPR_DECREMENT:
+            printf("(%s%s)", 
+                   expr->as.increment.is_prefix ? "--" : "",
+                   expr->as.increment.name.identifier ? expr->as.increment.name.identifier : "unknown");
+            if (!expr->as.increment.is_prefix) printf("--");
+            break;
     }
 }
 
@@ -537,6 +562,10 @@ void free_expr(Expr* expr) {
             break;
         case EXPR_ENUM_ACCESS:
             // No dynamic allocations to free for enum access
+            break;
+        case EXPR_INCREMENT:
+        case EXPR_DECREMENT:
+            // Token doesn't need freeing
             break;
     }
     free(expr);
@@ -737,6 +766,8 @@ void ast_release_expr(Expr* expr) {
                 ast_release_expr(expr->as.table_dot.table);
                 break;
             case EXPR_ENUM_ACCESS:
+            case EXPR_INCREMENT:
+            case EXPR_DECREMENT:
             case EXPR_LITERAL:
             case EXPR_VARIABLE:
                 // These don't reference other expressions
