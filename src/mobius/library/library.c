@@ -61,8 +61,7 @@ static const LibraryEntry library_registry[] = {
     {"array_find", lib_array_find, 2, 2},         // Exactly 2 args
     
     // Type system functions
-    {"set_strict_types", lib_set_strict_types, 0, 1},     // 0 or 1 args
-    {"set_type_warnings", lib_set_type_warnings, 1, 1},   // Exactly 1 arg
+    // Note: set_strict_types() and set_type_warnings() removed - use #pragma instead
     {"get_type_config", lib_get_type_config, 0, 0},       // No args
     
     // Utility functions

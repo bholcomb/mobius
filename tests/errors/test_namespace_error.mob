@@ -1,0 +1,11 @@
+// Test error when intermediate namespace is not a table
+print("Testing namespace collision error...");
+
+// Create a variable that's not a table
+var x = 42;
+
+// Try to import into x.y.z - should fail because x is not a table
+import "math" as x.y.z
+
+print("This line should not be reached");
+

@@ -1,0 +1,56 @@
+// Test nested namespace imports
+print("=== Testing Nested Namespace Imports ===");
+
+// Test 1: Import math module into nested namespace
+print("\n1. Testing math.trig namespace...");
+import "math" as math.trig
+
+// Verify nested table was created
+print("math table exists:", typeof(math) == "table");
+print("math.trig table exists:", typeof(math.trig) == "table");
+
+// Test calling function through nested namespace
+var sine_result = math.trig.sin(0);
+print("math.trig.sin(0) =", sine_result);
+
+if (sine_result != 0.0) {
+    print("❌ FAIL: Expected sine_result to be 0.0");
+} else {
+    print("✅ PASS: Nested namespace works!");
+}
+
+// Test 2: Import text_processing into nested namespace
+print("\n2. Testing utils.text namespace...");
+import "text_processing" as utils.text
+
+// Verify nested table was created
+print("utils table exists:", typeof(utils) == "table");
+print("utils.text table exists:", typeof(utils.text) == "table");
+
+// Test calling function
+var reversed = utils.text.reverse("hello");
+print("utils.text.reverse('hello') =", reversed);
+
+if (reversed != "olleh") {
+    print("❌ FAIL: Expected 'olleh'");
+} else {
+    print("✅ PASS: Nested text processing works!");
+}
+
+// Test 3: Add another module to existing namespace
+print("\n3. Testing adding to existing namespace...");
+// Note: We'll import math again as utils.math to test adding to existing "utils" namespace
+import "math" as utils.math
+
+print("utils.math table exists:", typeof(utils.math) == "table");
+var cosine_result = utils.math.cos(0);
+print("utils.math.cos(0) =", cosine_result);
+
+if (cosine_result != 1.0) {
+    print("❌ FAIL: Expected cosine_result to be 1.0");
+} else {
+    print("✅ PASS: Adding to existing namespace works!");
+}
+
+print("\n=== All Nested Namespace Tests Complete ===");
+

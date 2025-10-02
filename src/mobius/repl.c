@@ -3,6 +3,7 @@
 #include "scanner.h"
 #include "parser.h"
 #include "evaluator.h"
+#include "library/stdlib_init.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -233,6 +234,9 @@ void start_repl(void) {
     state.env = create_environment(NULL);
     state.running = true;
     state.command_count = 1;
+    
+    // Register standard library functions
+    register_stdlib_functions(state.env);
     
     // Add built-in constants to REPL environment
     define_variable(state.env, "nil", make_nil_value());

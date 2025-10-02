@@ -55,7 +55,7 @@ var config = get_type_config();
 print("  strict_mode:", config["strict_mode"]);
 print("  warn_on_conversion:", config["warn_on_conversion"]);
 
-set_type_warnings(true);
+#pragma type_warnings true
 print("Enabled conversion warnings...");
 var warned_conversion: float32 = f64_c;   // Should show warning
 print("Conversion result:", warned_conversion);

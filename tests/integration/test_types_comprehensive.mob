@@ -39,7 +39,7 @@ print("strict_mode:", cfg["strict_mode"]);
 print("warn_on_conversion:", cfg["warn_on_conversion"]);
 
 print("\n5. Enable Warnings and Test");
-set_type_warnings(true);
+#pragma type_warnings true
 var warned: int16 = 123.456;  // Should show warning
 print("With warning:", warned);
 

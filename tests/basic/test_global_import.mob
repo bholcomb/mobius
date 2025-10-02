@@ -1,0 +1,48 @@
+// Test global import with _GLOBAL
+print("=== Testing Global Import with _GLOBAL ===");
+
+// Test 1: Import math functions into global namespace
+print("\n1. Testing global import...");
+import "math" as _GLOBAL
+
+// Test calling functions without namespace prefix
+var sine = sin(0);
+var cosine = cos(0);
+var tangent = tan(0);
+
+print("sin(0) =", sine);
+print("cos(0) =", cosine);
+print("tan(0) =", tangent);
+
+if (sine == 0.0 && cosine == 1.0 && tangent == 0.0) {
+    print("✅ PASS: Global import works!");
+} else {
+    print("❌ FAIL: Unexpected values");
+}
+
+// Test 2: Verify functions are in global scope
+print("\n2. Testing global scope...");
+var factorial_result = factorial(5);
+print("factorial(5) =", factorial_result);
+
+if (factorial_result == 120.0) {
+    print("✅ PASS: Functions accessible globally!");
+} else {
+    print("❌ FAIL: Expected 120.0");
+}
+
+// Test 3: Import text_processing to global scope
+print("\n3. Testing multiple global imports...");
+import "text_processing" as _GLOBAL
+
+var reversed = reverse("hello");
+print("reverse('hello') =", reversed);
+
+if (reversed == "olleh") {
+    print("✅ PASS: Multiple global imports work!");
+} else {
+    print("❌ FAIL: Expected 'olleh'");
+}
+
+print("\n=== All Global Import Tests Complete ===");
+

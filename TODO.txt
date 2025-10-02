@@ -1,8 +1,0 @@
-Add pre/post increment operators ++/--
-When loading modules, they are put in a namespace (table)
-Create a dynamic, quasi-thread-safe array type
-Create a dynamic memory pool for Value types
-    Cache hashed value in Value type
-    Use env ID:generation:index (all in 64 bits) for passing values
-Create a dynamic memory pool for Environments
-Create a dynamic memory pool for Tables
