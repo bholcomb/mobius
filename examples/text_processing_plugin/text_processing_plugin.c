@@ -80,7 +80,7 @@ EvalResult text_word_count(Environment* env, int arg_count) {
         return make_error("word_count() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = env_pop(env);
+    Value text_val = ctx_pop(global_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
         return make_error("word_count() expects a string argument", 0, 0);
@@ -100,7 +100,7 @@ EvalResult text_word_count(Environment* env, int arg_count) {
         text++;
     }
     
-    env_push(env, make_integer_value(NUM_INT32, word_count));
+    ctx_push(global_context, make_integer_value(NUM_INT32, word_count));
     free_value(text_val);
     return make_success(1);
 }
@@ -114,7 +114,7 @@ EvalResult text_line_count(Environment* env, int arg_count) {
         return make_error("line_count() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = env_pop(env);
+    Value text_val = ctx_pop(global_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
         return make_error("line_count() expects a string argument", 0, 0);
@@ -134,7 +134,7 @@ EvalResult text_line_count(Environment* env, int arg_count) {
         }
     }
     
-    env_push(env, make_integer_value(NUM_INT32, line_count));
+    ctx_push(global_context, make_integer_value(NUM_INT32, line_count));
     return make_success(1);
 }
 
@@ -147,8 +147,8 @@ EvalResult text_char_count(Environment* env, int arg_count) {
         return make_error("char_count() expects exactly 2 arguments", 0, 0);
     }
     
-    Value char_val = env_pop(env);
-    Value text_val = env_pop(env);
+    Value char_val = ctx_pop(global_context);
+    Value text_val = ctx_pop(global_context);
 
     if (text_val.type != VAL_STRING || char_val.type != VAL_STRING) {
         return make_error("char_count() expects string arguments", 0, 0);
@@ -164,7 +164,7 @@ EvalResult text_char_count(Environment* env, int arg_count) {
     char target = char_str[0];
     int count = count_char(text, target);
     
-    env_push(env, make_integer_value(NUM_INT32, count));
+    ctx_push(global_context, make_integer_value(NUM_INT32, count));
     return make_success(1);
 }
 
@@ -181,7 +181,7 @@ EvalResult text_reverse(Environment* env, int arg_count) {
         return make_error("reverse() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = env_pop(env);
+    Value text_val = ctx_pop(global_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
         return make_error("reverse() expects a string argument", 0, 0);
@@ -196,7 +196,7 @@ EvalResult text_reverse(Environment* env, int arg_count) {
     
     Value result = make_string_value_from_cstr(reversed);
     free(reversed);
-    env_push(env, result);
+    ctx_push(global_context, result);
     return make_success(1);
 }
 
@@ -209,7 +209,7 @@ EvalResult text_title_case(Environment* env, int arg_count) {
         return make_error("title_case() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = env_pop(env);
+    Value text_val = ctx_pop(global_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
         return make_error("title_case() expects a string argument", 0, 0);
@@ -237,7 +237,7 @@ EvalResult text_title_case(Environment* env, int arg_count) {
     
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    env_push(env, return_val);
+    ctx_push(global_context, return_val);
     return make_success(1);
 }
 
@@ -250,7 +250,7 @@ EvalResult text_trim(Environment* env, int arg_count) {
         return make_error("trim() expects exactly 1 argument", 0, 0);
     }
 
-    Value text_val = env_pop(env);
+    Value text_val = ctx_pop(global_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
         return make_error("trim() expects a string argument", 0, 0);
@@ -280,9 +280,9 @@ EvalResult text_trim(Environment* env, int arg_count) {
     result[len] = '\0';
     
     Value return_val = make_string_value_from_cstr(result);
-    env_push(env, return_val);
+    ctx_push(global_context, return_val);
     free(result);
-    env_push(env, return_val);
+    ctx_push(global_context, return_val);
     return make_success(1);
 }
 
@@ -295,9 +295,9 @@ EvalResult text_replace_all(Environment* env, int arg_count) {
         return make_error("replace_all() expects exactly 3 arguments", 0, 0);
     }
 
-    Value new_val = env_pop(env);
-    Value old_val = env_pop(env);
-    Value text_val = env_pop(env);
+    Value new_val = ctx_pop(global_context);
+    Value old_val = ctx_pop(global_context);
+    Value text_val = ctx_pop(global_context);
     
     if (text_val.type != VAL_STRING || old_val.type != VAL_STRING || new_val.type != VAL_STRING) {
         return make_error("replace_all() expects string arguments", 0, 0);
@@ -321,7 +321,7 @@ EvalResult text_replace_all(Environment* env, int arg_count) {
     
     if (count == 0) {
         // No replacements needed
-        env_push(env, make_string_value_from_cstr(text));
+        ctx_push(global_context, make_string_value_from_cstr(text));
         return make_success(1);
     }
     
@@ -354,7 +354,7 @@ EvalResult text_replace_all(Environment* env, int arg_count) {
     
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    env_push(env, return_val);
+    ctx_push(global_context, return_val);
     return make_success(1);
 }
 
@@ -372,9 +372,9 @@ EvalResult text_pad_left(Environment* env, int arg_count) {
         return make_error("pad_left() expects exactly 3 arguments", 0, 0);
     }
 
-    Value pad_char_val = env_pop(env);
-    Value width_val = env_pop(env);
-    Value text_val = env_pop(env);
+    Value pad_char_val = ctx_pop(global_context);
+    Value width_val = ctx_pop(global_context);
+    Value text_val = ctx_pop(global_context);
     
     if (text_val.type != VAL_STRING || width_val.type != VAL_INTEGER || pad_char_val.type != VAL_STRING) {
         return make_error("pad_left() expects (string, integer, string) arguments", 0, 0);
@@ -393,7 +393,7 @@ EvalResult text_pad_left(Environment* env, int arg_count) {
     
     if (width <= text_len) {
         // No padding needed
-        env_push(env, make_string_value_from_cstr(text));
+        ctx_push(global_context, make_string_value_from_cstr(text));
         return make_success(1);
     }
     
@@ -410,7 +410,7 @@ EvalResult text_pad_left(Environment* env, int arg_count) {
     
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    env_push(env, return_val);
+    ctx_push(global_context, return_val);
     return make_success(1);
 }
 
@@ -424,8 +424,8 @@ EvalResult text_split(Environment* env, int arg_count) {
         return make_error("split() expects exactly 2 arguments", 0, 0);
     }
 
-    Value delim_val = env_pop(env);
-    Value text_val = env_pop(env);
+    Value delim_val = ctx_pop(global_context);
+    Value text_val = ctx_pop(global_context);
     
     if (text_val.type != VAL_STRING || delim_val.type != VAL_STRING) {
         return make_error("split() expects string arguments", 0, 0);
@@ -462,7 +462,7 @@ EvalResult text_split(Environment* env, int arg_count) {
     free(text_copy);
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    env_push(env, return_val);
+    ctx_push(global_context, return_val);
     return make_success(1);
 }
 

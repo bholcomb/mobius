@@ -14,13 +14,13 @@ EvalResult lib_table_insert(Environment* env, int arg_count) {
         return make_error("table_insert expects exactly 3 arguments (table, key, value)", 0, 0);
     }
     
-    Value value = env_peek(env, 0);
-    Value key = env_peek(env, 1);
-    Value table_val = env_peek(env, 2);
+    Value value = ctx_peek(global_context, 0);
+    Value key = ctx_peek(global_context, 1);
+    Value table_val = ctx_peek(global_context, 2);
     
     // Remove arguments
     for (int i = 0; i < 3; i++) {
-        env_pop(env);
+        ctx_pop(global_context);
     }
     
     if (table_val.type != VAL_TABLE) {
@@ -32,7 +32,7 @@ EvalResult lib_table_insert(Environment* env, int arg_count) {
         return make_error("Failed to insert into table", 0, 0);
     }
     
-    env_push(env, make_nil_value());
+    ctx_push(global_context, make_nil_value());
     return make_success(1);
 }
 
@@ -41,12 +41,12 @@ EvalResult lib_table_remove(Environment* env, int arg_count) {
         return make_error("table_remove expects exactly 2 arguments (table, key)", 0, 0);
     }
     
-    Value key = env_peek(env, 0);
-    Value table_val = env_peek(env, 1);
+    Value key = ctx_peek(global_context, 0);
+    Value table_val = ctx_peek(global_context, 1);
     
     // Remove arguments
-    env_pop(env);
-    env_pop(env);
+    ctx_pop(global_context);
+    ctx_pop(global_context);
     
     if (table_val.type != VAL_TABLE) {
         return make_error("table_remove first argument must be a table", 0, 0);
@@ -55,9 +55,9 @@ EvalResult lib_table_remove(Environment* env, int arg_count) {
     Table* table = table_val.as.table;
     bool success = table_remove(table, key);
     if (success) {
-        env_push(env, make_bool_value(true));
+        ctx_push(global_context, make_bool_value(true));
     } else {
-        env_push(env, make_bool_value(false));
+        ctx_push(global_context, make_bool_value(false));
     }
     
     return make_success(1);
@@ -68,12 +68,12 @@ EvalResult lib_table_has_key(Environment* env, int arg_count) {
         return make_error("table_has_key expects exactly 2 arguments (table, key)", 0, 0);
     }
     
-    Value key = env_peek(env, 0);
-    Value table_val = env_peek(env, 1);
+    Value key = ctx_peek(global_context, 0);
+    Value table_val = ctx_peek(global_context, 1);
     
     // Remove arguments
-    env_pop(env);
-    env_pop(env);
+    ctx_pop(global_context);
+    ctx_pop(global_context);
     
     if (table_val.type != VAL_TABLE) {
         return make_error("table_has_key first argument must be a table", 0, 0);
@@ -82,7 +82,7 @@ EvalResult lib_table_has_key(Environment* env, int arg_count) {
     Table* table = table_val.as.table;
     bool has_key = table_has_key(table, key);
     
-    env_push(env, make_bool_value(has_key));
+    ctx_push(global_context, make_bool_value(has_key));
     return make_success(1);
 }
 
@@ -91,8 +91,8 @@ EvalResult lib_table_size(Environment* env, int arg_count) {
         return make_error("table_size expects exactly 1 argument", 0, 0);
     }
     
-    Value table_val = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value table_val = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
     
     if (table_val.type != VAL_TABLE) {
         return make_error("table_size argument must be a table", 0, 0);
@@ -101,7 +101,7 @@ EvalResult lib_table_size(Environment* env, int arg_count) {
     Table* table = table_val.as.table;
     size_t size = table_size(table);
     
-    env_push(env, make_integer_value(NUM_INT64, (int64_t)size));
+    ctx_push(global_context, make_integer_value(NUM_INT64, (int64_t)size));
     return make_success(1);
 }
 
@@ -110,12 +110,12 @@ EvalResult lib_setmetatable(Environment* env, int arg_count) {
         return make_error("setmetatable expects exactly 2 arguments (table, metatable)", 0, 0);
     }
     
-    Value metatable_val = env_peek(env, 0);
-    Value table_val = env_peek(env, 1);
+    Value metatable_val = ctx_peek(global_context, 0);
+    Value table_val = ctx_peek(global_context, 1);
     
     // Remove arguments
-    env_pop(env);
-    env_pop(env);
+    ctx_pop(global_context);
+    ctx_pop(global_context);
     
     if (table_val.type != VAL_TABLE) {
         return make_error("setmetatable first argument must be a table", 0, 0);
@@ -130,7 +130,7 @@ EvalResult lib_setmetatable(Environment* env, int arg_count) {
     
     set_metatable(table, metatable);
     
-    env_push(env, table_val); // Return the original table
+    ctx_push(global_context, table_val); // Return the original table
     return make_success(1);
 }
 
@@ -139,8 +139,8 @@ EvalResult lib_getmetatable(Environment* env, int arg_count) {
         return make_error("getmetatable expects exactly 1 argument", 0, 0);
     }
     
-    Value table_val = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value table_val = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
     
     if (table_val.type != VAL_TABLE) {
         return make_error("getmetatable argument must be a table", 0, 0);
@@ -150,9 +150,9 @@ EvalResult lib_getmetatable(Environment* env, int arg_count) {
     Table* metatable = get_metatable(table);
     
     if (metatable) {
-        env_push(env, make_table_value(metatable));
+        ctx_push(global_context, make_table_value(metatable));
     } else {
-        env_push(env, make_nil_value());
+        ctx_push(global_context, make_nil_value());
     }
     
     return make_success(1);
@@ -163,8 +163,8 @@ EvalResult lib_pairs(Environment* env, int arg_count) {
         return make_error("pairs expects exactly 1 argument", 0, 0);
     }
     
-    Value table_val = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value table_val = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
     
     if (table_val.type != VAL_TABLE) {
         return make_error("pairs argument must be a table", 0, 0);
@@ -205,6 +205,6 @@ EvalResult lib_pairs(Environment* env, int arg_count) {
     pairs_array->length = pair_index;
     
     // Push the pairs array onto the stack
-    env_push(env, make_array_value(pairs_array));
+    ctx_push(global_context, make_array_value(pairs_array));
     return make_success(1);
 }

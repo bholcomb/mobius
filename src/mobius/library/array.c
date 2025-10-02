@@ -15,8 +15,8 @@ EvalResult lib_array_create(Environment* env, int arg_count) {
 
     size_t capacity = 8; // Default capacity
     if (arg_count == 1) {
-        Value arg = env_peek(env, 0);
-        env_pop(env); // Remove argument
+        Value arg = ctx_peek(global_context, 0);
+        ctx_pop(global_context); // Remove argument
         
         if (arg.type != VAL_INTEGER) {
             return make_error("array_create capacity must be an integer", 0, 0);
@@ -30,7 +30,7 @@ EvalResult lib_array_create(Environment* env, int arg_count) {
         return make_error("Failed to create array", 0, 0);
     }
 
-    env_push(env, make_array_value(array));
+    ctx_push(global_context, make_array_value(array));
     return make_success(1);
 }
 
@@ -39,12 +39,12 @@ EvalResult lib_array_push(Environment* env, int arg_count) {
         return make_error("array_push expects exactly 2 arguments (array, value)", 0, 0);
     }
 
-    Value value = env_peek(env, 0);
-    Value array_val = env_peek(env, 1);
+    Value value = ctx_peek(global_context, 0);
+    Value array_val = ctx_peek(global_context, 1);
     
     // Remove arguments
-    env_pop(env);
-    env_pop(env);
+    ctx_pop(global_context);
+    ctx_pop(global_context);
 
     if (array_val.type != VAL_ARRAY) {
         return make_error("array_push first argument must be an array", 0, 0);
@@ -61,8 +61,8 @@ EvalResult lib_array_pop(Environment* env, int arg_count) {
         return make_error("array_pop expects exactly 1 argument", 0, 0);
     }
 
-    Value array_val = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value array_val = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
         return make_error("array_pop argument must be an array", 0, 0);
@@ -70,14 +70,14 @@ EvalResult lib_array_pop(Environment* env, int arg_count) {
 
     ArrayValue* array = array_val.as.array;
     if (array->length == 0) {
-        env_push(env, make_nil_value());
+        ctx_push(global_context, make_nil_value());
         return make_success(1);
     }
 
     Value popped_value = array->elements[array->length - 1];
     array->length--;
 
-    env_push(env, popped_value);
+    ctx_push(global_context, popped_value);
     return make_success(1);
 }
 
@@ -86,12 +86,12 @@ EvalResult lib_array_get(Environment* env, int arg_count) {
         return make_error("array_get expects exactly 2 arguments (array, index)", 0, 0);
     }
 
-    Value index_val = env_peek(env, 0);
-    Value array_val = env_peek(env, 1);
+    Value index_val = ctx_peek(global_context, 0);
+    Value array_val = ctx_peek(global_context, 1);
     
     // Remove arguments
-    env_pop(env);
-    env_pop(env);
+    ctx_pop(global_context);
+    ctx_pop(global_context);
 
     if (array_val.type != VAL_ARRAY) {
         return make_error("array_get first argument must be an array", 0, 0);
@@ -105,11 +105,11 @@ EvalResult lib_array_get(Environment* env, int arg_count) {
     int64_t index = index_val.as.integer.value.i64;
 
     if (index < 0 || index >= (int64_t)array->length) {
-        env_push(env, make_nil_value());
+        ctx_push(global_context, make_nil_value());
         return make_success(1);
     }
 
-    env_push(env, array->elements[index]);
+    ctx_push(global_context, array->elements[index]);
     return make_success(1);
 }
 
@@ -118,13 +118,13 @@ EvalResult lib_array_set(Environment* env, int arg_count) {
         return make_error("array_set expects exactly 3 arguments (array, index, value)", 0, 0);
     }
 
-    Value value = env_peek(env, 0);
-    Value index_val = env_peek(env, 1);
-    Value array_val = env_peek(env, 2);
+    Value value = ctx_peek(global_context, 0);
+    Value index_val = ctx_peek(global_context, 1);
+    Value array_val = ctx_peek(global_context, 2);
     
     // Remove arguments
     for (int i = 0; i < 3; i++) {
-        env_pop(env);
+        ctx_pop(global_context);
     }
 
     if (array_val.type != VAL_ARRAY) {
@@ -154,15 +154,15 @@ EvalResult lib_array_length(Environment* env, int arg_count) {
         return make_error("array_length expects exactly 1 argument", 0, 0);
     }
 
-    Value array_val = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value array_val = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
         return make_error("array_length argument must be an array", 0, 0);
     }
 
     ArrayValue* array = array_val.as.array;
-    env_push(env, make_integer_value(NUM_INT64, (int64_t)array->length));
+    ctx_push(global_context, make_integer_value(NUM_INT64, (int64_t)array->length));
     return make_success(1);
 }
 
@@ -171,13 +171,13 @@ EvalResult lib_array_slice(Environment* env, int arg_count) {
         return make_error("array_slice expects exactly 3 arguments (array, start, end)", 0, 0);
     }
 
-    Value end_val = env_peek(env, 0);
-    Value start_val = env_peek(env, 1);
-    Value array_val = env_peek(env, 2);
+    Value end_val = ctx_peek(global_context, 0);
+    Value start_val = ctx_peek(global_context, 1);
+    Value array_val = ctx_peek(global_context, 2);
     
     // Remove arguments
     for (int i = 0; i < 3; i++) {
-        env_pop(env);
+        ctx_pop(global_context);
     }
 
     if (array_val.type != VAL_ARRAY) {
@@ -198,7 +198,7 @@ EvalResult lib_array_slice(Environment* env, int arg_count) {
     if (start >= end) {
         // Return empty array
         ArrayValue* empty_array = array_create(8);
-        env_push(env, make_array_value(empty_array));
+        ctx_push(global_context, make_array_value(empty_array));
         return make_success(1);
     }
 
@@ -213,7 +213,7 @@ EvalResult lib_array_slice(Environment* env, int arg_count) {
         slice_array->length++;
     }
 
-    env_push(env, make_array_value(slice_array));
+    ctx_push(global_context, make_array_value(slice_array));
     return make_success(1);
 }
 
@@ -225,7 +225,7 @@ EvalResult lib_array_concat(Environment* env, int arg_count) {
     // Calculate total length
     size_t total_length = 0;
     for (int i = 0; i < arg_count; i++) {
-        Value arg = env_peek(env, i);
+        Value arg = ctx_peek(global_context, i);
         if (arg.type != VAL_ARRAY) {
             return make_error("array_concat expects all arguments to be arrays", 0, 0);
         }
@@ -239,7 +239,7 @@ EvalResult lib_array_concat(Environment* env, int arg_count) {
 
     // Copy elements from all arrays (in reverse order due to stack)
     for (int i = arg_count - 1; i >= 0; i--) {
-        Value arg = env_peek(env, i);
+        Value arg = ctx_peek(global_context, i);
         ArrayValue* array = arg.as.array;
         for (size_t j = 0; j < array->length; j++) {
             result_array->elements[result_array->length] = copy_value(array->elements[j]);
@@ -249,10 +249,10 @@ EvalResult lib_array_concat(Environment* env, int arg_count) {
 
     // Remove arguments
     for (int i = 0; i < arg_count; i++) {
-        env_pop(env);
+        ctx_pop(global_context);
     }
 
-    env_push(env, make_array_value(result_array));
+    ctx_push(global_context, make_array_value(result_array));
     return make_success(1);
 }
 
@@ -261,8 +261,8 @@ EvalResult lib_array_reverse(Environment* env, int arg_count) {
         return make_error("array_reverse expects exactly 1 argument", 0, 0);
     }
 
-    Value array_val = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value array_val = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
         return make_error("array_reverse argument must be an array", 0, 0);
@@ -278,7 +278,7 @@ EvalResult lib_array_reverse(Environment* env, int arg_count) {
         array->elements[j] = temp;
     }
 
-    env_push(env, array_val); // Return the same array
+    ctx_push(global_context, array_val); // Return the same array
     return make_success(1);
 }
 
@@ -287,12 +287,12 @@ EvalResult lib_array_find(Environment* env, int arg_count) {
         return make_error("array_find expects exactly 2 arguments (array, value)", 0, 0);
     }
 
-    Value search_val = env_peek(env, 0);
-    Value array_val = env_peek(env, 1);
+    Value search_val = ctx_peek(global_context, 0);
+    Value array_val = ctx_peek(global_context, 1);
     
     // Remove arguments
-    env_pop(env);
-    env_pop(env);
+    ctx_pop(global_context);
+    ctx_pop(global_context);
 
     if (array_val.type != VAL_ARRAY) {
         return make_error("array_find first argument must be an array", 0, 0);
@@ -303,12 +303,12 @@ EvalResult lib_array_find(Environment* env, int arg_count) {
     // Search for the value
     for (size_t i = 0; i < array->length; i++) {
         if (values_equal(array->elements[i], search_val)) {
-            env_push(env, make_integer_value(NUM_INT64, (int64_t)i));
+            ctx_push(global_context, make_integer_value(NUM_INT64, (int64_t)i));
             return make_success(1);
         }
     }
 
     // Not found
-    env_push(env, make_integer_value(NUM_INT64, -1));
+    ctx_push(global_context, make_integer_value(NUM_INT64, -1));
     return make_success(1);
 }

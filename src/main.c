@@ -29,6 +29,18 @@ int execute_file(const char* filename) {
     
     Stmt** statements = parse_result.statements;
     
+    // Initialize global execution stack if not already done
+    if (!global_context) {
+        global_context = create_execution_context(256);
+        if (!global_context) {
+            fprintf(stderr, "Failed to create execution stack\n");
+            free_parse_result(&parse_result);
+            free_token_array(&token_array);
+            free_file_result(&file_result);
+            return 1;
+        }
+    }
+    
     // Create environment
     Environment* env = create_environment(NULL);
     if (!env) {

@@ -19,8 +19,8 @@ EvalResult lib_set_strict_types(Environment* env, int arg_count) {
     
     bool strict = true; // Default to strict if no argument
     if (arg_count == 1) {
-        Value arg = env_peek(env, 0);
-        env_pop(env); // Remove argument
+        Value arg = ctx_peek(global_context, 0);
+        ctx_pop(global_context); // Remove argument
         
         if (arg.type != VAL_BOOL) {
             return make_error("set_strict_types argument must be a boolean", 0, 0);
@@ -29,7 +29,7 @@ EvalResult lib_set_strict_types(Environment* env, int arg_count) {
     }
     
     global_type_config.strict_mode = strict;
-    env_push(env, make_nil_value());
+    ctx_push(global_context, make_nil_value());
     return make_success(1);
 }
 
@@ -40,15 +40,15 @@ EvalResult lib_set_type_warnings(Environment* env, int arg_count) {
         return make_error("set_type_warnings expects exactly 1 argument", 0, 0);
     }
     
-    Value arg = env_peek(env, 0);
-    env_pop(env); // Remove argument
+    Value arg = ctx_peek(global_context, 0);
+    ctx_pop(global_context); // Remove argument
     
     if (arg.type != VAL_BOOL) {
         return make_error("set_type_warnings argument must be a boolean", 0, 0);
     }
     
     global_type_config.warn_on_conversion = arg.as.boolean;
-    env_push(env, make_nil_value());
+    ctx_push(global_context, make_nil_value());
     return make_success(1);
 }
 
@@ -75,6 +75,6 @@ EvalResult lib_get_type_config(Environment* env, int arg_count) {
     Value warn_value = make_bool_value(global_type_config.warn_on_conversion);
     table_set(config_table, warn_key, warn_value);
     
-    env_push(env, make_table_value(config_table));
+    ctx_push(global_context, make_table_value(config_table));
     return make_success(1);
 }
