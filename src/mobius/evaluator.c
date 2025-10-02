@@ -352,358 +352,6 @@ EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env) {
     return make_success_with_value(copy_value(expr->value));
 }
 
-// =============================================================================
-// STACK-BASED EXPRESSION EVALUATION (NEW)
-// =============================================================================
-
-// Stack-based literal evaluation - pushes value onto stack
-EvalResult eval_literal_expr_stack(LiteralExpr* expr, Environment* env) {
-    // Push the literal value onto the environment's stack
-    ctx_push(global_context, expr->value);
-    return make_success(1);  // Success indicator, 1 value pushed onto stack
-}
-
-// Stack-based variable evaluation - pushes variable value onto stack
-EvalResult eval_variable_expr_stack(VariableExpr* expr, Environment* env) {
-    const char* name = expr->name.identifier ? expr->name.identifier : "unknown";
-    
-    bool found;
-    Value value = get_variable(env, name, &found);
-    
-    if (!found) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "Undefined variable '%s'", name);
-        
-        return make_error_detailed(
-            error_msg,
-            "Make sure the variable is declared before use",
-            ERROR_UNDEFINED,
-            0, 0,
-            name,
-            NULL
-        );
-    }
-    
-    // Push the variable value onto the stack
-    ctx_push(global_context, value);
-    return make_success(1);  // Success indicator, 1 value pushed onto stack
-}
-
-// Stack-based binary evaluation - pops operands, computes, pushes result
-EvalResult eval_binary_expr_stack(BinaryExpr* expr, Environment* env) {
-    // Evaluate left operand (pushes onto stack)
-    EvalResult left_result = evaluate_expr(expr->left, env);
-    if (is_error(left_result)) {
-        return left_result;
-    }
-    
-    // Evaluate right operand (pushes onto stack)
-    EvalResult right_result = evaluate_expr(expr->right, env);
-    if (is_error(right_result)) {
-        return right_result;
-    }
-    
-    // Pop operands from stack (right operand is on top)
-    Value right = ctx_pop(global_context);
-    Value left = ctx_pop(global_context);
-    
-    EvalResult result;
-    switch (expr->op.type) {
-        case TOKEN_PLUS:
-            result = add_values(env, left, right);
-            break;
-        case TOKEN_MINUS:
-            result = subtract_values(env, left, right);
-            break;
-        case TOKEN_STAR:
-            result = multiply_values(env, left, right);
-            break;
-        case TOKEN_SLASH:
-            result = divide_values(env, left, right, expr->op.line, expr->op.column);
-            break;
-        case TOKEN_PERCENT:
-            result = modulo_values(env, left, right, expr->op.line, expr->op.column);
-            break;
-        case TOKEN_EQUAL_EQUAL:
-        case TOKEN_BANG_EQUAL:
-        case TOKEN_GREATER:
-        case TOKEN_GREATER_EQUAL:
-        case TOKEN_LESS:
-        case TOKEN_LESS_EQUAL:
-            result = compare_values(env, left, right, expr->op.type);
-            break;
-        case TOKEN_AND:
-        case TOKEN_AND_AND:
-            if (!is_truthy(left)) {
-                ctx_push(global_context, left);
-            } else {
-                ctx_push(global_context, right);
-            }
-            result = make_success(1);
-            break;
-        case TOKEN_OR:
-        case TOKEN_OR_OR:
-            if (is_truthy(left)) {
-                ctx_push(global_context, left);
-            } else {
-                ctx_push(global_context, right);
-            }
-            result = make_success(1);
-            break;
-        default:
-            result = make_error("Unsupported binary operator", expr->op.line, expr->op.column);
-            break;
-    }
-    
-    // Clean up operands
-    free_value(left);
-    free_value(right);
-    
-    // Result already pushed by arithmetic function
-        return result;
-}
-
-// Stack-based unary evaluation - pops operand, computes, pushes result
-EvalResult eval_unary_expr_stack(UnaryExpr* expr, Environment* env) {
-    // Evaluate operand (pushes onto stack)
-    EvalResult operand_result = evaluate_expr(expr->right, env);
-    if (is_error(operand_result)) {
-        return operand_result;
-    }
-    
-    // Pop operand from stack
-    Value operand = ctx_pop(global_context);
-    
-    EvalResult result;
-    switch (expr->op.type) {
-        case TOKEN_MINUS:
-            if (operand.type == VAL_FLOAT64) {
-                result = make_success_with_value(make_float_value(-operand.as.float64_val));
-            } else if (operand.type == VAL_INTEGER) {
-                // Extract value properly based on the actual type, but result should be int64_t
-                int64_t value = 0;
-                switch (operand.as.integer.num_type) {
-                    case NUM_INT8:   value = operand.as.integer.value.i8; break;
-                    case NUM_UINT8:  value = operand.as.integer.value.u8; break;
-                    case NUM_INT16:  value = operand.as.integer.value.i16; break;
-                    case NUM_UINT16: value = operand.as.integer.value.u16; break;
-                    case NUM_INT32:  value = operand.as.integer.value.i32; break;
-                    case NUM_UINT32: value = operand.as.integer.value.u32; break;
-                    case NUM_INT64:  value = operand.as.integer.value.i64; break;
-                    case NUM_UINT64: value = operand.as.integer.value.u64; break;
-                    default: value = operand.as.integer.value.i32; break;
-                }
-                result = make_success_with_value(make_integer_value(NUM_INT64, -value));
-            } else {
-                result = make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
-            }
-            break;
-        case TOKEN_PLUS:
-            // Unary plus is identity for numbers
-            if (operand.type == VAL_FLOAT64 || operand.type == VAL_INTEGER) {
-                result = make_success_with_value(operand);
-            } else {
-                result = make_error("Cannot apply unary plus to non-numeric value", expr->op.line, expr->op.column);
-            }
-            break;
-        case TOKEN_BANG:
-        case TOKEN_NOT:
-            result = make_success_with_value(make_bool_value(!is_truthy(operand)));
-            break;
-        default:
-            result = make_error("Unknown unary operator", expr->op.line, expr->op.column);
-            break;
-    }
-    
-    // Clean up operand
-    free_value(operand);
-    
-    if (is_error(result)) {
-        return result;
-    }
-    
-    // Result already pushed by make_success_with_value
-    return result;
-}
-
-// Stack-based grouping evaluation - just evaluates the inner expression
-EvalResult eval_grouping_expr_stack(GroupingExpr* expr, Environment* env) {
-    // Grouping just evaluates the inner expression
-    return evaluate_expr(expr->expression, env);
-}
-
-// =============================================================================
-// STACK-BASED FUNCTION INTERFACE (UNIFIED FOR AST AND BYTECODE)
-// =============================================================================
-
-// Stack-based builtin function signature - unified interface that works for both AST and bytecode
-typedef EvalResult (*StackLibraryFunction)(Environment* env, int arg_count);
-
-// =============================================================================
-// NATIVE STACK-BASED BUILTIN FUNCTIONS
-// =============================================================================
-
-// Native stack-based print function
-EvalResult builtin_print_stack(Environment* env, int arg_count) {
-    for (int i = 0; i < arg_count; i++) {
-        if (i > 0) printf(" ");
-        Value arg = ctx_peek(global_context, arg_count - 1 - i);  // Get args in correct order
-        print_value(arg);
-    }
-    printf("\n");
-    
-    // Pop arguments from stack
-    for (int i = 0; i < arg_count; i++) {
-        ctx_pop(global_context);
-    }
-    
-    return make_success(0);
-}
-
-// Native stack-based str function
-EvalResult builtin_str_stack(Environment* env, int arg_count) {
-    if (arg_count != 1) {
-        return make_error("str() expects exactly 1 argument", 0, 0);
-    }
-    
-    Value arg = ctx_pop(global_context);
-    char* temp_str = value_to_string(arg);
-    Value result = make_string_value_from_cstr(temp_str);
-    free(temp_str);
-    free_value(arg);
-    
-    ctx_push(global_context, result);
-    free_value(result);  // env_push copies the value
-    return make_success(1);
-}
-
-// Native stack-based int function
-EvalResult builtin_int_stack(Environment* env, int arg_count) {
-    if (arg_count != 1) {
-        return make_error("int() expects exactly 1 argument", 0, 0);
-    }
-    
-    Value arg = ctx_pop(global_context);
-    
-    Value result_val;
-    switch (arg.type) {
-        case VAL_INTEGER:
-            result_val = arg;  // Already an integer
-            break;
-        case VAL_FLOAT64:
-            result_val = make_integer_value(NUM_INT32, (int32_t)arg.as.float64_val);
-            free_value(arg);
-            break;
-        case VAL_STRING: {
-            if (arg.as.string) {
-                const char* str_data = string_data(arg.as.string);
-                char* endptr;
-                long val = strtol(str_data, &endptr, 10);
-                if (*endptr == '\0') {
-                    result_val = make_integer_value(NUM_INT32, (int32_t)val);
-                } else {
-                    free_value(arg);
-                    return make_error("Cannot convert string to integer", 0, 0);
-                }
-            } else {
-                free_value(arg);
-                return make_error("Cannot convert null string to integer", 0, 0);
-            }
-            free_value(arg);
-            break;
-        }
-        case VAL_BOOL:
-            result_val = make_integer_value(NUM_INT32, arg.as.boolean ? 1 : 0);
-            free_value(arg);
-            break;
-        default:
-            free_value(arg);
-            return make_error("Cannot convert value to integer", 0, 0);
-    }
-    
-    ctx_push(global_context, result_val);
-    free_value(result_val);  // env_push copies the value
-    return make_success(1);
-}
-
-// Native stack-based float function  
-EvalResult builtin_float_stack(Environment* env, int arg_count) {
-    if (arg_count != 1) {
-        return make_error("float() expects exactly 1 argument", 0, 0);
-    }
-    
-    Value arg = ctx_pop(global_context);
-    
-    Value result_val;
-    switch (arg.type) {
-        case VAL_FLOAT64:
-            result_val = arg;  // Already a float
-            break;
-        case VAL_INTEGER: {
-            // Convert integer to float based on its numeric type
-            double val = 0.0;
-            switch (arg.as.integer.num_type) {
-                case NUM_INT8:   val = arg.as.integer.value.i8; break;
-                case NUM_UINT8:  val = arg.as.integer.value.u8; break;
-                case NUM_INT16:  val = arg.as.integer.value.i16; break;
-                case NUM_UINT16: val = arg.as.integer.value.u16; break;
-                case NUM_INT32:  val = arg.as.integer.value.i32; break;
-                case NUM_UINT32: val = arg.as.integer.value.u32; break;
-                case NUM_INT64:  val = arg.as.integer.value.i64; break;
-                case NUM_UINT64: val = arg.as.integer.value.u64; break;
-                default: val = arg.as.integer.value.i32; break;
-            }
-            result_val = make_float_value(val);
-            free_value(arg);
-            break;
-        }
-        case VAL_STRING: {
-            if (arg.as.string) {
-                const char* str = string_data(arg.as.string);
-                char* endptr;
-                double val = strtod(str, &endptr);
-                if (*endptr == '\0') {
-                    result_val = make_float_value(val);
-                } else {
-                    free_value(arg);
-                    return make_error("Cannot convert string to float", 0, 0);
-                }
-            } else {
-                free_value(arg);
-                return make_error("Cannot convert null string to float", 0, 0);
-            }
-            free_value(arg);
-            break;
-        }
-        default:
-            free_value(arg);
-            return make_error("Cannot convert value to float", 0, 0);
-    }
-    
-    ctx_push(global_context, result_val);
-    free_value(result_val);  // env_push copies the value
-    return make_success(1);
-}
-
-// Native stack-based typeof function
-EvalResult builtin_typeof_stack(Environment* env, int arg_count) {
-    if (arg_count != 1) {
-        return make_error("typeof() expects exactly 1 argument", 0, 0);
-    }
-    
-    Value arg = ctx_pop(global_context);
-    const char* type_name = value_type_name(arg.type);
-    Value result = make_string_value_from_cstr(type_name);
-    free_value(arg);
-    
-    ctx_push(global_context, result);
-    free_value(result);  // env_push copies the value
-    return make_success(1);
-}
-
-// Include the new library interface
-#include "library/library.h"
-
 // Stack-based function call evaluation
 EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     char full_name[256];
@@ -862,72 +510,21 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
         return make_error("Only variable and module.function calls supported", 0, 0);
     }
     
-    // Parse qualified name (module.function)
-    char module_name[128] = {0};
-    char function_name[128] = {0};
-    bool is_qualified = parse_qualified_name(full_name, module_name, function_name);
+    // All function calls go through the environment
+    // Module functions must be imported first using: import "module_name";
+    // Then called via: module_name.function() which is handled as TABLE_DOT above
     
-    LibraryFunction builtin = NULL;
+    (void)registry;  // Not used - functions must be imported into environment
     
-    if (is_qualified) {
-        // Qualified function call: module.function()
-        if (registry) {
-            builtin = lookup_qualified_plugin_function(registry, module_name, function_name);
-        }
-        
-        if (!builtin) {
-            char error_msg[512];
-            snprintf(error_msg, sizeof(error_msg), "Unknown function '%s' in module '%s'", 
-                    function_name, module_name);
-            
-            return make_error_detailed(
-                error_msg,
-                "Check if the module is loaded and the function name is correct",
-                ERROR_UNDEFINED,
-                call_line,
-                call_column,
-                NULL,
-                NULL
-            );
-        }
-    } else {
-        // Regular function call: function()
-        
-        // First check if it's a user-defined or imported native function
-        bool found = false;
-        Value func_value = get_variable(env, full_name, &found);
-        if (found) {
-            if (func_value.type == VAL_FUNCTION && func_value.as.function) {
-                // Call user-defined function
-                return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
-            } else if (func_value.type == VAL_NATIVE_FUNCTION && func_value.as.native_function) {
-                // Call native function imported to global scope
-                // Evaluate arguments onto stack
-                for (size_t i = 0; i < expr->arg_count; i++) {
-                    EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
-                    if (is_error(arg_result)) {
-                        // Clean up any arguments already on stack
-                        for (size_t j = 0; j < i; j++) {
-                            ctx_pop(global_context);
-                        }
-                        return arg_result;
-                    }
-                }
-                
-                // Call the native function
-                stack_trace_push(full_name, NULL, 0, 0, true, false, NULL);
-                LibraryFunction native_func = (LibraryFunction)func_value.as.native_function;
-                global_context->env = env;
-                EvalResult result = native_func(global_context, expr->arg_count);
-                stack_trace_pop();
-                
-                return result;
-            }
-        }
-        
-        // First try the new unified library
-        LibraryFunction lib_func = lookup_library_function(full_name);
-        if (lib_func) {
+    // Check if it's a user-defined function or native function in the environment
+    bool found = false;
+    Value func_value = get_variable(env, full_name, &found);
+    if (found) {
+        if (func_value.type == VAL_FUNCTION && func_value.as.function) {
+            // Call user-defined function
+            return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+        } else if (func_value.type == VAL_NATIVE_FUNCTION && func_value.as.native_function) {
+            // Call native function (stdlib or imported from module)
             // Evaluate arguments onto stack
             for (size_t i = 0; i < expr->arg_count; i++) {
                 EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
@@ -938,99 +535,67 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                     }
                     return arg_result;
                 }
-                // Argument is now on stack
             }
             
-            // Push builtin function call onto stack trace
-            stack_trace_push(full_name, NULL, 0, 0, true, false, NULL);
-            
-            // Call the unified library function
-            global_context->env = env;  // Set current environment in context
-            EvalResult result = lib_func(global_context, expr->arg_count);
-            
-            // Pop builtin function call from stack trace
+            // Call the native function
+            stack_trace_push(full_name, NULL, call_line, call_column, true, false, NULL);
+            LibraryFunction native_func = (LibraryFunction)func_value.as.native_function;
+            global_context->env = env;
+            EvalResult result = native_func(global_context, expr->arg_count);
             stack_trace_pop();
             
             return result;
         }
-        
-        // Fall back to stdlib (plugins require namespace)
-        builtin = lookup_builtin(full_name);
-        
-        if (!builtin) {
-            // Check if this function exists in any loaded module (to give helpful error)
-            char suggested_name[256] = {0};
-            ModuleRegistry* reg = get_global_module_registry();
-            if (reg) {
-                for (size_t i = 0; i < reg->function_count; i++) {
-                    const char* qualified = reg->function_table[i].qualified_name;
-                    // Check if the qualified name ends with our function name
-                    size_t qual_len = strlen(qualified);
-                    size_t func_len = strlen(full_name);
-                    if (qual_len > func_len && 
-                        qualified[qual_len - func_len - 1] == '.' &&
-                        strcmp(qualified + qual_len - func_len, full_name) == 0) {
-                        // Found it! Save the qualified name
-                        snprintf(suggested_name, sizeof(suggested_name), "%s", qualified);
-                        break;
-                    }
-                }
+    }
+    
+    // Function not found - provide helpful error message
+    // Check if this function exists in any loaded module (to suggest import)
+    char suggested_import[256] = {0};
+    ModuleRegistry* reg = get_global_module_registry();
+    if (reg) {
+        for (size_t i = 0; i < reg->function_count; i++) {
+            const char* qualified = reg->function_table[i].qualified_name;
+            // Check if the qualified name ends with our function name
+            size_t qual_len = strlen(qualified);
+            size_t func_len = strlen(full_name);
+            if (qual_len > func_len && 
+                qualified[qual_len - func_len - 1] == '.' &&
+                strcmp(qualified + qual_len - func_len, full_name) == 0) {
+                // Extract module name
+                size_t module_len = qual_len - func_len - 1;
+                strncpy(suggested_import, qualified, module_len);
+                suggested_import[module_len] = '\0';
+                break;
             }
-            
-            char error_msg[512];
-            char suggestion[512];
-            
-            if (suggested_name[0]) {
-                // Function exists in a module - suggest qualified name
-                snprintf(error_msg, sizeof(error_msg), 
-                        "Function '%s' requires module namespace", full_name);
-                snprintf(suggestion, sizeof(suggestion),
-                        "Use qualified name: %s()", suggested_name);
-            } else {
-                // Function truly doesn't exist
-            snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
-                snprintf(suggestion, sizeof(suggestion),
-                        "Check the function name spelling or make sure it's declared before use");
-            }
-            
-            return make_error_detailed(
-                error_msg,
-                suggestion,
-                ERROR_UNDEFINED,
-                call_line,
-                call_column,
-                NULL,
-                NULL
-            );
         }
     }
     
-    // OLD PATH: Evaluate arguments onto stack for adapter
-    for (size_t i = 0; i < expr->arg_count; i++) {
-        EvalResult arg_result = evaluate_expr(expr->arguments[i], env);
-        if (is_error(arg_result)) {
-            // Clean up any arguments already on stack
-            for (size_t j = 0; j < i; j++) {
-                ctx_pop(global_context);
-            }
-            return arg_result;
-        }
-        // Argument is now on stack
+    char error_msg[512];
+    char suggestion[512];
+    
+    if (suggested_import[0]) {
+        // Function exists in a module - suggest import
+        snprintf(error_msg, sizeof(error_msg), 
+                "Function '%s' requires importing module first", full_name);
+        snprintf(suggestion, sizeof(suggestion),
+                "Add: import \"%s\"; then call as: %s.%s()", 
+                suggested_import, suggested_import, full_name);
+    } else {
+        // Function truly doesn't exist
+        snprintf(error_msg, sizeof(error_msg), "Unknown function '%s'", full_name);
+        snprintf(suggestion, sizeof(suggestion),
+                "Check the function name spelling or make sure it's declared before use");
     }
     
-    // Push builtin function call onto stack trace
-    const char* func_name = is_qualified ? function_name : full_name;
-    stack_trace_push(func_name, NULL, 0, 0, true, is_qualified, 
-                     is_qualified ? module_name : NULL);
-    
-    // Call the function using stack-based interface
-    global_context->env = env;  // Set current environment in context
-    EvalResult result = builtin(global_context, expr->arg_count);
-    
-    // Pop builtin function call from stack trace
-    stack_trace_pop();
-    
-    return result;
+    return make_error_detailed(
+        error_msg,
+        suggestion,
+        ERROR_UNDEFINED,
+        call_line,
+        call_column,
+        NULL,
+        NULL
+    );
 }
 
 // Main expression evaluator (stack-based)
@@ -1919,39 +1484,18 @@ ModuleRegistry* get_global_module_registry(void) {
     return global_registry;
 }
 
-// Built-in function lookup - first checks plugins, then falls back to library
-LibraryFunction lookup_builtin(const char* name) {
-    // NAMESPACE ENFORCEMENT: Do NOT search plugins by unqualified name
-    // Plugin functions MUST be accessed via qualified name (module.function)
-    // This ensures no naming conflicts between modules
-    
-    // Only check the standard library (global functions like print, typeof, etc.)
-    return lookup_library_function(name);
-}
+// Note: All function lookup functions removed (lookup_builtin, lookup_plugin_function,
+// lookup_qualified_plugin_function). Functions are now consistently looked up through
+// the environment using get_variable():
+// - User-defined functions: stored as VAL_FUNCTION
+// - Stdlib functions: stored as VAL_NATIVE_FUNCTION via register_stdlib_functions()
+// - Module functions: must be imported first, then accessed via module.function() syntax
+//   which resolves through TABLE_DOT expression evaluation
 
-// Plugin-aware function lookup
-LibraryFunction lookup_plugin_function(ModuleRegistry* registry, const char* name) {
-    if (!registry) return NULL;
-    
-    PluginFunction* plugin_func = lookup_function(registry, name);
-    return plugin_func ? plugin_func->function : NULL;
-}
-
-// Qualified function lookup (module.function)
-LibraryFunction lookup_qualified_plugin_function(ModuleRegistry* registry, 
-                                                const char* module_name, 
-                                                const char* function_name) {
-    if (!registry) return NULL;
-    
-    PluginFunction* plugin_func = lookup_qualified_function(registry, module_name, function_name);
-    return plugin_func ? plugin_func->function : NULL;
-}
-
-void register_builtins(Environment* env) {
-    // Built-ins are looked up dynamically, so we don't need to register them
-    // in the environment. They're handled specially in eval_call_expr.
-    (void)env;
-}
+// Note: register_builtins() removed - use register_stdlib_functions() from
+// library/stdlib_init.h instead. This properly registers all stdlib functions
+// as VAL_NATIVE_FUNCTION values in the environment, making lookup consistent
+// with user-defined functions.
 
 // Main statement evaluator
 EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {

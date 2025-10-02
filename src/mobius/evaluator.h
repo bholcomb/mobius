@@ -58,10 +58,6 @@ EvalResult evaluate_expr(Expr* expr, Environment* env);
 EvalResult evaluate_stmt(Stmt* stmt, Environment* env);
 EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env);
 
-// Plugin-aware evaluation
-EvalResult evaluate_stmt_with_registry(Stmt* stmt, Environment* env, ModuleRegistry* registry);
-EvalResult evaluate_program_with_registry(Stmt** statements, size_t count, Environment* env, ModuleRegistry* registry);
-
 // Expression evaluation
 EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env);
 EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env);
@@ -89,12 +85,8 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env);
 
 // Note: Built-in functions moved to stdlib.h/stdlib.c
 
-// Plugin-aware function management
-LibraryFunction lookup_builtin(const char* name);
-LibraryFunction lookup_plugin_function(ModuleRegistry* registry, const char* name);
-LibraryFunction lookup_qualified_plugin_function(ModuleRegistry* registry, 
-                                                const char* module_name, 
-                                                const char* function_name);
+// Note: All function lookup functions removed. Module functions must be imported
+// first using import statements, then accessed via module.function() syntax.
 
 // Global module registry management
 void set_global_module_registry(ModuleRegistry* registry);
