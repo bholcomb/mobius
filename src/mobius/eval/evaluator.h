@@ -5,7 +5,6 @@
 #include "data/function.h"
 #include "frontend/ast.h"
 #include "state/environment.h"
-#include "state/stack_trace.h"
 
 #include <stdbool.h>
 
