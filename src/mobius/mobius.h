@@ -10,21 +10,21 @@
  */
 
 // Core components
-#include "token.h"
-#include "ast.h"
-#include "scanner.h"
-#include "parser.h"
-#include "environment.h"
-#include "evaluator.h"
+#include "frontend/token.h"
+#include "frontend/ast.h"
+#include "frontend/scanner.h"
+#include "frontend/parser.h"
+#include "state/environment.h"
+#include "eval/evaluator.h"
 
 // Extended functionality
-#include "file_io.h"
+#include "util/file_io.h"
 #include "repl.h"
 #include "library/library.h"
 
 // Plugin system
-#include "plugin.h"
-#include "module_registry.h"
+#include "state/plugin.h"
+#include "statemodule_registry.h"
 
 // Embedding API
 #include "embedding.h"

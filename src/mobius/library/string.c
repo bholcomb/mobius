@@ -1,6 +1,8 @@
-#include "string.h"
-#include "../value.h"
-#include "../environment.h"
+#include "library/string.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "eval/evaluator.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
