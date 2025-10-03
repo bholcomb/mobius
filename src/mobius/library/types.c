@@ -1,8 +1,10 @@
-#include "types.h"
-#include "../value.h"
-#include "../environment.h"
-#include "../types.h"
-#include "../table.h"
+#include "library/types.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "data/types.h"
+#include "data/table.h"
+#include "eval/evaluator.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 

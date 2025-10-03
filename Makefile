@@ -3,7 +3,9 @@
 
 # Compiler and flags
 CC = gcc
+CXX = g++
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -g -O2 -fPIC
+CXXFLAGS = -Wall -Wextra -std=c++11 -g -O2 -fPIC
 CPPFLAGS = -Isrc -Isrc/mobius
 LDFLAGS = -lm -ldl
 
@@ -15,31 +17,44 @@ OBJDIR = $(BUILDDIR)
 
 # Core library sources
 MOBIUS_SOURCES = \
-	$(SRCDIR)/mobius/ast.c \
-	$(SRCDIR)/mobius/embedding.c \
-	$(SRCDIR)/mobius/environment.c \
-	$(SRCDIR)/mobius/evaluator.c \
-	$(SRCDIR)/mobius/file_io.c \
-	$(SRCDIR)/mobius/module_registry.c \
-	$(SRCDIR)/mobius/parser.c \
-	$(SRCDIR)/mobius/repl.c \
-	$(SRCDIR)/mobius/scanner.c \
-	$(SRCDIR)/mobius/stack_trace.c \
-	$(SRCDIR)/mobius/table.c \
-	$(SRCDIR)/mobius/token.c \
-	$(SRCDIR)/mobius/types.c \
-	$(SRCDIR)/mobius/utility.c \
-	$(SRCDIR)/mobius/value.c \
-	$(SRCDIR)/mobius/enumValue.c \
-	$(SRCDIR)/mobius/library/library.c \
+	$(SRCDIR)/mobius/data/array.c \
+	$(SRCDIR)/mobius/data/enum.c \
+	$(SRCDIR)/mobius/data/number.c \
+	$(SRCDIR)/mobius/data/table.c \
+	$(SRCDIR)/mobius/data/value.c \
+	$(SRCDIR)/mobius/internal/refString.c \
+	$(SRCDIR)/mobius/frontend/ast.c \
+	$(SRCDIR)/mobius/frontend/parser.c \
+	$(SRCDIR)/mobius/frontend/scanner.c \
+	$(SRCDIR)/mobius/frontend/token.c \
+	$(SRCDIR)/mobius/eval/eval_arithmatic.c \
+	$(SRCDIR)/mobius/eval/eval_array.c \
+	$(SRCDIR)/mobius/eval/eval_core.c \
+	$(SRCDIR)/mobius/eval/eval_enum.c \
+	$(SRCDIR)/mobius/eval/eval_error.c \
+	$(SRCDIR)/mobius/eval/eval_expression.c \
+	$(SRCDIR)/mobius/eval/eval_import.c \
+	$(SRCDIR)/mobius/eval/eval_statement.c \
+	$(SRCDIR)/mobius/eval/eval_switch.c \
+	$(SRCDIR)/mobius/eval/eval_table.c \
+	$(SRCDIR)/mobius/eval/eval_util.c \
+	$(SRCDIR)/mobius/library/array.c \
 	$(SRCDIR)/mobius/library/core.c \
+	$(SRCDIR)/mobius/library/library.c \
 	$(SRCDIR)/mobius/library/math.c \
+	$(SRCDIR)/mobius/library/stdlib_init.c \
 	$(SRCDIR)/mobius/library/string.c \
 	$(SRCDIR)/mobius/library/table_lib.c \
-	$(SRCDIR)/mobius/library/array.c \
 	$(SRCDIR)/mobius/library/types.c \
 	$(SRCDIR)/mobius/library/util.c \
-	$(SRCDIR)/mobius/library/stdlib_init.c
+	$(SRCDIR)/mobius/state/embedding.c \
+	$(SRCDIR)/mobius/state/environment.c \
+	$(SRCDIR)/mobius/state/mobius_state.cpp \
+	$(SRCDIR)/mobius/state/stack_trace.c \
+	$(SRCDIR)/mobius/plugin/module_registry.c \
+	$(SRCDIR)/mobius/util/file_io.c \
+	$(SRCDIR)/mobius/util/utility.c \
+	$(SRCDIR)/mobius/repl.c \
 
 # All library sources combined  
 ALL_LIB_SOURCES = $(MOBIUS_SOURCES)
@@ -47,7 +62,7 @@ ALL_LIB_SOURCES = $(MOBIUS_SOURCES)
 # Main executable source
 MAIN_SOURCE = $(SRCDIR)/main.c
 
-# Object files
+# Object files - preserve directory structure to avoid naming conflicts
 MOBIUS_OBJECTS = $(MOBIUS_SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 MAIN_OBJECT = $(MAIN_SOURCE:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 
@@ -88,11 +103,17 @@ $(MOBIUS_EXE): $(MAIN_OBJECT) $(LIBMOBIUS)
 	@echo "Linking: $@"
 	$(CC) $(CFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
-# Generic rule for object files
+# Generic rule for C object files
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	@echo "Compiling: $<"
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+# Generic rule for C++ object files
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	@echo "Compiling: $<"
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 # Example executables
 $(BINDIR)/embedding_example: examples/embedding_example/embedding_example.c $(LIBMOBIUS)

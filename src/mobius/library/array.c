@@ -1,6 +1,8 @@
-#include "array.h"
-#include "../value.h"
-#include "../environment.h"
+#include "data/array.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "eval/evaluator.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 

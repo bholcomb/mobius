@@ -1,10 +1,13 @@
-#include "util.h"
-#include "../value.h"
-#include "../environment.h"
-#include "../file_io.h"
-#include "../scanner.h"
-#include "../parser.h"
-#include "../evaluator.h"
+#include "library/util.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "util/file_io.h"
+#include "frontend/scanner.h"
+#include "frontend/parser.h"
+#include "eval/evaluator.h"
+#include "frontend/parser.h"
+#include "eval/evaluator.h"
+
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>

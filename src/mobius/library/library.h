@@ -1,9 +1,9 @@
 #ifndef MOBIUS_LIBRARY_H
 #define MOBIUS_LIBRARY_H
 
-#include "../value.h"
-#include "../environment.h"
-#include "../evaluator.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "eval/evaluator.h"
 
 // =============================================================================
 // UNIFIED LIBRARY INTERFACE
@@ -16,7 +16,7 @@
 // Library function registry entry
 typedef struct {
     const char* name;
-    LibraryFunction func;
+    MobiusCFunction func;
     int min_args;      // -1 for variadic
     int max_args;      // -1 for unlimited
 } LibraryEntry;
@@ -31,6 +31,6 @@ const LibraryEntry* get_library_registry(void);
 size_t get_library_registry_size(void);
 
 // Lookup a library function by name
-LibraryFunction lookup_library_function(const char* name);
+MobiusCFunction lookup_library_function(const char* name);
 
 #endif // MOBIUS_LIBRARY_H

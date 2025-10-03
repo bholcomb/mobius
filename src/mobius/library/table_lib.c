@@ -1,7 +1,9 @@
-#include "table_lib.h"
-#include "../table.h"
-#include "../value.h"
-#include "../environment.h"
+#include "library/table_lib.h"
+#include "data/table.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "eval/evaluator.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 

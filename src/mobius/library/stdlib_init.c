@@ -1,7 +1,8 @@
-#include "stdlib_init.h"
-#include "library.h"
-#include "../value.h"
-#include "../environment.h"
+#include "library/stdlib_init.h"
+#include "library/library.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "eval/evaluator.h"
 
 // Register all standard library functions as VAL_NATIVE_FUNCTION values
 // in the given environment

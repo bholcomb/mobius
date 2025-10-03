@@ -1,11 +1,12 @@
-#include "library.h"
-#include "core.h"
-#include "math.h"
-#include "string.h"
-#include "table_lib.h"
-#include "array.h"
-#include "types.h"
-#include "util.h"
+#include "library/library.h"
+#include "library/core.h"
+#include "library/math.h"
+#include "library/string.h"
+#include "library/table_lib.h"
+#include "library/array.h"
+#include "library/types.h"
+#include "library/util.h"
+
 #include <stdio.h>
 #include <string.h>
 

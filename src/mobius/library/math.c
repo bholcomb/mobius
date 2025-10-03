@@ -1,7 +1,8 @@
-#include "math.h"
-#include "library.h"
-#include "../value.h"
-#include "../environment.h"
+#include "library/math.h"
+#include "library/library.h"
+#include "data/value.h"
+#include "state/environment.h"
+#include "eval/evaluator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
