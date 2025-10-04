@@ -17,9 +17,10 @@
  * Usage: Load this plugin in Mobius with load_plugin("text_processing.so")
  */
 
-#include "../src/mobius/plugin.h"
-#include "../src/mobius/ast.h"
-#include "../src/mobius/evaluator.h"
+#include "../src/mobius/plugin/plugin.h"
+#include "../src/mobius/frontend/ast.h"
+#include "../src/mobius/eval/evaluator.h"
+#include "../src/mobius/state/mobius_state.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,15 +76,15 @@ static void reverse_string(char* str) {
  * Count words in a string
  * word_count(text) -> integer
  */
-EvalResult text_word_count(ExecutionContext* ctx, int arg_count) {
+EvalResult text_word_count(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("word_count() expects exactly 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "word_count() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(ctx);
+    Value text_val = ctx_pop(state->main_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
-        return make_error("word_count() expects a string argument", 0, 0);
+        return make_error(state->main_context->current_env, "word_count() expects a string argument", 0, 0);
     }
     
     const char* text = string_data(text_val.as.string);
@@ -100,7 +101,7 @@ EvalResult text_word_count(ExecutionContext* ctx, int arg_count) {
         text++;
     }
     
-    ctx_push(ctx, make_integer_value(NUM_INT32, word_count));
+    ctx_push(state->main_context, make_integer_value(NUM_INT32, word_count));
     free_value(text_val);
     return make_success(1);
 }
@@ -109,15 +110,15 @@ EvalResult text_word_count(ExecutionContext* ctx, int arg_count) {
  * Count lines in a string
  * line_count(text) -> integer
  */
-EvalResult text_line_count(ExecutionContext* ctx, int arg_count) {
+EvalResult text_line_count(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("line_count() expects exactly 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "line_count() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(ctx);
+    Value text_val = ctx_pop(state->main_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
-        return make_error("line_count() expects a string argument", 0, 0);
+        return make_error(state->main_context->current_env, "line_count() expects a string argument", 0, 0);
     }
     
     const char* text = string_data(text_val.as.string);
@@ -134,7 +135,7 @@ EvalResult text_line_count(ExecutionContext* ctx, int arg_count) {
         }
     }
     
-    ctx_push(ctx, make_integer_value(NUM_INT32, line_count));
+    ctx_push(state->main_context, make_integer_value(NUM_INT32, line_count));
     return make_success(1);
 }
 
@@ -142,29 +143,29 @@ EvalResult text_line_count(ExecutionContext* ctx, int arg_count) {
  * Count occurrences of a character
  * char_count(text, character) -> integer
  */
-EvalResult text_char_count(ExecutionContext* ctx, int arg_count) {
+EvalResult text_char_count(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return make_error("char_count() expects exactly 2 arguments", 0, 0);
+        return make_error(state->main_context->current_env, "char_count() expects exactly 2 arguments", 0, 0);
     }
     
-    Value char_val = ctx_pop(ctx);
-    Value text_val = ctx_pop(ctx);
+    Value char_val = ctx_pop(state->main_context);
+    Value text_val = ctx_pop(state->main_context);
 
     if (text_val.type != VAL_STRING || char_val.type != VAL_STRING) {
-        return make_error("char_count() expects string arguments", 0, 0);
+        return make_error(state->main_context->current_env, "char_count() expects string arguments", 0, 0);
     }
     
     const char* text = string_data(text_val.as.string);
     const char* char_str = string_data(char_val.as.string);
     
     if (strlen(char_str) != 1) {
-        return make_error("char_count() second argument must be a single character", 0, 0);
+        return make_error(state->main_context->current_env, "char_count() second argument must be a single character", 0, 0);
     }
     
     char target = char_str[0];
     int count = count_char(text, target);
     
-    ctx_push(ctx, make_integer_value(NUM_INT32, count));
+    ctx_push(state->main_context, make_integer_value(NUM_INT32, count));
     return make_success(1);
 }
 
@@ -176,27 +177,27 @@ EvalResult text_char_count(ExecutionContext* ctx, int arg_count) {
  * Reverse a string
  * reverse(text) -> string
  */
-EvalResult text_reverse(ExecutionContext* ctx, int arg_count) {
+EvalResult text_reverse(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("reverse() expects exactly 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "reverse() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(ctx);
+    Value text_val = ctx_pop(state->main_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
-        return make_error("reverse() expects a string argument", 0, 0);
+        return make_error(state->main_context->current_env, "reverse() expects a string argument", 0, 0);
     }
 
     char* reversed = safe_strdup(string_data(text_val.as.string));
     if (!reversed) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
     }
     
     reverse_string(reversed);
     
     Value result = make_string_value_from_cstr(reversed);
     free(reversed);
-    ctx_push(ctx, result);
+    ctx_push(state->main_context, result);
     return make_success(1);
 }
 
@@ -204,21 +205,21 @@ EvalResult text_reverse(ExecutionContext* ctx, int arg_count) {
  * Convert to title case
  * title_case(text) -> string
  */
-EvalResult text_title_case(ExecutionContext* ctx, int arg_count) {
+EvalResult text_title_case(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("title_case() expects exactly 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "title_case() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(ctx);
+    Value text_val = ctx_pop(state->main_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
-        return make_error("title_case() expects a string argument", 0, 0);
+        return make_error(state->main_context->current_env, "title_case() expects a string argument", 0, 0);
     }
     
     const char* input = string_data(text_val.as.string);
     char* result = safe_strdup(input);
     if (!result) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
     }
     
     int capitalize_next = 1;
@@ -237,7 +238,7 @@ EvalResult text_title_case(ExecutionContext* ctx, int arg_count) {
     
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    ctx_push(ctx, return_val);
+    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -245,15 +246,15 @@ EvalResult text_title_case(ExecutionContext* ctx, int arg_count) {
  * Remove whitespace from both ends
  * trim(text) -> string
  */
-EvalResult text_trim(ExecutionContext* ctx, int arg_count) {
+EvalResult text_trim(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("trim() expects exactly 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "trim() expects exactly 1 argument", 0, 0);
     }
 
-    Value text_val = ctx_pop(ctx);
+    Value text_val = ctx_pop(state->main_context);
     if (text_val.type != VAL_STRING) {
         free_value(text_val);
-        return make_error("trim() expects a string argument", 0, 0);
+        return make_error(state->main_context->current_env, "trim() expects a string argument", 0, 0);
     }
     
     const char* input = string_data(text_val.as.string);
@@ -273,16 +274,16 @@ EvalResult text_trim(ExecutionContext* ctx, int arg_count) {
     size_t len = end - input + 1;
     char* result = malloc(len + 1);
     if (!result) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
     }
     
     strncpy(result, input, len);
     result[len] = '\0';
     
     Value return_val = make_string_value_from_cstr(result);
-    ctx_push(ctx, return_val);
+    ctx_push(state->main_context, return_val);
     free(result);
-    ctx_push(ctx, return_val);
+    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -290,17 +291,17 @@ EvalResult text_trim(ExecutionContext* ctx, int arg_count) {
  * Replace all occurrences of a substring
  * replace_all(text, old_substr, new_substr) -> string
  */
-EvalResult text_replace_all(ExecutionContext* ctx, int arg_count) {
+EvalResult text_replace_all(MobiusState* state, int arg_count) {
     if (arg_count != 3) {
-        return make_error("replace_all() expects exactly 3 arguments", 0, 0);
+        return make_error(state->main_context->current_env, "replace_all() expects exactly 3 arguments", 0, 0);
     }
 
-    Value new_val = ctx_pop(ctx);
-    Value old_val = ctx_pop(ctx);
-    Value text_val = ctx_pop(ctx);
+    Value new_val = ctx_pop(state->main_context);
+    Value old_val = ctx_pop(state->main_context);
+    Value text_val = ctx_pop(state->main_context);
     
     if (text_val.type != VAL_STRING || old_val.type != VAL_STRING || new_val.type != VAL_STRING) {
-        return make_error("replace_all() expects string arguments", 0, 0);
+        return make_error(state->main_context->current_env, "replace_all() expects string arguments", 0, 0);
     }
     
     const char* text = string_data(text_val.as.string);
@@ -308,7 +309,7 @@ EvalResult text_replace_all(ExecutionContext* ctx, int arg_count) {
     const char* new_substr = string_data(new_val.as.string);
     
     if (strlen(old_substr) == 0) {
-        return make_error("replace_all() old substring cannot be empty", 0, 0);
+        return make_error(state->main_context->current_env, "replace_all() old substring cannot be empty", 0, 0);
     }
     
     // Count occurrences to determine result size
@@ -321,7 +322,7 @@ EvalResult text_replace_all(ExecutionContext* ctx, int arg_count) {
     
     if (count == 0) {
         // No replacements needed
-        ctx_push(ctx, make_string_value_from_cstr(text));
+        ctx_push(state->main_context, make_string_value_from_cstr(text));
         return make_success(1);
     }
     
@@ -332,7 +333,7 @@ EvalResult text_replace_all(ExecutionContext* ctx, int arg_count) {
     
     char* result = malloc(result_len + 1);
     if (!result) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
     }
     
     // Perform replacements
@@ -354,7 +355,7 @@ EvalResult text_replace_all(ExecutionContext* ctx, int arg_count) {
     
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    ctx_push(ctx, return_val);
+    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -366,18 +367,17 @@ EvalResult text_replace_all(ExecutionContext* ctx, int arg_count) {
  * Pad string to specified width with character
  * pad_left(text, width, pad_char) -> string
  */
-EvalResult text_pad_left(ExecutionContext* ctx, int arg_count) {
-    (void)ctx; // Unused parameter
+EvalResult text_pad_left(MobiusState* state, int arg_count) {
     if (arg_count != 3) {
-        return make_error("pad_left() expects exactly 3 arguments", 0, 0);
+        return make_error(state->main_context->current_env, "pad_left() expects exactly 3 arguments", 0, 0);
     }
 
-    Value pad_char_val = ctx_pop(ctx);
-    Value width_val = ctx_pop(ctx);
-    Value text_val = ctx_pop(ctx);
+    Value pad_char_val = ctx_pop(state->main_context);
+    Value width_val = ctx_pop(state->main_context);
+    Value text_val = ctx_pop(state->main_context);
     
     if (text_val.type != VAL_STRING || width_val.type != VAL_INTEGER || pad_char_val.type != VAL_STRING) {
-        return make_error("pad_left() expects (string, integer, string) arguments", 0, 0);
+        return make_error(state->main_context->current_env, "pad_left() expects (string, integer, string) arguments", 0, 0);
     }
     
     const char* text = string_data(text_val.as.string);
@@ -385,7 +385,7 @@ EvalResult text_pad_left(ExecutionContext* ctx, int arg_count) {
     const char* pad_char_str = string_data(pad_char_val.as.string);
     
     if (strlen(pad_char_str) != 1) {
-        return make_error("pad_left() pad character must be a single character", 0, 0);
+        return make_error(state->main_context->current_env, "pad_left() pad character must be a single character", 0, 0);
     }
     
     char pad_char = pad_char_str[0];
@@ -393,13 +393,13 @@ EvalResult text_pad_left(ExecutionContext* ctx, int arg_count) {
     
     if (width <= text_len) {
         // No padding needed
-        ctx_push(ctx, make_string_value_from_cstr(text));
+        ctx_push(state->main_context, make_string_value_from_cstr(text));
         return make_success(1);
     }
     
     char* result = malloc(width + 1);
     if (!result) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
     }
     
     int pad_count = width - text_len;
@@ -410,7 +410,7 @@ EvalResult text_pad_left(ExecutionContext* ctx, int arg_count) {
     
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    ctx_push(ctx, return_val);
+    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -418,31 +418,30 @@ EvalResult text_pad_left(ExecutionContext* ctx, int arg_count) {
  * Split string by delimiter
  * split(text, delimiter) -> string (comma-separated for this example)
  */
-EvalResult text_split(ExecutionContext* ctx, int arg_count) {
-    (void)ctx; // Unused parameter
+EvalResult text_split(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return make_error("split() expects exactly 2 arguments", 0, 0);
+        return make_error(state->main_context->current_env, "split() expects exactly 2 arguments", 0, 0);
     }
 
-    Value delim_val = ctx_pop(ctx);
-    Value text_val = ctx_pop(ctx);
+    Value delim_val = ctx_pop(state->main_context);
+    Value text_val = ctx_pop(state->main_context);
     
     if (text_val.type != VAL_STRING || delim_val.type != VAL_STRING) {
-        return make_error("split() expects string arguments", 0, 0);
+        return make_error(state->main_context->current_env, "split() expects string arguments", 0, 0);
     }
     
     const char* text = string_data(text_val.as.string);
     const char* delimiter = string_data(delim_val.as.string);
     
     if (strlen(delimiter) == 0) {
-        return make_error("split() delimiter cannot be empty", 0, 0);
+        return make_error(state->main_context->current_env, "split() delimiter cannot be empty", 0, 0);
     }
     
     // For simplicity, return parts joined with " | " 
     // In a real implementation, you'd return an array
     char* result = malloc(strlen(text) * 2 + 100); // Rough estimate
     if (!result) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
     }
     
     result[0] = '\0';
@@ -462,7 +461,7 @@ EvalResult text_split(ExecutionContext* ctx, int arg_count) {
     free(text_copy);
     Value return_val = make_string_value_from_cstr(result);
     free(result);
-    ctx_push(ctx, return_val);
+    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -519,19 +518,19 @@ int validate_text_processing_env(void) {
 
 static PluginFunction text_processing_functions[] = {
     // Text analysis functions
-    {"word_count", text_word_count, 1, "Count words in text", "analysis", "word_count(\"hello world\")"},
-    {"line_count", text_line_count, 1, "Count lines in text", "analysis", "line_count(\"line1\\nline2\")"},
-    {"char_count", text_char_count, 2, "Count character occurrences", "analysis", "char_count(\"hello\", \"l\")"},
+    {"word_count", text_word_count, 1},
+    {"line_count", text_line_count, 1},
+    {"char_count", text_char_count, 2},
     
     // String manipulation functions
-    {"reverse", text_reverse, 1, "Reverse a string", "manipulation", "reverse(\"hello\")"},
-    {"title_case", text_title_case, 1, "Convert to title case", "manipulation", "title_case(\"hello world\")"},
-    {"trim", text_trim, 1, "Remove leading/trailing whitespace", "manipulation", "trim(\" hello \")"},
-    {"replace_all", text_replace_all, 3, "Replace all occurrences", "manipulation", "replace_all(\"hello\", \"l\", \"x\")"},
+    {"reverse", text_reverse, 1},
+    {"title_case", text_title_case, 1},
+    {"trim", text_trim, 1},
+    {"replace_all", text_replace_all, 3},
     
     // Text formatting functions
-    {"pad_left", text_pad_left, 3, "Pad string to width on left", "formatting", "pad_left(\"hi\", 5, \"0\")"},
-    {"split", text_split, 2, "Split string by delimiter", "formatting", "split(\"a,b,c\", \",\")"}
+    {"pad_left", text_pad_left, 3},
+    {"split", text_split, 2}
 };
 
 // ============================================================================

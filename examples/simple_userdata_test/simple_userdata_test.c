@@ -9,7 +9,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../src/mobius/mobius.h"
+#include "../../src/mobius/data/value.h"
+#include "../../src/mobius/state/mobius_state.h"
+#include "../../src/mobius/state/environment.h"
 
 // Simple test structure
 typedef struct {
@@ -31,7 +33,7 @@ int main() {
     printf("=== Simple Userdata Test ===\n\n");
     
     // Create Mobius state
-    MobiusState* state = mobius_new_state();
+    MobiusState* state = mobius_new_state(NULL);
     if (!state) {
         printf("Failed to create Mobius state\n");
         return 1;
@@ -56,32 +58,26 @@ int main() {
     printf("\n2. Creating userdata values...\n");
     
     // Create userdata values
-    MobiusValue* val1 = mobius_create_userdata(state, obj1, test_object_destructor, "TestObject", sizeof(TestObject));
-    MobiusValue* val2 = mobius_create_userdata(state, obj2, test_object_destructor, "TestObject", sizeof(TestObject));
+    Value val1 = make_userdata_value(obj1, test_object_destructor, "TestObject", sizeof(TestObject));
+    Value val2 = make_userdata_value(obj2, test_object_destructor, "TestObject", sizeof(TestObject));
     
-    if (!val1 || !val2) {
-        printf("Failed to create userdata values\n");
-        free(obj1);
-        free(obj2);
-        mobius_free_state(state);
-        return 1;
-    }
-    
-    printf("   Created MobiusValue wrappers\n");
+    printf("   Created Value wrappers\n");
     
     printf("\n3. Testing type checking...\n");
     
     // Test type checking
-    printf("   val1 is userdata: %s\n", mobius_is_userdata(val1) ? "true" : "false");
-    printf("   val1 is TestObject: %s\n", mobius_is_userdata_type(val1, "TestObject") ? "true" : "false");
-    printf("   val1 is SomeOtherType: %s\n", mobius_is_userdata_type(val1, "SomeOtherType") ? "true" : "false");
+    printf("   val1 is userdata: %s\n", (val1.type == VAL_USERDATA) ? "true" : "false");
+    printf("   val1 is TestObject: %s\n", 
+           (val1.type == VAL_USERDATA && strcmp(val1.as.userdata.type_name, "TestObject") == 0) ? "true" : "false");
+    printf("   val1 is SomeOtherType: %s\n", 
+           (val1.type == VAL_USERDATA && strcmp(val1.as.userdata.type_name, "SomeOtherType") == 0) ? "true" : "false");
     
     printf("\n4. Testing value extraction...\n");
     
     // Test value extraction
-    void* ptr1 = mobius_to_userdata(val1);
-    const char* type1 = mobius_userdata_type(val1);
-    size_t size1 = mobius_userdata_size(val1);
+    void* ptr1 = val1.as.userdata.ptr;
+    const char* type1 = val1.as.userdata.type_name;
+    size_t size1 = val1.as.userdata.size;
     
     printf("   val1 pointer: %p\n", ptr1);
     printf("   val1 type: %s\n", type1);
@@ -92,60 +88,66 @@ int main() {
     printf("   Extracted obj1: id=%d, name='%s', value=%f\n", 
            extracted_obj1->id, extracted_obj1->name, extracted_obj1->value);
     
-    printf("\n5. Testing copying...\n");
+    printf("\n5. Testing value system...\n");
     
-    // Test copying
-    MobiusValue* val1_copy = mobius_copy_value(val1);
-    if (val1_copy) {
-        printf("   Copy successful\n");
-        printf("   Copy is userdata: %s\n", mobius_is_userdata(val1_copy) ? "true" : "false");
-        printf("   Copy points to same object: %s\n", 
-               (mobius_to_userdata(val1_copy) == mobius_to_userdata(val1)) ? "true" : "false");
-        
-        mobius_free_value(val1_copy);
-        printf("   Copy freed (original object should still exist)\n");
-    }
-    
-    printf("\n6. Testing internal value system...\n");
-    
-    // Test with internal value system
-    Value internal_val = val1->internal_value;
-    printf("   Internal value type: %s\n", value_type_name(internal_val.type));
-    printf("   Internal value pointer: %p\n", internal_val.as.userdata.ptr);
-    printf("   Internal value type_name: %s\n", internal_val.as.userdata.type_name);
+    // Test value type system
+    printf("   Value type: %s\n", value_type_name(val1.type));
+    printf("   Value pointer: %p\n", val1.as.userdata.ptr);
+    printf("   Value type_name: %s\n", val1.as.userdata.type_name);
     
     // Test printing
     printf("   Print value output: ");
-    print_value(internal_val);
+    print_value(val1);
     printf("\n");
     
     // Test string conversion
-    char* str_repr = value_to_string(internal_val);
+    char* str_repr = value_to_string(val1);
     if (str_repr) {
         printf("   String representation: %s\n", str_repr);
         free(str_repr);
     }
     
-    printf("\n7. Testing equality...\n");
+    printf("\n6. Testing equality...\n");
     
     // Test equality
     printf("   val1 == val1: %s\n", 
-           values_equal(val1->internal_value, val1->internal_value) ? "true" : "false");
+           values_equal(val1, val1) ? "true" : "false");
     printf("   val1 == val2: %s\n", 
-           values_equal(val1->internal_value, val2->internal_value) ? "true" : "false");
+           values_equal(val1, val2) ? "true" : "false");
+    
+    printf("\n7. Storing in environment...\n");
+    
+    // Test storing userdata in environment
+    define_variable(state->global_env, "test_obj1", val1);
+    define_variable(state->global_env, "test_obj2", val2);
+    printf("   Stored both objects in global environment\n");
+    
+    // Retrieve and verify
+    bool found;
+    Value retrieved = get_variable(state->global_env, "test_obj1", &found);
+    if (found && retrieved.type == VAL_USERDATA) {
+        TestObject* retrieved_obj = (TestObject*)retrieved.as.userdata.ptr;
+        printf("   Retrieved obj1: id=%d, name='%s', value=%f\n", 
+               retrieved_obj->id, retrieved_obj->name, retrieved_obj->value);
+    }
     
     printf("\n8. Cleaning up...\n");
     
-    // Cleanup
-    mobius_free_value(val1);
-    printf("   val1 freed\n");
-    
-    mobius_free_value(val2);
-    printf("   val2 freed\n");
+    // Note: Values are now owned by the environment, so they'll be freed
+    // when we free the state. We shouldn't call free_value on them manually.
     
     mobius_free_state(state);
-    printf("   Mobius state freed\n");
+    printf("   Mobius state freed (userdata destructors should have been called)\n");
     
     printf("\n=== Test Completed Successfully ===\n");
+    printf("This demonstrates:\n");
+    printf("  ✅ Userdata creation with custom destructors\n");
+    printf("  ✅ Type checking and type names\n");
+    printf("  ✅ Value extraction and manipulation\n");
+    printf("  ✅ Printing and string conversion\n");
+    printf("  ✅ Equality comparison\n");
+    printf("  ✅ Environment storage and retrieval\n");
+    printf("  ✅ Automatic cleanup via destructors\n");
+    
     return 0;
 }
