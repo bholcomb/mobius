@@ -117,7 +117,8 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
             bool found = false;
             Value table_value = get_variable(env, table_name, &found);
             if (found && table_value.type == VAL_TABLE) {
-                Value func_key = make_string_value_from_cstr(func_name);
+                MobiusState* state = env->current_context->state;
+                Value func_key = make_string_value_from_cstr(state, func_name);
                 Value func_value = table_get(table_value.as.table, func_key);
                 free_value(func_key);
                 
@@ -194,7 +195,8 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                 
                 // Look up the function in the table
                 const char* func_name = dot_expr->key.identifier;
-                Value func_key = make_string_value_from_cstr(func_name);
+                MobiusState* state = env->current_context->state;
+                Value func_key = make_string_value_from_cstr(state, func_name);
                 Value func_value = table_get(table_value.as.table, func_key);
                 free_value(func_key);
                 free_value(table_value);

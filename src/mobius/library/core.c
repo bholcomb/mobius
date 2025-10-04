@@ -74,7 +74,7 @@ EvalResult lib_typeof(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context);
     
     // Push result onto stack
-    Value result = make_string_value_from_cstr(type_name);
+    Value result = make_string_value_from_cstr(state, type_name);
     ctx_push(state->main_context, result);
     
     return make_success(1);
@@ -195,7 +195,7 @@ EvalResult lib_str(MobiusState* state, int arg_count) {
     Value result;
     
     if (temp_str) {
-        result = make_string_value_from_cstr(temp_str);
+        result = make_string_value_from_cstr(state, temp_str);
         free(temp_str);
     } else {
         result = make_nil_value();

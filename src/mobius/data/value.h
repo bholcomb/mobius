@@ -1,7 +1,7 @@
 #ifndef MOBIUS_VALUE_H
 #define MOBIUS_VALUE_H
 
-#include "internal/refString.h"
+#include "internal/string_intern.h"
 #include "eval/evalResult.h"
 #include "data/number.h"
 
@@ -53,7 +53,7 @@ typedef struct {
         float float32_val;                      // 4 bytes
         double float64_val;                     // 8 bytes
 
-        RefCountedString* string;               // 8 bytes
+        MobiusString* string;                   // 8 bytes (interned, immutable)
         char character;                         // 1 byte
 
         struct ArrayValue* array;                      // 8 bytes
@@ -83,8 +83,8 @@ Value make_char_value(char value);
 Value make_integer_value(NumberType type, int64_t value);
 Value make_float32_value(float value);
 Value make_float_value(double value);
-Value make_string_value(RefCountedString* string);
-Value make_string_value_from_cstr(const char* cstr);
+Value make_string_value(MobiusString* string);
+Value make_string_value_from_cstr(struct MobiusState* state, const char* cstr);
 Value make_function_value(struct MobiusFunction* function);
 Value make_native_function_value(MobiusCFunction function);
 Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);

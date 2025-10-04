@@ -14,6 +14,9 @@ typedef struct TableEntry {
     bool is_occupied;
 } TableEntry;
 
+// Forward declaration
+struct MobiusState;
+
 // Table structure - pure hash table
 typedef struct Table {
     TableEntry* entries;     // Hash table entries
@@ -21,10 +24,11 @@ typedef struct Table {
     size_t capacity;         // Size of entries array
     struct Table* metatable; // For operator overloading
     int ref_count;           // Reference counting for memory management
+    struct MobiusState* state; // Back-reference to owning state (for string interning)
 } Table;
 
 // Table function declarations
-Table* create_table(size_t initial_capacity);
+Table* create_table(struct MobiusState* state, size_t initial_capacity);
 void free_table(Table* table);
 Table* table_copy(Table* source);
 
@@ -52,8 +56,8 @@ Table* get_metatable(Table* table);
 
 // Basic metatable functions (advanced metamethods in evaluator.h)
 const char* get_metamethod_name(const char* name);
-bool has_table_metamethod(Table* table, const char* method_name);
-Value get_table_metamethod(Table* table, const char* method_name);
+bool has_table_metamethod(Table* table, MobiusString* method_name);
+Value get_table_metamethod(Table* table, MobiusString* method_name);
 
 // Table debugging
 void print_table(Table* table);

@@ -9,7 +9,8 @@
 
 // Table evaluation functions
 EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
-    Table* table = create_table(INITIAL_TABLE_CAPACITY);
+    MobiusState* state = env->current_context->state;
+    Table* table = create_table(state, INITIAL_TABLE_CAPACITY);
     if (!table) {
         return make_error(env, "Failed to create table", 0, 0);
     }
@@ -154,7 +155,7 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     strncpy(key_str, key_identifier, strlen(key_identifier));
     key_str[expr->key.length] = '\0';
     
-    Value key = make_string_value_from_cstr(key_str);
+    Value key = make_string_value_from_cstr(env->current_context->state, key_str);
     free(key_str);
     
     // Get the value from the table

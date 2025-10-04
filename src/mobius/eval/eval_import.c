@@ -87,7 +87,8 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
         return NULL;
     } else {
         // Create new table for first component
-        current_table = create_table(16);
+        MobiusState* state = env->current_context->state;
+        current_table = create_table(state, 16);
         if (!current_table) {
             *error_result = make_error(env, "Failed to create namespace table", line, column);
             return NULL;
@@ -99,7 +100,7 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
     // Walk through remaining path components
     for (size_t i = 1; i < path_len; i++) {
         // Try to get the next component from current table
-        Value key = make_string_value_from_cstr(path[i]);
+        Value key = make_string_value_from_cstr(env->current_context->state, path[i]);
         Value next_value = table_get(current_table, key);
         free_value(key);
         
@@ -108,13 +109,14 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
             current_table = next_value.as.table;
         } else if (next_value.type == VAL_NIL) {
             // Doesn't exist, create new table
-            Table* new_table = create_table(16);
+            MobiusState* state = env->current_context->state;
+            Table* new_table = create_table(state, 16);
             if (!new_table) {
                 *error_result = make_error(env, "Failed to create nested namespace table", line, column);
                 return NULL;
             }
             Value new_table_value = make_table_value(new_table);
-            Value key2 = make_string_value_from_cstr(path[i]);
+            Value key2 = make_string_value_from_cstr(env->current_context->state, path[i]);
             table_set(current_table, key2, new_table_value);
             free_value(key2);
             current_table = new_table;
@@ -142,7 +144,7 @@ static bool check_function_override(const char* func_name, Table* target_table,
     bool exists = false;
     
     if (target_table) {
-        Value key = make_string_value_from_cstr(func_name);
+        Value key = make_string_value_from_cstr(env->current_context->state, func_name);
         Value existing = table_get(target_table, key);
         free_value(key);
         exists = (existing.type != VAL_NIL);
@@ -301,7 +303,8 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
             return make_error(env, error_msg, stmt->keyword.line, stmt->keyword.column);
         } else {
             // Create new table
-            target_table = create_table(16);
+            MobiusState* state = env->current_context->state;
+            target_table = create_table(state, 16);
             if (!target_table) {
                 if (path_components) {
                     for (size_t i = 0; i < path_len; i++) free(path_components[i]);
@@ -352,7 +355,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                 return override_error;
             }
             
-            Value func_key = make_string_value_from_cstr(func_name);
+            Value func_key = make_string_value_from_cstr(env->current_context->state, func_name);
             Value func_value = make_native_function_value(func_ptr);
             table_set(target_table, func_key, func_value);
             free_value(func_key);

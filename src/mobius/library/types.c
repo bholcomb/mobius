@@ -19,18 +19,18 @@ EvalResult lib_get_type_config(MobiusState* state, int arg_count) {
     }
     
     // Return a table with configuration
-    Table* config_table = create_table(8);
+    Table* config_table = create_table(state, 8);
     if (!config_table) {
         return make_error(state->main_context->current_env, "Failed to create config table", 0, 0);
     }
     
     // Add strict_mode key-value pair
-    Value strict_key = make_string_value_from_cstr("strict_mode");
+    Value strict_key = make_string_value_from_cstr(state, "strict_mode");
     Value strict_value = make_bool_value(state->config.strict_mode);
     table_set(config_table, strict_key, strict_value);
     
     // Add warn_on_conversion key-value pair
-    Value warn_key = make_string_value_from_cstr("warn_on_conversion");
+    Value warn_key = make_string_value_from_cstr(state, "warn_on_conversion");
     Value warn_value = make_bool_value(state->config.warn_on_conversion);
     table_set(config_table, warn_key, warn_value);
     

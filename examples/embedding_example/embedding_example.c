@@ -78,7 +78,7 @@ EvalResult custom_system_info(MobiusState* state, int arg_count) {
     }
     
     const char* info = "System: Linux x86_64, Mobius v0.1.0";
-    ctx_push(ctx, make_string_value_from_cstr(info));
+    ctx_push(ctx, make_string_value_from_cstr(state, info));
     return make_success(1);
 }
 
@@ -168,7 +168,7 @@ void example_value_exchange(void) {
     mobius_init_stdlib(state);
     
     // Set variables from C
-    define_variable(state->global_env, "c_string", make_string_value_from_cstr("Set from C"));
+    define_variable(state->global_env, "c_string", make_string_value_from_cstr(state, "Set from C"));
     define_variable(state->global_env, "c_number", make_integer_value(NUM_INT64, 123));
     define_variable(state->global_env, "c_bool", make_bool_value(true));
     

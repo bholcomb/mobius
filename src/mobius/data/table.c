@@ -1,4 +1,6 @@
 #include "data/table.h"
+#include "internal/string_intern.h"
+#include "state/mobius_state.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +77,8 @@ size_t hash_value(Value value, size_t capacity) {
             hash = hash_float(value.as.float64_val);
             break;
         case VAL_STRING:
-            hash = value.as.string ? hash_string_for_table(string_data(value.as.string)) : 0;
+            // Use precomputed hash from MobiusString (much faster!)
+            hash = value.as.string ? string_hash(value.as.string) : 0;
             break;
         case VAL_CHAR:
             hash = (size_t)value.as.character;
@@ -195,7 +198,7 @@ void table_insert_entry(TableEntry* entries, size_t capacity, Value key, Value v
     entries[start_index].is_occupied = true;
 }
 
-Table* create_table(size_t initial_capacity) {
+Table* create_table(struct MobiusState* state, size_t initial_capacity) {
     if (initial_capacity < INITIAL_TABLE_CAPACITY) {
         initial_capacity = INITIAL_TABLE_CAPACITY;
     }
@@ -216,6 +219,7 @@ Table* create_table(size_t initial_capacity) {
     table->capacity = initial_capacity;
     table->metatable = NULL;
     table->ref_count = 1;
+    table->state = state;  // Store back-reference to state
     
     return table;
 }
@@ -284,8 +288,8 @@ Value table_get(Table* table, Value key) {
     }
     
     // Check metatable for __index
-    if (table->metatable) {
-        Value index_method = get_table_metamethod(table, "__index");
+    if (table->metatable && table->state) {
+        Value index_method = get_table_metamethod(table, table->state->mm_index);
         if (index_method.type == VAL_FUNCTION) {
             // TODO: Call metamethod with table and key
             // For now, fall through to return nil
@@ -310,8 +314,8 @@ bool table_set(Table* table, Value key, Value value) {
     
     if (is_new_key) {
         // Check metatable for __newindex
-        if (table->metatable) {
-            Value newindex_method = get_table_metamethod(table, "__newindex");
+        if (table->metatable && table->state) {
+            Value newindex_method = get_table_metamethod(table, table->state->mm_newindex);
             if (newindex_method.type == VAL_FUNCTION) {
                 // TODO: Call metamethod with table, key, and value
                 return true;
@@ -371,7 +375,7 @@ size_t table_size(Table* table) {
 Table* table_copy(Table* source) {
     if (!source) return NULL;
     
-    Table* copy = create_table(source->capacity);
+    Table* copy = create_table(source->state, source->capacity);
     if (!copy) return NULL;
     
     // Copy all entries
@@ -511,42 +515,29 @@ void print_table_debug(Table* table) {
 // BASIC METAMETHOD SUPPORT
 // =============================================================================
 
+// Validate metamethod name (must start with __)
 const char* get_metamethod_name(const char* name) {
-    // Just return the name for validation - used for standard metamethod names
     if (name && (strncmp(name, "__", 2) == 0)) {
         return name;
     }
     return NULL;
 }
 
-bool has_table_metamethod(Table* table, const char* method_name) {
+// Check if table has a specific metamethod
+bool has_table_metamethod(Table* table, MobiusString* method_name) {
     if (!table || !table->metatable || !method_name) {
         return false;
     }
     
-    char* name_copy = malloc(strlen(method_name) + 1);
-    if (!name_copy) {
-        return false;
-    }
-    strcpy(name_copy, method_name);
-    
-    Value method = table_get(table->metatable, make_string_value_from_cstr(name_copy));
-    free(name_copy);
+    Value method = table_get(table->metatable, make_string_value(method_name));
     return method.type != VAL_NIL;
 }
 
-Value get_table_metamethod(Table* table, const char* method_name) {
+// Get a metamethod from table's metatable
+Value get_table_metamethod(Table* table, MobiusString* method_name) {
     if (!table || !table->metatable || !method_name) {
         return make_nil_value();
     }
     
-    char* name_copy = malloc(strlen(method_name) + 1);
-    if (!name_copy) {
-        return make_nil_value();
-    }
-    strcpy(name_copy, method_name);
-    
-    Value result = table_get(table->metatable, make_string_value_from_cstr(name_copy));
-    free(name_copy);
-    return result;
+    return table_get(table->metatable, make_string_value(method_name));
 }

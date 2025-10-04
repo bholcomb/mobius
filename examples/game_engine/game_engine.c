@@ -77,7 +77,7 @@ EvalResult game_get_player_pos(MobiusState* state, int arg_count) {
     char pos_str[64];
     snprintf(pos_str, sizeof(pos_str), "%.1f,%.1f", g_game->player.x, g_game->player.y);
     
-    ctx_push(ctx, make_string_value_from_cstr(pos_str));
+    ctx_push(ctx, make_string_value_from_cstr(state, pos_str));
     return make_success(1);
 }
 

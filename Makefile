@@ -22,7 +22,6 @@ MOBIUS_SOURCES = \
 	$(SRCDIR)/mobius/data/number.c \
 	$(SRCDIR)/mobius/data/table.c \
 	$(SRCDIR)/mobius/data/value.c \
-	$(SRCDIR)/mobius/internal/refString.c \
 	$(SRCDIR)/mobius/frontend/ast.c \
 	$(SRCDIR)/mobius/frontend/parser.c \
 	$(SRCDIR)/mobius/frontend/scanner.c \
@@ -37,6 +36,7 @@ MOBIUS_SOURCES = \
 	$(SRCDIR)/mobius/eval/eval_statement.c \
 	$(SRCDIR)/mobius/eval/eval_switch.c \
 	$(SRCDIR)/mobius/eval/eval_table.c \
+	$(SRCDIR)/mobius/internal/string_intern.c \
 	$(SRCDIR)/mobius/library/array.c \
 	$(SRCDIR)/mobius/library/core.c \
 	$(SRCDIR)/mobius/library/library.c \

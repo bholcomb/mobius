@@ -57,7 +57,7 @@ Value make_float_value(double val) {
     return value;
 }
 
-Value make_string_value(RefCountedString* string) {
+Value make_string_value(MobiusString* string) {
     Value value = {0};
     value.type = VAL_STRING;
     value.as.string = string;  // Takes ownership of the ref-counted string
@@ -456,7 +456,7 @@ const char* value_type_name(ValueType type) {
 Value copy_value(Value value) {
     if (value.type == VAL_STRING && value.as.string) {
         // Use reference counting - just increment ref count!
-        RefCountedString* retained_str = string_retain(value.as.string);
+        MobiusString* retained_str = string_retain(value.as.string);
         return make_string_value(retained_str);
     } else if (value.type == VAL_ARRAY && value.as.array) {
         // For arrays, increment reference count (shared ownership)
@@ -541,8 +541,11 @@ void free_value(Value value) {
 
 
 // Helper function to create Value from C string
-Value make_string_value_from_cstr(const char* cstr) {
-    RefCountedString* str = string_create(cstr);
+Value make_string_value_from_cstr(struct MobiusState* state, const char* cstr) {
+    if (!state || !cstr) {
+        return make_nil_value();
+    }
+    MobiusString* str = string_create(state, cstr);
     return make_string_value(str);
 }
 

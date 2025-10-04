@@ -8,6 +8,7 @@
 #include "frontend/parser.h"
 #include "frontend/token.h"
 #include "library/library.h"
+#include "internal/string_intern.h"
 #include "plugin/module_registry.h"
 #include "util/utility.h"
 #include "util/file_io.h"
@@ -365,12 +366,34 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
     // Initialize fields
     state->global_env = NULL;
     state->registry = NULL;
+    state->string_pool = NULL;
     state->main_context = NULL;
     state->last_error = NULL;
     state->initialized = false;
     state->source_code = NULL;
     
-    // Create main execution context first
+    // Create string intern pool (256 initial buckets)
+    state->string_pool = string_pool_create(256);
+    if (!state->string_pool) {
+        mobius_free_state(state);
+        return NULL;
+    }
+    
+    // Pre-intern common metamethod names for fast lookup
+    state->mm_add = string_create(state, "__add");
+    state->mm_sub = string_create(state, "__sub");
+    state->mm_mul = string_create(state, "__mul");
+    state->mm_div = string_create(state, "__div");
+    state->mm_mod = string_create(state, "__mod");
+    state->mm_eq = string_create(state, "__eq");
+    state->mm_lt = string_create(state, "__lt");
+    state->mm_le = string_create(state, "__le");
+    state->mm_index = string_create(state, "__index");
+    state->mm_newindex = string_create(state, "__newindex");
+    state->mm_call = string_create(state, "__call");
+    state->mm_tostring = string_create(state, "__tostring");
+    
+    // Create main execution context
     state->main_context = mobius_create_context(state);
     if (!state->main_context) {
         mobius_free_state(state);
@@ -387,6 +410,11 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
     // Link environment to context
     state->global_env->current_context = state->main_context;
     state->main_context->current_env = state->global_env;
+    
+    // Set the state pointer in the global environment's variable table
+    if (state->global_env->variables) {
+        state->global_env->variables->state = state;
+    }
     
     // Use global module registry (not per-state)
     state->registry = mobius_get_global_registry();
@@ -423,6 +451,11 @@ void mobius_free_state(MobiusState* state) {
     // It will be automatically freed at process exit via atexit()
     state->registry = NULL;
     
+    // Free string intern pool (frees all interned strings)
+    if (state->string_pool) {
+        string_pool_free(state->string_pool);
+    }
+    
     // Free error
     if (state->last_error) {
         mobius_free_error(state->last_error);
@@ -458,7 +491,7 @@ int mobius_exec_string(MobiusState* state, const char* code) {
     }
     
     // Parse AST
-    ParseResult parse_result = parse(tokens);
+    ParseResult parse_result = parse(state, tokens);
     free_token_array(&tokens);
     
     if (parse_result.had_error) {

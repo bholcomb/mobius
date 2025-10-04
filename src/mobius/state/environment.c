@@ -12,8 +12,11 @@ Environment* create_environment(Environment* enclosing) {
     if (!env) return NULL;
     
     env->enclosing = enclosing;
-    env->variables = create_table(INITIAL_TABLE_CAPACITY);
     env->current_context = enclosing ? enclosing->current_context : NULL;
+    
+    // Get state from context (if available) or pass NULL for global env
+    MobiusState* state = env->current_context ? env->current_context->state : NULL;
+    env->variables = create_table(state, INITIAL_TABLE_CAPACITY);
     if (!env->variables) {
         free(env);
         return NULL;
@@ -35,7 +38,7 @@ void define_variable(Environment* env, const char* name, Value value) {
     if (!env || !name) return;
     
     // Convert name to string Value for use as key
-    Value key = make_string_value_from_cstr(name);
+    Value key = make_string_value_from_cstr(env->current_context->state, name);
     
     // Set the variable in the table (table_set handles overwriting)
     table_set(env->variables, key, value);
@@ -50,7 +53,7 @@ Value get_variable(Environment* env, const char* name, bool* found) {
     
     Environment* current = env;
     while (current) {
-        Value key = make_string_value_from_cstr(name);
+        Value key = make_string_value_from_cstr(env->current_context->state, name);
         
         if (table_has_key(current->variables, key)) {
             Value value = table_get(current->variables, key);
@@ -71,7 +74,7 @@ Value get_variable(Environment* env, const char* name, bool* found) {
 bool assign_variable(Environment* env, const char* name, Value value) {
     Environment* current = env;
     while (current) {
-        Value key = make_string_value_from_cstr(name);
+        Value key = make_string_value_from_cstr(env->current_context->state, name);
         
         if (table_has_key(current->variables, key)) {
             table_set(current->variables, key, value);

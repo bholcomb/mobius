@@ -467,7 +467,7 @@ void mobius_stack_pushString(MobiusState* state, const char* str) {
         ctx_push(state->main_context, make_nil_value());
         return;
     }
-    ctx_push(state->main_context, make_string_value_from_cstr(str));
+    ctx_push(state->main_context, make_string_value_from_cstr(state, str));
 }
 
 void mobius_stack_pushNil(MobiusState* state) {
@@ -475,7 +475,7 @@ void mobius_stack_pushNil(MobiusState* state) {
 }
 
 void mobius_stack_pushNewTable(MobiusState* state, size_t capacity) {
-    Table* table = create_table(capacity == 0 ? 16 : capacity);
+    Table* table = create_table(state, capacity == 0 ? 16 : capacity);
     if (!table) {
         fprintf(stderr, "FATAL: Failed to create table\n");
         exit(1);
@@ -578,7 +578,7 @@ void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* k
         fatal_type_error("mobius_stack_setTableField", VAL_TABLE, table_val->type, table_idx);
     }
     
-    Value key_val = make_string_value_from_cstr(key);
+    Value key_val = make_string_value_from_cstr(state, key);
     Value field_val = ctx_pop(state->main_context);
     
     table_set(table_val->as.table, key_val, field_val);
@@ -597,7 +597,7 @@ void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* k
         fatal_type_error("mobius_stack_getTableField", VAL_TABLE, table_val->type, table_idx);
     }
     
-    Value key_val = make_string_value_from_cstr(key);
+    Value key_val = make_string_value_from_cstr(state, key);
     Value result = table_get(table_val->as.table, key_val);
     
     ctx_push(state->main_context, result);

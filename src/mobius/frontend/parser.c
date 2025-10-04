@@ -1,31 +1,23 @@
 #include "parser.h"
+#include "util/utility.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-
-// Helper: duplicate a string (standard C99 compatible)
-static char* duplicate_string(const char* str) {
-    if (!str) return NULL;
-    size_t len = strlen(str);
-    char* dup = malloc(len + 1);
-    if (dup) {
-        memcpy(dup, str, len + 1);
-    }
-    return dup;
-}
 
 // Forward declarations
 Stmt* parse_continue_statement(Parser* parser);
 Stmt* parse_pragma_statement(Parser* parser);
 
 // Parser initialization
-void init_parser(Parser* parser, Token* tokens, size_t token_count) {
+void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token_count) {
     parser->tokens = tokens;
     parser->token_count = token_count;
     parser->current = 0;
     parser->had_error = false;
     parser->panic_mode = false;
+    parser->state = state;
 }
 
 // Parser state functions
@@ -218,12 +210,12 @@ Expr* parse_primary(Parser* parser) {
     
     if (parser_match(parser, TOKEN_STRING)) {
         Token token = parser_previous(parser);
-        // Create a RefCountedString from the token's string literal
+        // Create a MobiusString from the token's string literal
         if (token.literal.string) {
-            Value value = make_string_value_from_cstr(token.literal.string);
+            Value value = make_string_value_from_cstr(parser->state, token.literal.string);
             return make_literal_expr(value);
         } else {
-            Value value = make_string_value_from_cstr("");
+            Value value = make_string_value_from_cstr(parser->state, "");
             return make_literal_expr(value);
         }
     }
@@ -318,7 +310,7 @@ Expr* parse_table_literal(Parser* parser) {
                     const char* key_id = key_token.identifier ? key_token.identifier : "unknown";
                     strncpy(key_str, key_id, strlen(key_id));
                     key_str[key_token.length] = '\0';
-                    current_pair->key = make_literal_expr(make_string_value_from_cstr(key_str));
+                    current_pair->key = make_literal_expr(make_string_value_from_cstr(parser->state, key_str));
                     free(key_str);
                     current_pair->is_computed_key = false;
                     current_pair->value = parse_expression(parser);
@@ -860,11 +852,11 @@ Stmt* parse_declaration(Parser* parser) {
 }
 
 // Main parsing function
-ParseResult parse(TokenArray tokens) {
+ParseResult parse(MobiusState* state, TokenArray tokens) {
     ParseResult result = {0};
     
     Parser parser;
-    init_parser(&parser, tokens.tokens, tokens.count);
+    init_parser(&parser, state, tokens.tokens, tokens.count);
     
     Stmt** statements = NULL;
     size_t count = 0;
@@ -1075,7 +1067,7 @@ Stmt* parse_import_statement(Parser* parser) {
                 
                 // Store the dotted path as a string literal in alias
                 // We need to allocate and store this string
-                alias.literal.string = duplicate_string(path_buffer);
+                alias.literal.string = mobius_strdup(path_buffer);
                 alias.type = TOKEN_STRING;  // Mark it as a string type for later processing
             }
         } else if (parser_check(parser, TOKEN_STRING)) {
@@ -1297,8 +1289,7 @@ CasePattern* parse_case_pattern(Parser* parser) {
         return make_value_pattern(value);
     } else if (parser_check(parser, TOKEN_STRING)) {
         Token token = parser_advance(parser);
-        RefCountedString* rc_string = string_create(token.literal.string);
-        Value value = make_string_value(rc_string);
+        Value value = make_string_value_from_cstr(parser->state, token.literal.string);
         return make_value_pattern(value);
     } else if (parser_check(parser, TOKEN_TRUE)) {
         parser_advance(parser);

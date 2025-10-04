@@ -56,7 +56,7 @@ EvalResult lib_upper(MobiusState* state, int arg_count) {
     }
     upper_str[len] = '\0';
     
-    RefCountedString* result_string = string_create(upper_str);
+    MobiusString* result_string = string_create(state, upper_str);
     free(upper_str);
     
     if (!result_string) {
@@ -91,7 +91,7 @@ EvalResult lib_lower(MobiusState* state, int arg_count) {
     }
     lower_str[len] = '\0';
     
-    RefCountedString* result_string = string_create(lower_str);
+    MobiusString* result_string = string_create(state, lower_str);
     free(lower_str);
     
     if (!result_string) {
@@ -135,7 +135,7 @@ EvalResult lib_substr(MobiusState* state, int arg_count) {
     }
     
     if (start < 0 || start >= (int64_t)input_len || length < 0) {
-        ctx_push(state->main_context, make_string_value_from_cstr(""));
+        ctx_push(state->main_context, make_string_value_from_cstr(state, ""));
         return make_success(1);
     }
     
@@ -152,7 +152,7 @@ EvalResult lib_substr(MobiusState* state, int arg_count) {
     strncpy(substr_data, input + start, actual_length);
     substr_data[actual_length] = '\0';
     
-    RefCountedString* result_string = string_create(substr_data);
+    MobiusString* result_string = string_create(state, substr_data);
     free(substr_data);
     
     if (!result_string) {
@@ -199,7 +199,7 @@ EvalResult lib_concat(MobiusState* state, int arg_count) {
         ctx_pop(state->main_context);
     }
     
-    RefCountedString* result_string = string_create(result_data);
+    MobiusString* result_string = string_create(state, result_data);
     free(result_data);
     
     if (!result_string) {

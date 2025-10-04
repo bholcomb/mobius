@@ -4,6 +4,7 @@
 #include "frontend/token.h"
 #include "frontend/ast.h"
 #include "frontend/scanner.h"
+#include "state/mobius_state.h"
 
 // Parser state structure
 typedef struct {
@@ -12,6 +13,7 @@ typedef struct {
     size_t current;         // Current token index
     bool had_error;         // Whether an error occurred
     bool panic_mode;        // Whether we're in panic mode recovery
+    MobiusState* state;     // Mobius state we're parsing in
 } Parser;
 
 // Parser result structure
@@ -22,11 +24,11 @@ typedef struct {
 } ParseResult;
 
 // Main parsing functions
-ParseResult parse(TokenArray tokens);
+ParseResult parse(MobiusState* state, TokenArray tokens);
 void free_parse_result(ParseResult* result);
 
 // Parser initialization and state management
-void init_parser(Parser* parser, Token* tokens, size_t token_count);
+void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token_count);
 bool parser_at_end(Parser* parser);
 Token parser_peek(Parser* parser);
 Token parser_previous(Parser* parser);

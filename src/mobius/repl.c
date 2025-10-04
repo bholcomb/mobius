@@ -160,7 +160,7 @@ bool process_repl_line(ReplState* state, const char* line) {
     }
     
     // Check for parse errors
-    ParseResult parse_result = parse(tokens);
+    ParseResult parse_result = parse(state->state, tokens);
     if (parse_result.had_error) {
         printf("Parse error in input\n");
         free_parse_result(&parse_result);
