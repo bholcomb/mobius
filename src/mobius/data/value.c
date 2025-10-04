@@ -3,6 +3,7 @@
 #include "data/table.h"
 #include "data/array.h"
 #include "data/function.h"
+#include "frontend/ast.h"
 #include "util/utility.h"
 
 #include <stdio.h>
@@ -513,6 +514,18 @@ void free_value(Value value) {
                 }
                 free(func->param_names);
             }
+            
+            // Free function body (AST statements)
+            // Use ast_release_stmt since statements were retained with ast_retain_stmt
+            if (func->body) {
+                for (size_t i = 0; i < func->body_count; i++) {
+                    if (func->body[i]) {
+                        ast_release_stmt(func->body[i]);
+                    }
+                }
+                free(func->body);
+            }
+            
             // Note: don't free closure environment - it's managed separately
             
             free(func);

@@ -265,7 +265,9 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     if (found) {
         if (func_value.type == VAL_FUNCTION && func_value.as.function) {
             // Call user-defined function
-            return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+            EvalResult result = call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
+            free_value(func_value);  // Free the copied function value
+            return result;
         } else if (func_value.type == VAL_NATIVE_FUNCTION && func_value.as.native_function) {
             // Call native function (stdlib or imported from module)
             // Evaluate arguments onto stack
@@ -276,6 +278,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                     for (size_t j = 0; j < i; j++) {
                         ctx_pop(env->current_context);
                     }
+                    free_value(func_value);  // Free before returning
                     return arg_result;
                 }
             }
@@ -286,6 +289,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
             EvalResult result = native_func(env->current_context->state, expr->arg_count);
             stack_trace_pop(env->current_context);
             
+            free_value(func_value);  // Free the copied function value
             return result;
         }
     }

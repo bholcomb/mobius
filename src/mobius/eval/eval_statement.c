@@ -96,7 +96,7 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
         return make_error(env, "Memory allocation failed", 0, 0);
     }
     
-        p           EvalResult result = make_success(0);
+    EvalResult result = make_success(0);
     for (size_t i = 0; i < stmt->count; i++) {
         result = evaluate_stmt(stmt->statements[i], block_env);
         if (is_error(result)) {
@@ -329,7 +329,7 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
     
     // Define the function in the current environment using the stored name
     define_variable(env, function->name, func_value);
-    
+    function->ref_count--;
     return make_success(0);
 }
 
