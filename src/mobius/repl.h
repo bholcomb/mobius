@@ -1,18 +1,18 @@
 #ifndef MOBIUS_REPL_H
 #define MOBIUS_REPL_H
 
-#include "environment.h"
+#include "state/mobius_state.h"
 #include <stdbool.h>
 
 // REPL state
 typedef struct {
-    Environment* env;       // REPL environment (persistent across commands)
+    MobiusState* state;       // REPL environment (persistent across commands)
     bool running;          // Whether REPL is active
     int command_count;     // Number of commands executed
 } ReplState;
 
 // REPL functions
-void start_repl(void);
+void start_repl(MobiusState* state);
 void repl_loop(ReplState* state);
 bool process_repl_line(ReplState* state, const char* line);
 void print_repl_prompt(int command_count);

@@ -7,7 +7,7 @@
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
 #include "frontend/token.h"
-#include "library/stdlib_init.h"
+#include "library/library.h"
 #include "plugin/module_registry.h"
 #include "util/utility.h"
 #include "util/file_io.h"
@@ -205,7 +205,7 @@ static void ensure_frame_capacity(ExecutionContext* ctx, size_t needed) {
     ctx->frame_capacity = new_capacity;
 }
 
-void trace_push(ExecutionContext* ctx, const char* function_name,
+void stack_trace_push(ExecutionContext* ctx, const char* function_name,
                        const char* filename, int line, int column,
                        FunctionType type, void* function_ptr, Environment* env) {
     if (!ctx) return;
@@ -229,22 +229,38 @@ void trace_push(ExecutionContext* ctx, const char* function_name,
     frame->stack_base = ctx->stack_top;
     frame->stack_top = ctx->stack_top;
     frame->start_time = get_time_ns();
+    
+    // Update execution context's current environment to this frame's environment
+    if (env) {
+        ctx->current_env = env;
+    }
 }
 
-void trace_pop(ExecutionContext* ctx) {
+void stack_trace_pop(ExecutionContext* ctx) {
     if (!ctx || ctx->frame_count == 0) {
         return;
     }
     
     ctx->frame_count--;
+    
+    // Restore previous environment
+    if (ctx->frame_count > 0) {
+        // Set current_env to the previous frame's environment
+        ctx->current_env = ctx->call_frames[ctx->frame_count - 1].env;
+    } else {
+        // No frames left, revert to the state's global environment
+        if (ctx->state && ctx->state->global_env) {
+            ctx->current_env = ctx->state->global_env;
+        }
+    }
 }
 
-void trace_clear(ExecutionContext* ctx) {
+void stack_trace_clear(ExecutionContext* ctx) {
     if (!ctx) return;
     ctx->frame_count = 0;
 }
 
-size_t trace_depth(ExecutionContext* ctx) {
+size_t stack_trace_depth(ExecutionContext* ctx) {
     return ctx ? ctx->frame_count : 0;
 }
 
@@ -252,7 +268,7 @@ bool is_stack_overflow(ExecutionContext* ctx) {
     return ctx ? (ctx->frame_count >= ctx->max_depth) : false;
 }
 
-void print_trace(ExecutionContext* ctx) {
+void print_stack_trace(ExecutionContext* ctx) {
     if (!ctx || ctx->frame_count == 0) {
         printf("Stack trace: (empty)\n");
         return;
@@ -285,7 +301,7 @@ void print_trace(ExecutionContext* ctx) {
     }
 }
 
-char* format_trace(ExecutionContext* ctx) {
+char* format_stack_trace(ExecutionContext* ctx) {
     if (!ctx || ctx->frame_count == 0) {
         return mobius_strdup("Stack trace: (empty)\n");
     }
@@ -350,20 +366,25 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
     state->main_context = NULL;
     state->last_error = NULL;
     state->initialized = false;
+    state->source_code = NULL;
     
-    // Create global environment
+    // Create main execution context first
+    state->main_context = mobius_create_context(state);
+    if (!state->main_context) {
+        mobius_free_state(state);
+        return NULL;
+    }
+    
+    // Create global environment and link it to the context
     state->global_env = create_environment(NULL);
     if (!state->global_env) {
         mobius_free_state(state);
         return NULL;
     }
     
-    // Create main execution context
-    state->main_context = mobius_create_context(state);
-    if (!state->main_context) {
-        mobius_free_state(state);
-        return NULL;
-    }
+    // Link environment to context
+    state->global_env->current_context = state->main_context;
+    state->main_context->current_env = state->global_env;
     
     // Create module registry
     state->registry = create_module_registry();
@@ -371,6 +392,11 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
         mobius_free_state(state);
         return NULL;
     }
+
+    // Add built-in constants to global environment
+    define_variable(state->global_env, "nil", make_nil_value());
+    define_variable(state->global_env, "true", make_bool_value(true));
+    define_variable(state->global_env, "false", make_bool_value(false));
     
     return state;
 }
@@ -404,7 +430,7 @@ void mobius_free_state(MobiusState* state) {
 int mobius_init_stdlib(MobiusState* state) {
     if (!state) return MOBIUS_ERROR_ARGUMENT;
     
-    register_stdlib_functions(state->global_env);
+    register_stdlib_functions(state);
     
     state->initialized = true;
     return MOBIUS_OK;
@@ -530,3 +556,103 @@ int mobius_set_error(MobiusState* state, int code, const char* message, const ch
     return code;
 }
 
+// ============================================================================
+// STACK TRACE MANAGEMENT
+// ============================================================================
+
+// Capture a snapshot of the current call stack
+StackTrace* capture_stack_trace(ExecutionContext* ctx) {
+    if (!ctx || ctx->frame_count == 0) {
+        return NULL;
+    }
+    
+    StackTrace* trace = malloc(sizeof(StackTrace));
+    if (!trace) return NULL;
+    
+    trace->frame_count = ctx->frame_count;
+    trace->frames = malloc(sizeof(TraceFrame) * ctx->frame_count);
+    if (!trace->frames) {
+        free(trace);
+        return NULL;
+    }
+    
+    // Copy frame information (shallow copy of pointers is OK since they're static strings)
+    for (size_t i = 0; i < ctx->frame_count; i++) {
+        CallFrame* src = &ctx->call_frames[i];
+        TraceFrame* dst = &trace->frames[i];
+        
+        dst->function_name = src->function_name;
+        dst->filename = src->filename;
+        dst->line = src->line;
+        dst->column = src->column;
+        
+        // Convert FunctionType to TraceFunctionType
+        switch (src->type) {
+            case FUNCTION_TYPE_NATIVE:  dst->type = TRACE_FUNCTION_NATIVE; break;
+            case FUNCTION_TYPE_SCRIPT:  dst->type = TRACE_FUNCTION_SCRIPT; break;
+            case FUNCTION_TYPE_PLUGIN:  dst->type = TRACE_FUNCTION_PLUGIN; break;
+            case FUNCTION_TYPE_CLOSURE: dst->type = TRACE_FUNCTION_CLOSURE; break;
+            default: dst->type = TRACE_FUNCTION_SCRIPT; break;
+        }
+    }
+    
+    return trace;
+}
+
+// Free a stack trace
+void free_stack_trace(StackTrace* trace) {
+    if (!trace) return;
+    free(trace->frames);
+    free(trace);
+}
+
+// ============================================================================
+// SOURCE CODE CONTEXT
+// ============================================================================
+
+void set_source_context(MobiusState* state, const char* source) {
+    state->source_code = source;
+}
+
+const char* get_source_context(MobiusState* state) {
+    return state->source_code;
+}
+
+const char* extract_source_line(const char* source, int line_number) {
+    if (!source || line_number <= 0) {
+        return NULL;
+    }
+    
+    static char line_buffer[512];  // Static buffer for the extracted line
+    const char* current = source;
+    int current_line = 1;
+    
+    // Find the start of the target line
+    while (current_line < line_number && *current) {
+        if (*current == '\n') {
+            current_line++;
+        }
+        current++;
+    }
+    
+    if (current_line != line_number || !*current) {
+        return NULL;  // Line not found
+    }
+    
+    // Copy the line content, excluding the newline
+    const char* line_start = current;
+    const char* line_end = current;
+    while (*line_end && *line_end != '\n' && *line_end != '\r') {
+        line_end++;
+    }
+    
+    size_t line_length = line_end - line_start;
+    if (line_length >= sizeof(line_buffer)) {
+        line_length = sizeof(line_buffer) - 1;  // Truncate if too long
+    }
+    
+    strncpy(line_buffer, line_start, line_length);
+    line_buffer[line_length] = '\0';
+    
+    return line_buffer;
+}

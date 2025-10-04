@@ -1,4 +1,6 @@
 #include "eval/evaluator.h"
+#include "state/mobius_state.h"
+
 
 #include <stdio.h>
 #include <string.h>
@@ -11,7 +13,7 @@ EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env) {
     EvalResult result = evaluate_expr(stmt->expression, env);
     // Pop the expression result off the stack (we don't need it for statements)
     if (!is_error(result) && result.return_count > 0) {
-        Value discard = ctx_pop(global_context);
+        Value discard = ctx_pop(env->current_context);
         free_value(discard);
         return make_success(0);
     }
@@ -29,7 +31,7 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
         }
         // Stack-based evaluation: pop the value from the stack
         if (init_result.return_count > 0) {
-            value = ctx_pop(global_context);
+            value = ctx_pop(env->current_context);
         }
     }
     
@@ -37,13 +39,15 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
     if (stmt->is_annotated) {
         TypeConversionResult conversion = validate_and_convert_value(value, stmt->type_hint, stmt->is_annotated, global_type_config);
         if (!conversion.success) {
-            return make_error_detailed_with_source(
+            return make_error_detailed(
+                env,
                 conversion.error_message ? conversion.error_message : "Type validation failed",
                 "Check that the value matches the declared type",
                 ERROR_TYPE,
                 stmt->name.line,
                 stmt->name.column,
-                "eval_var_stmt"
+                "eval_var_stmt",
+                NULL
             );
         }
         
@@ -73,24 +77,23 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
         
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "Name collision: enum '%s' already exists, cannot declare variable with the same name", identifier);
-        return make_error(error_msg, stmt->name.line, stmt->name.column);
+        return make_error(env, error_msg, stmt->name.line, stmt->name.column);
     }
     
     define_variable(env, name, value);
     
-    return make_success_with_value(make_nil_value());
+    ctx_push(env->current_context, make_nil_value());
+    return make_success(1);
 }
 
 EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
     Environment* block_env = create_environment(env);
     if (!block_env) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(env, "Memory allocation failed", 0, 0);
     }
     
-    EvalResult result = make_success_with_value(make_nil_value());
-    
     for (size_t i = 0; i < stmt->count; i++) {
-        result = evaluate_stmt(stmt->statements[i], block_env);
+        EvalResult result = evaluate_stmt(stmt->statements[i], block_env);
         if (is_error(result)) {
             break;
         }
@@ -108,7 +111,7 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
     }
     
     free_environment(block_env);
-    return result;
+    return make_success(0);
 }
 
 EvalResult eval_if_stmt(IfStmt* stmt, Environment* env) {
@@ -117,7 +120,7 @@ EvalResult eval_if_stmt(IfStmt* stmt, Environment* env) {
         return condition_result;
     }
     
-    Value condition_val = ctx_pop(global_context);
+    Value condition_val = ctx_pop(env->current_context);
     bool condition = is_truthy(condition_val);
     free_value(condition_val);
     
@@ -131,14 +134,13 @@ EvalResult eval_if_stmt(IfStmt* stmt, Environment* env) {
 }
 
 EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env) {
-    EvalResult result;
     while (true) {
         EvalResult condition_result = evaluate_expr(stmt->condition, env);
         if (is_error(condition_result)) {
             return condition_result;
         }
         
-        Value condition_val = ctx_pop(global_context);
+        Value condition_val = ctx_pop(env->current_context);
         bool condition = is_truthy(condition_val);
         free_value(condition_val);
         
@@ -146,7 +148,7 @@ EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env) {
             break;
         }
         
-        result = evaluate_stmt(stmt->body, env);
+        EvalResult result = evaluate_stmt(stmt->body, env);
         if (is_error(result)) {
             return result;
         }
@@ -169,21 +171,19 @@ EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env) {
         }
     }
     
-    return result;
+    return make_success(0);
 }
 
 EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
     // Create new environment for the for loop scope
     Environment* for_env = create_environment(env);
     if (!for_env) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(env, "Memory allocation failed", 0, 0);
     }
-    
-    EvalResult result = make_success(0);
     
     // Execute initializer
     if (stmt->initializer) {
-        result = evaluate_stmt(stmt->initializer, for_env);
+        EvalResult result = evaluate_stmt(stmt->initializer, for_env);
         if (is_error(result)) {
             free_environment(for_env);
             return result;
@@ -200,7 +200,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
                 return condition_result;
             }
             
-            Value condition_val = ctx_pop(global_context);
+            Value condition_val = ctx_pop(env->current_context);
             bool condition = is_truthy(condition_val);
             free_value(condition_val);
             
@@ -210,7 +210,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
         }
         
         // Execute body
-        result = evaluate_stmt(stmt->body, for_env);
+        EvalResult result = evaluate_stmt(stmt->body, for_env);
         if (is_error(result)) {
             free_environment(for_env);
             return result;
@@ -245,7 +245,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
     }
     
     free_environment(for_env);
-    return result;
+    return make_success(0);
 }
 
 // Function statement evaluation: func name(params) { body }
@@ -253,14 +253,14 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
     // Create a function object
     MobiusFunction* function = malloc(sizeof(MobiusFunction));
     if (!function) {
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(env, "Memory allocation failed", 0, 0);
     }
     
     // Extract function name from token
     function->name = extract_identifier_name(&stmt->name);
     if (!function->name) {
         free(function);
-        return make_error("Failed to extract function name", 0, 0);
+        return make_error(env, "Failed to extract function name", 0, 0);
     }
     
     // Extract parameter names from tokens
@@ -270,7 +270,7 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         if (!function->param_names) {
             free(function->name);
             free(function);
-            return make_error("Memory allocation failed", 0, 0);
+            return make_error(env, "Memory allocation failed", 0, 0);
         }
         
         for (size_t i = 0; i < stmt->param_count; i++) {
@@ -283,7 +283,7 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
                 free(function->param_names);
                 free(function->name);
                 free(function);
-                return make_error("Failed to extract parameter name", 0, 0);
+                return make_error(env, "Failed to extract parameter name", 0, 0);
             }
         }
     } else {
@@ -305,7 +305,7 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
             }
             free(function->name);
             free(function);
-            return make_error_detailed("Memory allocation failed for function body", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
+            return make_error_detailed(env, "Memory allocation failed for function body", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
         }
         
         // Copy the body array and retain each statement
@@ -340,8 +340,8 @@ EvalResult eval_return_stmt(ReturnStmt* stmt, Environment* env) {
         result.has_returned = true;
         return result;
     } else {
-        // No return value - push nil
-        EvalResult result = make_success_with_value(make_nil_value());
+        // No return value
+        EvalResult result = make_success(0);
     result.has_returned = true;
     return result;
     }

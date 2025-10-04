@@ -10,13 +10,18 @@
  * - Exchanging values between C and Mobius
  * - Registering custom C functions
  * - Error handling
- * - Loading plugins
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "../src/mobius/mobius.h"
+
+// Include the Mobius library headers
+#include "../../src/mobius/state/mobius_state.h"
+#include "../../src/mobius/state/environment.h"
+#include "../../src/mobius/data/value.h"
+#include "../../src/mobius/library/library.h"
+#include "../../src/mobius/eval/evaluator.h"
 
 // ============================================================================
 // CUSTOM C FUNCTIONS FOR MOBIUS
@@ -26,70 +31,80 @@
  * Custom function: add two numbers
  * Demonstrates basic value exchange and error handling
  */
-int custom_add(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
+EvalResult custom_add(MobiusState* state, int arg_count) {
+    ExecutionContext* ctx = mobius_get_main_context(state);
+    
     // Validate argument count
-    MOBIUS_CHECK_ARG_COUNT(2);
+    if (arg_count != 2) {
+        return make_error(state->global_env, "custom_add requires exactly 2 arguments", 0, 0);
+    }
+    
+    // Pop arguments from stack (in reverse order)
+    Value b = ctx_pop(ctx);
+    Value a = ctx_pop(ctx);
     
     // Validate argument types
-    if (!mobius_is_integer(args[0]) && !mobius_is_float(args[0])) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a number");
+    if (a.type != VAL_FLOAT64 && a.type != VAL_INTEGER) {
+        free_value(b);
+        return make_error(state->global_env, "First argument must be a number", 0, 0);
     }
-    if (!mobius_is_integer(args[1]) && !mobius_is_float(args[1])) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "Second argument must be a number");
+    if (b.type != VAL_FLOAT64 && b.type != VAL_INTEGER) {
+        free_value(a);
+        return make_error(state->global_env, "Second argument must be a number", 0, 0);
     }
     
-    // Perform calculation
-    double a = mobius_convert_to_float(args[0]);
-    double b = mobius_convert_to_float(args[1]);
-    double sum = a + b;
+    // Convert to double for calculation
+    double num_a = (a.type == VAL_FLOAT64) ? a.as.float64_val : (double)a.as.integer.value.i64;
+    double num_b = (b.type == VAL_FLOAT64) ? b.as.float64_val : (double)b.as.integer.value.i64;
     
-    // Return result
-    *result = mobius_create_float(state, sum);
-    return MOBIUS_OK;
+    // Clean up
+    free_value(a);
+    free_value(b);
+    
+    // Push result
+    ctx_push(ctx, make_float_value(num_a + num_b));
+    return make_success(1);
 }
 
 /**
  * Custom function: get system information
  * Demonstrates string return values
  */
-int custom_system_info(MobiusState* state, MobiusValue** args __attribute__((unused)), size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(0);
+EvalResult custom_system_info(MobiusState* state, int arg_count) {
+    ExecutionContext* ctx = mobius_get_main_context(state);
     
-    // Get system information (simplified example)
-    const char* info = "System: Linux x86_64, Compiler: GCC";
-    *result = mobius_create_string(state, info);
+    if (arg_count != 0) {
+        return make_error(state->global_env, "system_info takes no arguments", 0, 0);
+    }
     
-    return MOBIUS_OK;
+    const char* info = "System: Linux x86_64, Mobius v0.1.0";
+    ctx_push(ctx, make_string_value_from_cstr(info));
+    return make_success(1);
 }
 
 /**
- * Custom function: multiply array elements
- * Demonstrates working with Mobius variables from C
+ * Custom function: double a number
+ * Demonstrates simple numeric operations
  */
-int custom_multiply_global(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
-    MOBIUS_CHECK_ARG_TYPE(0, mobius_is_string, "string");
+EvalResult custom_double(MobiusState* state, int arg_count) {
+    ExecutionContext* ctx = mobius_get_main_context(state);
     
-    // Get variable name
-    const char* var_name = mobius_to_string(args[0]);
-    
-    // Get the variable from Mobius
-    MobiusValue* var_value = mobius_get_global(state, var_name);
-    if (!var_value) {
-        return mobius_set_error(state, MOBIUS_ERROR_RUNTIME, "Variable not found");
+    if (arg_count != 1) {
+        return make_error(state->global_env, "double requires exactly 1 argument", 0, 0);
     }
     
-    // For this example, assume it's a number and multiply by 2
-    if (!mobius_is_integer(var_value) && !mobius_is_float(var_value)) {
-        mobius_free_value(var_value);
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "Variable must be a number");
+    Value val = ctx_pop(ctx);
+    
+    if (val.type != VAL_FLOAT64 && val.type != VAL_INTEGER) {
+        free_value(val);
+        return make_error(state->global_env, "Argument must be a number", 0, 0);
     }
     
-    double value = mobius_convert_to_float(var_value);
-    mobius_free_value(var_value);
+    double num = (val.type == VAL_FLOAT64) ? val.as.float64_val : (double)val.as.integer.value.i64;
+    free_value(val);
     
-    *result = mobius_create_float(state, value * 2.0);
-    return MOBIUS_OK;
+    ctx_push(ctx, make_float_value(num * 2.0));
+    return make_success(1);
 }
 
 // ============================================================================
@@ -102,16 +117,16 @@ int custom_multiply_global(MobiusState* state, MobiusValue** args, size_t arg_co
 void example_basic_execution(void) {
     printf("=== Example 1: Basic Script Execution ===\n");
     
-    // Create interpreter state
-    MobiusState* state = mobius_new_state();
+    // Create interpreter state with default config
+    MobiusState* state = mobius_new_state(NULL);
     if (!state) {
         printf("Failed to create Mobius state\n");
         return;
     }
     
-    // Initialize core functionality
-    if (mobius_init_core(state) != MOBIUS_OK) {
-        printf("Failed to initialize Mobius core\n");
+    // Initialize standard library
+    if (mobius_init_stdlib(state) != MOBIUS_OK) {
+        printf("Failed to initialize Mobius stdlib\n");
         mobius_free_state(state);
         return;
     }
@@ -131,6 +146,9 @@ void example_basic_execution(void) {
         MobiusError* error = mobius_get_last_error(state);
         if (error) {
             printf("Error: %s\n", error->message);
+            if (error->suggestion) {
+                printf("Suggestion: %s\n", error->suggestion);
+            }
             mobius_free_error(error);
         }
     }
@@ -145,44 +163,30 @@ void example_basic_execution(void) {
 void example_value_exchange(void) {
     printf("=== Example 2: Value Exchange ===\n");
     
-    MobiusState* state = mobius_new_state();
+    MobiusState* state = mobius_new_state(NULL);
     if (!state) return;
-    mobius_init_core(state);
+    mobius_init_stdlib(state);
     
     // Set variables from C
-    MobiusValue* str_val = mobius_create_string(state, "Set from C");
-    MobiusValue* num_val = mobius_create_integer(state, 123);
-    MobiusValue* bool_val = mobius_create_bool(state, true);
-    
-    mobius_set_global(state, "c_string", str_val);
-    mobius_set_global(state, "c_number", num_val);
-    mobius_set_global(state, "c_bool", bool_val);
+    define_variable(state->global_env, "c_string", make_string_value_from_cstr("Set from C"));
+    define_variable(state->global_env, "c_number", make_integer_value(NUM_INT64, 123));
+    define_variable(state->global_env, "c_bool", make_bool_value(true));
     
     // Execute script that uses these variables
     const char* script = 
         "print(\"From C:\", c_string, c_number, c_bool);\n"
         "var result = c_number * 2;\n"
-        "var message = \"Calculated: \" + str(result);\n";
+        "print(\"Calculated:\", result);\n";
     
     mobius_exec_string(state, script);
     
     // Get variables back from Mobius
-    MobiusValue* result_val = mobius_get_global(state, "result");
-    MobiusValue* message_val = mobius_get_global(state, "message");
-    
-    if (result_val && mobius_is_integer(result_val)) {
-        printf("Result from Mobius: %ld\n", mobius_to_integer(result_val));
-    }
-    if (message_val && mobius_is_string(message_val)) {
-        printf("Message from Mobius: %s\n", mobius_to_string(message_val));
+    bool found;
+    Value result_val = get_variable(state->global_env, "result", &found);
+    if (found && result_val.type == VAL_INTEGER) {
+        printf("Result from Mobius: %ld\n", result_val.as.integer.value.i64);
     }
     
-    // Cleanup
-    mobius_free_value(str_val);
-    mobius_free_value(num_val);
-    mobius_free_value(bool_val);
-    mobius_free_value(result_val);
-    mobius_free_value(message_val);
     mobius_free_state(state);
     printf("\n");
 }
@@ -193,14 +197,14 @@ void example_value_exchange(void) {
 void example_custom_functions(void) {
     printf("=== Example 3: Custom C Functions ===\n");
     
-    MobiusState* state = mobius_new_state();
+    MobiusState* state = mobius_new_state(NULL);
     if (!state) return;
-    mobius_init_core(state);
+    mobius_init_stdlib(state);
     
     // Register custom functions
-    mobius_register_function(state, "c_add", custom_add, 2, "Add two numbers");
-    mobius_register_function(state, "system_info", custom_system_info, 0, "Get system information");
-    mobius_register_function(state, "multiply_global", custom_multiply_global, 1, "Multiply global variable by 2");
+    define_variable(state->global_env, "c_add", make_native_function_value(custom_add));
+    define_variable(state->global_env, "system_info", make_native_function_value(custom_system_info));
+    define_variable(state->global_env, "double", make_native_function_value(custom_double));
     
     // Execute script using custom functions
     const char* script = 
@@ -210,9 +214,9 @@ void example_custom_functions(void) {
         "print(\"System info:\", system_info());\n"
         "\n"
         "var my_value = 5;\n"
-        "print(\"Before multiply_global: my_value =\", my_value);\n"
-        "var doubled = multiply_global(\"my_value\");\n"
-        "print(\"After multiply_global:\", doubled);\n";
+        "print(\"Before double: my_value =\", my_value);\n"
+        "var doubled = double(my_value);\n"
+        "print(\"After double:\", doubled);\n";
     
     printf("Executing script with custom functions:\n");
     int result = mobius_exec_string(state, script);
@@ -229,46 +233,32 @@ void example_custom_functions(void) {
 }
 
 /**
- * Example 4: Plugin loading and advanced features
+ * Example 4: Advanced features
  */
-void example_plugins_and_advanced(void) {
-    printf("=== Example 4: Plugins and Advanced Features ===\n");
+void example_advanced_features(void) {
+    printf("=== Example 4: Advanced Features ===\n");
     
-    MobiusState* state = mobius_new_state();
+    MobiusState* state = mobius_new_state(NULL);
     if (!state) return;
-    mobius_init_core(state);
-    
-    // Try to load math plugin
-    int plugin_result = mobius_load_plugin(state, "./bin/modules/math.so");
-    if (plugin_result == MOBIUS_OK) {
-        printf("Math plugin loaded successfully!\n");
-    } else {
-        printf("Math plugin not available (this is okay for the example)\n");
-    }
+    mobius_init_stdlib(state);
     
     // Show interpreter information
-    printf("Mobius version: %s\n", mobius_version_string());
-    printf("Loaded plugins: %zu\n", mobius_plugin_count(state));
-    printf("Available functions: %zu\n", mobius_function_count(state));
+    printf("Mobius version: 0.1.0\n");
     
-    // Execute advanced script
+    // Execute advanced script with functions and control flow
     const char* script = 
         "print(\"\\n--- Advanced Mobius Script ---\");\n"
-        "var numbers = [1, 2, 3, 4, 5];  // Note: arrays not yet implemented\n"
-        "print(\"Built-in functions work:\");\n"
+        "print(\"Built-in math functions:\");\n"
         "print(\"abs(-42) =\", abs(-42));\n"
         "print(\"pow(2, 8) =\", pow(2, 8));\n"
         "print(\"sqrt(144) =\", sqrt(144));\n"
-        "\n"
-        "// Try math plugin functions if available\n"
-        "// print(\"sin(pi() / 2) =\", sin(pi() / 2));\n"
         "\n"
         "func fibonacci(n) {\n"
         "    if (n <= 1) return n;\n"
         "    return fibonacci(n - 1) + fibonacci(n - 2);\n"
         "}\n"
         "\n"
-        "print(\"Fibonacci sequence:\");\n"
+        "print(\"\\nFibonacci sequence:\");\n"
         "for (var i = 0; i < 10; i = i + 1) {\n"
         "    print(\"fib(\", i, \") =\", fibonacci(i));\n"
         "}\n";
@@ -296,12 +286,12 @@ void example_plugins_and_advanced(void) {
 void example_error_handling(void) {
     printf("=== Example 5: Error Handling ===\n");
     
-    MobiusState* state = mobius_new_state();
+    MobiusState* state = mobius_new_state(NULL);
     if (!state) return;
-    mobius_init_core(state);
+    mobius_init_stdlib(state);
     
     // Register a custom function that can fail
-    mobius_register_function(state, "c_add", custom_add, 2, "Add two numbers");
+    define_variable(state->global_env, "c_add", make_native_function_value(custom_add));
     
     // Execute scripts with various errors
     const char* scripts[] = {
@@ -347,6 +337,49 @@ void example_error_handling(void) {
     mobius_free_state(state);
 }
 
+/**
+ * Example 6: File execution
+ */
+void example_file_execution(void) {
+    printf("=== Example 6: File Execution ===\n");
+    
+    MobiusState* state = mobius_new_state(NULL);
+    if (!state) return;
+    mobius_init_stdlib(state);
+    
+    // Create a test script file
+    const char* test_script = 
+        "// Test script from file\n"
+        "print(\"Executing from file!\");\n"
+        "var x = 10;\n"
+        "var y = 20;\n"
+        "print(\"x + y =\", x + y);\n";
+    
+    FILE* f = fopen("/tmp/test_mobius.mb", "w");
+    if (f) {
+        fprintf(f, "%s", test_script);
+        fclose(f);
+        
+        printf("Executing script from file: /tmp/test_mobius.mb\n");
+        int result = mobius_exec_file(state, "/tmp/test_mobius.mb");
+        if (result != MOBIUS_OK) {
+            MobiusError* error = mobius_get_last_error(state);
+            if (error) {
+                printf("Error: %s\n", error->message);
+                mobius_free_error(error);
+            }
+        }
+        
+        // Clean up test file
+        remove("/tmp/test_mobius.mb");
+    } else {
+        printf("Could not create test file\n");
+    }
+    
+    mobius_free_state(state);
+    printf("\n");
+}
+
 // ============================================================================
 // MAIN PROGRAM
 // ============================================================================
@@ -359,18 +392,19 @@ int main(void) {
     example_basic_execution();
     example_value_exchange();
     example_custom_functions();
-    example_plugins_and_advanced();
+    example_advanced_features();
     example_error_handling();
+    example_file_execution();
     
     printf("✅ All examples completed!\n");
     printf("\nThis demonstrates how to embed Mobius in your C application.\n");
     printf("Key features:\n");
-    printf("- Isolated interpreter states\n");
-    printf("- Bidirectional value exchange\n");
-    printf("- Custom C function registration\n");
-    printf("- Comprehensive error handling\n");
-    printf("- Plugin system integration\n");
-    printf("- Memory management\n");
+    printf("- Isolated interpreter states (MobiusState)\n");
+    printf("- Bidirectional value exchange (define_variable/get_variable)\n");
+    printf("- Custom C function registration (make_native_function_value)\n");
+    printf("- Comprehensive error handling (MobiusError)\n");
+    printf("- File and string execution (mobius_exec_file/mobius_exec_string)\n");
+    printf("- Standard library integration (mobius_init_stdlib)\n");
     
     return 0;
 }

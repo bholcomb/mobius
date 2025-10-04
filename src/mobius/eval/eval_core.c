@@ -14,7 +14,7 @@ EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
             print_runtime_error(result.error);
             // Continue execution instead of breaking for better error recovery
             // In a real language, you might want to break on certain error types
-            result = make_success_with_value(make_nil_value()); // Reset result for next statement
+            result = make_success(0); // Reset result for next statement
         }
     }
     
@@ -24,7 +24,7 @@ EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
 // Main statement evaluator
 EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
     if (!stmt) {
-        return make_error("Null statement", 0, 0);
+        return make_error(env, "Null statement", 0, 0);
     }
     
     switch (stmt->type) {
@@ -57,7 +57,7 @@ EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
         case STMT_ENUM:
             return eval_enum_stmt(&stmt->as.enum_stmt, env);
         default:
-            return make_error("Unknown statement type", 0, 0);
+            return make_error(env, "Unknown statement type", 0, 0);
     }
 }
 
@@ -65,7 +65,7 @@ EvalResult evaluate_stmt(Stmt* stmt, Environment* env) {
 // Main expression evaluator (stack-based)
 EvalResult evaluate_expr(Expr* expr, Environment* env) {
     if (!expr) {
-        return make_error("Null expression", 0, 0);
+        return make_error(env, "Null expression", 0, 0);
     }
     
     switch (expr->type) {
@@ -99,6 +99,6 @@ EvalResult evaluate_expr(Expr* expr, Environment* env) {
         case EXPR_DECREMENT:
             return eval_increment_expr(&expr->as.increment, env);
         default:
-            return make_error("Unknown expression type", 0, 0);
+            return make_error(env, "Unknown expression type", 0, 0);
     }
 }

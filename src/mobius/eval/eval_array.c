@@ -1,5 +1,7 @@
 #include "eval/evaluator.h"
 #include "data/array.h"
+#include "state/mobius_state.h"
+
 
 #include <stdio.h>
 #include <string.h>
@@ -10,7 +12,7 @@ EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
     // Create a new array
     ArrayValue* array = array_create(expr->element_count);
     if (!array) {
-        return make_error("Failed to create array", 0, 0);
+        return make_error(env, "Failed to create array", 0, 0);
     }
     
     // Evaluate and add each element
@@ -19,7 +21,7 @@ EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
         if (is_error(element_result)) {
             // Clean up any elements already on stack
             for (size_t j = 0; j < i; j++) {
-                ctx_pop(global_context);
+                ctx_pop(env->current_context);
             }
             array_release(array);
             return element_result;
@@ -29,7 +31,7 @@ EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
     
     // Pop elements from stack in reverse order and add to array
     for (size_t i = expr->element_count; i > 0; i--) {
-        Value element = ctx_pop(global_context);
+        Value element = ctx_pop(env->current_context);
         array_push(array, element);
     }
     
@@ -40,7 +42,8 @@ EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
         array->elements[array->length - 1 - i] = temp;
     }
     
-    return make_success_with_value(make_array_value(array));
+    ctx_push(env->current_context, make_array_value(array));
+    return make_success(1);
 }
 
 EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
@@ -49,7 +52,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
     if (is_error(target_result)) {
         return target_result;
     }
-    Value target_value = ctx_pop(global_context);
+    Value target_value = ctx_pop(env->current_context);
     
     // Evaluate the index expression
     EvalResult index_result = evaluate_expr(expr->index, env);
@@ -57,7 +60,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         free_value(target_value);
         return index_result;
     }
-    Value index_value = ctx_pop(global_context);
+    Value index_value = ctx_pop(env->current_context);
     
     // Handle both arrays and tables
     if (target_value.type == VAL_ARRAY) {
@@ -65,7 +68,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         if (index_value.type != VAL_INTEGER) {
             free_value(target_value);
             free_value(index_value);
-            return make_error("Array index must be an integer", 0, 0);
+            return make_error(env, "Array index must be an integer", 0, 0);
         }
         
         // Get the index value
@@ -76,7 +79,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         if (index < 0 || (size_t)index >= array->length) {
             free_value(target_value);
             free_value(index_value);
-            return make_error("Array index out of bounds", 0, 0);
+            return make_error(env, "Array index out of bounds", 0, 0);
         }
         
         // Get the value (array_get returns a copy)
@@ -86,7 +89,8 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         free_value(index_value);
         // Don't free target_value here - the array is still referenced
         
-        return make_success_with_value(result);
+        ctx_push(env->current_context, result);
+        return make_success(1);
         
     } else if (target_value.type == VAL_TABLE) {
         // Table indexing logic (same as before)
@@ -96,12 +100,13 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         free_value(index_value);
         // Don't free target_value here - the table is still referenced
         
-        return make_success_with_value(result);
+        ctx_push(env->current_context, result);
+        return make_success(1);
         
     } else {
         // Neither array nor table
         free_value(target_value);
         free_value(index_value);
-        return make_error("Cannot index non-array/non-table value", 0, 0);
+        return make_error(env, "Cannot index non-array/non-table value", 0, 0);
     }
 }

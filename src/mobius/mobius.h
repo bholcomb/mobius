@@ -23,11 +23,8 @@
 #include "library/library.h"
 
 // Plugin system
-#include "state/plugin.h"
-#include "statemodule_registry.h"
-
-// Embedding API
-#include "embedding.h"
+#include "plugin/plugin.h"
+#include "plugin/module_registry.h"
 
 // Library version
 #define MOBIUS_VERSION_MAJOR 0

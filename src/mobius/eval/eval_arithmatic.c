@@ -1,4 +1,5 @@
 #include "eval/evaluator.h"
+#include "state/mobius_state.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -6,10 +7,8 @@
 #include <math.h>
 
 // Helper function to increment/decrement an integer value
-Value increment_integer(Value val, bool is_increment, int line, int column, bool* success) {
+Value increment_integer(Value val, bool is_increment, bool* success) {
     *success = false;
-    (void)line;
-    (void)column;
     
     if (val.type != VAL_INTEGER) {
         return make_nil_value();
@@ -68,42 +67,41 @@ EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env) {
     if (!found) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "Undefined variable '%s'", var_name);
-        return make_error(error_msg, expr->op.line, expr->op.column);
+        return make_error(env, error_msg, expr->op.line, expr->op.column);
     }
     
     // Check if it's an integer
     if (current.type != VAL_INTEGER) {
-        return make_error("Increment/decrement can only be applied to integers", 
+        return make_error(env, "Increment/decrement can only be applied to integers", 
                         expr->op.line, expr->op.column);
     }
     
     // Compute new value
     bool success;
-    Value new_value = increment_integer(current, expr->is_increment, 
-                                       expr->op.line, expr->op.column, &success);
+    Value new_value = increment_integer(current, expr->is_increment, &success);
     
     if (!success) {
-        return make_error("Failed to increment/decrement value", 
+        return make_error(env, "Failed to increment/decrement value", 
                         expr->op.line, expr->op.column);
     }
     
     // Update the variable
     if (!assign_variable(env, var_name, new_value)) {
-        return make_error("Failed to update variable", expr->op.line, expr->op.column);
+        return make_error(env, "Failed to update variable", expr->op.line, expr->op.column);
     }
     
     // Return appropriate value based on prefix/postfix
     if (expr->is_prefix) {
-        return make_success_with_value(new_value);  // Return new value (++i)
+        ctx_push(env->current_context, new_value);
     } else {
-        return make_success_with_value(current);     // Return old value (i++)
+        ctx_push(env->current_context, current);
+
     }
+    return make_success(1);  // Return new value (++i)
 }
 
 // Arithmetic operations
 EvalResult add_values(Environment* env, Value left, Value right) {
-    (void)env;
-
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -114,7 +112,7 @@ EvalResult add_values(Environment* env, Value left, Value right) {
             // For now, fall through to default behavior
         } else if (add_method.type != VAL_NIL) {
             // Non-function metamethod - treat as error for arithmetic
-            return make_error("__add metamethod must be a function", 0, 0);
+            return make_error(env, "__add metamethod must be a function", 0, 0);
         }
         // If no metamethod found, continue to default error
     }
@@ -126,7 +124,7 @@ EvalResult add_values(Environment* env, Value left, Value right) {
         if (!left_str || !right_str) {
             free(left_str);
             free(right_str);
-            return make_error("Memory allocation failed in string concatenation", 0, 0);
+            return make_error(env, "Memory allocation failed in string concatenation", 0, 0);
         }
         
         size_t len = strlen(left_str) + strlen(right_str) + 1;
@@ -134,7 +132,7 @@ EvalResult add_values(Environment* env, Value left, Value right) {
         if (!result) {
             free(left_str);
             free(right_str);
-            return make_error("Memory allocation failed", 0, 0);
+            return make_error(env, "Memory allocation failed", 0, 0);
         }
         
         strcpy(result, left_str);
@@ -145,7 +143,8 @@ EvalResult add_values(Environment* env, Value left, Value right) {
         
         Value final_result = make_string_value_from_cstr(result);
         free(result);
-        return make_success_with_value(final_result);
+        ctx_push(env->current_context, final_result);
+        return make_success(1);
     }
     
     // Numeric addition
@@ -199,10 +198,11 @@ EvalResult add_values(Environment* env, Value left, Value right) {
         
         // Return appropriate result type
         if (use_double) {
-            return make_success_with_value(make_float_value(left_val + right_val));
+            ctx_push(env->current_context, make_float_value(left_val + right_val));
         } else {
-            return make_success_with_value(make_float32_value((float)(left_val + right_val)));
+            ctx_push(env->current_context, make_float32_value((float)(left_val + right_val)));
         }
+        return make_success(1);
     }
     
     // Integer addition
@@ -234,13 +234,14 @@ EvalResult add_values(Environment* env, Value left, Value right) {
             default: right_val = 0; break;
         }
         
-        return make_success_with_value(make_integer_value(NUM_INT64, left_val + right_val));
+        ctx_push(env->current_context, make_integer_value(NUM_INT64, left_val + right_val));
+        return make_success(1);
     }
     
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
-        return make_error("Cannot perform arithmetic on tables without __add metamethod", 0, 0);
+        return make_error(env, "Cannot perform arithmetic on tables without __add metamethod", 0, 0);
     }
-    return make_error("Cannot add these types", 0, 0);
+    return make_error(env, "Cannot add these types", 0, 0);
 }
 
 EvalResult subtract_values(Environment* env, Value left, Value right) {
@@ -254,7 +255,7 @@ EvalResult subtract_values(Environment* env, Value left, Value right) {
             // TODO: Call function metamethod
             // For now, fall through to default behavior
         } else if (sub_method.type != VAL_NIL) {
-            return make_error("__sub metamethod must be a function", 0, 0);
+            return make_error(env, "__sub metamethod must be a function", 0, 0);
         }
     }
     
@@ -280,20 +281,22 @@ EvalResult subtract_values(Environment* env, Value left, Value right) {
             }
         }
         
-        return make_success_with_value(make_float_value(left_val - right_val));
+        ctx_push(env->current_context, make_float_value(left_val - right_val));
+        return make_success(1);
     }
     
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
         // Simplified integer subtraction (assuming int32 for now)
         int64_t left_val = left.as.integer.value.i32;
         int64_t right_val = right.as.integer.value.i32;
-        return make_success_with_value(make_integer_value(NUM_INT32, left_val - right_val));
+        ctx_push(env->current_context, make_integer_value(NUM_INT32, left_val - right_val));
+        return make_success(1);
     }
     
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
-        return make_error("Cannot perform arithmetic on tables without __sub metamethod", 0, 0);
+        return make_error(env, "Cannot perform arithmetic on tables without __sub metamethod", 0, 0);
     }
-    return make_error("Cannot subtract these types", 0, 0);
+    return make_error(env, "Cannot subtract these types", 0, 0);
 }
 
 EvalResult multiply_values(Environment* env, Value left, Value right) {
@@ -307,7 +310,7 @@ EvalResult multiply_values(Environment* env, Value left, Value right) {
             // TODO: Call function metamethod
             // For now, fall through to default behavior
         } else if (mul_method.type != VAL_NIL) {
-            return make_error("__mul metamethod must be a function", 0, 0);
+            return make_error(env, "__mul metamethod must be a function", 0, 0);
         }
     }
     
@@ -315,19 +318,21 @@ EvalResult multiply_values(Environment* env, Value left, Value right) {
     if (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64) {
         double left_val = (left.type == VAL_FLOAT64) ? left.as.float64_val : left.as.integer.value.i32;
         double right_val = (right.type == VAL_FLOAT64) ? right.as.float64_val : right.as.integer.value.i32;
-        return make_success_with_value(make_float_value(left_val * right_val));
+        ctx_push(env->current_context, make_float_value(left_val * right_val));
+        return make_success(1);
     }
     
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
         int64_t left_val = left.as.integer.value.i32;
         int64_t right_val = right.as.integer.value.i32;
-        return make_success_with_value(make_integer_value(NUM_INT32, left_val * right_val));
+        ctx_push(env->current_context, make_integer_value(NUM_INT32, left_val * right_val));
+        return make_success(1);
     }
     
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
-        return make_error("Cannot perform arithmetic on tables without __mul metamethod", 0, 0);
+        return make_error(env, "Cannot perform arithmetic on tables without __mul metamethod", 0, 0);
     }
-    return make_error("Cannot multiply these types", 0, 0);
+    return make_error(env, "Cannot multiply these types", 0, 0);
 }
 
 EvalResult divide_values(Environment* env, Value left, Value right, int line, int column) {
@@ -341,11 +346,11 @@ EvalResult divide_values(Environment* env, Value left, Value right, int line, in
             // TODO: Call function metamethod
             // For now, fall through to default behavior
         } else if (div_method.type != VAL_NIL) {
-            return make_error("__div metamethod must be a function", 0, 0);
+            return make_error(env, "__div metamethod must be a function", 0, 0);
         }
         
         // If tables without metamethods, return error
-        return make_error("Cannot perform arithmetic on tables without __div metamethod", 0, 0);
+        return make_error(env, "Cannot perform arithmetic on tables without __div metamethod", 0, 0);
     }
     
     // Division always returns float to handle fractions
@@ -355,16 +360,19 @@ EvalResult divide_values(Environment* env, Value left, Value right, int line, in
                        (right.type == VAL_INTEGER) ? right.as.integer.value.i32 : 0.0;
     
     if (right_val == 0.0) {
-        return make_error_detailed_with_source(
+        return make_error_detailed(
+            env,
             "Division by zero",
             "Check that the divisor is not zero before performing division",
             ERROR_DIVISION,
             line, column,
+            NULL,
             NULL
         );
     }
     
-    return make_success_with_value(make_float_value(left_val / right_val));
+    ctx_push(env->current_context, make_float_value(left_val / right_val));
+    return make_success(1);
 }
 
 EvalResult modulo_values(Environment* env, Value left, Value right, int line, int column) {
@@ -378,11 +386,11 @@ EvalResult modulo_values(Environment* env, Value left, Value right, int line, in
             // TODO: Call function metamethod
             // For now, fall through to default behavior
         } else if (mod_method.type != VAL_NIL) {
-            return make_error("__mod metamethod must be a function", 0, 0);
+            return make_error(env, "__mod metamethod must be a function", 0, 0);
         }
         
         // If tables without metamethods, return error
-        return make_error("Cannot perform modulo on tables without __mod metamethod", 0, 0);
+        return make_error(env, "Cannot perform modulo on tables without __mod metamethod", 0, 0);
     }
     
     // Handle integer modulo (preferred for exact results)
@@ -391,16 +399,19 @@ EvalResult modulo_values(Environment* env, Value left, Value right, int line, in
         int32_t right_val = right.as.integer.value.i32;
         
         if (right_val == 0) {
-            return make_error_detailed_with_source(
+            return make_error_detailed(
+                env,
                 "Modulo by zero",
                 "Check that the divisor is not zero before performing modulo",
                 ERROR_DIVISION,
                 line, column,
+                NULL,
                 NULL
             );
         }
         
-        return make_success_with_value(make_integer_value(NUM_INT32, left_val % right_val));
+        ctx_push(env->current_context, make_integer_value(NUM_INT32, left_val % right_val));
+        return make_success(1);
     }
     
     // Handle float modulo using fmod
@@ -412,19 +423,22 @@ EvalResult modulo_values(Environment* env, Value left, Value right, int line, in
                            (double)right.as.integer.value.i32;
         
         if (right_val == 0.0) {
-            return make_error_detailed_with_source(
+            return make_error_detailed(
+                env,
                 "Modulo by zero",
                 "Check that the divisor is not zero before performing modulo",
                 ERROR_DIVISION,
                 line, column,
+                NULL,
                 NULL
             );
         }
         
-        return make_success_with_value(make_float_value(fmod(left_val, right_val)));
+        ctx_push(env->current_context, make_float_value(fmod(left_val, right_val)));
+        return make_success(1);
     }
     
-    return make_error("Cannot modulo these types", 0, 0);
+    return make_error(env, "Cannot modulo these types", 0, 0);
 }
 
 EvalResult compare_values(Environment* env, Value left, Value right, TokenType op) {
@@ -467,7 +481,7 @@ EvalResult compare_values(Environment* env, Value left, Value right, TokenType o
                 // TODO: Call function metamethod
                 // For now, fall through to default behavior
             } else if (compare_method.type != VAL_NIL) {
-                return make_error("Comparison metamethod must be a function", 0, 0);
+                return make_error(env, "Comparison metamethod must be a function", 0, 0);
             }
         }
         
@@ -476,7 +490,7 @@ EvalResult compare_values(Environment* env, Value left, Value right, TokenType o
             // Use default equality for tables
         } else {
             // Other comparisons require metamethods for tables
-            return make_error("Cannot compare tables without appropriate metamethod", 0, 0);
+            return make_error(env, "Cannot compare tables without appropriate metamethod", 0, 0);
         }
     }
     
@@ -494,7 +508,7 @@ EvalResult compare_values(Environment* env, Value left, Value right, TokenType o
         } else if (left.type == VAL_INTEGER) {
             left_val = left.as.integer.value.i32; // Simplified
         } else {
-            return make_error("Cannot compare non-numeric types", 0, 0);
+            return make_error(env, "Cannot compare non-numeric types", 0, 0);
         }
         
         if (right.type == VAL_FLOAT64) {
@@ -502,7 +516,7 @@ EvalResult compare_values(Environment* env, Value left, Value right, TokenType o
         } else if (right.type == VAL_INTEGER) {
             right_val = right.as.integer.value.i32; // Simplified
         } else {
-            return make_error("Cannot compare non-numeric types", 0, 0);
+            return make_error(env, "Cannot compare non-numeric types", 0, 0);
         }
         
         switch (op) {
@@ -511,9 +525,10 @@ EvalResult compare_values(Environment* env, Value left, Value right, TokenType o
             case TOKEN_LESS:          result = left_val < right_val; break;
             case TOKEN_LESS_EQUAL:    result = left_val <= right_val; break;
             default:
-                return make_error("Unknown comparison operator", 0, 0);
+                return make_error(env, "Unknown comparison operator", 0, 0);
         }
     }
     
-    return make_success_with_value(make_bool_value(result));
+    ctx_push(env->current_context, make_bool_value(result));
+    return make_success(1);
 }

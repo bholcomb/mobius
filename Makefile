@@ -37,20 +37,16 @@ MOBIUS_SOURCES = \
 	$(SRCDIR)/mobius/eval/eval_statement.c \
 	$(SRCDIR)/mobius/eval/eval_switch.c \
 	$(SRCDIR)/mobius/eval/eval_table.c \
-	$(SRCDIR)/mobius/eval/eval_util.c \
 	$(SRCDIR)/mobius/library/array.c \
 	$(SRCDIR)/mobius/library/core.c \
 	$(SRCDIR)/mobius/library/library.c \
 	$(SRCDIR)/mobius/library/math.c \
-	$(SRCDIR)/mobius/library/stdlib_init.c \
 	$(SRCDIR)/mobius/library/string.c \
 	$(SRCDIR)/mobius/library/table_lib.c \
 	$(SRCDIR)/mobius/library/types.c \
 	$(SRCDIR)/mobius/library/util.c \
-	$(SRCDIR)/mobius/state/embedding.c \
 	$(SRCDIR)/mobius/state/environment.c \
-	$(SRCDIR)/mobius/state/mobius_state.cpp \
-	$(SRCDIR)/mobius/state/stack_trace.c \
+	$(SRCDIR)/mobius/state/mobius_state.c \
 	$(SRCDIR)/mobius/plugin/module_registry.c \
 	$(SRCDIR)/mobius/util/file_io.c \
 	$(SRCDIR)/mobius/util/utility.c \

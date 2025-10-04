@@ -1,4 +1,5 @@
 #include "eval/evaluator.h"
+#include "state/mobius_state.h"
 
 #include <string.h>
 
@@ -65,7 +66,7 @@ static int simple_compare_values(Value left, Value right) {
 
 
 // Range matching (e.g., 1..10)
-static bool value_in_range(Value value, CasePattern* pattern) {
+static bool value_in_range(Value value, CasePattern* pattern, Environment* env) {
     // Note: These evaluations need a temporary environment
     // For now, we'll assume range patterns use literals
     // TODO: Support complex expressions in range patterns with proper environment
@@ -80,7 +81,7 @@ static bool value_in_range(Value value, CasePattern* pattern) {
         free_environment(temp_env);
         return false;
     }
-    Value start_val = ctx_pop(global_context);
+    Value start_val = ctx_pop(env->current_context);
     
     EvalResult end_result = evaluate_expr(pattern->as.range_pattern.end, temp_env);
     if (end_result.has_error) {
@@ -88,7 +89,7 @@ static bool value_in_range(Value value, CasePattern* pattern) {
         free_environment(temp_env);
         return false;
     }
-    Value end_val = ctx_pop(global_context);
+    Value end_val = ctx_pop(env->current_context);
     
     free_environment(temp_env);
     bool inclusive = pattern->as.range_pattern.inclusive;
@@ -119,7 +120,7 @@ static bool evaluate_expression_pattern(CasePattern* pattern, Value value, Envir
         return false;
     }
     
-    Value rhs_val = ctx_pop(global_context);
+    Value rhs_val = ctx_pop(env->current_context);
     TokenType op = pattern->as.expr_pattern.op;
     bool result = false;
     
@@ -167,7 +168,7 @@ static PatternMatchResult match_pattern(CasePattern* pattern, Value value, Envir
             break;
             
         case PATTERN_RANGE:
-            result.matches = value_in_range(value, pattern);
+            result.matches = value_in_range(value, pattern, env);
             break;
             
         case PATTERN_TYPE:
@@ -200,7 +201,7 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
         return discriminant_result;
     }
     
-    Value switch_value = ctx_pop(global_context);
+    Value switch_value = ctx_pop(env->current_context);
     
     // Try each case in order
     for (size_t i = 0; i < stmt->case_count; i++) {
@@ -211,7 +212,7 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
         Environment* case_env = create_environment(env);
         if (!case_env) {
             free_value(switch_value);
-            return make_error("Memory allocation failed", 0, 0);
+            return make_error(env, "Memory allocation failed", 0, 0);
         }
         
         for (size_t j = 0; j < case_clause->pattern_count; j++) {
@@ -227,7 +228,7 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
                             free_environment(case_env);
                             return guard_result;
                         }
-                    Value guard_val = ctx_pop(global_context);
+                    Value guard_val = ctx_pop(env->current_context);
                     bool guard_passed = is_truthy(guard_val);
                     free_value(guard_val);
                     if (!guard_passed) {
@@ -304,5 +305,5 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
     
     // No match and no default
     free_value(switch_value);
-    return make_success_with_value(make_nil_value());
+    return make_success(0);
 }

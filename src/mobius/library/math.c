@@ -1,5 +1,4 @@
 #include "library/math.h"
-#include "library/library.h"
 #include "data/value.h"
 #include "state/environment.h"
 #include "eval/evaluator.h"
@@ -12,12 +11,12 @@
 // UNIFIED MATH FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_abs(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_abs(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("abs expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "abs expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     Value result;
     
     if (arg.type == VAL_INTEGER) {
@@ -39,27 +38,27 @@ EvalResult lib_abs(ExecutionContext* ctx, int arg_count) {
     } else if (arg.type == VAL_FLOAT32) {
         result = make_float32_value(fabsf(arg.as.float32_val));
     } else {
-        return make_error("abs expects a numeric argument", 0, 0);
+        return make_error(state->main_context->current_env, "abs expects a numeric argument", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, result);
+    ctx_push(state->main_context, result);
     
     return make_success(1);
 }
 
-EvalResult lib_min(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_min(MobiusState* state, int arg_count) {
     if (arg_count < 2) {
-        return make_error("min expects at least 2 arguments", 0, 0);
+        return make_error(state->main_context->current_env, "min expects at least 2 arguments", 0, 0);
     }
 
-    Value min_val = ctx_peek(ctx, arg_count - 1);  // First argument
+    Value min_val = ctx_peek(state->main_context, arg_count - 1);  // First argument
     
     for (int i = arg_count - 2; i >= 0; i--) {
-        Value current = ctx_peek(ctx, i);
+        Value current = ctx_peek(state->main_context, i);
         
         // Compare numeric values
         bool is_less = false;
@@ -94,7 +93,7 @@ EvalResult lib_min(ExecutionContext* ctx, int arg_count) {
         } else if (min_val.type == VAL_FLOAT32 && current.type == VAL_FLOAT32) {
             is_less = current.as.float32_val < min_val.as.float32_val;
         } else {
-            return make_error("min expects numeric arguments of compatible types", 0, 0);
+            return make_error(state->main_context->current_env, "min expects numeric arguments of compatible types", 0, 0);
         }
         
         if (is_less) {
@@ -104,24 +103,24 @@ EvalResult lib_min(ExecutionContext* ctx, int arg_count) {
     
     // Pop all arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(ctx);
+        ctx_pop(state->main_context);
     }
     
     // Push result onto stack
-    ctx_push(ctx, min_val);
+    ctx_push(state->main_context, min_val);
     
     return make_success(1);
 }
 
-EvalResult lib_max(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_max(MobiusState* state, int arg_count) {
     if (arg_count < 2) {
-        return make_error("max expects at least 2 arguments", 0, 0);
+        return make_error(state->main_context->current_env, "max expects at least 2 arguments", 0, 0);
     }
 
-    Value max_val = ctx_peek(ctx, arg_count - 1);  // First argument
+    Value max_val = ctx_peek(state->main_context, arg_count - 1);  // First argument
     
     for (int i = arg_count - 2; i >= 0; i--) {
-        Value current = ctx_peek(ctx, i);
+        Value current = ctx_peek(state->main_context, i);
         
         // Compare numeric values (similar logic to min but reversed)
         bool is_greater = false;
@@ -156,7 +155,7 @@ EvalResult lib_max(ExecutionContext* ctx, int arg_count) {
         } else if (max_val.type == VAL_FLOAT32 && current.type == VAL_FLOAT32) {
             is_greater = current.as.float32_val > max_val.as.float32_val;
         } else {
-            return make_error("max expects numeric arguments of compatible types", 0, 0);
+            return make_error(state->main_context->current_env, "max expects numeric arguments of compatible types", 0, 0);
         }
         
         if (is_greater) {
@@ -166,22 +165,22 @@ EvalResult lib_max(ExecutionContext* ctx, int arg_count) {
     
     // Pop all arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(ctx);
+        ctx_pop(state->main_context);
     }
     
     // Push result onto stack
-    ctx_push(ctx, max_val);
+    ctx_push(state->main_context, max_val);
     
     return make_success(1);
 }
 
-EvalResult lib_pow(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_pow(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return make_error("pow expects 2 arguments", 0, 0);
+        return make_error(state->main_context->current_env, "pow expects 2 arguments", 0, 0);
     }
 
-    Value base = ctx_peek(ctx, 1);
-    Value exponent = ctx_peek(ctx, 0);
+    Value base = ctx_peek(state->main_context, 1);
+    Value exponent = ctx_peek(state->main_context, 0);
     
     double base_val, exp_val;
     
@@ -205,7 +204,7 @@ EvalResult lib_pow(ExecutionContext* ctx, int arg_count) {
         }
         base_val = (double)val;
     } else {
-        return make_error("pow expects numeric arguments", 0, 0);
+        return make_error(state->main_context->current_env, "pow expects numeric arguments", 0, 0);
     }
     
     // Convert exponent to double (similar logic)
@@ -228,27 +227,27 @@ EvalResult lib_pow(ExecutionContext* ctx, int arg_count) {
         }
         exp_val = (double)val;
     } else {
-        return make_error("pow expects numeric arguments", 0, 0);
+        return make_error(state->main_context->current_env, "pow expects numeric arguments", 0, 0);
     }
     
     double result_val = pow(base_val, exp_val);
     
     // Pop arguments from stack
-    ctx_pop(ctx);
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, make_float_value(result_val));
+    ctx_push(state->main_context, make_float_value(result_val));
     
     return make_success(1);
 }
 
-EvalResult lib_sqrt(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_sqrt(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("sqrt expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "sqrt expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     double val;
     
     // Convert to double
@@ -271,28 +270,28 @@ EvalResult lib_sqrt(ExecutionContext* ctx, int arg_count) {
         }
         val = (double)int_val;
     } else {
-        return make_error("sqrt expects a numeric argument", 0, 0);
+        return make_error(state->main_context->current_env, "sqrt expects a numeric argument", 0, 0);
     }
     
     if (val < 0) {
-        return make_error("sqrt of negative number", 0, 0);
+        return make_error(state->main_context->current_env, "sqrt of negative number", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, make_float_value(sqrt(val)));
+    ctx_push(state->main_context, make_float_value(sqrt(val)));
     
     return make_success(1);
 }
 
-EvalResult lib_floor(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_floor(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("floor expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "floor expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     double val;
     
     // Convert to double
@@ -302,28 +301,28 @@ EvalResult lib_floor(ExecutionContext* ctx, int arg_count) {
         val = (double)arg.as.float32_val;
     } else if (arg.type == VAL_INTEGER) {
         // Integer floor is just the integer itself
-        ctx_pop(ctx);
-        ctx_push(ctx, arg);
+        ctx_pop(state->main_context);
+        ctx_push(state->main_context, arg);
         return make_success(1);
     } else {
-        return make_error("floor expects a numeric argument", 0, 0);
+        return make_error(state->main_context->current_env, "floor expects a numeric argument", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, make_float_value(floor(val)));
+    ctx_push(state->main_context, make_float_value(floor(val)));
     
     return make_success(1);
 }
 
-EvalResult lib_ceil(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_ceil(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("ceil expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "ceil expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     double val;
     
     // Convert to double
@@ -333,28 +332,28 @@ EvalResult lib_ceil(ExecutionContext* ctx, int arg_count) {
         val = (double)arg.as.float32_val;
     } else if (arg.type == VAL_INTEGER) {
         // Integer ceil is just the integer itself
-        ctx_pop(ctx);
-        ctx_push(ctx, arg);
+        ctx_pop(state->main_context);
+        ctx_push(state->main_context, arg);
         return make_success(1);
     } else {
-        return make_error("ceil expects a numeric argument", 0, 0);
+        return make_error(state->main_context->current_env, "ceil expects a numeric argument", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, make_float_value(ceil(val)));
+    ctx_push(state->main_context, make_float_value(ceil(val)));
     
     return make_success(1);
 }
 
-EvalResult lib_round(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_round(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("round expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "round expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     double val;
     
     // Convert to double
@@ -364,18 +363,18 @@ EvalResult lib_round(ExecutionContext* ctx, int arg_count) {
         val = (double)arg.as.float32_val;
     } else if (arg.type == VAL_INTEGER) {
         // Integer round is just the integer itself
-        ctx_pop(ctx);
-        ctx_push(ctx, arg);
+        ctx_pop(state->main_context);
+        ctx_push(state->main_context, arg);
         return make_success(1);
     } else {
-        return make_error("round expects a numeric argument", 0, 0);
+        return make_error(state->main_context->current_env, "round expects a numeric argument", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, make_float_value(round(val)));
+    ctx_push(state->main_context, make_float_value(round(val)));
     
     return make_success(1);
 }

@@ -22,10 +22,7 @@ typedef struct {
 typedef struct {
     const char* name;           // Function name
     MobiusCFunction function;   // Function pointer
-    size_t arity;              // Expected arguments (SIZE_MAX for variadic)
-    const char* description;    // Function description
-    const char* category;       // Function category (e.g., "math", "string")
-    const char* usage;          // Usage example (optional)
+    size_t arg_count;           // Expected arguments (SIZE_MAX for variadic)
 } PluginFunction;
 
 // Plugin structure - main interface
@@ -63,11 +60,8 @@ typedef struct {
 // Convenience macros for plugin authors
 #define MOBIUS_PLUGIN_EXPORT __attribute__((visibility("default")))
 
-#define MOBIUS_PLUGIN_FUNCTION(func_name, func_ptr, arity, desc, category) \
-    {func_name, func_ptr, arity, desc, category, NULL}
-
-#define MOBIUS_PLUGIN_FUNCTION_WITH_USAGE(func_name, func_ptr, arity, desc, category, usage) \
-    {func_name, func_ptr, arity, desc, category, usage}
+#define MOBIUS_PLUGIN_FUNCTION(func_name, func_ptr, arg_count) \
+    {func_name, func_ptr, arg_count}
 
 // Function signature validation
 bool validate_plugin_function_signature(PluginFunction* func);

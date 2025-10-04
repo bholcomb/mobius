@@ -1,8 +1,12 @@
-#include "file_io.h"
-#include "scanner.h"
-#include "parser.h"
-#include "evaluator.h"
-#include "environment.h"
+#include "util/file_io.h"
+#include "frontend/scanner.h"
+#include "frontend/parser.h"
+#include "eval/evaluator.h"
+#include "state/environment.h"
+#include "state/mobius_state.h"
+#include "library/library.h"
+#include "plugin/module_registry.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -96,16 +100,12 @@ int execute_script_string(const char* source, const char* filename) {
         return 1;
     }
     
-    // Initialize global environment
-    init_global_environment();
-    
     printf("Executing %s...\n", filename ? filename : "script");
     
     // Scan tokens
     TokenArray tokens = scan_source(source);
     if (tokens.count == 0) {
         fprintf(stderr, "Error: No tokens found\n");
-        cleanup_global_environment();
         return 1;
     }
     
@@ -113,18 +113,20 @@ int execute_script_string(const char* source, const char* filename) {
     ParseResult parse_result = parse(tokens);
     if (parse_result.had_error) {
         fprintf(stderr, "Parse errors occurred\n");
-        cleanup_global_environment();  // Clean up environment first
         free_parse_result(&parse_result);  // Then free parse result
         free_token_array(&tokens);
         return 1;
     }
     
+    MobiusState* state = mobius_new_state(NULL);
+    register_stdlib_functions(state);
+
     // Set source context for better error reporting
-    set_source_context(source);
+    set_source_context(state, source);
     
     // Execute the program
     EvalResult eval_result = evaluate_program(parse_result.statements, 
-                                            parse_result.count, global_env);
+                                            parse_result.count, state->global_env);
     
     int exit_code = 0;
     if (is_error(eval_result)) {
@@ -133,11 +135,10 @@ int execute_script_string(const char* source, const char* filename) {
     }
     
     // Cleanup
-    set_source_context(NULL);  // Clear source context
-    cleanup_global_environment();  // Clean up environment first (releases AST references)
+    set_source_context(state, NULL);  // Clear source context
     free_parse_result(&parse_result);  // Then free parse result
     free_token_array(&tokens);
-    
+    mobius_free_state(state);
     return exit_code;
 }
 

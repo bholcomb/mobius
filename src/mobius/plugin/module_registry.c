@@ -418,13 +418,6 @@ void print_available_functions(ModuleRegistry* registry) {
         FunctionEntry* entry = &registry->function_table[i];
         // Show only qualified name since plugins are namespaced
         printf("🔧 %s\n", entry->qualified_name);
-        if (entry->function->description) {
-            printf("   %s\n", entry->function->description);
-        }
-        if (entry->function->category) {
-            printf("   Category: %s\n", entry->function->category);
-        }
-        printf("\n");
     }
 }
 

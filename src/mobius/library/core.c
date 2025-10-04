@@ -1,5 +1,4 @@
 #include "library/core.h"
-#include "library/library.h"
 #include "data/value.h"
 #include "state/environment.h"
 #include "eval/evaluator.h"
@@ -36,9 +35,9 @@ static void print_with_escapes(const char* str) {
 // UNIFIED CORE FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_print(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_print(MobiusState* state, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
-        Value arg = ctx_peek(ctx, arg_count - 1 - i);  // Get args in correct order
+        Value arg = ctx_peek(state->main_context, arg_count - 1 - i);  // Get args in correct order
         
         // Handle strings specially to process escape sequences
         if (arg.type == VAL_STRING && arg.as.string) {
@@ -57,36 +56,36 @@ EvalResult lib_print(ExecutionContext* ctx, int arg_count) {
     
     // Pop arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(ctx);
+        ctx_pop(state->main_context);
     }
     
     return make_success(0);
 }
 
-EvalResult lib_typeof(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_typeof(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("typeof expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "typeof expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     const char* type_name = value_type_name(arg.type);
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
     Value result = make_string_value_from_cstr(type_name);
-    ctx_push(ctx, result);
+    ctx_push(state->main_context, result);
     
     return make_success(1);
 }
 
-EvalResult lib_int(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_int(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("int expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "int expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_pop(ctx);
+    Value arg = ctx_pop(state->main_context);
     Value result;
     
     switch (arg.type) {
@@ -107,10 +106,10 @@ EvalResult lib_int(ExecutionContext* ctx, int arg_count) {
                 if (*endptr == '\0') {
                     result = make_integer_value(NUM_INT32, (int32_t)val);
                 } else {
-                    return make_error("Cannot convert string to integer", 0, 0);
+                    return make_error(state->main_context->current_env, "Cannot convert string to integer", 0, 0);
                 }
             } else {
-                return make_error("Cannot convert null string to integer", 0, 0);
+                return make_error(state->main_context->current_env, "Cannot convert null string to integer", 0, 0);
             }
             break;
         }
@@ -118,21 +117,21 @@ EvalResult lib_int(ExecutionContext* ctx, int arg_count) {
             result = make_integer_value(NUM_INT32, arg.as.boolean ? 1 : 0);
             break;
         default:
-            return make_error("Cannot convert value to integer", 0, 0);
+            return make_error(state->main_context->current_env, "Cannot convert value to integer", 0, 0);
     }
        
     // Push result onto stack
-    ctx_push(ctx, result);
+    ctx_push(state->main_context, result);
     
     return make_success(1);
 }
 
-EvalResult lib_float(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_float(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("float expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "float expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     Value result;
     
     switch (arg.type) {
@@ -166,32 +165,32 @@ EvalResult lib_float(ExecutionContext* ctx, int arg_count) {
                 if (*endptr == '\0') {
                     result = make_float_value(val);
                 } else {
-                    return make_error("Cannot convert string to float", 0, 0);
+                    return make_error(state->main_context->current_env, "Cannot convert string to float", 0, 0);
                 }
             } else {
-                return make_error("Cannot convert null string to float", 0, 0);
+                return make_error(state->main_context->current_env, "Cannot convert null string to float", 0, 0);
             }
             break;
         }
         default:
-            return make_error("Cannot convert value to float", 0, 0);
+            return make_error(state->main_context->current_env, "Cannot convert value to float", 0, 0);
     }
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, result);
+    ctx_push(state->main_context, result);
     
     return make_success(1);
 }
 
-EvalResult lib_str(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_str(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error("str expects 1 argument", 0, 0);
+        return make_error(state->main_context->current_env, "str expects 1 argument", 0, 0);
     }
 
-    Value arg = ctx_peek(ctx, 0);
+    Value arg = ctx_peek(state->main_context, 0);
     char* temp_str = value_to_string(arg);
     Value result;
     
@@ -203,10 +202,10 @@ EvalResult lib_str(ExecutionContext* ctx, int arg_count) {
     }
     
     // Pop argument from stack
-    ctx_pop(ctx);
+    ctx_pop(state->main_context);
     
     // Push result onto stack
-    ctx_push(ctx, result);
+    ctx_push(state->main_context, result);
     
     return make_success(1);
 }

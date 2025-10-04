@@ -14,6 +14,7 @@
 struct ModuleRegistry;
 struct MobiusState;
 struct MobiusFunction;
+struct ExecutionContext;
 
 // Main evaluation functions (all use stack-based calling convention)
 EvalResult evaluate_expr(Expr* expr, Environment* env);
@@ -45,10 +46,9 @@ EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env);
 EvalResult eval_for_stmt(ForStmt* stmt, Environment* env);
 
 // Utility functions
-EvalResult make_success(int return_count);        // For library functions using stack-based returns
-EvalResult make_success_with_value(Value value);  // Pushes value onto global stack and returns success
-EvalResult make_error(const char* message, int line, int column);
-EvalResult make_error_detailed(const char* message, const char* suggestion, 
+EvalResult make_success(int return_count); // Pushes value onto env's stack and returns success
+EvalResult make_error(Environment* env, const char* message, int line, int column);
+EvalResult make_error_detailed(Environment* env, const char* message, const char* suggestion, 
                               ErrorCategory category, int line, int column,
                               const char* function_name, const char* source_line);
 bool is_error(EvalResult result);
@@ -74,18 +74,6 @@ void print_runtime_error(RuntimeError error);
 void print_runtime_error_with_context(RuntimeError error, const char* filename);
 const char* error_category_name(ErrorCategory category);
 const char* get_error_suggestion(ErrorCategory category);
-
-// Source context management for better error reporting
-void set_source_context(const char* source);
-const char* get_source_context(void);
-const char* extract_source_line(const char* source, int line_number);
-
-
-// Enhanced error creation with source line extraction
-EvalResult make_error_with_source(const char* message, int line, int column);
-EvalResult make_error_detailed_with_source(const char* message, const char* suggestion, 
-                                          ErrorCategory category, int line, int column,
-                                          const char* function_name);
 
 // User-defined function support
 EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env);
