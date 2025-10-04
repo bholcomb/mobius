@@ -56,7 +56,7 @@ EvalResult lib_print(MobiusState* state, int arg_count) {
     
     // Pop arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(state->main_context);
+        free_value(ctx_pop(state->main_context));
     }
     
     return make_success(0);

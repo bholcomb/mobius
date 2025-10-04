@@ -61,6 +61,8 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     for (size_t i = arg_count; i > 0; i--) {
         Value arg_value = ctx_pop(env->current_context);
         define_variable(func_env, function->param_names[i-1], arg_value);
+        // Free the value since define_variable incremented its ref_count
+        free_value(arg_value);
     }
     
     // Execute function body
@@ -390,6 +392,9 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
                                                ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL, NULL);
     }
     
+    // Push the value back to stack (assignment expressions return the assigned value)
+    // Note: We push the same value, not a copy, since we want to return the assigned value
+    // But we don't free it here because it's being returned on the stack
     ctx_push(env->current_context, value);
     return make_success(1);
 }
