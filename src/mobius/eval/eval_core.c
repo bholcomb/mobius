@@ -12,9 +12,8 @@ EvalResult evaluate_program(Stmt** statements, size_t count, Environment* env) {
         result = evaluate_stmt(statements[i], env);
         if (is_error(result)) {
             print_runtime_error(result.error);
-            // Continue execution instead of breaking for better error recovery
-            // In a real language, you might want to break on certain error types
-            result = make_success(0); // Reset result for next statement
+            // Stop execution on error - errors should halt the program
+            return result;
         }
     }
     

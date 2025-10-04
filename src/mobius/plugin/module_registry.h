@@ -15,87 +15,75 @@ struct LoadedModule {
     Plugin* plugin;             // Plugin interface
     PluginStatus status;        // Current status
     const char* error_message;  // Error message if status is error
+    int ref_count;              // Number of states using this module
     LoadedModule* next;         // Linked list pointer
 };
-
-// Function lookup entry for fast resolution
-typedef struct {
-    char* name;                 // Function name (NULL for namespaced functions)
-    char* qualified_name;       // Full name (module.function) - REQUIRED
-    PluginFunction* function;   // Function pointer
-    LoadedModule* module;       // Source module
-    bool is_namespaced;         // True if function requires namespace (module.func)
-} FunctionEntry;
 
 // Module registry - central plugin management
 typedef struct ModuleRegistry {
     LoadedModule* modules;      // Linked list of loaded modules
     size_t module_count;        // Number of loaded modules
     
-    // Function lookup table for O(1) function resolution
-    FunctionEntry* function_table;
-    size_t function_count;
-    size_t function_capacity;
-    
     // Configuration
     char** plugin_directories;  // List of plugin directories
     size_t plugin_dir_count;    // Number of plugin directories
     size_t plugin_dir_capacity; // Capacity of plugin directories array
-    bool auto_load_core;        // Auto-load core modules
-    bool allow_unload;          // Allow module unloading
     bool debug_mode;            // Debug output
 } ModuleRegistry;
 
-// Registry management
-ModuleRegistry* create_module_registry(void);
-void free_module_registry(ModuleRegistry* registry);
-bool add_plugin_directory(ModuleRegistry* registry, const char* directory);
-void clear_plugin_directories(ModuleRegistry* registry);
-
-// Module loading/unloading
-PluginLoadResult load_module(ModuleRegistry* registry, const char* path);
-PluginLoadResult load_module_by_name(ModuleRegistry* registry, const char* name);
-bool unload_module(ModuleRegistry* registry, const char* name);
-bool reload_module(ModuleRegistry* registry, const char* name);
-
-// Plugin discovery
-int scan_plugin_directory(ModuleRegistry* registry, const char* directory);
-int auto_load_core_modules(ModuleRegistry* registry);
-char** list_available_plugins(const char* directory, size_t* count);
-
-// Function resolution
-PluginFunction* lookup_function(ModuleRegistry* registry, const char* name);
-PluginFunction* lookup_qualified_function(ModuleRegistry* registry, 
-                                         const char* module_name, 
-                                         const char* function_name);
-bool is_function_available(ModuleRegistry* registry, const char* name);
+// ============================================================================
+// PUBLIC API - Used by evaluator and external code
+// ============================================================================
 
 // Module information
 LoadedModule* find_module(ModuleRegistry* registry, const char* name);
 bool is_module_loaded(ModuleRegistry* registry, const char* name);
-const char* get_module_error(ModuleRegistry* registry, const char* name);
+PluginLoadResult load_module_by_name(ModuleRegistry* registry, const char* name);
 
 // Registry introspection
 void print_loaded_modules(ModuleRegistry* registry);
-void print_available_functions(ModuleRegistry* registry);
-void print_module_functions(ModuleRegistry* registry, const char* module_name);
 
-// Function table management (internal)
-bool add_function_to_table(ModuleRegistry* registry, const char* module_name, PluginFunction* func);
-void remove_functions_from_table(ModuleRegistry* registry, const char* module_name);
-void rebuild_function_table(ModuleRegistry* registry);
+// ============================================================================
+// GLOBAL PLUGIN SYSTEM API
+// ============================================================================
 
-// Namespace parsing utilities
-bool parse_qualified_name(const char* full_name, char* module_name, char* function_name);
-char* build_qualified_name(const char* module_name, const char* function_name);
+/**
+ * Add a directory to scan for plugins
+ * Can be called before creating any states
+ * @param path Directory path to scan for .so files
+ */
+void mobius_add_plugin_directory(const char* path);
 
-// Error handling
-const char* module_registry_get_last_error(void);
-void module_registry_clear_error(void);
+/**
+ * Remove all plugin directories
+ */
+void mobius_clear_plugin_directories(void);
 
-// Global module registry management
-void set_global_module_registry(struct ModuleRegistry* registry);
-struct ModuleRegistry* get_global_module_registry(void);
+/**
+ * Manually trigger a plugin scan (optional - called automatically)
+ * @param force_rescan If true, rescan even if already scanned
+ * @return Number of modules discovered, -1 on error
+ */
+int mobius_scan_plugins(bool force_rescan);
 
+/**
+ * Get global module registry (for debugging/introspection)
+ * Note: Registry is automatically created on first access and
+ * cleaned up at process exit via atexit()
+ * @return Global module registry
+ */
+struct ModuleRegistry* mobius_get_global_registry(void);
+
+/**
+ * Increment reference count for a module (called during import)
+ * @param module_name Name of the module
+ */
+void mobius_plugin_increment_refcount(const char* module_name);
+
+/**
+ * Decrement reference count for a module (called when state is freed)
+ * @param module_name Name of the module
+ */
+void mobius_plugin_decrement_refcount(const char* module_name);
 
 #endif // MOBIUS_MODULE_REGISTRY_H

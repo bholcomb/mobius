@@ -40,6 +40,7 @@ MobiusConfig mobius_default_config(void) {
     config.strict_mode = false;
     config.warn_on_conversion = false;
     config.debug_mode = false;
+    config.enable_hot_reload = false;
     return config;
 }
 
@@ -386,12 +387,15 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
     state->global_env->current_context = state->main_context;
     state->main_context->current_env = state->global_env;
     
-    // Create module registry
-    state->registry = create_module_registry();
+    // Use global module registry (not per-state)
+    state->registry = mobius_get_global_registry();
     if (!state->registry) {
         mobius_free_state(state);
         return NULL;
     }
+    
+    // Scan for plugins (respects hot_reload setting)
+    mobius_scan_plugins(state->config.enable_hot_reload);
 
     // Add built-in constants to global environment
     define_variable(state->global_env, "nil", make_nil_value());
@@ -414,10 +418,9 @@ void mobius_free_state(MobiusState* state) {
         free_environment(state->global_env);
     }
     
-    // Free module registry
-    if (state->registry) {
-        free_module_registry(state->registry);
-    }
+    // NOTE: Don't free module registry - it's a global singleton
+    // It will be automatically freed at process exit via atexit()
+    state->registry = NULL;
     
     // Free error
     if (state->last_error) {

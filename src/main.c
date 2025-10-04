@@ -70,6 +70,10 @@ int main(int argc, char *argv[]) {
         }
     }
     
+    // Configure plugin directories FIRST (before creating state)
+    mobius_add_plugin_directory("./bin/modules");
+    mobius_add_plugin_directory("./modules");
+    
     // Create MobiusState with optional custom config
     MobiusConfig config = mobius_default_config();
     if (debug_mode) {
@@ -92,32 +96,21 @@ int main(int argc, char *argv[]) {
     // Only show startup messages when not running a script file
     if (!script_file) {
         printf("Mobius Scripting Language Interpreter v0.1.0\n");
-    }
-    
-    // Auto-discover and load extension modules
-    if (!script_file) {
-        printf("🔍 Auto-discovering extension modules...\n");
         
-        int loaded_count = auto_load_core_modules(state->registry);
-        if (loaded_count > 0) {
-            printf("✅ Successfully loaded %d extension module%s\n", 
-                   loaded_count, loaded_count == 1 ? "" : "s");
-        } else if (loaded_count == 0) {
-            printf("ℹ️  No extension modules found (built-in functions still available)\n");
+        // Show discovered plugins
+        ModuleRegistry* registry = mobius_get_global_registry();
+        if (registry && registry->module_count > 0) {
+            printf("✅ Discovered %zu extension module%s\n", 
+                   registry->module_count, registry->module_count == 1 ? "" : "s");
         } else {
-            printf("⚠️  Failed to scan for modules: %s\n", 
-                   module_registry_get_last_error() ? module_registry_get_last_error() : "unknown error");
+            printf("ℹ️  No extension modules found (built-in functions still available)\n");
         }
-    } else {
-        // Silently load modules for script execution
-        auto_load_core_modules(state->registry);
     }
     
     int result = 0;
     
     if (list_modules) {
         print_loaded_modules(state->registry);
-        print_available_functions(state->registry);
     } else if (script_file) {
         // Execute script file
         result = execute_file(state, script_file);

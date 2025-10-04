@@ -191,7 +191,11 @@ static bool check_function_override(const char* func_name, Table* target_table,
 
 // Import statement evaluation
 EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
-    ModuleRegistry* registry = get_global_module_registry();
+    if (!env || !env->current_context) {
+        return make_error(env, "Invalid environment context", 0, 0);
+    }
+    
+    ModuleRegistry* registry = mobius_get_global_registry();
     if (!registry) {
         return make_error(env, "Module registry not initialized", 0, 0);
     }
@@ -250,18 +254,41 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         }
     }
     
-    // Load the module plugin (if not already loaded globally)
-    if (!is_module_loaded(registry, module_name)) {
-    PluginLoadResult result = load_module_by_name(registry, module_name);
-    if (result.status != PLUGIN_STATUS_LOADED) {
-        char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "FATAL: Import failed - module '%s' not found", module_name);
+    // Find or load the module
+    LoadedModule* module = find_module(registry, module_name);
+    if (!module) {
+        // Module not loaded yet, try to load it
+        PluginLoadResult result = load_module_by_name(registry, module_name);
+        if (result.status != PLUGIN_STATUS_LOADED) {
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg), "Import failed - module '%s' not found", module_name);
             if (path_components) {
                 for (size_t i = 0; i < path_len; i++) free(path_components[i]);
                 free(path_components);
             }
-        return make_error(env, error_msg, stmt->keyword.line, stmt->keyword.column);
+            return make_error(env, error_msg, stmt->keyword.line, stmt->keyword.column);
         }
+        module = find_module(registry, module_name);
+        if (!module) {
+            if (path_components) {
+                for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+                free(path_components);
+            }
+            return make_error(env, "Module loaded but not found in registry", stmt->keyword.line, stmt->keyword.column);
+        }
+    }
+    
+    // Increment reference count
+    mobius_plugin_increment_refcount(module_name);
+    
+    // Get the plugin interface
+    Plugin* plugin = module->plugin;
+    if (!plugin) {
+        if (path_components) {
+            for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+            free(path_components);
+        }
+        return make_error(env, "Module has no plugin interface", stmt->keyword.line, stmt->keyword.column);
     }
     
     // Determine target table (global env, nested table, or new table)
@@ -270,14 +297,12 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     
     if (is_global) {
         // _GLOBAL import: functions go directly into global environment
-        // We'll handle this specially below
         target_table = NULL;
     } else if (path_components && path_len > 0) {
         // Nested namespace: get or create nested tables
         target_table = get_or_create_nested_table(env, path_components, path_len, 
                                                    stmt->keyword.line, stmt->keyword.column, &nested_error);
         if (!target_table) {
-            // Cleanup
             for (size_t i = 0; i < path_len; i++) free(path_components[i]);
             free(path_components);
             return nested_error;
@@ -294,40 +319,22 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         }
     }
     
-    // If we have a target table (not global), store the original module name
-    // so module.function() calls can be resolved correctly
-    if (!is_global && target_table) {
-        Value module_key = make_string_value_from_cstr("__module_name__");
-        Value module_value = make_string_value_from_cstr(module_name);
-        table_set(target_table, module_key, module_value);
-        free_value(module_key);
-        free_value(module_value);
-    }
-    
-    // Populate functions from the module
+    // Populate functions from the plugin directly
     int functions_added = 0;
-    for (size_t i = 0; i < registry->function_count; i++) {
-        FunctionEntry* entry = &registry->function_table[i];
-        if (!entry->qualified_name) continue;
+    for (size_t i = 0; i < plugin->function_count; i++) {
+        PluginFunction* func = &plugin->functions[i];
+        if (!func || !func->name || !func->function) continue;
         
-        char entry_module[128] = {0};
-        char entry_func[128] = {0};
-        if (!parse_qualified_name(entry->qualified_name, entry_module, entry_func)) continue;
-        if (strcmp(entry_module, module_name) != 0) continue;
+        const char* func_name = func->name;
+        MobiusCFunction func_ptr = func->function;
         
-        // Get the actual function pointer from the plugin function struct
-        if (!entry->function || !entry->function->function) continue;
-        MobiusCFunction func_ptr = entry->function->function;
-        
-        // This function belongs to our module
         if (is_global) {
             // Define function directly in global environment
-            // Check for override
             bool found = false;
-            get_variable(env, entry_func, &found);
+            get_variable(env, func_name, &found);
             if (found) {
                 EvalResult override_error = {0};
-                if (!check_function_override(entry_func, NULL, 
+                if (!check_function_override(func_name, NULL, 
                                             stmt->keyword.line, stmt->keyword.column, &override_error, env)) {
                     if (path_components) {
                         for (size_t j = 0; j < path_len; j++) free(path_components[j]);
@@ -336,15 +343,13 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                     return override_error;
                 }
             }
-            // Define as native function value
             Value func_value = make_native_function_value(func_ptr);
-            define_variable(env, entry_func, func_value);
+            define_variable(env, func_name, func_value);
             functions_added++;
         } else {
             // Add to target table
-            // Check for override
             EvalResult override_error = {0};
-            if (!check_function_override(entry_func, target_table, 
+            if (!check_function_override(func_name, target_table, 
                                         stmt->keyword.line, stmt->keyword.column, &override_error, env)) {
                 if (path_components) {
                     for (size_t j = 0; j < path_len; j++) free(path_components[j]);
@@ -353,8 +358,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                 return override_error;
             }
             
-            // Store native function value in table
-            Value func_key = make_string_value_from_cstr(entry_func);
+            Value func_key = make_string_value_from_cstr(func_name);
             Value func_value = make_native_function_value(func_ptr);
             table_set(target_table, func_key, func_value);
             free_value(func_key);
@@ -375,7 +379,6 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         free(path_components);
     }
     
-    (void)functions_added;
     ctx_push(env->current_context, make_nil_value());
     return make_success(1);
 }
