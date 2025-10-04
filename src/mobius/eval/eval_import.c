@@ -8,19 +8,6 @@
 #include <stdlib.h>
 
 
-// Global type checking configuration
-TypeCheckConfig global_type_config = {false, false};
-
-// Global override behavior for imports
-typedef enum {
-    OVERRIDE_ERROR,    // Default: error on override
-    OVERRIDE_WARN,     // Warn but continue on override
-    OVERRIDE_QUIET     // Silent override
-} OverrideBehavior;
-
-static OverrideBehavior global_override_behavior = OVERRIDE_ERROR;
-
-
 // Helper: Parse namespace path into components
 // Returns allocated array of strings (caller must free), NULL on error
 // Sets *count to number of components
@@ -169,8 +156,9 @@ static bool check_function_override(const char* func_name, Table* target_table,
         return true;
     }
     
-    // Function exists - check override behavior
-    switch (global_override_behavior) {
+    // Function exists - check override behavior from state config
+    MobiusState* state = env->current_context->state;
+    switch (state->config.override_behavior) {
         case OVERRIDE_ERROR: {
             char error_msg[256];
             snprintf(error_msg, sizeof(error_msg), 
@@ -233,26 +221,9 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     bool is_global = false;
     char** path_components = parse_namespace_path(target_name, &path_len, &is_global);
     
-    // Check if we've already imported to this exact location
-    if (!is_global) {
-        const char* check_name = (path_components && path_len > 0) ? path_components[0] : target_name;
-        bool found = false;
-        Value existing = get_variable(env, check_name, &found);
-        
-        if (found && path_len == 1) {
-            // Simple case: single-level namespace already exists
-            if (existing.type == VAL_TABLE) {
-                // Already imported, nothing to do
-                if (path_components) {
-                    for (size_t i = 0; i < path_len; i++) free(path_components[i]);
-                    free(path_components);
-                }
-                
-                ctx_push(env->current_context, make_nil_value());
-                return make_success(1);
-            }
-        }
-    }
+    // Note: We allow multiple modules to share the same namespace.
+    // Override checking happens at the function level, not namespace level.
+    // The check_function_override() helper will validate each individual function.
     
     // Find or load the module
     LoadedModule* module = find_module(registry, module_name);
@@ -293,13 +264,14 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     
     // Determine target table (global env, nested table, or new table)
     Table* target_table = NULL;
+    bool table_is_new = false;  // Track if we created a new table
     EvalResult nested_error = {0};
     
     if (is_global) {
         // _GLOBAL import: functions go directly into global environment
         target_table = NULL;
     } else if (path_components && path_len > 0) {
-        // Nested namespace: get or create nested tables
+        // Get or create namespace table (reuses existing tables)
         target_table = get_or_create_nested_table(env, path_components, path_len, 
                                                    stmt->keyword.line, stmt->keyword.column, &nested_error);
         if (!target_table) {
@@ -307,15 +279,37 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
             free(path_components);
             return nested_error;
         }
+        // Note: get_or_create_nested_table handles defining the variable if needed
     } else {
-        // Simple single-name import: create new table
-        target_table = create_table(16);
-        if (!target_table) {
+        // Simple single-name import: check if table already exists, or create new one
+        bool found = false;
+        Value existing = get_variable(env, target_name, &found);
+        
+        if (found && existing.type == VAL_TABLE) {
+            // Reuse existing table
+            target_table = existing.as.table;
+            table_is_new = false;
+        } else if (found) {
+            // Variable exists but is not a table
+            char error_msg[256];
+            snprintf(error_msg, sizeof(error_msg), 
+                "Cannot import to '%s': variable already exists and is not a table", target_name);
             if (path_components) {
                 for (size_t i = 0; i < path_len; i++) free(path_components[i]);
                 free(path_components);
             }
-            return make_error(env, "Failed to create module table", stmt->keyword.line, stmt->keyword.column);
+            return make_error(env, error_msg, stmt->keyword.line, stmt->keyword.column);
+        } else {
+            // Create new table
+            target_table = create_table(16);
+            if (!target_table) {
+                if (path_components) {
+                    for (size_t i = 0; i < path_len; i++) free(path_components[i]);
+                    free(path_components);
+                }
+                return make_error(env, "Failed to create module table", stmt->keyword.line, stmt->keyword.column);
+            }
+            table_is_new = true;
         }
     }
     
@@ -366,10 +360,10 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         }
     }
     
-    // If not global import and we created a new table (not nested), define it
-    if (!is_global && target_table && path_len <= 1) {
+    // If not global import and we created a new table, define it as a variable
+    if (!is_global && target_table && table_is_new) {
         Value table_value = make_table_value(target_table);
-        const char* var_name = (path_components && path_len > 0) ? path_components[0] : target_name;
+        const char* var_name = target_name;
         define_variable(env, var_name, table_value);
     }
     
@@ -385,26 +379,25 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
 
 // Pragma statement evaluation
 EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
-    (void)env;  // Pragma affects global state, not environment
-    
     if (!stmt->name.identifier) {
         return make_error(env, "Invalid pragma - missing name", stmt->keyword.line, stmt->keyword.column);
     }
     
     const char* pragma_name = stmt->name.identifier;
+    MobiusState* state = env->current_context->state;
     
     // Handle strict_types pragma
     if (strcmp(pragma_name, "strict_types") == 0) {
         // Value should be true or false
         if (stmt->value.type == TOKEN_TRUE) {
-            global_type_config.strict_mode = true;
+            state->config.strict_mode = true;
         } else if (stmt->value.type == TOKEN_FALSE) {
-            global_type_config.strict_mode = false;
+            state->config.strict_mode = false;
         } else if (stmt->value.identifier) {
             if (strcmp(stmt->value.identifier, "true") == 0) {
-                global_type_config.strict_mode = true;
+                state->config.strict_mode = true;
             } else if (strcmp(stmt->value.identifier, "false") == 0) {
-                global_type_config.strict_mode = false;
+                state->config.strict_mode = false;
             } else {
                 char error_msg[256];
                 snprintf(error_msg, sizeof(error_msg), 
@@ -424,14 +417,14 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
     if (strcmp(pragma_name, "type_warnings") == 0) {
         // Value should be true or false
         if (stmt->value.type == TOKEN_TRUE) {
-            global_type_config.warn_on_conversion = true;
+            state->config.warn_on_conversion = true;
         } else if (stmt->value.type == TOKEN_FALSE) {
-            global_type_config.warn_on_conversion = false;
+            state->config.warn_on_conversion = false;
         } else if (stmt->value.identifier) {
             if (strcmp(stmt->value.identifier, "true") == 0) {
-                global_type_config.warn_on_conversion = true;
+                state->config.warn_on_conversion = true;
             } else if (strcmp(stmt->value.identifier, "false") == 0) {
-                global_type_config.warn_on_conversion = false;
+                state->config.warn_on_conversion = false;
             } else {
                 char error_msg[256];
                 snprintf(error_msg, sizeof(error_msg), 
@@ -463,11 +456,11 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
         }
         
         if (strcmp(value, "error") == 0) {
-            global_override_behavior = OVERRIDE_ERROR;
+            state->config.override_behavior = OVERRIDE_ERROR;
         } else if (strcmp(value, "warn") == 0) {
-            global_override_behavior = OVERRIDE_WARN;
+            state->config.override_behavior = OVERRIDE_WARN;
         } else if (strcmp(value, "quiet") == 0) {
-            global_override_behavior = OVERRIDE_QUIET;
+            state->config.override_behavior = OVERRIDE_QUIET;
         } else {
             char error_msg[256];
             snprintf(error_msg, sizeof(error_msg), 

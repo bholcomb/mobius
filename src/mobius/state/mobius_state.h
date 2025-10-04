@@ -54,6 +54,13 @@ struct MobiusError {
 // CONFIGURATION
 // ============================================================================
 
+// Override behavior for function imports
+typedef enum {
+    OVERRIDE_ERROR,    // Error on function name override (default)
+    OVERRIDE_WARN,     // Warn but continue on override
+    OVERRIDE_QUIET     // Silent override
+} OverrideBehavior;
+
 struct MobiusConfig {
     size_t initial_stack_size;    // Default: INITIAL_STACK_CAPACITY
     size_t max_stack_size;        // Default: MAX_STACK_CAPACITY
@@ -62,6 +69,7 @@ struct MobiusConfig {
     bool warn_on_conversion;      // If true, warn when converting types
     bool debug_mode;              // If true, print debug information
     bool enable_hot_reload;       // If true, rescan plugins on state creation
+    OverrideBehavior override_behavior;  // How to handle function name conflicts
 };
 
 /**

@@ -41,6 +41,7 @@ MobiusConfig mobius_default_config(void) {
     config.warn_on_conversion = false;
     config.debug_mode = false;
     config.enable_hot_reload = false;
+    config.override_behavior = OVERRIDE_ERROR;
     return config;
 }
 

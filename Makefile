@@ -47,6 +47,7 @@ MOBIUS_SOURCES = \
 	$(SRCDIR)/mobius/library/util.c \
 	$(SRCDIR)/mobius/state/environment.c \
 	$(SRCDIR)/mobius/state/mobius_state.c \
+	$(SRCDIR)/mobius/state/stack.c \
 	$(SRCDIR)/mobius/plugin/module_registry.c \
 	$(SRCDIR)/mobius/util/file_io.c \
 	$(SRCDIR)/mobius/util/utility.c \
@@ -129,6 +130,10 @@ $(BINDIR)/multi_environment_demo: examples/multi_environment_demo/multi_environm
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 $(BINDIR)/simple_userdata_test: examples/simple_userdata_test/simple_userdata_test.c $(LIBMOBIUS)
+	@echo "Building example: $@"
+	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+
+$(BINDIR)/stack_api_test: examples/stack_api_test/stack_api_test.c $(LIBMOBIUS)
 	@echo "Building example: $@"
 	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
