@@ -284,26 +284,25 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     }
     
     // Function not found - provide helpful error message
-    // Check if this function exists in any loaded module (to suggest import)
+    // Check if this function might exist in any loaded plugin module
     char suggested_import[256] = {0};
-    ModuleRegistry* reg = get_global_module_registry();
+    ModuleRegistry* reg = mobius_get_global_registry();
     if (reg) {
-        for (size_t i = 0; i < reg->function_count; i++) {
-            const char* qualified = reg->function_table[i].qualified_name;
-            // Check if the qualified name ends with our function name
-            size_t qual_len = strlen(qualified);
-            size_t func_len = strlen(full_name);
-            if (qual_len > func_len && 
-                qualified[qual_len - func_len - 1] == '.' &&
-                strcmp(qualified + qual_len - func_len, full_name) == 0) {
-                // Extract module name
-                size_t module_len = qual_len - func_len - 1;
-                if (module_len < sizeof(suggested_import)) {
-                    memcpy(suggested_import, qualified, module_len);
-                    suggested_import[module_len] = '\0';
+        // Iterate through loaded modules to see if any have this function
+        LoadedModule* module = reg->modules;
+        while (module) {
+            if (module->plugin && module->plugin->functions) {
+                // Check if this module has a function with the requested name
+                for (size_t i = 0; i < module->plugin->function_count; i++) {
+                    if (strcmp(module->plugin->functions[i].name, full_name) == 0) {
+                        // Found it! Suggest importing this module
+                        snprintf(suggested_import, sizeof(suggested_import), "%s", module->name);
+                        break;
+                    }
                 }
-                break;
+                if (suggested_import[0]) break;
             }
+            module = module->next;
         }
     }
     

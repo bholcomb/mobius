@@ -12,18 +12,61 @@
 // Global error message for the module registry
 static char last_error[512] = {0};
 
-
-// Global module registry (will be initialized by main.c)
+// Global module registry singleton
 static ModuleRegistry* global_registry = NULL;
+static bool cleanup_registered = false;
+static bool already_scanned = false;
 
+// Forward declarations for internal functions
+static ModuleRegistry* create_module_registry(void);
+static void free_module_registry(ModuleRegistry* registry);
+
+// ============================================================================
+// GLOBAL REGISTRY MANAGEMENT
+// ============================================================================
+
+// Automatic cleanup (registered with atexit)
+static void cleanup_global_registry(void) {
+    if (global_registry) {
+        free_module_registry(global_registry);
+        global_registry = NULL;
+        already_scanned = false;
+    }
+}
+
+// Get or create global registry (lazy initialization)
+static ModuleRegistry* get_or_create_global_registry(void) {
+    if (!global_registry) {
+        global_registry = create_module_registry();
+        
+        // Register cleanup automatically on first use
+        if (!cleanup_registered && global_registry) {
+            atexit(cleanup_global_registry);
+            cleanup_registered = true;
+        }
+    }
+    
+    return global_registry;
+}
+
+// Public accessor - gets or creates global registry
+ModuleRegistry* mobius_get_global_registry(void) {
+    return get_or_create_global_registry();
+}
+
+// Deprecated compatibility functions
 void set_global_module_registry(ModuleRegistry* registry) {
     global_registry = registry;
 }
 
 ModuleRegistry* get_global_module_registry(void) {
-    return global_registry;
+    return get_or_create_global_registry();
 }
 
+
+// ============================================================================
+// INTERNAL HELPER FUNCTIONS
+// ============================================================================
 
 // Set error message
 static void set_error(const char* message) {
@@ -31,17 +74,17 @@ static void set_error(const char* message) {
 }
 
 // Clear error message
-void module_registry_clear_error(void) {
+static void module_registry_clear_error(void) {
     last_error[0] = '\0';
 }
 
-// Get last error message
-const char* module_registry_get_last_error(void) {
+// Get last error message (unused, but kept for potential debugging)
+static const char* module_registry_get_last_error(void) {
     return last_error[0] ? last_error : NULL;
 }
 
-// Create a new module registry
-ModuleRegistry* create_module_registry(void) {
+// Create a new module registry (internal - called by get_or_create_global_registry)
+static ModuleRegistry* create_module_registry(void) {
     ModuleRegistry* registry = malloc(sizeof(ModuleRegistry));
     if (!registry) {
         set_error("Failed to allocate memory for module registry");
@@ -50,28 +93,17 @@ ModuleRegistry* create_module_registry(void) {
     
     registry->modules = NULL;
     registry->module_count = 0;
-    registry->function_table = malloc(64 * sizeof(FunctionEntry));
-    registry->function_count = 0;
-    registry->function_capacity = 64;
     registry->plugin_directories = NULL;
     registry->plugin_dir_count = 0;
     registry->plugin_dir_capacity = 0;
-    registry->auto_load_core = true;
-    registry->allow_unload = true;
     registry->debug_mode = false;
-    
-    if (!registry->function_table) {
-        free(registry);
-        set_error("Failed to allocate memory for function table");
-        return NULL;
-    }
     
     module_registry_clear_error();
     return registry;
 }
 
-// Add a plugin directory to the registry
-bool add_plugin_directory(ModuleRegistry* registry, const char* directory) {
+// Add a plugin directory to the registry (internal)
+static bool add_plugin_directory(ModuleRegistry* registry, const char* directory) {
     if (!registry || !directory) {
         set_error("Invalid arguments to add_plugin_directory");
         return false;
@@ -100,8 +132,8 @@ bool add_plugin_directory(ModuleRegistry* registry, const char* directory) {
     return true;
 }
 
-// Clear all plugin directories
-void clear_plugin_directories(ModuleRegistry* registry) {
+// Clear all plugin directories (internal)
+static void clear_plugin_directories(ModuleRegistry* registry) {
     if (!registry) return;
     
     for (size_t i = 0; i < registry->plugin_dir_count; i++) {
@@ -114,8 +146,8 @@ void clear_plugin_directories(ModuleRegistry* registry) {
     registry->plugin_dir_capacity = 0;
 }
 
-// Free module registry and all loaded modules
-void free_module_registry(ModuleRegistry* registry) {
+// Free module registry and all loaded modules (internal - called by atexit)
+static void free_module_registry(ModuleRegistry* registry) {
     if (!registry) return;
     
     // Free plugin directories
@@ -142,22 +174,12 @@ void free_module_registry(ModuleRegistry* registry) {
         module = next;
     }
     
-    // Free function table
-    for (size_t i = 0; i < registry->function_count; i++) {
-        // name is NULL for namespaced functions, so only free if not NULL
-        if (registry->function_table[i].name) {
-            free(registry->function_table[i].name);
-        }
-        free(registry->function_table[i].qualified_name);
-    }
-    free(registry->function_table);
-    
     free(registry);
 }
 
 
-// Load a module from a file path
-PluginLoadResult load_module(ModuleRegistry* registry, const char* path) {
+// Load a module from a file path (internal - used by load_module_by_name)
+static PluginLoadResult load_module(ModuleRegistry* registry, const char* path) {
     PluginLoadResult result = {PLUGIN_STATUS_ERROR, NULL, NULL};
     
     if (!registry || !path) {
@@ -259,16 +281,12 @@ PluginLoadResult load_module(ModuleRegistry* registry, const char* path) {
     module->plugin = plugin;
     module->status = PLUGIN_STATUS_LOADED;
     module->error_message = NULL;
+    module->ref_count = 0;  // Initialize reference count
     module->next = registry->modules;
     
     // Add to registry
     registry->modules = module;
     registry->module_count++;
-    
-    // Add functions to lookup table
-    for (size_t i = 0; i < plugin->function_count; i++) {
-        add_function_to_table(registry, plugin->metadata.name, &plugin->functions[i]);
-    }
     
     if (registry->debug_mode) {
         printf("Successfully loaded plugin '%s' v%s (%zu functions)\n", 
@@ -281,6 +299,10 @@ PluginLoadResult load_module(ModuleRegistry* registry, const char* path) {
     module_registry_clear_error();
     return result;
 }
+
+// ============================================================================
+// PUBLIC API IMPLEMENTATION
+// ============================================================================
 
 // Find a module by name
 LoadedModule* find_module(ModuleRegistry* registry, const char* name) {
@@ -301,93 +323,6 @@ bool is_module_loaded(ModuleRegistry* registry, const char* name) {
     return find_module(registry, name) != NULL;
 }
 
-// Add function to lookup table
-// Plugin functions are NAMESPACED - only accessible via qualified name (module.function)
-bool add_function_to_table(ModuleRegistry* registry, const char* module_name, PluginFunction* func) {
-    if (!registry || !module_name || !func) return false;
-    
-    // Resize table if needed
-    if (registry->function_count >= registry->function_capacity) {
-        size_t new_capacity = registry->function_capacity * 2;
-        FunctionEntry* new_table = realloc(registry->function_table, 
-                                          new_capacity * sizeof(FunctionEntry));
-        if (!new_table) return false;
-        
-        registry->function_table = new_table;
-        registry->function_capacity = new_capacity;
-    }
-    
-    FunctionEntry* entry = &registry->function_table[registry->function_count];
-    
-    // NAMESPACE ENFORCEMENT: Don't store unqualified name
-    // Plugin functions can ONLY be accessed via qualified name
-    entry->name = NULL;
-    
-    // Create qualified name (module.function) - REQUIRED for access
-    size_t qualified_len = strlen(module_name) + strlen(func->name) + 2;
-    entry->qualified_name = malloc(qualified_len);
-    if (!entry->qualified_name) {
-        return false;
-    }
-    snprintf(entry->qualified_name, qualified_len, "%s.%s", module_name, func->name);
-    
-    entry->function = func;
-    entry->module = find_module(registry, module_name);
-    entry->is_namespaced = true;  // All plugin functions are namespaced
-    
-    registry->function_count++;
-    return true;
-}
-
-// Lookup function by name (searches all modules)
-// NAMESPACE ENFORCEMENT: This function returns NULL for all plugin functions
-// Plugin functions MUST be accessed via qualified name (module.function)
-// Only kept for backward compatibility - should not be used for plugins
-PluginFunction* lookup_function(ModuleRegistry* registry, const char* name) {
-    if (!registry || !name) return NULL;
-    
-    // Plugin functions are namespaced - they cannot be looked up by unqualified name
-    // This function will always return NULL for plugin functions
-    // Use lookup_qualified_function() instead
-    
-    (void)registry;  // Unused - plugin functions require namespace
-    (void)name;      // Unused - plugin functions require namespace
-    
-    return NULL;  // All plugin functions require namespace
-}
-
-// Lookup qualified function (module.function)
-PluginFunction* lookup_qualified_function(ModuleRegistry* registry, 
-                                         const char* module_name, 
-                                         const char* function_name) {
-    if (!registry || !module_name || !function_name) return NULL;
-    
-    char qualified_name[256];
-    snprintf(qualified_name, sizeof(qualified_name), "%s.%s", module_name, function_name);
-    
-    for (size_t i = 0; i < registry->function_count; i++) {
-        if (strcmp(registry->function_table[i].qualified_name, qualified_name) == 0) {
-            return registry->function_table[i].function;
-        }
-    }
-    return NULL;
-}
-
-// Parse qualified name (module.function)
-bool parse_qualified_name(const char* full_name, char* module_name, char* function_name) {
-    if (!full_name || !module_name || !function_name) return false;
-    
-    const char* dot = strchr(full_name, '.');
-    if (!dot) return false;
-    
-    size_t module_len = dot - full_name;
-    strncpy(module_name, full_name, module_len);
-    module_name[module_len] = '\0';
-    
-    strcpy(function_name, dot + 1);
-    return true;
-}
-
 // Print loaded modules
 void print_loaded_modules(ModuleRegistry* registry) {
     if (!registry) return;
@@ -404,47 +339,6 @@ void print_loaded_modules(ModuleRegistry* registry) {
         printf("\n");
         module = module->next;
     }
-}
-
-// Print available functions
-void print_available_functions(ModuleRegistry* registry) {
-    if (!registry) return;
-    
-    printf("Available Functions (%zu):\n", registry->function_count);
-    printf("=====================================\n");
-    printf("Note: All plugin functions require namespace (module.function)\n\n");
-    
-    for (size_t i = 0; i < registry->function_count; i++) {
-        FunctionEntry* entry = &registry->function_table[i];
-        // Show only qualified name since plugins are namespaced
-        printf("🔧 %s\n", entry->qualified_name);
-    }
-}
-
-// Plugin status to string
-const char* plugin_status_string(PluginStatus status) {
-    switch (status) {
-        case PLUGIN_STATUS_UNLOADED: return "unloaded";
-        case PLUGIN_STATUS_LOADED: return "loaded";
-        case PLUGIN_STATUS_ERROR: return "error";
-        case PLUGIN_STATUS_INCOMPATIBLE: return "incompatible";
-        default: return "unknown";
-    }
-}
-
-// Print plugin information
-void print_plugin_info(Plugin* plugin) {
-    if (!plugin) return;
-    
-    printf("Plugin Information:\n");
-    printf("===================\n");
-    printf("Name: %s\n", plugin->metadata.name);
-    printf("Version: %s\n", plugin->metadata.version);
-    printf("Description: %s\n", plugin->metadata.description);
-    printf("Author: %s\n", plugin->metadata.author);
-    printf("API Version: %zu\n", plugin->metadata.api_version);
-    printf("Functions: %zu\n", plugin->function_count);
-    printf("\n");
 }
 
 // ============================================================================
@@ -464,9 +358,9 @@ static bool is_plugin_file(const char* filename) {
 }
 
 /**
- * Scan a directory for plugin files and load them
+ * Scan a directory for plugin files and load them (internal)
  */
-int scan_plugin_directory(ModuleRegistry* registry, const char* directory) {
+static int scan_plugin_directory(ModuleRegistry* registry, const char* directory) {
     if (!registry || !directory) {
         set_error("Invalid arguments to scan_plugin_directory");
         return -1;
@@ -541,102 +435,7 @@ int scan_plugin_directory(ModuleRegistry* registry, const char* directory) {
 
 
 /**
- * Auto-load core modules from the default directory
- */
-int auto_load_core_modules(ModuleRegistry* registry) {
-    if (!registry) {
-        set_error("Invalid registry for auto_load_core_modules");
-        return -1;
-    }
-    
-    const char* default_dirs[] = {
-        "./bin/modules",
-        "./modules", 
-        "/usr/local/lib/mobius/modules",
-        NULL
-    };
-    
-    // Try user-specified directories first
-    for (size_t i = 0; i < registry->plugin_dir_count; i++) {
-        int count = scan_plugin_directory(registry, registry->plugin_directories[i]);
-        if (count >= 0) {
-            return count;
-        }
-    }
-    
-    // Try default directories
-    for (int i = 0; default_dirs[i]; i++) {
-        DIR* dir = opendir(default_dirs[i]);
-        if (dir) {
-            closedir(dir);
-            int count = scan_plugin_directory(registry, default_dirs[i]);
-            if (count >= 0) {
-                return count;
-            }
-        }
-    }
-    
-    set_error("No plugin directories found");
-    return 0; // No plugins loaded, but not an error
-}
-
-/**
- * List available plugins in a directory
- */
-char** list_available_plugins(const char* directory, size_t* count) {
-    if (!directory || !count) {
-        return NULL;
-    }
-    
-    *count = 0;
-    
-    DIR* dir = opendir(directory);
-    if (!dir) {
-        return NULL;
-    }
-    
-    // First pass: count plugin files
-    struct dirent* entry;
-    size_t plugin_count = 0;
-    
-    while ((entry = readdir(dir)) != NULL) {
-        if (is_plugin_file(entry->d_name)) {
-            plugin_count++;
-        }
-    }
-    
-    if (plugin_count == 0) {
-        closedir(dir);
-        return NULL;
-    }
-    
-    // Allocate array for plugin names
-    char** plugins = malloc(plugin_count * sizeof(char*));
-    if (!plugins) {
-        closedir(dir);
-        return NULL;
-    }
-    
-    // Second pass: collect plugin names
-    rewinddir(dir);
-    size_t index = 0;
-    
-    while ((entry = readdir(dir)) != NULL && index < plugin_count) {
-        if (is_plugin_file(entry->d_name)) {
-            plugins[index] = mobius_strdup(entry->d_name);
-            if (plugins[index]) {
-                index++;
-            }
-        }
-    }
-    
-    closedir(dir);
-    *count = index;
-    return plugins;
-}
-
-/**
- * Load a module by name from the default plugin directory
+ * Load a module by name from configured and default plugin directories
  */
 PluginLoadResult load_module_by_name(ModuleRegistry* registry, const char* name) {
     PluginLoadResult result;
@@ -702,19 +501,87 @@ PluginLoadResult load_module_by_name(ModuleRegistry* registry, const char* name)
     return result;
 }
 
-// is_module_loaded already implemented above
+// ============================================================================
+// GLOBAL PLUGIN SYSTEM API IMPLEMENTATION
+// ============================================================================
 
 /**
- * Get error message for a specific module
+ * Add a directory to scan for plugins
  */
-const char* get_module_error(ModuleRegistry* registry, const char* name) {
-    LoadedModule* module = find_module(registry, name);
-    return module ? module->error_message : "Module not found";
+void mobius_add_plugin_directory(const char* path) {
+    if (!path) return;
+    
+    ModuleRegistry* registry = get_or_create_global_registry();
+    if (!registry) return;
+    
+    add_plugin_directory(registry, path);
 }
 
 /**
- * Check if a function is available in the registry
+ * Remove all plugin directories
  */
-bool is_function_available(ModuleRegistry* registry, const char* name) {
-    return lookup_function(registry, name) != NULL;
+void mobius_clear_plugin_directories(void) {
+    ModuleRegistry* registry = get_or_create_global_registry();
+    if (!registry) return;
+    
+    clear_plugin_directories(registry);
+}
+
+/**
+ * Scan for available plugins
+ */
+int mobius_scan_plugins(bool force_rescan) {
+    if (!force_rescan && already_scanned) {
+        return 0;  // Already scanned, no need to rescan
+    }
+    
+    ModuleRegistry* registry = get_or_create_global_registry();
+    if (!registry) return -1;
+    
+    // If rescanning, we don't unload modules, just rescan directories
+    // This allows discovering new plugins without affecting loaded ones
+    
+    int total_discovered = 0;
+    
+    // Scan all configured directories
+    for (size_t i = 0; i < registry->plugin_dir_count; i++) {
+        int count = scan_plugin_directory(registry, registry->plugin_directories[i]);
+        if (count > 0) total_discovered += count;
+    }
+    
+    already_scanned = true;
+    return total_discovered;
+}
+
+/**
+ * Increment reference count for a module
+ */
+void mobius_plugin_increment_refcount(const char* module_name) {
+    if (!module_name) return;
+    
+    ModuleRegistry* registry = get_or_create_global_registry();
+    if (!registry) return;
+    
+    LoadedModule* module = find_module(registry, module_name);
+    if (module) {
+        module->ref_count++;
+    }
+}
+
+/**
+ * Decrement reference count for a module
+ */
+void mobius_plugin_decrement_refcount(const char* module_name) {
+    if (!module_name) return;
+    
+    ModuleRegistry* registry = get_or_create_global_registry();
+    if (!registry) return;
+    
+    LoadedModule* module = find_module(registry, module_name);
+    if (module && module->ref_count > 0) {
+        module->ref_count--;
+        
+        // For now: keep loaded until process exit
+        // Future: If ref_count == 0 and hot reload active, could unload
+    }
 }

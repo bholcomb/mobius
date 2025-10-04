@@ -61,6 +61,7 @@ struct MobiusConfig {
     bool strict_mode;             // If true, no automatic conversions
     bool warn_on_conversion;      // If true, warn when converting types
     bool debug_mode;              // If true, print debug information
+    bool enable_hot_reload;       // If true, rescan plugins on state creation
 };
 
 /**

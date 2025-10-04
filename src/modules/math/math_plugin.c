@@ -705,6 +705,10 @@ static PluginFunction math_functions[] = {
     {"factorial", math_factorial, 1},
     {"gcd", math_gcd, 2},
     {"lcm", math_lcm, 2},
+
+    // Mathematical constants
+    {"pi", math_pi, 0},
+    {"e", math_e, 0}
 };
 
 // Plugin instance

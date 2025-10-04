@@ -3,6 +3,7 @@
 #include "data/array.h"
 #include "data/enum.h"
 #include "data/function.h"
+#include "util/utility.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -921,7 +922,16 @@ void ast_release_stmt(Stmt* stmt) {
                 // Nothing to release for continue statements
                 break;
             case STMT_IMPORT:
-                // Nothing to release for import statements (tokens are not owned)
+                // Free duplicated string literals
+                if (stmt->as.import_stmt.module_name.type == TOKEN_STRING && 
+                    stmt->as.import_stmt.module_name.literal.string) {
+                    free((void*)stmt->as.import_stmt.module_name.literal.string);
+                }
+                if (stmt->as.import_stmt.has_alias && 
+                    stmt->as.import_stmt.alias.type == TOKEN_STRING && 
+                    stmt->as.import_stmt.alias.literal.string) {
+                    free((void*)stmt->as.import_stmt.alias.literal.string);
+                }
                 break;
             case STMT_PRAGMA:
                 // Nothing to release for pragma statements (tokens are not owned)
@@ -1022,7 +1032,18 @@ Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_a
     stmt->ref_count = 1;  // Initialize reference count
     stmt->as.import_stmt.keyword = keyword;
     stmt->as.import_stmt.module_name = module_name;
+    
+    // Deep copy the string literal since token array will be freed after parsing
+    if (module_name.type == TOKEN_STRING && module_name.literal.string) {
+        stmt->as.import_stmt.module_name.literal.string = mobius_strdup(module_name.literal.string);
+    }
+    
     stmt->as.import_stmt.alias = alias;
+    // Deep copy alias string if present
+    if (has_alias && alias.type == TOKEN_STRING && alias.literal.string) {
+        stmt->as.import_stmt.alias.literal.string = mobius_strdup(alias.literal.string);
+    }
+    
     stmt->as.import_stmt.has_alias = has_alias;
     return stmt;
 }
