@@ -1,9 +1,12 @@
 #include "repl.h"
-#include "file_io.h"
-#include "scanner.h"
-#include "parser.h"
-#include "evaluator.h"
-#include "library/stdlib_init.h"
+#include "util/file_io.h"
+#include "state/environment.h"
+#include "state/mobius_state.h"
+#include "frontend/scanner.h"
+#include "frontend/parser.h"
+#include "eval/evaluator.h"
+#include "library/library.h"
+#include "util/utility.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,7 +105,7 @@ void repl_command_help(void) {
 
 void repl_command_env(ReplState* state) {
     printf("Current environment:\n");
-    print_environment(state->env);
+    print_environment(state->state->global_env);
 }
 
 void repl_command_clear(void) {
@@ -173,13 +176,13 @@ bool process_repl_line(ReplState* state, const char* line) {
         // For REPL, handle expression statements specially - evaluate and print
         if (stmt->type == STMT_EXPRESSION) {
             ExpressionStmt* expr_stmt = &stmt->as.expression;
-            EvalResult result = evaluate_expr(expr_stmt->expression, state->env);
+            EvalResult result = evaluate_expr(expr_stmt->expression, state->state->global_env);
             
             if (is_error(result)) {
                 print_runtime_error(result.error);
             } else if (result.return_count > 0) {
                 // Pop and print the value (unless it's nil)
-                Value val = ctx_pop(global_context);
+                Value val = ctx_pop(state->state->main_context);
                 if (val.type != VAL_NIL) {
                     print_value(val);
                     printf("\n");
@@ -188,7 +191,7 @@ bool process_repl_line(ReplState* state, const char* line) {
             }
         } else {
             // For other statements, evaluate normally
-            EvalResult result = evaluate_stmt(stmt, state->env);
+            EvalResult result = evaluate_stmt(stmt, state->state->global_env);
             
             if (is_error(result)) {
                 print_runtime_error(result.error);
@@ -226,26 +229,15 @@ void repl_loop(ReplState* state) {
     }
 }
 
-void start_repl(void) {
+void start_repl(MobiusState* mobius_state) {
     print_repl_welcome();
     
     // Initialize REPL state
     ReplState state = {0};
-    state.env = create_environment(NULL);
+    state.state = mobius_state;
     state.running = true;
     state.command_count = 1;
-    
-    // Register standard library functions
-    register_stdlib_functions(state.env);
-    
-    // Add built-in constants to REPL environment
-    define_variable(state.env, "nil", make_nil_value());
-    define_variable(state.env, "true", make_bool_value(true));
-    define_variable(state.env, "false", make_bool_value(false));
-    
+        
     // Run the REPL loop
     repl_loop(&state);
-    
-    // Cleanup
-    free_environment(state.env);
 }

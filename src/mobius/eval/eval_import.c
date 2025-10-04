@@ -1,5 +1,6 @@
 #include "eval/evaluator.h"
 #include "util/utility.h"
+#include "state/mobius_state.h"
 #include "plugin/module_registry.h"
 
 #include <stdio.h>
@@ -95,13 +96,13 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
         snprintf(error_msg, sizeof(error_msg), 
             "Cannot create nested namespace '%s': '%s' is not a table", 
             path[0], path[0]);
-        *error_result = make_error(error_msg, line, column);
+        *error_result = make_error(env, error_msg, line, column);
         return NULL;
     } else {
         // Create new table for first component
         current_table = create_table(16);
         if (!current_table) {
-            *error_result = make_error("Failed to create namespace table", line, column);
+            *error_result = make_error(env, "Failed to create namespace table", line, column);
             return NULL;
         }
         Value table_value = make_table_value(current_table);
@@ -122,7 +123,7 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
             // Doesn't exist, create new table
             Table* new_table = create_table(16);
             if (!new_table) {
-                *error_result = make_error("Failed to create nested namespace table", line, column);
+                *error_result = make_error(env, "Failed to create nested namespace table", line, column);
                 return NULL;
             }
             Value new_table_value = make_table_value(new_table);
@@ -136,7 +137,7 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
             snprintf(error_msg, sizeof(error_msg), 
                 "Cannot create nested namespace: intermediate path component '%s' is not a table", 
                 path[i]);
-            *error_result = make_error(error_msg, line, column);
+            *error_result = make_error(env, error_msg, line, column);
             return NULL;
         }
     }
@@ -148,7 +149,7 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
 // Returns true if should continue, false if should abort
 // Handles error/warn/quiet modes
 static bool check_function_override(const char* func_name, Table* target_table, 
-                                    int line, int column, EvalResult* error_result) {
+                                    int line, int column, EvalResult* error_result, Environment* env) {
     // For global imports, target_table is NULL and caller has already checked existence
     // For table imports, we check if function exists in the target table
     bool exists = false;
@@ -175,7 +176,7 @@ static bool check_function_override(const char* func_name, Table* target_table,
             snprintf(error_msg, sizeof(error_msg), 
                 "Function '%s' already exists in target namespace (use #pragma override_behavior to change)",
                 func_name);
-            *error_result = make_error(error_msg, line, column);
+            *error_result = make_error(env, error_msg, line, column);
             return false;
         }
         case OVERRIDE_WARN:
@@ -192,22 +193,22 @@ static bool check_function_override(const char* func_name, Table* target_table,
 EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     ModuleRegistry* registry = get_global_module_registry();
     if (!registry) {
-        return make_error("Module registry not initialized", 0, 0);
+        return make_error(env, "Module registry not initialized", 0, 0);
     }
     
     // Extract module name from string literal token
     const char* module_name = stmt->module_name.literal.string;
     if (!module_name) {
-        return make_error("Invalid module name - null string", stmt->keyword.line, stmt->keyword.column);
+        return make_error(env, "Invalid module name - null string", stmt->keyword.line, stmt->keyword.column);
     }
     
     // Validate module name
     size_t name_len = strlen(module_name);
     if (name_len == 0) {
-        return make_error("Invalid module name - empty string", stmt->keyword.line, stmt->keyword.column);
+        return make_error(env, "Invalid module name - empty string", stmt->keyword.line, stmt->keyword.column);
     }
     if (name_len > 100) {
-        return make_error("Invalid module name - too long", stmt->keyword.line, stmt->keyword.column);
+        return make_error(env, "Invalid module name - too long", stmt->keyword.line, stmt->keyword.column);
     }
     
     // Determine the target name/path (alias or original module name)
@@ -219,7 +220,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         } else if (stmt->alias.identifier) {
             target_name = stmt->alias.identifier;
         } else {
-            return make_error("Invalid alias", stmt->keyword.line, stmt->keyword.column);
+            return make_error(env, "Invalid alias", stmt->keyword.line, stmt->keyword.column);
         }
     }
     
@@ -242,7 +243,9 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                     for (size_t i = 0; i < path_len; i++) free(path_components[i]);
                     free(path_components);
                 }
-        return make_success_with_value(make_nil_value());
+                
+                ctx_push(env->current_context, make_nil_value());
+                return make_success(1);
             }
         }
     }
@@ -257,7 +260,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                 for (size_t i = 0; i < path_len; i++) free(path_components[i]);
                 free(path_components);
             }
-        return make_error(error_msg, stmt->keyword.line, stmt->keyword.column);
+        return make_error(env, error_msg, stmt->keyword.line, stmt->keyword.column);
         }
     }
     
@@ -287,7 +290,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                 for (size_t i = 0; i < path_len; i++) free(path_components[i]);
                 free(path_components);
             }
-            return make_error("Failed to create module table", stmt->keyword.line, stmt->keyword.column);
+            return make_error(env, "Failed to create module table", stmt->keyword.line, stmt->keyword.column);
         }
     }
     
@@ -325,7 +328,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
             if (found) {
                 EvalResult override_error = {0};
                 if (!check_function_override(entry_func, NULL, 
-                                            stmt->keyword.line, stmt->keyword.column, &override_error)) {
+                                            stmt->keyword.line, stmt->keyword.column, &override_error, env)) {
                     if (path_components) {
                         for (size_t j = 0; j < path_len; j++) free(path_components[j]);
                         free(path_components);
@@ -342,7 +345,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
             // Check for override
             EvalResult override_error = {0};
             if (!check_function_override(entry_func, target_table, 
-                                        stmt->keyword.line, stmt->keyword.column, &override_error)) {
+                                        stmt->keyword.line, stmt->keyword.column, &override_error, env)) {
                 if (path_components) {
                     for (size_t j = 0; j < path_len; j++) free(path_components[j]);
                     free(path_components);
@@ -373,7 +376,8 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     }
     
     (void)functions_added;
-    return make_success_with_value(make_nil_value());
+    ctx_push(env->current_context, make_nil_value());
+    return make_success(1);
 }
 
 // Pragma statement evaluation
@@ -381,7 +385,7 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
     (void)env;  // Pragma affects global state, not environment
     
     if (!stmt->name.identifier) {
-        return make_error("Invalid pragma - missing name", stmt->keyword.line, stmt->keyword.column);
+        return make_error(env, "Invalid pragma - missing name", stmt->keyword.line, stmt->keyword.column);
     }
     
     const char* pragma_name = stmt->name.identifier;
@@ -403,13 +407,14 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
                 snprintf(error_msg, sizeof(error_msg), 
                     "Invalid value for pragma strict_types: '%s' (expected true or false)", 
                     stmt->value.identifier);
-                return make_error(error_msg, stmt->name.line, stmt->name.column);
+                return make_error(env, error_msg, stmt->name.line, stmt->name.column);
             }
         } else {
-            return make_error("Invalid value for pragma strict_types (expected true or false)", 
+            return make_error(env, "Invalid value for pragma strict_types (expected true or false)", 
                 stmt->name.line, stmt->name.column);
         }
-        return make_success_with_value(make_nil_value());
+        ctx_push(env->current_context, make_nil_value());
+        return make_success(1);
     }
     
     // Handle type_warnings pragma
@@ -429,13 +434,14 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
                 snprintf(error_msg, sizeof(error_msg), 
                     "Invalid value for pragma type_warnings: '%s' (expected true or false)", 
                     stmt->value.identifier);
-                return make_error(error_msg, stmt->name.line, stmt->name.column);
+                return make_error(env, error_msg, stmt->name.line, stmt->name.column);
             }
         } else {
-            return make_error("Invalid value for pragma type_warnings (expected true or false)", 
+            return make_error(env, "Invalid value for pragma type_warnings (expected true or false)", 
                 stmt->name.line, stmt->name.column);
         }
-        return make_success_with_value(make_nil_value());
+        ctx_push(env->current_context, make_nil_value());
+        return make_success(1);
     }
     
     // Handle override_behavior pragma
@@ -449,7 +455,7 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
         }
         
         if (!value) {
-            return make_error("Invalid value for pragma override_behavior", 
+            return make_error(env,  "Invalid value for pragma override_behavior", 
                 stmt->name.line, stmt->name.column);
         }
         
@@ -464,9 +470,10 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
             snprintf(error_msg, sizeof(error_msg), 
                 "Invalid value for pragma override_behavior: '%s' (expected 'error', 'warn', or 'quiet')", 
                 value);
-            return make_error(error_msg, stmt->name.line, stmt->name.column);
+            return make_error(env, error_msg, stmt->name.line, stmt->name.column);
         }
-        return make_success_with_value(make_nil_value());
+        ctx_push(env->current_context, make_nil_value());
+        return make_success(1);
     }
     
     // Unknown pragma
@@ -474,7 +481,7 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
     snprintf(error_msg, sizeof(error_msg), 
         "Unknown pragma: '%s' (supported pragmas: strict_types, type_warnings, override_behavior)", 
         pragma_name);
-    return make_error(error_msg, stmt->name.line, stmt->name.column);
+    return make_error(env, error_msg, stmt->name.line, stmt->name.column);
 }
 
 

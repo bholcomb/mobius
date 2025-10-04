@@ -3,34 +3,35 @@
 
 #include "data/value.h"
 #include "state/environment.h"
+#include "state/mobius_state.h"
 #include "eval/evaluator.h"
+#include "plugin/plugin.h"
 
 // =============================================================================
 // UNIFIED LIBRARY INTERFACE
 // =============================================================================
 
-// Unified builtin function signature that works for both AST and Bytecode
-// - For AST: Uses Environment* with stack operations (env_peek, env_pop, env_push)
-// LibraryFunction typedef is defined in evaluator.h
+/**
+ * Register all standard library functions in the global environment
+ * This function iterates through the library registry and registers each
+ * function as a native function in the state's global environment.
+ * 
+ * @param state The MobiusState containing the global environment
+ */
+void register_stdlib_functions(MobiusState* state);
 
-// Library function registry entry
-typedef struct {
-    const char* name;
-    MobiusCFunction func;
-    int min_args;      // -1 for variadic
-    int max_args;      // -1 for unlimited
-} LibraryEntry;
+/**
+ * Get the library function registry (for inspection/tooling)
+ * Useful for debugging, documentation generation, or runtime introspection.
+ * 
+ * @return Pointer to the library function registry array (NULL-terminated)
+ */
+const PluginFunction* get_library_registry(void);
 
-
-// =============================================================================
-// LIBRARY REGISTRY
-// =============================================================================
-
-// Get the complete library function registry
-const LibraryEntry* get_library_registry(void);
-size_t get_library_registry_size(void);
-
-// Lookup a library function by name
-MobiusCFunction lookup_library_function(const char* name);
+/**
+ * Get the number of functions in the library registry
+ * @return Number of registered library functions (excluding sentinel)
+ */
+size_t get_library_function_count(void);
 
 #endif // MOBIUS_LIBRARY_H

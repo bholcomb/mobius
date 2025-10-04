@@ -1,4 +1,5 @@
 #include "eval/evaluator.h"
+#include "state/mobius_state.h"
 #include "data/table.h"
 #include "data/enum.h"
 
@@ -10,7 +11,7 @@
 EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
     Table* table = create_table(INITIAL_TABLE_CAPACITY);
     if (!table) {
-        return make_error("Failed to create table", 0, 0);
+        return make_error(env, "Failed to create table", 0, 0);
     }
     
     // Evaluate each key-value pair
@@ -26,7 +27,7 @@ EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
             free_table(table);
             return value_result;
         }
-        value = ctx_pop(global_context);
+        value = ctx_pop(env->current_context);
         
         // Evaluate the key (if provided, otherwise use index)
         if (pair->key) {
@@ -36,7 +37,7 @@ EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
                 free_value(value);
                 return key_result;
             }
-            key = ctx_pop(global_context);
+            key = ctx_pop(env->current_context);
         } else {
             // Use index as key for array-style initialization
             key = make_integer_value(NUM_INT64, (int64_t)i);
@@ -47,11 +48,12 @@ EvalResult eval_table_literal_expr(TableLiteralExpr* expr, Environment* env) {
             free_table(table);
             free_value(key);
             free_value(value);
-            return make_error("Failed to set table entry", 0, 0);
+            return make_error(env, "Failed to set table entry", 0, 0);
         }
     }
     
-    return make_success_with_value(make_table_value(table));
+    ctx_push(env->current_context, make_table_value(table));
+    return make_success(1);
 }
 
 EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
@@ -60,11 +62,11 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
     if (is_error(table_result)) {
         return table_result;
     }
-    Value table_value = ctx_pop(global_context);
+    Value table_value = ctx_pop(env->current_context);
     
     if (table_value.type != VAL_TABLE) {
         free_value(table_value);
-        return make_error("Cannot index non-table value", 0, 0);
+        return make_error(env, "Cannot index non-table value", 0, 0);
     }
     
     // Evaluate the index expression
@@ -73,7 +75,7 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
         free_value(table_value);
         return index_result;
     }
-    Value index_value = ctx_pop(global_context);
+    Value index_value = ctx_pop(env->current_context);
     
     // Get the value from the table
     Value result = table_get(table_value.as.table, index_value);
@@ -82,7 +84,8 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
     free_value(index_value);
     // Don't free table_value here - the table is still referenced
     
-    return make_success_with_value(result);
+    ctx_push(env->current_context, result);
+    return make_success(1);
 }
 
 EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
@@ -115,11 +118,12 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
                     if (member) {
                         // Create enum value
                         Value result = make_enum_value(enum_def, member->value);
-                        return make_success_with_value(result);
+                        ctx_push(env->current_context, result);
+                        return make_success(1);
                     } else {
                         char error_msg[256];
                         snprintf(error_msg, sizeof(error_msg), "Undefined enum member '%s.%s'", enum_name, member_name);
-                        return make_error(error_msg, 0, 0);
+                        return make_error(env, error_msg, 0, 0);
                     }
                 }
             }
@@ -132,19 +136,19 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     if (is_error(table_result)) {
         return table_result;
     }
-    Value table_value = ctx_pop(global_context);
+    Value table_value = ctx_pop(env->current_context);
     
     
     if (table_value.type != VAL_TABLE) {
         free_value(table_value);
-        return make_error("Cannot access property of non-table value", 0, 0);
+        return make_error(env, "Cannot access property of non-table value", 0, 0);
     }
     
     // Create a string key from the identifier token
     char* key_str = malloc(expr->key.length + 1);
     if (!key_str) {
         free_value(table_value);
-        return make_error("Memory allocation failed", 0, 0);
+        return make_error(env, "Memory allocation failed", 0, 0);
     }
     const char* key_identifier = expr->key.identifier ? expr->key.identifier : "unknown";
     strncpy(key_str, key_identifier, strlen(key_identifier));
@@ -160,5 +164,6 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     free_value(key);
     // Don't free table_value here - the table is still referenced
     
-    return make_success_with_value(result);
+    ctx_push(env->current_context, result);
+    return make_success(1);
 }

@@ -1,8 +1,12 @@
 #ifndef MOBIUS_EVAL_RESULT_H
 #define MOBIUS_EVAL_RESULT_H
 
-//forward declarations
-struct StackTrace;
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+// Forward declarations
+struct ExecutionContext;
 
 // Error categories for better reporting
 typedef enum {
@@ -15,16 +19,39 @@ typedef enum {
     ERROR_RETURN        // Return outside function
 } ErrorCategory;
 
+// Function type for stack trace
+typedef enum {
+    TRACE_FUNCTION_NATIVE,         // C function
+    TRACE_FUNCTION_SCRIPT,         // Mobius script function
+    TRACE_FUNCTION_PLUGIN,         // Plugin function
+    TRACE_FUNCTION_CLOSURE         // Closure with captured environment
+} TraceFunctionType;
+
+// Stack trace frame - snapshot of a call frame
+typedef struct {
+    const char* function_name;    // Name of the function (not owned, don't free)
+    const char* filename;         // Source file name (not owned, don't free)
+    int line;                     // Line number
+    int column;                   // Column number
+    TraceFunctionType type;       // Function type
+} TraceFrame;
+
+// Stack trace - snapshot of the call stack at time of error
+typedef struct {
+    TraceFrame* frames;           // Array of frames (owned, must free)
+    size_t frame_count;           // Number of frames
+} StackTrace;
+
 // Enhanced runtime error structure
 typedef struct {
     const char* message;
-    const char* suggestion;    // Optional suggestion for fixing
+    const char* suggestion;       // Optional suggestion for fixing
     ErrorCategory category;
     int line;
     int column;
-    const char* function_name; // Function where error occurred
-    const char* source_line;   // The actual source code line
-    struct StackTrace* stack_trace;   // Call stack at time of error
+    const char* function_name;    // Function where error occurred
+    const char* source_line;      // The actual source code line
+    StackTrace* stack_trace;      // Call stack snapshot (owned, must free)
 } RuntimeError;
 
 // Evaluation result (stack-based only - no .value field)

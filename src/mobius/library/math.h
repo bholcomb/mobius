@@ -1,21 +1,21 @@
 #ifndef MOBIUS_LIBRARY_MATH_H
 #define MOBIUS_LIBRARY_MATH_H
 
-#include "library.h"
+#include "library/library.h"
 
 // =============================================================================
 // UNIFIED MATH FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
 // Math functions using unified library interface
-EvalResult lib_abs(ExecutionContext* ctx, int arg_count);
-EvalResult lib_min(ExecutionContext* ctx, int arg_count);
-EvalResult lib_max(ExecutionContext* ctx, int arg_count);
-EvalResult lib_pow(ExecutionContext* ctx, int arg_count);
-EvalResult lib_sqrt(ExecutionContext* ctx, int arg_count);
-EvalResult lib_floor(ExecutionContext* ctx, int arg_count);
-EvalResult lib_ceil(ExecutionContext* ctx, int arg_count);
-EvalResult lib_round(ExecutionContext* ctx, int arg_count);
+EvalResult lib_abs(MobiusState* state, int arg_count);
+EvalResult lib_min(MobiusState* state, int arg_count);
+EvalResult lib_max(MobiusState* state, int arg_count);
+EvalResult lib_pow(MobiusState* state, int arg_count);
+EvalResult lib_sqrt(MobiusState* state, int arg_count);
+EvalResult lib_floor(MobiusState* state, int arg_count);
+EvalResult lib_ceil(MobiusState* state, int arg_count);
+EvalResult lib_round(MobiusState* state, int arg_count);
 
 
 #endif // MOBIUS_LIBRARY_MATH_H

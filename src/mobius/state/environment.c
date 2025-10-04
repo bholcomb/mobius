@@ -1,5 +1,6 @@
 #include "state/environment.h"
 #include "data/table.h"
+#include "state/mobius_state.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,7 +13,7 @@ Environment* create_environment(Environment* enclosing) {
     
     env->enclosing = enclosing;
     env->variables = create_table(INITIAL_TABLE_CAPACITY);
-    
+    env->current_context = enclosing ? enclosing->current_context : NULL;
     if (!env->variables) {
         free(env);
         return NULL;

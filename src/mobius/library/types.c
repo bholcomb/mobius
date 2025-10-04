@@ -1,7 +1,6 @@
 #include "library/types.h"
 #include "data/value.h"
 #include "state/environment.h"
-#include "data/types.h"
 #include "data/table.h"
 #include "eval/evaluator.h"
 
@@ -14,17 +13,17 @@
 // Note: set_strict_types() and set_type_warnings() have been removed.
 // Use #pragma strict_types true/false instead.
 
-EvalResult lib_get_type_config(ExecutionContext* ctx, int arg_count) {
+EvalResult lib_get_type_config(MobiusState* state, int arg_count) {
     extern TypeCheckConfig global_type_config;
     
     if (arg_count != 0) {
-        return make_error("get_type_config expects no arguments", 0, 0);
+        return make_error(state->main_context->current_env, "get_type_config expects no arguments", 0, 0);
     }
     
     // Return a table with configuration
     Table* config_table = create_table(8);
     if (!config_table) {
-        return make_error("Failed to create config table", 0, 0);
+        return make_error(state->main_context->current_env, "Failed to create config table", 0, 0);
     }
     
     // Add strict_mode key-value pair
@@ -37,6 +36,6 @@ EvalResult lib_get_type_config(ExecutionContext* ctx, int arg_count) {
     Value warn_value = make_bool_value(global_type_config.warn_on_conversion);
     table_set(config_table, warn_key, warn_value);
     
-    ctx_push(ctx, make_table_value(config_table));
+    ctx_push(state->main_context, make_table_value(config_table));
     return make_success(1);
 }

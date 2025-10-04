@@ -1,4 +1,5 @@
 #include "eval/evaluator.h"
+#include "state/mobius_state.h"
 #include "plugin/module_registry.h"
 
 #include <stdio.h>
@@ -16,6 +17,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
                 function->param_count, arg_count);
                 
         return make_error_detailed(
+            env,
             error_msg,
             "Check the function definition for the correct number of parameters",
             ERROR_ARGUMENT,
@@ -26,7 +28,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     }
     
     // Push function call onto stack trace
-    stack_trace_push(function->name ? function->name : "anonymous", 
+    stack_trace_push(env->current_context, function->name ? function->name : "anonymous", 
                      NULL, // filename - TODO: add filename tracking
                      0, 0, // line, column - TODO: add call site tracking
                      false, false, NULL); // not builtin, not plugin
@@ -40,9 +42,9 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
         if (is_error(arg_result)) {
             // Clean up any arguments already on stack
             for (size_t j = 0; j < i; j++) {
-                ctx_pop(global_context);
+                ctx_pop(env->current_context);
             }
-            stack_trace_pop();
+            stack_trace_pop(env->current_context);
             free_environment(func_env);
             return arg_result;
         }
@@ -52,7 +54,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     // Pop arguments from stack and bind to parameters
     // Pop in reverse order since stack is LIFO
     for (size_t i = arg_count; i > 0; i--) {
-        Value arg_value = ctx_pop(global_context);
+        Value arg_value = ctx_pop(env->current_context);
         define_variable(func_env, function->param_names[i-1], arg_value);
     }
     
@@ -62,7 +64,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     for (size_t i = 0; i < function->body_count; i++) {
         result = evaluate_stmt(function->body[i], func_env);
         if (is_error(result)) {
-            stack_trace_pop();
+            stack_trace_pop(env->current_context);
             free_environment(func_env);
             return result;
         }
@@ -74,13 +76,13 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     }
     
     // Pop function call from stack trace
-    stack_trace_pop();
+    stack_trace_pop(env->current_context);
     
     // Return value is already on func_env's stack (if any)
     // Transfer it to the caller's stack
     if (!is_error(result) && result.has_returned && result.return_count > 0) {
         // Return value is already on global stack from evaluate_expr
-    free_environment(func_env);
+        free_environment(func_env);
         return make_success(1);  // Indicate 1 value on stack
     } else {
         free_environment(func_env);
@@ -91,8 +93,8 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
 
 // Expression evaluation
 EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env) {
-    (void)env;
-    return make_success_with_value(copy_value(expr->value));
+    ctx_push(env->current_context, copy_value(expr->value));
+    return make_success(1);
 }
 
 // Stack-based function call evaluation
@@ -127,18 +129,17 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                         if (is_error(arg_result)) {
                             // Clean up any arguments already on stack
                             for (size_t j = 0; j < i; j++) {
-                                ctx_pop(global_context);
+                                ctx_pop(env->current_context);
                             }
                             return arg_result;
                         }
                     }
                     
                     // Call the native function
-                    stack_trace_push(func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
+                    stack_trace_push(env->current_context, func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
                     MobiusCFunction native_func = func_value.as.native_function;
-                    global_context->env = env;  // Set current environment in context
-                    EvalResult result = native_func(global_context, expr->arg_count);
-                    stack_trace_pop();
+                    EvalResult result = native_func(env->current_context->state, expr->arg_count);
+                    stack_trace_pop(env->current_context);
                     
                     return result;
                 } else if (func_value.type == VAL_FUNCTION) {
@@ -150,14 +151,14 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                     snprintf(error_msg, sizeof(error_msg), 
                         "'%s.%s' is not a function (type: %s)", 
                         table_name, func_name, value_type_name(func_value.type));
-                    return make_error(error_msg, dot_expr->key.line, dot_expr->key.column);
+                    return make_error(env, error_msg, dot_expr->key.line, dot_expr->key.column);
                 }
                 
                 // Function not found in table
                 char error_msg[256];
                 snprintf(error_msg, sizeof(error_msg), 
                     "Function '%s' not found in '%s'", func_name, table_name);
-                return make_error(error_msg, dot_expr->key.line, dot_expr->key.column);
+                return make_error(env, error_msg, dot_expr->key.line, dot_expr->key.column);
             }
             
             // Table not found or not a table
@@ -166,12 +167,12 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                 snprintf(error_msg, sizeof(error_msg), 
                     "'%s' is not a table or module (type: %s)", 
                     table_name, value_type_name(table_value.type));
-                return make_error(error_msg, dot_expr->key.line, dot_expr->key.column);
+                return make_error(env, error_msg, dot_expr->key.line, dot_expr->key.column);
             } else {
                 char error_msg[256];
                 snprintf(error_msg, sizeof(error_msg), 
                     "Undefined module or table '%s'. Did you forget to import it?", table_name);
-                return make_error(error_msg, dot_expr->key.line, dot_expr->key.column);
+                return make_error(env, error_msg, dot_expr->key.line, dot_expr->key.column);
             }
         } else {
             // Handle nested table access like math.trig.sin()
@@ -183,11 +184,11 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
             
             // Pop the table from the stack
             if (table_result.return_count > 0) {
-                Value table_value = ctx_pop(global_context);
+                Value table_value = ctx_pop(env->current_context);
                 
                 if (table_value.type != VAL_TABLE) {
                     free_value(table_value);
-                    return make_error("Cannot call method on non-table value", 
+                    return make_error(env, "Cannot call method on non-table value", 
                         dot_expr->key.line, dot_expr->key.column);
                 }
                 
@@ -206,18 +207,17 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                         if (is_error(arg_result)) {
                             // Clean up any arguments already on stack
                             for (size_t j = 0; j < i; j++) {
-                                ctx_pop(global_context);
+                                ctx_pop(env->current_context);
                             }
                             return arg_result;
                         }
                     }
                     
                     // Call the native function directly
-                    stack_trace_push(func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
+                    stack_trace_push(env->current_context, func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
                     MobiusCFunction native_func = func_value.as.native_function;
-                    global_context->env = env;  // Set current environment in context
-                    EvalResult result = native_func(global_context, expr->arg_count);
-                    stack_trace_pop();
+                    EvalResult result = native_func(env->current_context->state, expr->arg_count);
+                    stack_trace_pop(env->current_context);
                     
                     return result;
                 } else if (func_value.type == VAL_FUNCTION) {
@@ -228,11 +228,11 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                     snprintf(error_msg, sizeof(error_msg), 
                         "'%s' is not a function (type: %s)", 
                         func_name, value_type_name(func_value.type));
-                    return make_error(error_msg, dot_expr->key.line, dot_expr->key.column);
+                    return make_error(env, error_msg, dot_expr->key.line, dot_expr->key.column);
                 }
             }
             
-            return make_error("Table expression did not return a value", 
+            return make_error(env, "Table expression did not return a value", 
                 dot_expr->key.line, dot_expr->key.column);
         }
     }
@@ -245,7 +245,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
         call_column = var_expr->name.column;
     }
     else {
-        return make_error("Only variable and module.function calls supported", 0, 0);
+        return make_error(env, "Only variable and module.function calls supported", 0, 0);
     }
     
     // All function calls go through the environment
@@ -267,18 +267,17 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                 if (is_error(arg_result)) {
                     // Clean up any arguments already on stack
                     for (size_t j = 0; j < i; j++) {
-                        ctx_pop(global_context);
+                        ctx_pop(env->current_context);
                     }
                     return arg_result;
                 }
             }
             
             // Call the native function
-            stack_trace_push(full_name, NULL, call_line, call_column, true, false, NULL);
+            stack_trace_push(env->current_context, full_name, NULL, call_line, call_column, true, false, NULL);
             MobiusCFunction native_func = func_value.as.native_function;
-            global_context->env = env;
-            EvalResult result = native_func(global_context, expr->arg_count);
-            stack_trace_pop();
+            EvalResult result = native_func(env->current_context->state, expr->arg_count);
+            stack_trace_pop(env->current_context);
             
             return result;
         }
@@ -299,8 +298,10 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                 strcmp(qualified + qual_len - func_len, full_name) == 0) {
                 // Extract module name
                 size_t module_len = qual_len - func_len - 1;
-                strncpy(suggested_import, qualified, module_len);
-                suggested_import[module_len] = '\0';
+                if (module_len < sizeof(suggested_import)) {
+                    memcpy(suggested_import, qualified, module_len);
+                    suggested_import[module_len] = '\0';
+                }
                 break;
             }
         }
@@ -324,6 +325,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     }
     
     return make_error_detailed(
+        env,
         error_msg,
         suggestion,
         ERROR_UNDEFINED,
@@ -346,6 +348,7 @@ EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
         snprintf(error_msg, sizeof(error_msg), "Undefined variable '%s'", name);
         
         return make_error_detailed(
+            env,
             error_msg,
             "Make sure the variable is declared before use",
             ERROR_UNDEFINED,
@@ -355,7 +358,8 @@ EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
         );
     }
     
-    return make_success_with_value(value);
+    ctx_push(env->current_context, value);
+    return make_success(1);
 }
 
 EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
@@ -363,7 +367,7 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
     if (is_error(value_result)) {
         return value_result;
     }
-    Value value = ctx_pop(global_context);
+    Value value = ctx_pop(env->current_context);
     
     char name[256];
     const char* identifier = expr->name.identifier ? expr->name.identifier : "unknown";
@@ -371,12 +375,13 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
     
     if (!assign_variable(env, name, value)) {
         free_value(value);
-        return make_error_detailed_with_source("Undefined variable in assignment", 
+        return make_error_detailed(env, "Undefined variable in assignment", 
                                                "Make sure the variable is declared before use",
-                                               ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL);
+                                               ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL, NULL);
     }
     
-    return make_success_with_value(value);
+    ctx_push(env->current_context, value);
+    return make_success(1);
 }
 
 EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
@@ -388,14 +393,14 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
     if (is_error(left_result)) {
         return left_result;
     }
-    Value left = ctx_pop(global_context);
+    Value left = ctx_pop(env->current_context);
     
     EvalResult right_result = evaluate_expr(expr->right, env);
     if (is_error(right_result)) {
         free_value(left);  // Clean up left operand
         return right_result;
     }
-    Value right = ctx_pop(global_context);
+    Value right = ctx_pop(env->current_context);
     
     switch (expr->op.type) {
         case TOKEN_PLUS:
@@ -419,22 +424,26 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
         case TOKEN_AND_AND:
             if (!is_truthy(left)) {
                 free_value(right);  // Clean up unused value
-                return make_success_with_value(left);
+                ctx_push(env->current_context, left);
+                return make_success(1);
             }
             free_value(left);  // Clean up unused value
-            return make_success_with_value(right);
+            ctx_push(env->current_context, right);
+            return make_success(1);
         case TOKEN_OR:
         case TOKEN_OR_OR:
             if (is_truthy(left)) {
                 free_value(right);  // Clean up unused value
-                return make_success_with_value(left);
+                ctx_push(env->current_context, left);
+                return make_success(1);
             }
             free_value(left);  // Clean up unused value
-            return make_success_with_value(right);
+            ctx_push(env->current_context, right);
+            return make_success(1);
         default:
             free_value(left);
             free_value(right);
-            return make_error_with_source("Unknown binary operator", expr->op.line, expr->op.column);
+            return make_error(env, "Unknown binary operator", expr->op.line, expr->op.column);
     }
 }
 
@@ -443,12 +452,13 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
     if (is_error(operand_result)) {
         return operand_result;
     }
-    Value operand = ctx_pop(global_context);
+    Value operand = ctx_pop(env->current_context);
     
     switch (expr->op.type) {
         case TOKEN_MINUS:
             if (operand.type == VAL_FLOAT64) {
-                return make_success_with_value(make_float_value(-operand.as.float64_val));
+                ctx_push(env->current_context, make_float_value(-operand.as.float64_val));
+                return make_success(1);
             } else if (operand.type == VAL_INTEGER) {
                 // Extract value properly based on the actual type, but result should be int64_t
                 int64_t value = 0;
@@ -464,27 +474,30 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
                     default: value = operand.as.integer.value.i32; break;
                 }
                 free_value(operand);
-                return make_success_with_value(make_integer_value(NUM_INT64, -value));
+                ctx_push(env->current_context, make_integer_value(NUM_INT64, -value));
+                return make_success(1);
             } else {
                 free_value(operand);
-                return make_error("Cannot negate non-numeric value", expr->op.line, expr->op.column);
+                return make_error(env, "Cannot negate non-numeric value", expr->op.line, expr->op.column);
             }
         case TOKEN_PLUS:
             // Unary plus is identity for numbers
             if (operand.type == VAL_FLOAT64 || operand.type == VAL_INTEGER) {
-                return make_success_with_value(operand);
+                ctx_push(env->current_context, operand);
+                return make_success(1);
             } else {
                 free_value(operand);
-                return make_error("Cannot apply unary plus to non-numeric value", expr->op.line, expr->op.column);
+                return make_error(env, "Cannot apply unary plus to non-numeric value", expr->op.line, expr->op.column);
             }
         case TOKEN_BANG:
         case TOKEN_NOT: {
             bool truthy = is_truthy(operand);
             free_value(operand);
-            return make_success_with_value(make_bool_value(!truthy));
+            ctx_push(env->current_context, make_bool_value(!truthy));
+            return make_success(1);
         }
         default:
             free_value(operand);
-            return make_error("Unknown unary operator", expr->op.line, expr->op.column);
+            return make_error(env, "Unknown unary operator", expr->op.line, expr->op.column);
     }
 }

@@ -8,14 +8,15 @@
 #include <stdbool.h>
 
 // Forward declarations
-typedef struct Environment Environment;
+struct ExecutionContext;
 
 // Environment structure for variable scoping only
 // Stack is now global in ExecutionStack
-struct Environment {
+typedef struct Environment {
     Table* variables;       // Table storing variable name->value mappings
     struct Environment* enclosing;  // Parent environment for scoping
-};
+    struct ExecutionContext* current_context;  // Current execution context
+} Environment;
 
 // Environment creation and management
 Environment* create_environment(Environment* enclosing);
@@ -29,5 +30,6 @@ bool is_defined(Environment* env, const char* name);
 
 // Environment utilities
 void print_environment(Environment* env);
+
 
 #endif // MOBIUS_ENVIRONMENT_H

@@ -171,6 +171,9 @@ struct MobiusState {
     // TODO(threading): ThreadState** threads; - Array of thread states
     // TODO(threading): size_t thread_count;
     // TODO(threading): pthread_key_t thread_key; - TLS for per-thread context
+
+    // Global source code context for error reporting
+    const char* source_code;
 };
 
 // ============================================================================
@@ -282,7 +285,7 @@ void ctx_ensure_stack_capacity(ExecutionContext* ctx, size_t needed);
  * @param function_ptr Function pointer or AST node (can be NULL)
  * @param env Local environment for this call
  */
-void trace_push(ExecutionContext* ctx, const char* function_name, 
+void stack_trace_push(ExecutionContext* ctx, const char* function_name, 
                        const char* filename, int line, int column,
                        FunctionType type, void* function_ptr, struct Environment* env);
 
@@ -290,20 +293,20 @@ void trace_push(ExecutionContext* ctx, const char* function_name,
  * Pop call frame from stack trace
  * @param ctx Execution context
  */
-void trace_pop(ExecutionContext* ctx);
+void stack_trace_pop(ExecutionContext* ctx);
 
 /**
  * Clear all call frames
  * @param ctx Execution context
  */
-void trace_clear(ExecutionContext* ctx);
+void stack_trace_clear(ExecutionContext* ctx);
 
 /**
  * Get current call depth
  * @param ctx Execution context
  * @return Number of call frames on stack
  */
-size_t trace_depth(ExecutionContext* ctx);
+size_t stack_trace_depth(ExecutionContext* ctx);
 
 /**
  * Check for stack overflow
@@ -316,14 +319,27 @@ bool is_stack_overflow(ExecutionContext* ctx);
  * Print stack trace to stdout
  * @param ctx Execution context
  */
-void print_trace(ExecutionContext* ctx);
+void print_stack_trace(ExecutionContext* ctx);
 
 /**
  * Format stack trace to string
  * @param ctx Execution context
  * @return Formatted string (caller must free), or NULL on error
  */
-char* format_trace(ExecutionContext* ctx);
+char* format_stack_trace(ExecutionContext* ctx);
+
+/**
+ * Capture stack trace
+ * @param ctx Execution context
+ * @return Stack trace
+ */
+StackTrace* capture_stack_trace(ExecutionContext* ctx);
+
+/**
+ * Free stack trace
+ * @param trace Stack trace
+ */
+void free_stack_trace(StackTrace* trace);
 
 // ============================================================================
 // EXECUTION API
@@ -376,5 +392,31 @@ void mobius_free_error(MobiusError* error);
  * @return Error code (for convenience in returning from functions)
  */
 int mobius_set_error(MobiusState* state, int code, const char* message, const char* suggestion, int line, int column, const char* function_name);
+
+// ============================================================================
+// SOURCE CODE CONTEXT
+// ============================================================================
+
+/**
+ * Set the source code context
+ * @param state The interpreter state
+ * @param source The source code
+ */
+void set_source_context(MobiusState* state, const char* source);
+
+/**
+ * Get the source code context
+ * @param state The interpreter state
+ * @return The source code
+ */
+const char* get_source_context(MobiusState* state);
+
+/**
+ * Extract a source line from the source code
+ * @param source The source code
+ * @param line_number The line number
+ * @return The source line
+ */
+const char* extract_source_line(const char* source, int line_number);
 
 #endif // MOBIUS_STATE_H
