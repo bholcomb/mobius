@@ -50,12 +50,16 @@ EvalResult lib_array_push(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context);
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
+        free_value(value);
         return make_error(state->main_context->current_env, "array_push first argument must be an array", 0, 0);
     }
 
     ArrayValue* array = array_val.as.array;
     array_push(array, value);
 
+    free_value(array_val);
+    free_value(value);
     return make_success(0);
 }
 
@@ -68,11 +72,13 @@ EvalResult lib_array_pop(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
         return make_error(state->main_context->current_env, "array_pop argument must be an array", 0, 0);
     }
 
     ArrayValue* array = array_val.as.array;
     if (array->length == 0) {
+        free_value(array_val);
         ctx_push(state->main_context, make_nil_value());
         return make_success(1);
     }
@@ -80,6 +86,7 @@ EvalResult lib_array_pop(MobiusState* state, int arg_count) {
     Value popped_value = array->elements[array->length - 1];
     array->length--;
 
+    free_value(array_val);
     ctx_push(state->main_context, popped_value);
     return make_success(1);
 }
@@ -97,10 +104,14 @@ EvalResult lib_array_get(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context);
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
+        free_value(index_val);
         return make_error(state->main_context->current_env, "array_get first argument must be an array", 0, 0);
     }
 
     if (index_val.type != VAL_INTEGER) {
+        free_value(array_val);
+        free_value(index_val);
         return make_error(state->main_context->current_env, "array_get index must be an integer", 0, 0);
     }
 
@@ -108,11 +119,15 @@ EvalResult lib_array_get(MobiusState* state, int arg_count) {
     int64_t index = index_val.as.integer.value.i64;
 
     if (index < 0 || index >= (int64_t)array->length) {
+        free_value(array_val);
+        free_value(index_val);
         ctx_push(state->main_context, make_nil_value());
         return make_success(1);
     }
 
-    ctx_push(state->main_context, array->elements[index]);
+    free_value(array_val);
+    free_value(index_val);
+    ctx_push(state->main_context, copy_value(array->elements[index]));
     return make_success(1);
 }
 
@@ -131,10 +146,16 @@ EvalResult lib_array_set(MobiusState* state, int arg_count) {
     }
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
+        free_value(index_val);
+        free_value(value);
         return make_error(state->main_context->current_env, "array_set first argument must be an array", 0, 0);
     }
 
     if (index_val.type != VAL_INTEGER) {
+        free_value(array_val);
+        free_value(index_val);
+        free_value(value);
         return make_error(state->main_context->current_env, "array_set index must be an integer", 0, 0);
     }
 
@@ -142,6 +163,9 @@ EvalResult lib_array_set(MobiusState* state, int arg_count) {
     int64_t index = index_val.as.integer.value.i64;
 
     if (index < 0 || index >= (int64_t)array->length) {
+        free_value(array_val);
+        free_value(index_val);
+        free_value(value);
         return make_error(state->main_context->current_env, "array_set index out of bounds", 0, 0);
     }
 
@@ -149,6 +173,9 @@ EvalResult lib_array_set(MobiusState* state, int arg_count) {
     free_value(array->elements[index]);
     array->elements[index] = copy_value(value);
 
+    free_value(array_val);
+    free_value(index_val);
+    free_value(value);
     return make_success(0);
 }
 
@@ -161,10 +188,12 @@ EvalResult lib_array_length(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
         return make_error(state->main_context->current_env, "array_length argument must be an array", 0, 0);
     }
 
     ArrayValue* array = array_val.as.array;
+    free_value(array_val);
     ctx_push(state->main_context, make_integer_value(NUM_INT64, (int64_t)array->length));
     return make_success(1);
 }
@@ -184,10 +213,16 @@ EvalResult lib_array_slice(MobiusState* state, int arg_count) {
     }
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
+        free_value(start_val);
+        free_value(end_val);
         return make_error(state->main_context->current_env, "array_slice first argument must be an array", 0, 0);
     }
 
     if (start_val.type != VAL_INTEGER || end_val.type != VAL_INTEGER) {
+        free_value(array_val);
+        free_value(start_val);
+        free_value(end_val);
         return make_error(state->main_context->current_env, "array_slice start and end must be integers", 0, 0);
     }
 
@@ -201,6 +236,9 @@ EvalResult lib_array_slice(MobiusState* state, int arg_count) {
     if (start >= end) {
         // Return empty array
         ArrayValue* empty_array = array_create(8);
+        free_value(array_val);
+        free_value(start_val);
+        free_value(end_val);
         ctx_push(state->main_context, make_array_value(empty_array));
         return make_success(1);
     }
@@ -208,6 +246,9 @@ EvalResult lib_array_slice(MobiusState* state, int arg_count) {
     size_t slice_length = (size_t)(end - start);
     ArrayValue* slice_array = array_create(slice_length);
     if (!slice_array) {
+        free_value(array_val);
+        free_value(start_val);
+        free_value(end_val);
         return make_error(state->main_context->current_env, "Failed to create slice array", 0, 0);
     }
 
@@ -216,6 +257,9 @@ EvalResult lib_array_slice(MobiusState* state, int arg_count) {
         slice_array->length++;
     }
 
+    free_value(array_val);
+    free_value(start_val);
+    free_value(end_val);
     ctx_push(state->main_context, make_array_value(slice_array));
     return make_success(1);
 }
@@ -230,6 +274,10 @@ EvalResult lib_array_concat(MobiusState* state, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
         Value arg = ctx_peek(state->main_context, i);
         if (arg.type != VAL_ARRAY) {
+            // Clean up arguments before returning error
+            for (int j = 0; j < arg_count; j++) {
+                free_value(ctx_pop(state->main_context));
+            }
             return make_error(state->main_context->current_env, "array_concat expects all arguments to be arrays", 0, 0);
         }
         total_length += arg.as.array->length;
@@ -237,6 +285,10 @@ EvalResult lib_array_concat(MobiusState* state, int arg_count) {
 
     ArrayValue* result_array = array_create(total_length);
     if (!result_array) {
+        // Clean up arguments before returning error
+        for (int i = 0; i < arg_count; i++) {
+            free_value(ctx_pop(state->main_context));
+        }
         return make_error(state->main_context->current_env, "Failed to create result array", 0, 0);
     }
 
@@ -250,9 +302,9 @@ EvalResult lib_array_concat(MobiusState* state, int arg_count) {
         }
     }
 
-    // Remove arguments
+    // Remove and free arguments
     for (int i = 0; i < arg_count; i++) {
-        ctx_pop(state->main_context);
+        free_value(ctx_pop(state->main_context));
     }
 
     ctx_push(state->main_context, make_array_value(result_array));
@@ -268,6 +320,7 @@ EvalResult lib_array_reverse(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
         return make_error(state->main_context->current_env, "array_reverse argument must be an array", 0, 0);
     }
 
@@ -281,7 +334,7 @@ EvalResult lib_array_reverse(MobiusState* state, int arg_count) {
         array->elements[j] = temp;
     }
 
-    ctx_push(state->main_context, array_val); // Return the same array
+    ctx_push(state->main_context, array_val); // Return the same array (don't free since we're returning it)
     return make_success(1);
 }
 
@@ -298,6 +351,8 @@ EvalResult lib_array_find(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context);
 
     if (array_val.type != VAL_ARRAY) {
+        free_value(array_val);
+        free_value(search_val);
         return make_error(state->main_context->current_env, "array_find first argument must be an array", 0, 0);
     }
 
@@ -306,12 +361,16 @@ EvalResult lib_array_find(MobiusState* state, int arg_count) {
     // Search for the value
     for (size_t i = 0; i < array->length; i++) {
         if (values_equal(array->elements[i], search_val)) {
+            free_value(array_val);
+            free_value(search_val);
             ctx_push(state->main_context, make_integer_value(NUM_INT64, (int64_t)i));
             return make_success(1);
         }
     }
 
     // Not found
+    free_value(array_val);
+    free_value(search_val);
     ctx_push(state->main_context, make_integer_value(NUM_INT64, -1));
     return make_success(1);
 }

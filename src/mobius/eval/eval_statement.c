@@ -43,6 +43,7 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
         
         TypeConversionResult conversion = validate_and_convert_value(value, stmt->type_hint, stmt->is_annotated, type_config);
         if (!conversion.success) {
+            free_value(value);  // Free the value before returning error
             return make_error_detailed(
                 env,
                 conversion.error_message ? conversion.error_message : "Type validation failed",
@@ -80,12 +81,19 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
     if (enum_exists) {
         
         char error_msg[256];
+        free_value(value);  // Free the value we were going to define
         snprintf(error_msg, sizeof(error_msg), "Name collision: enum '%s' already exists, cannot declare variable with the same name", identifier);
         return make_error(env, error_msg, stmt->name.line, stmt->name.column);
     }
     
     define_variable(env, name, value);
     
+    // Free the value since define_variable (via table_set) incremented its ref_count
+    // For reference-counted types (arrays, strings, functions, tables), this decrements the count
+    // For primitive types (int, bool, nil), this is a no-op
+    free_value(value);
+    
+    if (value.type == VAL_ARRAY) fprintf(stderr, "[VAR] Freeing value after define_variable, array=%p\n", (void*)value.as.array);
     ctx_push(env->current_context, make_nil_value());
     return make_success(1);
 }

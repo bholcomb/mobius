@@ -33,6 +33,8 @@ EvalResult eval_array_literal_expr(ArrayLiteralExpr* expr, Environment* env) {
     for (size_t i = expr->element_count; i > 0; i--) {
         Value element = ctx_pop(env->current_context);
         array_push(array, element);
+        // Free the element since array_push copied it
+        free_value(element);
     }
     
     // Reverse the array since we pushed in LIFO order
@@ -87,7 +89,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         
         // Clean up
         free_value(index_value);
-        // Don't free target_value here - the array is still referenced
+        free_value(target_value);  // Free the array value we got from get_variable
         
         ctx_push(env->current_context, result);
         return make_success(1);
@@ -98,7 +100,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         
         // Clean up
         free_value(index_value);
-        // Don't free target_value here - the table is still referenced
+        free_value(target_value);  // Free the table value we got from get_variable
         
         ctx_push(env->current_context, result);
         return make_success(1);
