@@ -109,21 +109,21 @@ int execute_script_string(const char* source, const char* filename) {
         return 1;
     }
     
-    // Parse AST
-    ParseResult parse_result = parse(tokens);
-    if (parse_result.had_error) {
-        fprintf(stderr, "Parse errors occurred\n");
-        free_parse_result(&parse_result);  // Then free parse result
-        free_token_array(&tokens);
-        return 1;
-    }
-    
     MobiusState* state = mobius_new_state(NULL);
     register_stdlib_functions(state);
 
     // Set source context for better error reporting
     set_source_context(state, source);
     
+    // Parse AST
+    ParseResult parse_result = parse(state, tokens);
+    if (parse_result.had_error) {
+        fprintf(stderr, "Parse errors occurred\n");
+        free_parse_result(&parse_result);  // Then free parse result
+        free_token_array(&tokens);
+        return 1;
+    }
+
     // Execute the program
     EvalResult eval_result = evaluate_program(parse_result.statements, 
                                             parse_result.count, state->global_env);

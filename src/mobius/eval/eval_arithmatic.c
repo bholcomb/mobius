@@ -105,7 +105,8 @@ EvalResult add_values(Environment* env, Value left, Value right) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
-        Value add_method = get_table_metamethod(table, "__add");
+        MobiusState* state = env->current_context->state;
+        Value add_method = get_table_metamethod(table, state->mm_add);
         
         if (add_method.type == VAL_FUNCTION) {
             // TODO: Call function metamethod
@@ -118,31 +119,35 @@ EvalResult add_values(Environment* env, Value left, Value right) {
     }
     // String concatenation
     if (left.type == VAL_STRING || right.type == VAL_STRING) {
-        char* left_str = value_to_string(left);
-        char* right_str = value_to_string(right);
+        // Convert values to strings if needed, using value_to_string for non-strings
+        const char* left_data = NULL;
+        const char* right_data = NULL;
+        size_t left_len = 0;
+        size_t right_len = 0;
         
-        if (!left_str || !right_str) {
-            free(left_str);
-            free(right_str);
-            return make_error(env, "Memory allocation failed in string concatenation", 0, 0);
-        }
+        // Use MobiusString directly (no copy, fast!)
+        left_data = string_data(left.as.string);
+        left_len = string_length(left.as.string);
         
-        size_t len = strlen(left_str) + strlen(right_str) + 1;
-        char* result = malloc(len);
+        right_data = string_data(right.as.string);
+        right_len = string_length(right.as.string);
+        
+        // Allocate result buffer (combined length + null terminator)
+        size_t result_len = left_len + right_len;
+        char* result = malloc(result_len + 1);
         if (!result) {
-            free(left_str);
-            free(right_str);
             return make_error(env, "Memory allocation failed", 0, 0);
         }
         
-        strcpy(result, left_str);
-        strcat(result, right_str);
+        // Copy both parts directly (no strlen needed - we have lengths!)
+        memcpy(result, left_data, left_len);
+        memcpy(result + left_len, right_data, right_len);
+        result[result_len] = '\0';
         
-        free(left_str);
-        free(right_str);
-        
-        Value final_result = make_string_value_from_cstr(result);
+        // Intern the result string and push
+        Value final_result = make_string_value_from_cstr(env->current_context->state, result);
         free(result);
+        
         ctx_push(env->current_context, final_result);
         return make_success(1);
     }
@@ -249,7 +254,8 @@ EvalResult subtract_values(Environment* env, Value left, Value right) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
-        Value sub_method = get_table_metamethod(table, "__sub");
+        MobiusState* state = env->current_context->state;
+        Value sub_method = get_table_metamethod(table, state->mm_sub);
         
         if (sub_method.type == VAL_FUNCTION) {
             // TODO: Call function metamethod
@@ -304,7 +310,8 @@ EvalResult multiply_values(Environment* env, Value left, Value right) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
-        Value mul_method = get_table_metamethod(table, "__mul");
+        MobiusState* state = env->current_context->state;
+        Value mul_method = get_table_metamethod(table, state->mm_mul);
         
         if (mul_method.type == VAL_FUNCTION) {
             // TODO: Call function metamethod
@@ -340,7 +347,8 @@ EvalResult divide_values(Environment* env, Value left, Value right, int line, in
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
-        Value div_method = get_table_metamethod(table, "__div");
+        MobiusState* state = env->current_context->state;
+        Value div_method = get_table_metamethod(table, state->mm_div);
         
         if (div_method.type == VAL_FUNCTION) {
             // TODO: Call function metamethod
@@ -380,7 +388,8 @@ EvalResult modulo_values(Environment* env, Value left, Value right, int line, in
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
-        Value mod_method = get_table_metamethod(table, "__mod");
+        MobiusState* state = env->current_context->state;
+        Value mod_method = get_table_metamethod(table, state->mm_mod);
         
         if (mod_method.type == VAL_FUNCTION) {
             // TODO: Call function metamethod
@@ -448,25 +457,26 @@ EvalResult compare_values(Environment* env, Value left, Value right, TokenType o
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
-        const char* metamethod_name = NULL;
+        MobiusState* state = env->current_context->state;
+        MobiusString* metamethod_name = NULL;
         
         switch (op) {
             case TOKEN_EQUAL_EQUAL:
             case TOKEN_BANG_EQUAL:
-                metamethod_name = "__eq";
+                metamethod_name = state->mm_eq;
                 break;
             case TOKEN_LESS:
-                metamethod_name = "__lt";
+                metamethod_name = state->mm_lt;
                 break;
             case TOKEN_LESS_EQUAL:
-                metamethod_name = "__le";
+                metamethod_name = state->mm_le;
                 break;
             case TOKEN_GREATER:
             case TOKEN_GREATER_EQUAL:
                 // For > and >=, we check if the right operand has the metamethod
                 if (right.type == VAL_TABLE) {
                     table = right.as.table;
-                    metamethod_name = (op == TOKEN_GREATER) ? "__lt" : "__le";
+                    metamethod_name = (op == TOKEN_GREATER) ? state->mm_lt : state->mm_le;
                     // Note: a > b becomes b < a, a >= b becomes b <= a
                 }
                 break;

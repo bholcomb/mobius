@@ -195,7 +195,7 @@ EvalResult text_reverse(MobiusState* state, int arg_count) {
     
     reverse_string(reversed);
     
-    Value result = make_string_value_from_cstr(reversed);
+    Value result = make_string_value_from_cstr(state, reversed);
     free(reversed);
     ctx_push(state->main_context, result);
     return make_success(1);
@@ -236,7 +236,7 @@ EvalResult text_title_case(MobiusState* state, int arg_count) {
         }
     }
     
-    Value return_val = make_string_value_from_cstr(result);
+    Value return_val = make_string_value_from_cstr(state, result);
     free(result);
     ctx_push(state->main_context, return_val);
     return make_success(1);
@@ -280,7 +280,7 @@ EvalResult text_trim(MobiusState* state, int arg_count) {
     strncpy(result, input, len);
     result[len] = '\0';
     
-    Value return_val = make_string_value_from_cstr(result);
+    Value return_val = make_string_value_from_cstr(state, result);
     ctx_push(state->main_context, return_val);
     free(result);
     ctx_push(state->main_context, return_val);
@@ -322,7 +322,7 @@ EvalResult text_replace_all(MobiusState* state, int arg_count) {
     
     if (count == 0) {
         // No replacements needed
-        ctx_push(state->main_context, make_string_value_from_cstr(text));
+        ctx_push(state->main_context, make_string_value_from_cstr(state, text));
         return make_success(1);
     }
     
@@ -353,7 +353,7 @@ EvalResult text_replace_all(MobiusState* state, int arg_count) {
     }
     *dest = '\0';
     
-    Value return_val = make_string_value_from_cstr(result);
+    Value return_val = make_string_value_from_cstr(state, result);
     free(result);
     ctx_push(state->main_context, return_val);
     return make_success(1);
@@ -393,7 +393,7 @@ EvalResult text_pad_left(MobiusState* state, int arg_count) {
     
     if (width <= text_len) {
         // No padding needed
-        ctx_push(state->main_context, make_string_value_from_cstr(text));
+        ctx_push(state->main_context, make_string_value_from_cstr(state, text));
         return make_success(1);
     }
     
@@ -408,7 +408,7 @@ EvalResult text_pad_left(MobiusState* state, int arg_count) {
     }
     strcpy(result + pad_count, text);
     
-    Value return_val = make_string_value_from_cstr(result);
+    Value return_val = make_string_value_from_cstr(state, result);
     free(result);
     ctx_push(state->main_context, return_val);
     return make_success(1);
@@ -459,7 +459,7 @@ EvalResult text_split(MobiusState* state, int arg_count) {
     }
     
     free(text_copy);
-    Value return_val = make_string_value_from_cstr(result);
+    Value return_val = make_string_value_from_cstr(state, result);
     free(result);
     ctx_push(state->main_context, return_val);
     return make_success(1);

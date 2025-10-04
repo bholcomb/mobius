@@ -12,10 +12,7 @@
 // FORWARD DECLARATIONS
 // ============================================================================
 
-typedef struct MobiusState MobiusState;
-typedef struct ExecutionContext ExecutionContext;
-typedef struct MobiusConfig MobiusConfig;
-typedef struct MobiusError MobiusError;
+struct MobiusState;
 struct Environment;
 struct ModuleRegistry;
 
@@ -26,14 +23,14 @@ struct ModuleRegistry;
 /**
  * Error information structure
  */
-struct MobiusError {
+typedef struct MobiusError {
     int code;               // Error code
     char* message;          // Error message (caller must free)
     char* suggestion;       // Optional suggestion (caller must free)
     int line;              // Line number (if applicable)
     int column;            // Column number (if applicable)
     char* function_name;   // Function where error occurred (caller must free)
-};
+} MobiusError;
 
 // Error codes
 #define MOBIUS_OK               0
@@ -61,7 +58,7 @@ typedef enum {
     OVERRIDE_QUIET     // Silent override
 } OverrideBehavior;
 
-struct MobiusConfig {
+typedef struct MobiusConfig {
     size_t initial_stack_size;    // Default: INITIAL_STACK_CAPACITY
     size_t max_stack_size;        // Default: MAX_STACK_CAPACITY
     size_t max_call_depth;        // Default: MAX_CALL_DEPTH
@@ -70,7 +67,7 @@ struct MobiusConfig {
     bool debug_mode;              // If true, print debug information
     bool enable_hot_reload;       // If true, rescan plugins on state creation
     OverrideBehavior override_behavior;  // How to handle function name conflicts
-};
+} MobiusConfig;
 
 /**
  * Create default configuration
@@ -120,9 +117,9 @@ typedef struct CallFrame {
  * In single-threaded mode, there's one main context per MobiusState.
  * In multi-threaded mode, each thread can have multiple contexts (for coroutines).
  */
-struct ExecutionContext {
+typedef struct ExecutionContext {
     // Parent state
-    MobiusState* state;           // Back-reference to owning state
+    struct MobiusState* state;           // Back-reference to owning state
     
     // ========== EXECUTION STATE ==========
     // Value stack (for expression evaluation)
@@ -144,7 +141,7 @@ struct ExecutionContext {
     // TODO(coroutines): void* suspend_point; - Where to resume from
     // TODO(coroutines): Value suspend_value; - Value to resume with
     // TODO(coroutines): ExecutionContext* parent; - Parent context for nesting
-};
+} ExecutionContext;
 
 // ============================================================================
 // MOBIUS STATE
@@ -155,10 +152,26 @@ struct ExecutionContext {
  * Currently single-threaded with one main execution context.
  * Future: Support multiple threads and multiple contexts per thread.
  */
-struct MobiusState {
+typedef struct MobiusState {
     // ========== GLOBAL STATE ==========
     struct Environment* global_env;      // Global environment (built-in functions, constants)
     struct ModuleRegistry* registry;     // Plugin/module registry
+    struct StringInternPool* string_pool; // String interning pool for fast comparison and deduplication
+    
+    // ========== PRE-INTERNED STRINGS ==========
+    // Common metamethod names (interned once for fast lookup)
+    MobiusString* mm_add;        // "__add"
+    MobiusString* mm_sub;        // "__sub"
+    MobiusString* mm_mul;        // "__mul"
+    MobiusString* mm_div;        // "__div"
+    MobiusString* mm_mod;        // "__mod"
+    MobiusString* mm_eq;         // "__eq"
+    MobiusString* mm_lt;         // "__lt"
+    MobiusString* mm_le;         // "__le"
+    MobiusString* mm_index;      // "__index"
+    MobiusString* mm_newindex;   // "__newindex"
+    MobiusString* mm_call;       // "__call"
+    MobiusString* mm_tostring;   // "__tostring"
     
     // ========== EXECUTION CONTEXTS ==========
     ExecutionContext* main_context;  // Primary execution context
@@ -183,7 +196,7 @@ struct MobiusState {
 
     // Global source code context for error reporting
     const char* source_code;
-};
+} MobiusState;
 
 // ============================================================================
 // STATE MANAGEMENT API

@@ -123,7 +123,7 @@ EvalResult lib_load(MobiusState* state, int arg_count) {
     }
     
     // Parse AST
-    ParseResult parse_result = parse(tokens);
+    ParseResult parse_result = parse(state, tokens);
     free_token_array(&tokens);
     
     if (parse_result.had_error) {
