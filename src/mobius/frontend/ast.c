@@ -933,9 +933,15 @@ void ast_release_stmt(Stmt* stmt) {
                     free((void*)stmt->as.import_stmt.alias.literal.string);
                 }
                 break;
-            case STMT_PRAGMA:
-                // Nothing to release for pragma statements (tokens are not owned)
-                break;
+        case STMT_PRAGMA:
+            // Free deep-copied strings
+            if (stmt->as.pragma_stmt.value.type == TOKEN_STRING && stmt->as.pragma_stmt.value.literal.string) {
+                free((char*)stmt->as.pragma_stmt.value.literal.string);
+            }
+            if (stmt->as.pragma_stmt.value.identifier) {
+                free((char*)stmt->as.pragma_stmt.value.identifier);
+            }
+            break;
             case STMT_ENUM: {
                 // Release enum members
                 EnumMemberDef* member = stmt->as.enum_stmt.members;
@@ -1057,6 +1063,18 @@ Stmt* make_pragma_stmt(Token keyword, Token name, Token value) {
     stmt->as.pragma_stmt.keyword = keyword;
     stmt->as.pragma_stmt.name = name;
     stmt->as.pragma_stmt.value = value;
+    
+    // Deep copy the value string if it's a string literal
+    // (prevents dangling pointer after token array is freed)
+    if (value.type == TOKEN_STRING && value.literal.string) {
+        stmt->as.pragma_stmt.value.literal.string = mobius_strdup(value.literal.string);
+    }
+    
+    // Deep copy identifier if present
+    if (value.identifier) {
+        stmt->as.pragma_stmt.value.identifier = mobius_strdup(value.identifier);
+    }
+    
     return stmt;
 }
 

@@ -6,8 +6,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-extern TypeCheckConfig global_type_config;
-
 // Statement evaluation
 EvalResult eval_expression_stmt(ExpressionStmt* stmt, Environment* env) {
     EvalResult result = evaluate_expr(stmt->expression, env);
@@ -37,7 +35,13 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
     
     // Validate and convert type if annotation is provided
     if (stmt->is_annotated) {
-        TypeConversionResult conversion = validate_and_convert_value(value, stmt->type_hint, stmt->is_annotated, global_type_config);
+        MobiusState* state = env->current_context->state;
+        TypeCheckConfig type_config = {
+            state->config.strict_mode,
+            state->config.warn_on_conversion
+        };
+        
+        TypeConversionResult conversion = validate_and_convert_value(value, stmt->type_hint, stmt->is_annotated, type_config);
         if (!conversion.success) {
             return make_error_detailed(
                 env,
@@ -55,7 +59,7 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
         value = conversion.converted_value;
         
         // Warn about conversions if enabled
-        if (conversion.was_converted && global_type_config.warn_on_conversion) {
+        if (conversion.was_converted && state->config.warn_on_conversion) {
             printf("Warning: Implicit type conversion in variable declaration at line %d\n", stmt->name.line);
         }
         
