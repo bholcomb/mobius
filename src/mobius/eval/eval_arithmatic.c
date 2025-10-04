@@ -120,29 +120,46 @@ EvalResult add_values(Environment* env, Value left, Value right) {
     // String concatenation
     if (left.type == VAL_STRING || right.type == VAL_STRING) {
         // Convert values to strings if needed, using value_to_string for non-strings
-        const char* left_data = NULL;
-        const char* right_data = NULL;
-        size_t left_len = 0;
-        size_t right_len = 0;
+        char* left_str = NULL;
+        char* right_str = NULL;
+        bool free_left = false;
+        bool free_right = false;
         
-        // Use MobiusString directly (no copy, fast!)
-        left_data = string_data(left.as.string);
-        left_len = string_length(left.as.string);
+        // Convert left operand to string
+        if (left.type == VAL_STRING) {
+            left_str = (char*)string_data(left.as.string);
+        } else {
+            left_str = value_to_string(left);
+            free_left = true;
+        }
         
-        right_data = string_data(right.as.string);
-        right_len = string_length(right.as.string);
+        // Convert right operand to string
+        if (right.type == VAL_STRING) {
+            right_str = (char*)string_data(right.as.string);
+        } else {
+            right_str = value_to_string(right);
+            free_right = true;
+        }
         
         // Allocate result buffer (combined length + null terminator)
+        size_t left_len = strlen(left_str);
+        size_t right_len = strlen(right_str);
         size_t result_len = left_len + right_len;
         char* result = malloc(result_len + 1);
         if (!result) {
+            if (free_left) free(left_str);
+            if (free_right) free(right_str);
             return make_error(env, "Memory allocation failed", 0, 0);
         }
         
-        // Copy both parts directly (no strlen needed - we have lengths!)
-        memcpy(result, left_data, left_len);
-        memcpy(result + left_len, right_data, right_len);
+        // Copy both parts
+        memcpy(result, left_str, left_len);
+        memcpy(result + left_len, right_str, right_len);
         result[result_len] = '\0';
+        
+        // Clean up temporary strings
+        if (free_left) free(left_str);
+        if (free_right) free(right_str);
         
         // Intern the result string and push
         Value final_result = make_string_value_from_cstr(env->current_context->state, result);

@@ -1,0 +1,15 @@
+print("Testing factorial");
+
+func factorial(n) {
+    print("factorial called with n=" + n);
+    if (n <= 1) {
+        print("Base case, returning 1");
+        return 1;
+    }
+    print("Recursive case, calling factorial(" + (n - 1) + ")");
+    return n * factorial(n - 1);
+}
+
+print("Calling factorial(3)");
+var result = factorial(3);
+print("Result: " + result);

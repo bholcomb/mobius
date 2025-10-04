@@ -96,8 +96,9 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
         return make_error(env, "Memory allocation failed", 0, 0);
     }
     
+        p           EvalResult result = make_success(0);
     for (size_t i = 0; i < stmt->count; i++) {
-        EvalResult result = evaluate_stmt(stmt->statements[i], block_env);
+        result = evaluate_stmt(stmt->statements[i], block_env);
         if (is_error(result)) {
             break;
         }
@@ -115,7 +116,7 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
     }
     
     free_environment(block_env);
-    return make_success(0);
+    return result;  // Preserve has_returned, has_break, has_continue flags
 }
 
 EvalResult eval_if_stmt(IfStmt* stmt, Environment* env) {
