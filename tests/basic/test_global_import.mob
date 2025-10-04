@@ -1,4 +1,6 @@
 // Test global import with _GLOBAL
+#pragma override_behavior warn
+
 print("=== Testing Global Import with _GLOBAL ===");
 
 // Test 1: Import math functions into global namespace

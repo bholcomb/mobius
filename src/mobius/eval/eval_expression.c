@@ -33,6 +33,11 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
                      0, 0, // line, column - TODO: add call site tracking
                      false, false, NULL); // not builtin, not plugin
     
+    // Check for stack overflow
+    if (is_stack_overflow(env->current_context)) {
+        return make_error(env, "Stack overflow: maximum call depth exceeded", 0, 0);
+    }
+    
     // Create new environment for function execution (with closure as parent)
     Environment* func_env = create_environment(function->closure);
     

@@ -1,4 +1,5 @@
 // Comprehensive import statement tests
+#pragma override_behavior warn 
 
 func test_successful_imports() {
     print("Testing successful imports...");

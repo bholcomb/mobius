@@ -1,4 +1,6 @@
 // Test stdlib function override with _GLOBAL import
+#pragma override_behavior warn
+
 print("=== Testing Stdlib Override with _GLOBAL ===");
 
 // Test 1: Default behavior should error on override
