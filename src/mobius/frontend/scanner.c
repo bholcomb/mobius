@@ -462,12 +462,9 @@ TokenArray scan_source(const char* source) {
 // Free token array
 void free_token_array(TokenArray* array) {
     if (array->tokens) {
-        // Free any allocated string literals
+        // Free each token (identifiers and string literals)
         for (size_t i = 0; i < array->count; i++) {
-            if (array->tokens[i].type == TOKEN_STRING && 
-                array->tokens[i].literal.string) {
-                free((void*)array->tokens[i].literal.string);
-            }
+            free_token(&array->tokens[i]);
         }
         free(array->tokens);
         array->tokens = NULL;

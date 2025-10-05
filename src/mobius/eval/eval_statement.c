@@ -93,7 +93,6 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
     // For primitive types (int, bool, nil), this is a no-op
     free_value(value);
     
-    if (value.type == VAL_ARRAY) fprintf(stderr, "[VAR] Freeing value after define_variable, array=%p\n", (void*)value.as.array);
     ctx_push(env->current_context, make_nil_value());
     return make_success(1);
 }
