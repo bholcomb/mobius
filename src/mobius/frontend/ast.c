@@ -1087,9 +1087,14 @@ Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_a
     }
     
     stmt->as.import_stmt.alias = alias;
-    // Deep copy alias string if present
-    if (has_alias && alias.type == TOKEN_STRING && alias.literal.string) {
-        stmt->as.import_stmt.alias.literal.string = mobius_strdup(alias.literal.string);
+    // Deep copy alias string or identifier if present
+    if (has_alias) {
+        if (alias.type == TOKEN_STRING && alias.literal.string) {
+            stmt->as.import_stmt.alias.literal.string = mobius_strdup(alias.literal.string);
+        }
+        if (alias.identifier) {
+            stmt->as.import_stmt.alias.identifier = mobius_strdup(alias.identifier);
+        }
     }
     
     stmt->as.import_stmt.has_alias = has_alias;

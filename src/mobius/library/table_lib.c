@@ -27,13 +27,24 @@ EvalResult lib_table_insert(MobiusState* state, int arg_count) {
     }
     
     if (table_val.type != VAL_TABLE) {
+        free_value(table_val);
+        free_value(key);
+        free_value(value);
         return make_error(state->main_context->current_env, "table_insert first argument must be a table", 0, 0);
     }
     
     Table* table = table_val.as.table;
     if (!table_set(table, key, value)) {
+        free_value(table_val);
+        free_value(key);
+        free_value(value);
         return make_error(state->main_context->current_env, "Failed to insert into table", 0, 0);
     }
+    
+    // Free the arguments after use
+    free_value(table_val);
+    free_value(key);
+    free_value(value);
     
     ctx_push(state->main_context, make_nil_value());
     return make_success(1);
@@ -52,11 +63,18 @@ EvalResult lib_table_remove(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context);
     
     if (table_val.type != VAL_TABLE) {
+        free_value(table_val);
+        free_value(key);
         return make_error(state->main_context->current_env, "table_remove first argument must be a table", 0, 0);
     }
     
     Table* table = table_val.as.table;
     bool success = table_remove(table, key);
+    
+    // Free the arguments after use
+    free_value(table_val);
+    free_value(key);
+    
     if (success) {
         ctx_push(state->main_context, make_bool_value(true));
     } else {
@@ -79,11 +97,17 @@ EvalResult lib_table_has_key(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context);
     
     if (table_val.type != VAL_TABLE) {
+        free_value(table_val);
+        free_value(key);
         return make_error(state->main_context->current_env, "table_has_key first argument must be a table", 0, 0);
     }
     
     Table* table = table_val.as.table;
     bool has_key = table_has_key(table, key);
+    
+    // Free the arguments after use
+    free_value(table_val);
+    free_value(key);
     
     ctx_push(state->main_context, make_bool_value(has_key));
     return make_success(1);
@@ -98,11 +122,15 @@ EvalResult lib_table_size(MobiusState* state, int arg_count) {
     ctx_pop(state->main_context); // Remove argument
     
     if (table_val.type != VAL_TABLE) {
+        free_value(table_val);
         return make_error(state->main_context->current_env, "table_size argument must be a table", 0, 0);
     }
     
     Table* table = table_val.as.table;
     size_t size = table_size(table);
+    
+    // Free the argument after use
+    free_value(table_val);
     
     ctx_push(state->main_context, make_integer_value(NUM_INT64, (int64_t)size));
     return make_success(1);

@@ -342,6 +342,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
             }
             Value func_value = make_native_function_value(func_ptr);
             define_variable(env, func_name, func_value);
+            free_value(func_value);  // Free after define_variable copies it
             functions_added++;
         } else {
             // Add to target table
@@ -359,6 +360,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
             Value func_value = make_native_function_value(func_ptr);
             table_set(target_table, func_key, func_value);
             free_value(func_key);
+            free_value(func_value);  // Free after table_set copies it
             functions_added++;
         }
     }
