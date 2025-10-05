@@ -21,6 +21,7 @@
 #include "../src/mobius/frontend/ast.h"
 #include "../src/mobius/eval/evaluator.h"
 #include "../src/mobius/state/mobius_state.h"
+#include "../src/mobius/state/stack.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,13 +82,11 @@ EvalResult text_word_count(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "word_count() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(state->main_context);
-    if (text_val.type != VAL_STRING) {
-        free_value(text_val);
+    if (!mobius_stack_isString(state, -1)) {
         return make_error(state->main_context->current_env, "word_count() expects a string argument", 0, 0);
     }
     
-    const char* text = string_data(text_val.as.string);
+    const char* text = mobius_stack_asString(state, -1);
     int word_count = 0;
     int in_word = 0;
     
@@ -101,8 +100,8 @@ EvalResult text_word_count(MobiusState* state, int arg_count) {
         text++;
     }
     
-    ctx_push(state->main_context, make_integer_value(NUM_INT32, word_count));
-    free_value(text_val);
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushInt32(state, word_count);
     return make_success(1);
 }
 
@@ -115,13 +114,11 @@ EvalResult text_line_count(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "line_count() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(state->main_context);
-    if (text_val.type != VAL_STRING) {
-        free_value(text_val);
+    if (!mobius_stack_isString(state, -1)) {
         return make_error(state->main_context->current_env, "line_count() expects a string argument", 0, 0);
     }
     
-    const char* text = string_data(text_val.as.string);
+    const char* text = mobius_stack_asString(state, -1);
     int line_count = 1; // At least one line if string is not empty
     
     if (strlen(text) == 0) {
@@ -135,7 +132,8 @@ EvalResult text_line_count(MobiusState* state, int arg_count) {
         }
     }
     
-    ctx_push(state->main_context, make_integer_value(NUM_INT32, line_count));
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushInt32(state, line_count);
     return make_success(1);
 }
 
@@ -148,15 +146,12 @@ EvalResult text_char_count(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "char_count() expects exactly 2 arguments", 0, 0);
     }
     
-    Value char_val = ctx_pop(state->main_context);
-    Value text_val = ctx_pop(state->main_context);
-
-    if (text_val.type != VAL_STRING || char_val.type != VAL_STRING) {
+    if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2)) {
         return make_error(state->main_context->current_env, "char_count() expects string arguments", 0, 0);
     }
     
-    const char* text = string_data(text_val.as.string);
-    const char* char_str = string_data(char_val.as.string);
+    const char* char_str = mobius_stack_asString(state, -1);
+    const char* text = mobius_stack_asString(state, -2);
     
     if (strlen(char_str) != 1) {
         return make_error(state->main_context->current_env, "char_count() second argument must be a single character", 0, 0);
@@ -165,7 +160,8 @@ EvalResult text_char_count(MobiusState* state, int arg_count) {
     char target = char_str[0];
     int count = count_char(text, target);
     
-    ctx_push(state->main_context, make_integer_value(NUM_INT32, count));
+    mobius_stack_pop(state, 2);
+    mobius_stack_pushInt32(state, count);
     return make_success(1);
 }
 
@@ -182,22 +178,21 @@ EvalResult text_reverse(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "reverse() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(state->main_context);
-    if (text_val.type != VAL_STRING) {
-        free_value(text_val);
+    if (!mobius_stack_isString(state, -1)) {
         return make_error(state->main_context->current_env, "reverse() expects a string argument", 0, 0);
     }
 
-    char* reversed = safe_strdup(string_data(text_val.as.string));
+    const char* text = mobius_stack_asString(state, -1);
+    char* reversed = safe_strdup(text);
     if (!reversed) {
         return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
     }
     
     reverse_string(reversed);
     
-    Value result = make_string_value_from_cstr(state, reversed);
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushString(state, reversed);
     free(reversed);
-    ctx_push(state->main_context, result);
     return make_success(1);
 }
 
@@ -210,13 +205,11 @@ EvalResult text_title_case(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "title_case() expects exactly 1 argument", 0, 0);
     }
     
-    Value text_val = ctx_pop(state->main_context);
-    if (text_val.type != VAL_STRING) {
-        free_value(text_val);
+    if (!mobius_stack_isString(state, -1)) {
         return make_error(state->main_context->current_env, "title_case() expects a string argument", 0, 0);
     }
     
-    const char* input = string_data(text_val.as.string);
+    const char* input = mobius_stack_asString(state, -1);
     char* result = safe_strdup(input);
     if (!result) {
         return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
@@ -236,9 +229,9 @@ EvalResult text_title_case(MobiusState* state, int arg_count) {
         }
     }
     
-    Value return_val = make_string_value_from_cstr(state, result);
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushString(state, result);
     free(result);
-    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -251,13 +244,11 @@ EvalResult text_trim(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "trim() expects exactly 1 argument", 0, 0);
     }
 
-    Value text_val = ctx_pop(state->main_context);
-    if (text_val.type != VAL_STRING) {
-        free_value(text_val);
+    if (!mobius_stack_isString(state, -1)) {
         return make_error(state->main_context->current_env, "trim() expects a string argument", 0, 0);
     }
     
-    const char* input = string_data(text_val.as.string);
+    const char* input = mobius_stack_asString(state, -1);
     
     // Find start of non-whitespace
     while (*input && isspace(*input)) {
@@ -280,10 +271,9 @@ EvalResult text_trim(MobiusState* state, int arg_count) {
     strncpy(result, input, len);
     result[len] = '\0';
     
-    Value return_val = make_string_value_from_cstr(state, result);
-    ctx_push(state->main_context, return_val);
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushString(state, result);
     free(result);
-    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -296,17 +286,13 @@ EvalResult text_replace_all(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "replace_all() expects exactly 3 arguments", 0, 0);
     }
 
-    Value new_val = ctx_pop(state->main_context);
-    Value old_val = ctx_pop(state->main_context);
-    Value text_val = ctx_pop(state->main_context);
-    
-    if (text_val.type != VAL_STRING || old_val.type != VAL_STRING || new_val.type != VAL_STRING) {
+    if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2) || !mobius_stack_isString(state, -3)) {
         return make_error(state->main_context->current_env, "replace_all() expects string arguments", 0, 0);
     }
     
-    const char* text = string_data(text_val.as.string);
-    const char* old_substr = string_data(old_val.as.string);
-    const char* new_substr = string_data(new_val.as.string);
+    const char* new_substr = mobius_stack_asString(state, -1);
+    const char* old_substr = mobius_stack_asString(state, -2);
+    const char* text = mobius_stack_asString(state, -3);
     
     if (strlen(old_substr) == 0) {
         return make_error(state->main_context->current_env, "replace_all() old substring cannot be empty", 0, 0);
@@ -322,7 +308,8 @@ EvalResult text_replace_all(MobiusState* state, int arg_count) {
     
     if (count == 0) {
         // No replacements needed
-        ctx_push(state->main_context, make_string_value_from_cstr(state, text));
+        mobius_stack_pop(state, 3);
+        mobius_stack_pushString(state, text);
         return make_success(1);
     }
     
@@ -353,9 +340,9 @@ EvalResult text_replace_all(MobiusState* state, int arg_count) {
     }
     *dest = '\0';
     
-    Value return_val = make_string_value_from_cstr(state, result);
+    mobius_stack_pop(state, 3);
+    mobius_stack_pushString(state, result);
     free(result);
-    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -372,17 +359,13 @@ EvalResult text_pad_left(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "pad_left() expects exactly 3 arguments", 0, 0);
     }
 
-    Value pad_char_val = ctx_pop(state->main_context);
-    Value width_val = ctx_pop(state->main_context);
-    Value text_val = ctx_pop(state->main_context);
-    
-    if (text_val.type != VAL_STRING || width_val.type != VAL_INTEGER || pad_char_val.type != VAL_STRING) {
+    if (!mobius_stack_isString(state, -1) || !mobius_stack_isInteger(state, -2) || !mobius_stack_isString(state, -3)) {
         return make_error(state->main_context->current_env, "pad_left() expects (string, integer, string) arguments", 0, 0);
     }
     
-    const char* text = string_data(text_val.as.string);
-    int width = width_val.as.integer.value.i32;
-    const char* pad_char_str = string_data(pad_char_val.as.string);
+    const char* pad_char_str = mobius_stack_asString(state, -1);
+    int width = mobius_stack_asInt32(state, -2);
+    const char* text = mobius_stack_asString(state, -3);
     
     if (strlen(pad_char_str) != 1) {
         return make_error(state->main_context->current_env, "pad_left() pad character must be a single character", 0, 0);
@@ -393,7 +376,8 @@ EvalResult text_pad_left(MobiusState* state, int arg_count) {
     
     if (width <= text_len) {
         // No padding needed
-        ctx_push(state->main_context, make_string_value_from_cstr(state, text));
+        mobius_stack_pop(state, 3);
+        mobius_stack_pushString(state, text);
         return make_success(1);
     }
     
@@ -408,9 +392,9 @@ EvalResult text_pad_left(MobiusState* state, int arg_count) {
     }
     strcpy(result + pad_count, text);
     
-    Value return_val = make_string_value_from_cstr(state, result);
+    mobius_stack_pop(state, 3);
+    mobius_stack_pushString(state, result);
     free(result);
-    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
@@ -423,15 +407,12 @@ EvalResult text_split(MobiusState* state, int arg_count) {
         return make_error(state->main_context->current_env, "split() expects exactly 2 arguments", 0, 0);
     }
 
-    Value delim_val = ctx_pop(state->main_context);
-    Value text_val = ctx_pop(state->main_context);
-    
-    if (text_val.type != VAL_STRING || delim_val.type != VAL_STRING) {
+    if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2)) {
         return make_error(state->main_context->current_env, "split() expects string arguments", 0, 0);
     }
     
-    const char* text = string_data(text_val.as.string);
-    const char* delimiter = string_data(delim_val.as.string);
+    const char* delimiter = mobius_stack_asString(state, -1);
+    const char* text = mobius_stack_asString(state, -2);
     
     if (strlen(delimiter) == 0) {
         return make_error(state->main_context->current_env, "split() delimiter cannot be empty", 0, 0);
@@ -459,9 +440,9 @@ EvalResult text_split(MobiusState* state, int arg_count) {
     }
     
     free(text_copy);
-    Value return_val = make_string_value_from_cstr(state, result);
+    mobius_stack_pop(state, 2);
+    mobius_stack_pushString(state, result);
     free(result);
-    ctx_push(state->main_context, return_val);
     return make_success(1);
 }
 
