@@ -146,14 +146,14 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     }
     
     // Create a string key from the identifier token
-    char* key_str = malloc(expr->key.length + 1);
+    const char* key_identifier = expr->key.identifier ? expr->key.identifier : "unknown";
+    size_t key_len = strlen(key_identifier);
+    char* key_str = malloc(key_len + 1);
     if (!key_str) {
         free_value(table_value);
         return make_error(env, "Memory allocation failed", 0, 0);
     }
-    const char* key_identifier = expr->key.identifier ? expr->key.identifier : "unknown";
-    strncpy(key_str, key_identifier, strlen(key_identifier));
-    key_str[expr->key.length] = '\0';
+    strcpy(key_str, key_identifier);
     
     Value key = make_string_value_from_cstr(env->current_context->state, key_str);
     free(key_str);

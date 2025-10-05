@@ -49,7 +49,7 @@ Expr* make_variable_expr(Token name) {
     
     expr->type = EXPR_VARIABLE;
     expr->ref_count = 1;  // Initialize reference count
-    expr->as.variable.name = name;
+    expr->as.variable.name = copy_token(&name);  // Deep copy token to own the identifier string
     return expr;
 }
 
@@ -59,7 +59,7 @@ Expr* make_assignment_expr(Token name, Expr* value) {
     
     expr->type = EXPR_ASSIGNMENT;
     expr->ref_count = 1;  // Initialize reference count
-    expr->as.assignment.name = name;
+    expr->as.assignment.name = copy_token(&name);  // Deep copy token to own the identifier string
     expr->as.assignment.value = value;
     return expr;
 }
@@ -138,7 +138,7 @@ Expr* make_table_dot_expr(Expr* table, Token key) {
     expr->type = EXPR_TABLE_DOT;
     expr->ref_count = 1;  // Initialize reference count
     expr->as.table_dot.table = table;
-    expr->as.table_dot.key = key;
+    expr->as.table_dot.key = copy_token(&key);  // Deep copy token to own the identifier string
     return expr;
 }
 
@@ -159,7 +159,7 @@ Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token o
     
     expr->type = is_increment ? EXPR_INCREMENT : EXPR_DECREMENT;
     expr->ref_count = 1;  // Initialize reference count
-    expr->as.increment.name = name;
+    expr->as.increment.name = copy_token(&name);  // Deep copy token to own the identifier string
     expr->as.increment.is_prefix = is_prefix;
     expr->as.increment.is_increment = is_increment;
     expr->as.increment.op = op;
@@ -193,7 +193,7 @@ Stmt* make_var_stmt(Token name, Expr* initializer, NumberType type_hint, bool is
     
     stmt->type = STMT_VAR;
     stmt->ref_count = 1;  // Initialize reference count
-    stmt->as.var.name = name;
+    stmt->as.var.name = copy_token(&name);  // Deep copy token to own the identifier string
     stmt->as.var.initializer = initializer;
     stmt->as.var.type_hint = type_hint;
     stmt->as.var.is_annotated = is_annotated;
@@ -254,8 +254,24 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
     
     stmt->type = STMT_FUNCTION;
     stmt->ref_count = 1;  // Initialize reference count
-    stmt->as.function.name = name;
-    stmt->as.function.params = params;
+    stmt->as.function.name = copy_token(&name);  // Deep copy token to own the identifier string
+    
+    // Deep copy parameter tokens to own their identifier strings
+    if (param_count > 0 && params) {
+        Token* params_copy = malloc(param_count * sizeof(Token));
+        if (!params_copy) {
+            free_token(&stmt->as.function.name);
+            free(stmt);
+            return NULL;
+        }
+        for (size_t i = 0; i < param_count; i++) {
+            params_copy[i] = copy_token(&params[i]);
+        }
+        stmt->as.function.params = params_copy;
+    } else {
+        stmt->as.function.params = NULL;
+    }
+    
     stmt->as.function.param_count = param_count;
     stmt->as.function.body = body;
     stmt->as.function.body_count = body_count;
@@ -282,7 +298,7 @@ Stmt* make_enum_stmt(Token keyword, Token name, NumberType underlying_type,
     stmt->type = STMT_ENUM;
     stmt->ref_count = 1;  // Initialize reference count
     stmt->as.enum_stmt.keyword = keyword;
-    stmt->as.enum_stmt.name = name;
+    stmt->as.enum_stmt.name = copy_token(&name);  // Deep copy token to own the identifier string
     stmt->as.enum_stmt.underlying_type = underlying_type;
     stmt->as.enum_stmt.has_explicit_type = has_explicit_type;
     stmt->as.enum_stmt.members = members;
@@ -293,7 +309,7 @@ EnumMemberDef* make_enum_member(Token name, Expr* value) {
     EnumMemberDef* member = calloc(1, sizeof(EnumMemberDef));
     if (!member) return NULL;
     
-    member->name = name;
+    member->name = copy_token(&name);  // Deep copy token to own the identifier string
     member->value = value;
     member->next = NULL;
     return member;
@@ -740,6 +756,8 @@ void ast_release_expr(Expr* expr) {
                 break;
             case EXPR_ASSIGNMENT:
                 ast_release_expr(expr->as.assignment.value);
+                // Free the copied token identifier
+                free_token(&expr->as.assignment.name);
                 break;
             case EXPR_CALL:
                 ast_release_expr(expr->as.call.callee);
@@ -782,13 +800,23 @@ void ast_release_expr(Expr* expr) {
                 break;
             case EXPR_TABLE_DOT:
                 ast_release_expr(expr->as.table_dot.table);
+                // Free the copied token identifier
+                free_token(&expr->as.table_dot.key);
                 break;
             case EXPR_ENUM_ACCESS:
+                // No dynamic allocations
+                break;
             case EXPR_INCREMENT:
             case EXPR_DECREMENT:
+                // Free the copied token identifier
+                free_token(&expr->as.increment.name);
+                break;
             case EXPR_LITERAL:
+                // Literal value will be freed below
+                break;
             case EXPR_VARIABLE:
-                // These don't reference other expressions
+                // Free the copied token identifier
+                free_token(&expr->as.variable.name);
                 break;
         }
         
@@ -825,6 +853,8 @@ void ast_release_stmt(Stmt* stmt) {
                 if (stmt->as.var.initializer) {
                     ast_release_expr(stmt->as.var.initializer);
                 }
+                // Free the copied token identifier
+                free_token(&stmt->as.var.name);
                 break;
             case STMT_BLOCK:
                 if (stmt->as.block.statements) {
@@ -858,6 +888,8 @@ void ast_release_stmt(Stmt* stmt) {
                 ast_release_stmt(stmt->as.for_stmt.body);
                 break;
             case STMT_FUNCTION:
+                // Free the copied token identifier
+                free_token(&stmt->as.function.name);
                 if (stmt->as.function.body) {
                     for (size_t i = 0; i < stmt->as.function.body_count; i++) {
                         ast_release_stmt(stmt->as.function.body[i]);
@@ -865,6 +897,10 @@ void ast_release_stmt(Stmt* stmt) {
                     free(stmt->as.function.body);
                 }
                 if (stmt->as.function.params) {
+                    // Free each copied parameter token
+                    for (size_t i = 0; i < stmt->as.function.param_count; i++) {
+                        free_token(&stmt->as.function.params[i]);
+                    }
                     free(stmt->as.function.params);
                 }
                 break;
@@ -934,6 +970,8 @@ void ast_release_stmt(Stmt* stmt) {
                 }
                 break;
         case STMT_PRAGMA:
+            // Free the copied token identifiers
+            free_token(&stmt->as.pragma_stmt.name);
             // Free deep-copied strings
             if (stmt->as.pragma_stmt.value.type == TOKEN_STRING && stmt->as.pragma_stmt.value.literal.string) {
                 free((char*)stmt->as.pragma_stmt.value.literal.string);
@@ -943,10 +981,14 @@ void ast_release_stmt(Stmt* stmt) {
             }
             break;
             case STMT_ENUM: {
+                // Free the copied token identifier
+                free_token(&stmt->as.enum_stmt.name);
                 // Release enum members
                 EnumMemberDef* member = stmt->as.enum_stmt.members;
                 while (member) {
                     EnumMemberDef* next = member->next;
+                    // Free the member's token identifier
+                    free_token(&member->name);
                     if (member->value) {
                         ast_release_expr(member->value);
                     }
@@ -1061,7 +1103,7 @@ Stmt* make_pragma_stmt(Token keyword, Token name, Token value) {
     stmt->type = STMT_PRAGMA;
     stmt->ref_count = 1;  // Initialize reference count
     stmt->as.pragma_stmt.keyword = keyword;
-    stmt->as.pragma_stmt.name = name;
+    stmt->as.pragma_stmt.name = copy_token(&name);  // Deep copy token to own the identifier string
     stmt->as.pragma_stmt.value = value;
     
     // Deep copy the value string if it's a string literal
