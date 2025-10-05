@@ -83,7 +83,7 @@ EvalResult eval_table_index_expr(TableIndexExpr* expr, Environment* env) {
     
     // Clean up
     free_value(index_value);
-    // Don't free table_value here - the table is still referenced
+    free_value(table_value);  // Free the table value we popped from the stack
     
     ctx_push(env->current_context, result);
     return make_success(1);
@@ -163,7 +163,7 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
     
     // Clean up
     free_value(key);
-    // Don't free table_value here - the table is still referenced
+    free_value(table_value);  // Free the table value we popped from the stack
     
     ctx_push(env->current_context, result);
     return make_success(1);
