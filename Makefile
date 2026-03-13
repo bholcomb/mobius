@@ -6,7 +6,7 @@ CC = gcc
 CXX = g++
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -g -O2 -fPIC
 CXXFLAGS = -Wall -Wextra -std=c++11 -g -O2 -fPIC
-CPPFLAGS = -Isrc -Isrc/mobius
+CPPFLAGS = -Iinclude -Isrc -Isrc/mobius
 LDFLAGS = -lm -ldl
 
 # Directories

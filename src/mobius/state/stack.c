@@ -673,3 +673,45 @@ void mobius_stack_copy(MobiusState* state, int idx) {
     ctx_push(state->main_context, copy);
 }
 
+// ============================================================================
+// PUBLIC API — mobius_error
+// ============================================================================
+
+int mobius_error(MobiusState* state, const char* message) {
+    mobius_set_error(state, MOBIUS_ERROR_RUNTIME, message, NULL, 0, 0, NULL);
+    return -1;
+}
+
+// ============================================================================
+// PUBLIC API — Native function registration
+// ============================================================================
+
+void mobius_register_function(MobiusState* state, const char* name,
+                              MobiusCFunction func) {
+    if (!state || !name || !func) return;
+    define_variable(state->global_env, name, make_native_function_value(func));
+}
+
+// ============================================================================
+// PUBLIC API — Userdata
+// ============================================================================
+
+void mobius_stack_pushUserdata(MobiusState* state, void* ptr,
+                               void (*destructor)(void*),
+                               const char* type_name, size_t size) {
+    Value val = make_userdata_value(ptr, destructor, type_name, size);
+    ctx_push(state->main_context, val);
+}
+
+bool mobius_stack_isUserdata(MobiusState* state, int idx) {
+    Value* val = get_value_at(state, idx);
+    return val && val->type == VAL_USERDATA;
+}
+
+void* mobius_stack_getUserdata(MobiusState* state, int idx, const char** out_type_name) {
+    Value* val = get_value_at(state, idx);
+    if (!val || val->type != VAL_USERDATA) return NULL;
+    if (out_type_name) *out_type_name = val->as.userdata.type_name;
+    return val->as.userdata.ptr;
+}
+

@@ -31,12 +31,12 @@
  * Custom function: add two numbers
  * Demonstrates basic value exchange and error handling
  */
-EvalResult custom_add(MobiusState* state, int arg_count) {
+int custom_add(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     // Validate argument count
     if (arg_count != 2) {
-        return make_error(state->global_env, "custom_add requires exactly 2 arguments", 0, 0);
+        return mobius_error(state, "custom_add requires exactly 2 arguments");
     }
     
     // Pop arguments from stack (in reverse order)
@@ -46,11 +46,11 @@ EvalResult custom_add(MobiusState* state, int arg_count) {
     // Validate argument types
     if (a.type != VAL_FLOAT64 && a.type != VAL_INTEGER) {
         free_value(b);
-        return make_error(state->global_env, "First argument must be a number", 0, 0);
+        return mobius_error(state, "First argument must be a number");
     }
     if (b.type != VAL_FLOAT64 && b.type != VAL_INTEGER) {
         free_value(a);
-        return make_error(state->global_env, "Second argument must be a number", 0, 0);
+        return mobius_error(state, "Second argument must be a number");
     }
     
     // Convert to double for calculation
@@ -63,48 +63,48 @@ EvalResult custom_add(MobiusState* state, int arg_count) {
     
     // Push result
     ctx_push(ctx, make_float_value(num_a + num_b));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Custom function: get system information
  * Demonstrates string return values
  */
-EvalResult custom_system_info(MobiusState* state, int arg_count) {
+int custom_system_info(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 0) {
-        return make_error(state->global_env, "system_info takes no arguments", 0, 0);
+        return mobius_error(state, "system_info takes no arguments");
     }
     
     const char* info = "System: Linux x86_64, Mobius v0.1.0";
     ctx_push(ctx, make_string_value_from_cstr(state, info));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Custom function: double a number
  * Demonstrates simple numeric operations
  */
-EvalResult custom_double(MobiusState* state, int arg_count) {
+int custom_double(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 1) {
-        return make_error(state->global_env, "double requires exactly 1 argument", 0, 0);
+        return mobius_error(state, "double requires exactly 1 argument");
     }
     
     Value val = ctx_pop(ctx);
     
     if (val.type != VAL_FLOAT64 && val.type != VAL_INTEGER) {
         free_value(val);
-        return make_error(state->global_env, "Argument must be a number", 0, 0);
+        return mobius_error(state, "Argument must be a number");
     }
     
     double num = (val.type == VAL_FLOAT64) ? val.as.float64_val : (double)val.as.integer.value.i64;
     free_value(val);
     
     ctx_push(ctx, make_float_value(num * 2.0));
-    return make_success(1);
+    return 1;
 }
 
 // ============================================================================
@@ -143,14 +143,7 @@ void example_basic_execution(void) {
     
     int result = mobius_exec_string(state, script);
     if (result != MOBIUS_OK) {
-        MobiusError* error = mobius_get_last_error(state);
-        if (error) {
-            printf("Error: %s\n", error->message);
-            if (error->suggestion) {
-                printf("Suggestion: %s\n", error->suggestion);
-            }
-            mobius_free_error(error);
-        }
+        printf("Script execution failed (details printed by error handler)\n");
     }
     
     mobius_free_state(state);
@@ -221,11 +214,7 @@ void example_custom_functions(void) {
     printf("Executing script with custom functions:\n");
     int result = mobius_exec_string(state, script);
     if (result != MOBIUS_OK) {
-        MobiusError* error = mobius_get_last_error(state);
-        if (error) {
-            printf("Error: %s\n", error->message);
-            mobius_free_error(error);
-        }
+        printf("Script execution failed (details printed by error handler)\n");
     }
     
     mobius_free_state(state);
@@ -266,14 +255,7 @@ void example_advanced_features(void) {
     printf("\nExecuting advanced script:\n");
     int result = mobius_exec_string(state, script);
     if (result != MOBIUS_OK) {
-        MobiusError* error = mobius_get_last_error(state);
-        if (error) {
-            printf("Error: %s\n", error->message);
-            if (error->suggestion) {
-                printf("Suggestion: %s\n", error->suggestion);
-            }
-            mobius_free_error(error);
-        }
+        printf("Script execution failed (details printed by error handler)\n");
     }
     
     mobius_free_state(state);
@@ -313,20 +295,7 @@ void example_error_handling(void) {
         printf("Script: %s\n", scripts[i]);
         
         int result = mobius_exec_string(state, scripts[i]);
-        if (result != MOBIUS_OK) {
-            MobiusError* error = mobius_get_last_error(state);
-            if (error) {
-                printf("Error code: %d\n", error->code);
-                printf("Message: %s\n", error->message);
-                if (error->suggestion) {
-                    printf("Suggestion: %s\n", error->suggestion);
-                }
-                if (error->line > 0) {
-                    printf("Location: line %d, column %d\n", error->line, error->column);
-                }
-                mobius_free_error(error);
-            }
-        } else {
+        if (result == MOBIUS_OK) {
             printf("Unexpected success!\n");
         }
         printf("\n");
@@ -363,11 +332,7 @@ void example_file_execution(void) {
         printf("Executing script from file: /tmp/test_mobius.mb\n");
         int result = mobius_exec_file(state, "/tmp/test_mobius.mb");
         if (result != MOBIUS_OK) {
-            MobiusError* error = mobius_get_last_error(state);
-            if (error) {
-                printf("Error: %s\n", error->message);
-                mobius_free_error(error);
-            }
+            printf("Script execution failed (details printed by error handler)\n");
         }
         
         // Clean up test file

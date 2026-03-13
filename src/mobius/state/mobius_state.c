@@ -10,6 +10,7 @@
 #include "library/library.h"
 #include "internal/string_intern.h"
 #include "plugin/module_registry.h"
+#include "repl.h"
 #include "util/utility.h"
 #include "util/file_io.h"
 
@@ -22,9 +23,11 @@
 // Helper functions
 // ============================================================================
 
+static void default_error_handler(MobiusState* state, const MobiusError* error, void* userdata);
+
 static void clear_error(MobiusState* state) {
     if (state->last_error) {
-        mobius_free_error(state->last_error);
+        mobius_free_internal_error(state->last_error);
         state->last_error = NULL;
     }
 }
@@ -42,7 +45,7 @@ MobiusConfig mobius_default_config(void) {
     config.warn_on_conversion = false;
     config.debug_mode = false;
     config.enable_hot_reload = false;
-    config.override_behavior = OVERRIDE_ERROR;
+    config.override_behavior = MOBIUS_OVERRIDE_ERROR;
     return config;
 }
 
@@ -369,6 +372,8 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
     state->string_pool = NULL;
     state->main_context = NULL;
     state->last_error = NULL;
+    state->error_handler = default_error_handler;
+    state->error_handler_userdata = NULL;
     state->initialized = false;
     state->source_code = NULL;
     
@@ -458,7 +463,7 @@ void mobius_free_state(MobiusState* state) {
     
     // Free error
     if (state->last_error) {
-        mobius_free_error(state->last_error);
+        mobius_free_internal_error(state->last_error);
     }
     
     free(state);
@@ -544,20 +549,19 @@ int mobius_exec_file(MobiusState* state, const char* filename) {
 // ERROR HANDLING
 // ============================================================================
 
-MobiusError* mobius_get_last_error(MobiusState* state) {
+InternalError* mobius_get_last_error(MobiusState* state) {
     if (!state || !state->last_error) return NULL;
-    
-    // Return a copy of the error
-    MobiusError* copy = malloc(sizeof(MobiusError));
+
+    InternalError* copy = malloc(sizeof(InternalError));
     if (!copy) return NULL;
-    
+
     copy->code = state->last_error->code;
     copy->message = state->last_error->message ? mobius_strdup(state->last_error->message) : NULL;
     copy->suggestion = state->last_error->suggestion ? mobius_strdup(state->last_error->suggestion) : NULL;
     copy->line = state->last_error->line;
     copy->column = state->last_error->column;
     copy->function_name = state->last_error->function_name ? mobius_strdup(state->last_error->function_name) : NULL;
-    
+
     return copy;
 }
 
@@ -566,9 +570,8 @@ void mobius_clear_error(MobiusState* state) {
     clear_error(state);
 }
 
-void mobius_free_error(MobiusError* error) {
+void mobius_free_internal_error(InternalError* error) {
     if (!error) return;
-    
     free(error->message);
     free(error->suggestion);
     free(error->function_name);
@@ -577,19 +580,32 @@ void mobius_free_error(MobiusError* error) {
 
 int mobius_set_error(MobiusState* state, int code, const char* message, const char* suggestion, int line, int column, const char* function_name) {
     if (!state) return code;
-    
+
     clear_error(state);
-    
-    state->last_error = malloc(sizeof(MobiusError));
+
+    state->last_error = malloc(sizeof(InternalError));
     if (!state->last_error) return code;
-    
+
     state->last_error->code = code;
     state->last_error->message = message ? mobius_strdup(message) : NULL;
     state->last_error->suggestion = suggestion ? mobius_strdup(suggestion) : NULL;
     state->last_error->line = line;
     state->last_error->column = column;
     state->last_error->function_name = function_name ? mobius_strdup(function_name) : NULL;
-    
+
+    // Invoke the error handler callback
+    if (state->error_handler) {
+        MobiusError pub_err = {
+            .code = code,
+            .message = message,
+            .suggestion = suggestion,
+            .line = line,
+            .column = column,
+            .function_name = function_name
+        };
+        state->error_handler(state, &pub_err, state->error_handler_userdata);
+    }
+
     return code;
 }
 
@@ -641,6 +657,66 @@ void free_stack_trace(StackTrace* trace) {
     if (!trace) return;
     free(trace->frames);
     free(trace);
+}
+
+// ============================================================================
+// PUBLIC API — ERROR HANDLER
+// ============================================================================
+
+static void default_error_handler(MobiusState* state, const MobiusError* error, void* userdata) {
+    (void)state;
+    (void)userdata;
+    fprintf(stderr, "Error");
+    if (error->line > 0) {
+        fprintf(stderr, " [line %d:%d]", error->line, error->column);
+    }
+    if (error->function_name) {
+        fprintf(stderr, " in %s", error->function_name);
+    }
+    fprintf(stderr, ": %s\n", error->message ? error->message : "Unknown error");
+    if (error->suggestion) {
+        fprintf(stderr, "  suggestion: %s\n", error->suggestion);
+    }
+}
+
+MobiusErrorHandler mobius_set_error_handler(MobiusState* state,
+                                           MobiusErrorHandler handler,
+                                           void* userdata) {
+    if (!state) return NULL;
+    MobiusErrorHandler old = state->error_handler;
+    if (handler) {
+        state->error_handler = handler;
+        state->error_handler_userdata = userdata;
+    } else {
+        state->error_handler = default_error_handler;
+        state->error_handler_userdata = NULL;
+    }
+    return (old == default_error_handler) ? NULL : old;
+}
+
+// ============================================================================
+// PUBLIC API — MODULE HELPERS
+// ============================================================================
+
+size_t mobius_get_module_count(MobiusState* state) {
+    if (!state || !state->registry) return 0;
+    return state->registry->module_count;
+}
+
+void mobius_print_modules(MobiusState* state) {
+    if (!state || !state->registry) {
+        printf("No modules loaded.\n");
+        return;
+    }
+    print_loaded_modules(state->registry);
+}
+
+// ============================================================================
+// PUBLIC API — REPL
+// ============================================================================
+
+void mobius_start_repl(MobiusState* state) {
+    start_repl(state);
 }
 
 // ============================================================================

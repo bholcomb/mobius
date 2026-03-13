@@ -15,31 +15,8 @@ int execute_file(MobiusState* state, const char* filename) {
         return 1;
     }
     
-    // Execute the file using the MobiusState API
     int result = mobius_exec_file(state, filename);
-    
-    if (result != MOBIUS_OK) {
-        // Get and print error details
-        MobiusError* error = mobius_get_last_error(state);
-        if (error) {
-            fprintf(stderr, "Error executing '%s': %s\n", filename, 
-                    error->message ? error->message : "Unknown error");
-            if (error->line > 0) {
-                fprintf(stderr, "  at line %d:%d", error->line, error->column);
-                if (error->function_name) {
-                    fprintf(stderr, " in function '%s'", error->function_name);
-                }
-                fprintf(stderr, "\n");
-            }
-            if (error->suggestion) {
-                fprintf(stderr, "  suggestion: %s\n", error->suggestion);
-            }
-            mobius_free_error(error);
-        }
-        return 1;
-    }
-    
-    return 0;
+    return (result != MOBIUS_OK) ? 1 : 0;
 }
 
 int main(int argc, char *argv[]) {

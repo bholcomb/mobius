@@ -3,6 +3,7 @@
 
 #include "data/value.h"
 #include "state/environment.h"
+#include "mobius/mobius.h"
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -16,31 +17,15 @@ struct MobiusState;
 struct Environment;
 struct ModuleRegistry;
 
-// ============================================================================
-// ERROR HANDLING
-// ============================================================================
-
-/**
- * Error information structure
- */
-typedef struct MobiusError {
-    int code;               // Error code
-    char* message;          // Error message (caller must free)
-    char* suggestion;       // Optional suggestion (caller must free)
-    int line;              // Line number (if applicable)
-    int column;            // Column number (if applicable)
-    char* function_name;   // Function where error occurred (caller must free)
-} MobiusError;
-
-// Error codes
-#define MOBIUS_OK               0
-#define MOBIUS_ERROR_SYNTAX     1
-#define MOBIUS_ERROR_RUNTIME    2
-#define MOBIUS_ERROR_TYPE       3
-#define MOBIUS_ERROR_ARGUMENT   4
-#define MOBIUS_ERROR_MEMORY     5
-#define MOBIUS_ERROR_FILE       6
-#define MOBIUS_ERROR_PLUGIN     7
+// Internal error structure with owned (heap-allocated) strings
+typedef struct InternalError {
+    int code;
+    char* message;
+    char* suggestion;
+    int line;
+    int column;
+    char* function_name;
+} InternalError;
 
 // Default inital values
 #define INITIAL_STACK_CAPACITY 256
@@ -48,31 +33,10 @@ typedef struct MobiusError {
 #define MAX_CALL_DEPTH 1000
 
 // ============================================================================
-// CONFIGURATION
+// CONFIGURATION (defined in include/mobius/mobius.h)
 // ============================================================================
-
-// Override behavior for function imports
-typedef enum {
-    OVERRIDE_ERROR,    // Error on function name override (default)
-    OVERRIDE_WARN,     // Warn but continue on override
-    OVERRIDE_QUIET     // Silent override
-} OverrideBehavior;
-
-typedef struct MobiusConfig {
-    size_t initial_stack_size;    // Default: INITIAL_STACK_CAPACITY
-    size_t max_stack_size;        // Default: MAX_STACK_CAPACITY
-    size_t max_call_depth;        // Default: MAX_CALL_DEPTH
-    bool strict_mode;             // If true, no automatic conversions
-    bool warn_on_conversion;      // If true, warn when converting types
-    bool debug_mode;              // If true, print debug information
-    bool enable_hot_reload;       // If true, rescan plugins on state creation
-    OverrideBehavior override_behavior;  // How to handle function name conflicts
-} MobiusConfig;
-
-/**
- * Create default configuration
- */
-MobiusConfig mobius_default_config(void);
+// MobiusConfig, MobiusOverrideBehavior, and mobius_default_config() are
+// provided by the public header included above.
 
 // ============================================================================
 // CALL FRAME (for stack tracing with profiling)
@@ -152,7 +116,7 @@ typedef struct ExecutionContext {
  * Currently single-threaded with one main execution context.
  * Future: Support multiple threads and multiple contexts per thread.
  */
-typedef struct MobiusState {
+struct MobiusState {
     // ========== GLOBAL STATE ==========
     struct Environment* global_env;      // Global environment (built-in functions, constants)
     struct ModuleRegistry* registry;     // Plugin/module registry
@@ -180,7 +144,9 @@ typedef struct MobiusState {
     // TODO(coroutines): ExecutionContext* current_context; - Currently active context
     
     // ========== ERROR HANDLING ==========
-    MobiusError* last_error;      // Last error information
+    InternalError* last_error;
+    MobiusErrorHandler error_handler;
+    void* error_handler_userdata;
     
     // ========== CONFIGURATION ==========
     MobiusConfig config;          // VM configuration (immutable after init)
@@ -196,7 +162,7 @@ typedef struct MobiusState {
 
     // Global source code context for error reporting
     const char* source_code;
-} MobiusState;
+};
 
 // ============================================================================
 // STATE MANAGEMENT API
@@ -387,33 +353,14 @@ int mobius_exec_file(MobiusState* state, const char* filename);
 // ERROR HANDLING API
 // ============================================================================
 
-/**
- * Get the last error from the interpreter state
- * @param state The interpreter state
- * @return Error information (caller must free with mobius_free_error), or NULL if no error
- */
-MobiusError* mobius_get_last_error(MobiusState* state);
-
-/**
- * Clear the last error
- * @param state The interpreter state
- */
+InternalError* mobius_get_last_error(MobiusState* state);
 void mobius_clear_error(MobiusState* state);
+void mobius_free_internal_error(InternalError* error);
 
-/**
- * Free error information
- * @param error Error to free
- */
-void mobius_free_error(MobiusError* error);
-
-/**
- * Set an error in the interpreter state (for use in C functions)
- * @param state The interpreter state
- * @param code Error code
- * @param message Error message
- * @return Error code (for convenience in returning from functions)
- */
 int mobius_set_error(MobiusState* state, int code, const char* message, const char* suggestion, int line, int column, const char* function_name);
+
+// Set error and return -1 (convenience for native functions)
+int mobius_error(MobiusState* state, const char* message);
 
 // ============================================================================
 // SOURCE CODE CONTEXT

@@ -371,11 +371,7 @@ int main() {
     
     int result = mobius_exec_string(state, test_script);
     if (result != MOBIUS_OK) {
-        MobiusError* error = mobius_get_last_error(state);
-        if (error) {
-            std::cerr << "Script execution failed: " << error->message << std::endl;
-            mobius_free_error(error);
-        }
+        std::cerr << "Script execution failed" << std::endl;
     }
     
     std::cout << "\nCleaning up Mobius state..." << std::endl;

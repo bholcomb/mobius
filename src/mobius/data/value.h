@@ -13,8 +13,9 @@ struct EnumDefinition;
 struct Table;
 struct MobiusState;
 
-// Function pointer type for native functions
-typedef EvalResult (*MobiusCFunction)(struct MobiusState* ctx, int arg_count);
+// Native function signature: return number of values pushed (>= 0) on success,
+// or a negative value (via mobius_error()) on failure.
+typedef int (*MobiusCFunction)(struct MobiusState* ctx, int arg_count);
 
 // Forward declaration for userdata destructor
 typedef void (*UserdataDestructor)(void* ptr);

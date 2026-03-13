@@ -8,11 +8,11 @@
 // =============================================================================
 
 // String functions using unified library interface
-EvalResult lib_len(MobiusState* state, int arg_count);
-EvalResult lib_upper(MobiusState* state, int arg_count);
-EvalResult lib_lower(MobiusState* state, int arg_count);
-EvalResult lib_substr(MobiusState* state, int arg_count);
-EvalResult lib_concat(MobiusState* state, int arg_count);
-EvalResult lib_contains(MobiusState* state, int arg_count);
+int lib_len(MobiusState* state, int arg_count);
+int lib_upper(MobiusState* state, int arg_count);
+int lib_lower(MobiusState* state, int arg_count);
+int lib_substr(MobiusState* state, int arg_count);
+int lib_concat(MobiusState* state, int arg_count);
+int lib_contains(MobiusState* state, int arg_count);
 
 #endif // MOBIUS_LIBRARY_STRING_H
