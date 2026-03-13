@@ -17,29 +17,29 @@
 // UNIFIED UTILITY FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_random(MobiusState* state, int arg_count) {
+int lib_random(MobiusState* state, int arg_count) {
     if (arg_count > 2) {
-        return make_error(state->main_context->current_env, "random expects 0, 1, or 2 arguments", 0, 0);
+        return mobius_error(state, "random expects 0, 1, or 2 arguments");
     }
     
     if (arg_count == 0) {
         // Return random float between 0 and 1
         ctx_push(state->main_context, make_float_value((double)rand() / RAND_MAX));
-        return make_success(1);
+        return 1;
     } else if (arg_count == 1) {
         // Return random integer between 0 and n-1
         Value arg = ctx_peek(state->main_context, 0);
         ctx_pop(state->main_context); // Remove argument
         
         if (arg.type != VAL_INTEGER) {
-            return make_error(state->main_context->current_env, "random expects an integer argument", 0, 0);
+            return mobius_error(state, "random expects an integer argument");
         }
         int64_t max_val = arg.as.integer.value.i64;
         if (max_val <= 0) {
-            return make_error(state->main_context->current_env, "random expects a positive integer", 0, 0);
+            return mobius_error(state, "random expects a positive integer");
         }
         ctx_push(state->main_context, make_integer_value(NUM_INT64, rand() % max_val));
-        return make_success(1);
+        return 1;
     } else if (arg_count == 2) {
         // Return random integer between min and max (inclusive)
         Value max_arg = ctx_peek(state->main_context, 0);
@@ -50,76 +50,76 @@ EvalResult lib_random(MobiusState* state, int arg_count) {
         ctx_pop(state->main_context);
         
         if (min_arg.type != VAL_INTEGER || max_arg.type != VAL_INTEGER) {
-            return make_error(state->main_context->current_env, "random expects integer arguments", 0, 0);
+            return mobius_error(state, "random expects integer arguments");
         }
         
         int64_t min_val = min_arg.as.integer.value.i64;
         int64_t max_val = max_arg.as.integer.value.i64;
         
         if (min_val > max_val) {
-            return make_error(state->main_context->current_env, "random min value must be <= max value", 0, 0);
+            return mobius_error(state, "random min value must be <= max value");
         }
         
         int64_t range = max_val - min_val + 1;
         int64_t result = min_val + (rand() % range);
         ctx_push(state->main_context, make_integer_value(NUM_INT64, result));
-        return make_success(1);
+        return 1;
     }
     
-    return make_error(state->main_context->current_env, "random: unexpected argument count", 0, 0);
+    return mobius_error(state, "random: unexpected argument count");
 }
 
-EvalResult lib_time(MobiusState* state, int arg_count) {
+int lib_time(MobiusState* state, int arg_count) {
     if (arg_count != 0) {
-        return make_error(state->main_context->current_env, "time expects no arguments", 0, 0);
+        return mobius_error(state, "time expects no arguments");
     }
     
     ctx_push(state->main_context, make_integer_value(NUM_INT64, (int64_t)time(NULL)));
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_clock(MobiusState* state, int arg_count) {
+int lib_clock(MobiusState* state, int arg_count) {
     if (arg_count != 0) {
-        return make_error(state->main_context->current_env, "clock expects no arguments", 0, 0);
+        return mobius_error(state, "clock expects no arguments");
     }
     
     ctx_push(state->main_context, make_float_value((double)clock() / CLOCKS_PER_SEC));
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_load(MobiusState* state, int arg_count) {
+int lib_load(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "load expects exactly 1 argument (filename)", 0, 0);
+        return mobius_error(state, "load expects exactly 1 argument (filename)");
     }
     
     Value filename_val = ctx_peek(state->main_context, 0);
     ctx_pop(state->main_context); // Remove argument
     
     if (filename_val.type != VAL_STRING) {
-        return make_error(state->main_context->current_env, "load argument must be a string", 0, 0);
+        return mobius_error(state, "load argument must be a string");
     }
     
     const char* filename = string_data(filename_val.as.string);
     if (!filename || string_length(filename_val.as.string) == 0) {
-        return make_error(state->main_context->current_env, "load filename cannot be empty", 0, 0);
+        return mobius_error(state, "load filename cannot be empty");
     }
     
     // Check if file exists
     if (!file_exists(filename)) {
-        return make_error(state->main_context->current_env, "File does not exist", 0, 0);
+        return mobius_error(state, "File does not exist");
     }
     
     // Read file content
     FileResult file_result = read_file(filename);
     if (!file_result.success) {
-        return make_error(state->main_context->current_env, "Failed to read file", 0, 0);
+        return mobius_error(state, "Failed to read file");
     }
     
     // Parse and execute the loaded script in the current environment
     TokenArray tokens = scan_source(file_result.content);
     if (tokens.count == 0) {
         free_file_result(&file_result);
-        return make_error(state->main_context->current_env, "No code found in file", 0, 0);
+        return mobius_error(state, "No code found in file");
     }
     
     // Parse AST
@@ -129,7 +129,7 @@ EvalResult lib_load(MobiusState* state, int arg_count) {
     if (parse_result.had_error) {
         free_file_result(&file_result);
         free_parse_result(&parse_result);
-        return make_error(state->main_context->current_env, "Parse error in loaded file", 0, 0);
+        return mobius_error(state, "Parse error in loaded file");
     }
     
     // Set source context for better error reporting
@@ -148,18 +148,18 @@ EvalResult lib_load(MobiusState* state, int arg_count) {
     // This creates a small memory leak but ensures stability
     
     if (is_error(eval_result)) {
-        return eval_result; // Propagate error from loaded script
+        const char* msg = eval_result.error.message ? eval_result.error.message : "error in loaded script";
+        return mobius_error(state, msg);
     }
     
-    // Return true to indicate successful loading
     ctx_push(state->main_context, make_bool_value(true));
-    return make_success(1);
+    return 1;
 }
 
 // Get identity (memory address) of a value - useful for comparing table/array references
-EvalResult lib_id(MobiusState* state, int arg_count) {
+int lib_id(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "id() expects exactly 1 argument", 0, 0);
+        return mobius_error(state, "id() expects exactly 1 argument");
     }
     
     Value arg = ctx_peek(state->main_context, 0);
@@ -187,5 +187,5 @@ EvalResult lib_id(MobiusState* state, int arg_count) {
     
     free_value(arg);
     ctx_push(state->main_context, make_integer_value(NUM_INT64, (int64_t)addr));
-    return make_success(1);
+    return 1;
 }

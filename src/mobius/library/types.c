@@ -13,15 +13,15 @@
 // Note: set_strict_types() and set_type_warnings() have been removed.
 // Use #pragma strict_types true/false instead.
 
-EvalResult lib_get_type_config(MobiusState* state, int arg_count) {
+int lib_get_type_config(MobiusState* state, int arg_count) {
     if (arg_count != 0) {
-        return make_error(state->main_context->current_env, "get_type_config expects no arguments", 0, 0);
+        return mobius_error(state, "get_type_config expects no arguments");
     }
     
     // Return a table with configuration
     Table* config_table = create_table(state, 8);
     if (!config_table) {
-        return make_error(state->main_context->current_env, "Failed to create config table", 0, 0);
+        return mobius_error(state, "Failed to create config table");
     }
     
     // Add strict_mode key-value pair
@@ -35,5 +35,5 @@ EvalResult lib_get_type_config(MobiusState* state, int arg_count) {
     table_set(config_table, warn_key, warn_value);
     
     ctx_push(state->main_context, make_table_value(config_table));
-    return make_success(1);
+    return 1;
 }

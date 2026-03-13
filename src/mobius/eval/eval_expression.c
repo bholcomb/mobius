@@ -6,6 +6,23 @@
 #include <string.h>
 #include <stdlib.h>
 
+static EvalResult eval_call_native_func(MobiusCFunction func, MobiusState* state,
+                                        int arg_count, Environment* env,
+                                        const char* name, int line, int column) {
+    stack_trace_push(env->current_context, name, NULL, line, column,
+                     FUNCTION_TYPE_NATIVE, NULL, NULL);
+    int rc = func(state, arg_count);
+    stack_trace_pop(env->current_context);
+
+    if (rc >= 0) {
+        return make_success(rc);
+    }
+    if (state->last_error) {
+        return make_error(env, state->last_error->message, line, column);
+    }
+    return make_error(env, "native function error", line, column);
+}
+
 // Call a user-defined function
 EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t arg_count, Environment* env) {
     // Check argument count
@@ -143,13 +160,10 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                         }
                     }
                     
-                    // Call the native function
-                    stack_trace_push(env->current_context, func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
-                    MobiusCFunction native_func = func_value.as.native_function;
-                    EvalResult result = native_func(env->current_context->state, expr->arg_count);
-                    stack_trace_pop(env->current_context);
-                    
-                    return result;
+                    return eval_call_native_func(func_value.as.native_function,
+                                                env->current_context->state,
+                                                expr->arg_count, env, func_name,
+                                                dot_expr->key.line, dot_expr->key.column);
                 } else if (func_value.type == VAL_FUNCTION) {
                     // User-defined function in table
                     return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
@@ -222,13 +236,10 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                         }
                     }
                     
-                    // Call the native function directly
-                    stack_trace_push(env->current_context, func_name, NULL, dot_expr->key.line, dot_expr->key.column, true, false, NULL);
-                    MobiusCFunction native_func = func_value.as.native_function;
-                    EvalResult result = native_func(env->current_context->state, expr->arg_count);
-                    stack_trace_pop(env->current_context);
-                    
-                    return result;
+                    return eval_call_native_func(func_value.as.native_function,
+                                                env->current_context->state,
+                                                expr->arg_count, env, func_name,
+                                                dot_expr->key.line, dot_expr->key.column);
                 } else if (func_value.type == VAL_FUNCTION) {
                     // User-defined function - call it
                     return call_user_function(func_value.as.function, expr->arguments, expr->arg_count, env);
@@ -285,13 +296,11 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
                 }
             }
             
-            // Call the native function
-            stack_trace_push(env->current_context, full_name, NULL, call_line, call_column, true, false, NULL);
-            MobiusCFunction native_func = func_value.as.native_function;
-            EvalResult result = native_func(env->current_context->state, expr->arg_count);
-            stack_trace_pop(env->current_context);
-            
-            free_value(func_value);  // Free the copied function value
+            EvalResult result = eval_call_native_func(func_value.as.native_function,
+                                                      env->current_context->state,
+                                                      expr->arg_count, env, full_name,
+                                                      call_line, call_column);
+            free_value(func_value);
             return result;
         }
     }

@@ -161,7 +161,7 @@ static bool check_function_override(const char* func_name, Table* target_table,
     // Function exists - check override behavior from state config
     MobiusState* state = env->current_context->state;
     switch (state->config.override_behavior) {
-        case OVERRIDE_ERROR: {
+        case MOBIUS_OVERRIDE_ERROR: {
             char error_msg[256];
             snprintf(error_msg, sizeof(error_msg), 
                 "Function '%s' already exists in target namespace (use #pragma override_behavior to change)",
@@ -169,10 +169,10 @@ static bool check_function_override(const char* func_name, Table* target_table,
             *error_result = make_error(env, error_msg, line, column);
             return false;
         }
-        case OVERRIDE_WARN:
+        case MOBIUS_OVERRIDE_WARN:
             fprintf(stderr, "Warning: Overriding existing function '%s' in namespace\n", func_name);
             return true;
-        case OVERRIDE_QUIET:
+        case MOBIUS_OVERRIDE_QUIET:
             return true;
     }
     
@@ -461,11 +461,11 @@ EvalResult eval_pragma_stmt(PragmaStmt* stmt, Environment* env) {
         }
         
         if (strcmp(value, "error") == 0) {
-            state->config.override_behavior = OVERRIDE_ERROR;
+            state->config.override_behavior = MOBIUS_OVERRIDE_ERROR;
         } else if (strcmp(value, "warn") == 0) {
-            state->config.override_behavior = OVERRIDE_WARN;
+            state->config.override_behavior = MOBIUS_OVERRIDE_WARN;
         } else if (strcmp(value, "quiet") == 0) {
-            state->config.override_behavior = OVERRIDE_QUIET;
+            state->config.override_behavior = MOBIUS_OVERRIDE_QUIET;
         } else {
             char error_msg[256];
             snprintf(error_msg, sizeof(error_msg), 

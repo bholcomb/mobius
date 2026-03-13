@@ -55,11 +55,7 @@ int main() {
     printf("Causing error in Entity 1...\n");
     int result = mobius_exec_string(entity1, "undefined_function(); // This will error");
     if (result != MOBIUS_OK) {
-        MobiusError* error = mobius_get_last_error(entity1);
-        if (error) {
-            printf("  Error caught: %s\n", error->message);
-            mobius_free_error(error);
-        }
+        printf("  Error caught (details printed by error handler)\n");
     }
     
     printf("Entity 2 should still work fine...\n");

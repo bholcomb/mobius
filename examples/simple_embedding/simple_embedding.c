@@ -46,17 +46,9 @@ int main(void) {
     
     int result = mobius_exec_string(state, script);
     if (result != MOBIUS_OK) {
-        printf("\n❌ Script execution failed!\n");
-        MobiusError* error = mobius_get_last_error(state);
-        if (error) {
-            printf("Error: %s\n", error->message);
-            if (error->suggestion) {
-                printf("Suggestion: %s\n", error->suggestion);
-            }
-            mobius_free_error(error);
-        }
+        printf("\nScript execution failed!\n");
     } else {
-        printf("\n✅ Script executed successfully!\n");
+        printf("\nScript executed successfully!\n");
     }
     
     // Cleanup

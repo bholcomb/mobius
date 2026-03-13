@@ -35,7 +35,7 @@ static void print_with_escapes(const char* str) {
 // UNIFIED CORE FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_print(MobiusState* state, int arg_count) {
+int lib_print(MobiusState* state, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
         Value arg = ctx_peek(state->main_context, arg_count - 1 - i);  // Get args in correct order
         
@@ -59,12 +59,12 @@ EvalResult lib_print(MobiusState* state, int arg_count) {
         free_value(ctx_pop(state->main_context));
     }
     
-    return make_success(0);
+    return 0;
 }
 
-EvalResult lib_typeof(MobiusState* state, int arg_count) {
+int lib_typeof(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "typeof expects 1 argument", 0, 0);
+        return mobius_error(state, "typeof expects 1 argument");
     }
 
     Value arg = ctx_peek(state->main_context, 0);
@@ -77,12 +77,12 @@ EvalResult lib_typeof(MobiusState* state, int arg_count) {
     Value result = make_string_value_from_cstr(state, type_name);
     ctx_push(state->main_context, result);
     
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_int(MobiusState* state, int arg_count) {
+int lib_int(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "int expects 1 argument", 0, 0);
+        return mobius_error(state, "int expects 1 argument");
     }
 
     Value arg = ctx_pop(state->main_context);
@@ -106,10 +106,10 @@ EvalResult lib_int(MobiusState* state, int arg_count) {
                 if (*endptr == '\0') {
                     result = make_integer_value(NUM_INT32, (int32_t)val);
                 } else {
-                    return make_error(state->main_context->current_env, "Cannot convert string to integer", 0, 0);
+                    return mobius_error(state, "Cannot convert string to integer");
                 }
             } else {
-                return make_error(state->main_context->current_env, "Cannot convert null string to integer", 0, 0);
+                return mobius_error(state, "Cannot convert null string to integer");
             }
             break;
         }
@@ -117,18 +117,18 @@ EvalResult lib_int(MobiusState* state, int arg_count) {
             result = make_integer_value(NUM_INT32, arg.as.boolean ? 1 : 0);
             break;
         default:
-            return make_error(state->main_context->current_env, "Cannot convert value to integer", 0, 0);
+            return mobius_error(state, "Cannot convert value to integer");
     }
        
     // Push result onto stack
     ctx_push(state->main_context, result);
     
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_float(MobiusState* state, int arg_count) {
+int lib_float(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "float expects 1 argument", 0, 0);
+        return mobius_error(state, "float expects 1 argument");
     }
 
     Value arg = ctx_peek(state->main_context, 0);
@@ -165,15 +165,15 @@ EvalResult lib_float(MobiusState* state, int arg_count) {
                 if (*endptr == '\0') {
                     result = make_float_value(val);
                 } else {
-                    return make_error(state->main_context->current_env, "Cannot convert string to float", 0, 0);
+                    return mobius_error(state, "Cannot convert string to float");
                 }
             } else {
-                return make_error(state->main_context->current_env, "Cannot convert null string to float", 0, 0);
+                return mobius_error(state, "Cannot convert null string to float");
             }
             break;
         }
         default:
-            return make_error(state->main_context->current_env, "Cannot convert value to float", 0, 0);
+            return mobius_error(state, "Cannot convert value to float");
     }
     
     // Pop argument from stack
@@ -182,12 +182,12 @@ EvalResult lib_float(MobiusState* state, int arg_count) {
     // Push result onto stack
     ctx_push(state->main_context, result);
     
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_str(MobiusState* state, int arg_count) {
+int lib_str(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "str expects 1 argument", 0, 0);
+        return mobius_error(state, "str expects 1 argument");
     }
 
     Value arg = ctx_peek(state->main_context, 0);
@@ -207,5 +207,5 @@ EvalResult lib_str(MobiusState* state, int arg_count) {
     // Push result onto stack
     ctx_push(state->main_context, result);
     
-    return make_success(1);
+    return 1;
 }

@@ -63,36 +63,36 @@ static GameEngine* g_game = NULL;
 /**
  * Get player position: get_player_pos() -> string "x,y"
  */
-EvalResult game_get_player_pos(MobiusState* state, int arg_count) {
+int game_get_player_pos(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 0) {
-        return make_error(state->global_env, "get_player_pos takes no arguments", 0, 0);
+        return mobius_error(state, "get_player_pos takes no arguments");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     char pos_str[64];
     snprintf(pos_str, sizeof(pos_str), "%.1f,%.1f", g_game->player.x, g_game->player.y);
     
     ctx_push(ctx, make_string_value_from_cstr(state, pos_str));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Set player position: set_player_pos(x, y)
  */
-EvalResult game_set_player_pos(MobiusState* state, int arg_count) {
+int game_set_player_pos(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 2) {
-        return make_error(state->global_env, "set_player_pos requires 2 arguments", 0, 0);
+        return mobius_error(state, "set_player_pos requires 2 arguments");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     Value y_val = ctx_pop(ctx);
@@ -108,39 +108,39 @@ EvalResult game_set_player_pos(MobiusState* state, int arg_count) {
     g_game->player.y = (float)y;
     
     ctx_push(ctx, make_nil_value());
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Get player health: get_player_health() -> integer
  */
-EvalResult game_get_player_health(MobiusState* state, int arg_count) {
+int game_get_player_health(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 0) {
-        return make_error(state->global_env, "get_player_health takes no arguments", 0, 0);
+        return mobius_error(state, "get_player_health takes no arguments");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     ctx_push(ctx, make_integer_value(NUM_INT32, g_game->player.health));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Set player health: set_player_health(health)
  */
-EvalResult game_set_player_health(MobiusState* state, int arg_count) {
+int game_set_player_health(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 1) {
-        return make_error(state->global_env, "set_player_health requires 1 argument", 0, 0);
+        return mobius_error(state, "set_player_health requires 1 argument");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     Value health_val = ctx_pop(ctx);
@@ -154,39 +154,39 @@ EvalResult game_set_player_health(MobiusState* state, int arg_count) {
     g_game->player.health = health;
     
     ctx_push(ctx, make_nil_value());
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Get player score: get_score() -> integer
  */
-EvalResult game_get_score(MobiusState* state, int arg_count) {
+int game_get_score(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 0) {
-        return make_error(state->global_env, "get_score takes no arguments", 0, 0);
+        return mobius_error(state, "get_score takes no arguments");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     ctx_push(ctx, make_integer_value(NUM_INT32, g_game->player.score));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Add to score: add_score(points)
  */
-EvalResult game_add_score(MobiusState* state, int arg_count) {
+int game_add_score(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 1) {
-        return make_error(state->global_env, "add_score requires 1 argument", 0, 0);
+        return mobius_error(state, "add_score requires 1 argument");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     Value points_val = ctx_pop(ctx);
@@ -197,25 +197,25 @@ EvalResult game_add_score(MobiusState* state, int arg_count) {
     g_game->player.score += points;
     
     ctx_push(ctx, make_integer_value(NUM_INT32, g_game->player.score));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Spawn enemy: spawn_enemy(x, y, type)
  */
-EvalResult game_spawn_enemy(MobiusState* state, int arg_count) {
+int game_spawn_enemy(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 3) {
-        return make_error(state->global_env, "spawn_enemy requires 3 arguments", 0, 0);
+        return mobius_error(state, "spawn_enemy requires 3 arguments");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     if (g_game->enemy_count >= 10) {
-        return make_error(state->global_env, "Too many enemies", 0, 0);
+        return mobius_error(state, "Too many enemies");
     }
     
     Value type_val = ctx_pop(ctx);
@@ -239,49 +239,49 @@ EvalResult game_spawn_enemy(MobiusState* state, int arg_count) {
     g_game->enemy_count++;
     
     ctx_push(ctx, make_integer_value(NUM_INT32, g_game->enemy_count));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Get current level: get_level() -> integer
  */
-EvalResult game_get_level(MobiusState* state, int arg_count) {
+int game_get_level(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 0) {
-        return make_error(state->global_env, "get_level takes no arguments", 0, 0);
+        return mobius_error(state, "get_level takes no arguments");
     }
     
     if (!g_game) {
-        return make_error(state->global_env, "Game not initialized", 0, 0);
+        return mobius_error(state, "Game not initialized");
     }
     
     ctx_push(ctx, make_integer_value(NUM_INT32, g_game->level));
-    return make_success(1);
+    return 1;
 }
 
 /**
  * Game log function: game_log(message)
  */
-EvalResult game_log(MobiusState* state, int arg_count) {
+int game_log(MobiusState* state, int arg_count) {
     ExecutionContext* ctx = mobius_get_main_context(state);
     
     if (arg_count != 1) {
-        return make_error(state->global_env, "game_log requires 1 argument", 0, 0);
+        return mobius_error(state, "game_log requires 1 argument");
     }
     
     Value msg_val = ctx_pop(ctx);
     
     if (msg_val.type != VAL_STRING) {
         free_value(msg_val);
-        return make_error(state->global_env, "game_log requires a string argument", 0, 0);
+        return mobius_error(state, "game_log requires a string argument");
     }
     
     printf("[GAME LOG] %s\n", msg_val.as.string->data);
     free_value(msg_val);
     
     ctx_push(ctx, make_nil_value());
-    return make_success(1);
+    return 1;
 }
 
 // ============================================================================
@@ -377,11 +377,7 @@ void run_game_event(GameEngine* game, const char* event_name, const char* event_
     
     int result = mobius_exec_string(game->script_state, script);
     if (result != MOBIUS_OK) {
-        MobiusError* error = mobius_get_last_error(game->script_state);
-        if (error) {
-            printf("❌ Script error in event '%s': %s\n", event_name, error->message);
-            mobius_free_error(error);
-        }
+        printf("Script error in event '%s'\n", event_name);
     }
 }
 

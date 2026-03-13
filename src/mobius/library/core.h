@@ -8,11 +8,11 @@
 // =============================================================================
 
 // Core functions using unified library interface
-EvalResult lib_print(MobiusState* state, int arg_count);
-EvalResult lib_typeof(MobiusState* state, int arg_count);
-EvalResult lib_int(MobiusState* state, int arg_count);
-EvalResult lib_float(MobiusState* state, int arg_count);
-EvalResult lib_str(MobiusState* state, int arg_count);
+int lib_print(MobiusState* state, int arg_count);
+int lib_typeof(MobiusState* state, int arg_count);
+int lib_int(MobiusState* state, int arg_count);
+int lib_float(MobiusState* state, int arg_count);
+int lib_str(MobiusState* state, int arg_count);
 
 
 #endif // MOBIUS_LIBRARY_CORE_H

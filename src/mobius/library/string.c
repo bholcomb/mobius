@@ -13,9 +13,9 @@
 // UNIFIED STRING FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-EvalResult lib_len(MobiusState* state, int arg_count) {
+int lib_len(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "len expects exactly 1 argument", 0, 0);
+        return mobius_error(state, "len expects exactly 1 argument");
     }
     
     Value arg = ctx_peek(state->main_context, 0);
@@ -26,29 +26,29 @@ EvalResult lib_len(MobiusState* state, int arg_count) {
     } else if (arg.type == VAL_ARRAY && arg.as.array) {
         ctx_push(state->main_context, make_integer_value(NUM_INT64, (int64_t)arg.as.array->length));
     } else {
-        return make_error(state->main_context->current_env, "len expects a string or array argument", 0, 0);
+        return mobius_error(state, "len expects a string or array argument");
     }
     
-    return make_success(1);
+    return 1;
 }
     
-EvalResult lib_upper(MobiusState* state, int arg_count) {
+int lib_upper(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "upper expects exactly 1 argument", 0, 0);
+        return mobius_error(state, "upper expects exactly 1 argument");
     }
     
     Value arg = ctx_peek(state->main_context, 0);
     ctx_pop(state->main_context); // Remove argument
     
     if (arg.type != VAL_STRING || !arg.as.string) {
-        return make_error(state->main_context->current_env, "upper expects a string argument", 0, 0);
+        return mobius_error(state, "upper expects a string argument");
     }
     
     const char* input = string_data(arg.as.string);
     size_t len = string_length(arg.as.string);
     char* upper_str = malloc(len + 1);
     if (!upper_str) {
-        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
+        return mobius_error(state, "Memory allocation failed");
     }
     
     for (size_t i = 0; i < len; i++) {
@@ -60,30 +60,30 @@ EvalResult lib_upper(MobiusState* state, int arg_count) {
     free(upper_str);
     
     if (!result_string) {
-        return make_error(state->main_context->current_env, "String creation failed", 0, 0);
+        return mobius_error(state, "String creation failed");
     }
     
     ctx_push(state->main_context, make_string_value(result_string));
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_lower(MobiusState* state, int arg_count) {
+int lib_lower(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return make_error(state->main_context->current_env, "lower expects exactly 1 argument", 0, 0);
+        return mobius_error(state, "lower expects exactly 1 argument");
     }
     
     Value arg = ctx_peek(state->main_context, 0);
     ctx_pop(state->main_context); // Remove argument
     
     if (arg.type != VAL_STRING || !arg.as.string) {
-        return make_error(state->main_context->current_env, "lower expects a string argument", 0, 0);
+        return mobius_error(state, "lower expects a string argument");
     }
     
     const char* input = string_data(arg.as.string);
     size_t len = string_length(arg.as.string);
     char* lower_str = malloc(len + 1);
     if (!lower_str) {
-        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
+        return mobius_error(state, "Memory allocation failed");
     }
     
     for (size_t i = 0; i < len; i++) {
@@ -95,16 +95,16 @@ EvalResult lib_lower(MobiusState* state, int arg_count) {
     free(lower_str);
     
     if (!result_string) {
-        return make_error(state->main_context->current_env, "String creation failed", 0, 0);
+        return mobius_error(state, "String creation failed");
     }
     
     ctx_push(state->main_context, make_string_value(result_string));
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_substr(MobiusState* state, int arg_count) {
+int lib_substr(MobiusState* state, int arg_count) {
     if (arg_count != 3) {
-        return make_error(state->main_context->current_env, "substr expects exactly 3 arguments (string, start, length)", 0, 0);
+        return mobius_error(state, "substr expects exactly 3 arguments (string, start, length)");
     }
     
     Value length_val = ctx_peek(state->main_context, 0);
@@ -117,11 +117,11 @@ EvalResult lib_substr(MobiusState* state, int arg_count) {
     }
     
     if (string_val.type != VAL_STRING || !string_val.as.string) {
-        return make_error(state->main_context->current_env, "substr expects first argument to be a string", 0, 0);
+        return mobius_error(state, "substr expects first argument to be a string");
     }
     
     if (start_val.type != VAL_INTEGER || length_val.type != VAL_INTEGER) {
-        return make_error(state->main_context->current_env, "substr expects start and length to be integers", 0, 0);
+        return mobius_error(state, "substr expects start and length to be integers");
     }
     
     const char* input = string_data(string_val.as.string);
@@ -136,7 +136,7 @@ EvalResult lib_substr(MobiusState* state, int arg_count) {
     
     if (start < 0 || start >= (int64_t)input_len || length < 0) {
         ctx_push(state->main_context, make_string_value_from_cstr(state, ""));
-        return make_success(1);
+        return 1;
     }
     
     size_t actual_length = (size_t)length;
@@ -146,7 +146,7 @@ EvalResult lib_substr(MobiusState* state, int arg_count) {
     
     char* substr_data = malloc(actual_length + 1);
     if (!substr_data) {
-        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
+        return mobius_error(state, "Memory allocation failed");
     }
     
     strncpy(substr_data, input + start, actual_length);
@@ -156,16 +156,16 @@ EvalResult lib_substr(MobiusState* state, int arg_count) {
     free(substr_data);
     
     if (!result_string) {
-        return make_error(state->main_context->current_env, "String creation failed", 0, 0);
+        return mobius_error(state, "String creation failed");
     }
     
     ctx_push(state->main_context, make_string_value(result_string));
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_concat(MobiusState* state, int arg_count) {
+int lib_concat(MobiusState* state, int arg_count) {
     if (arg_count < 2) {
-        return make_error(state->main_context->current_env, "concat expects at least 2 arguments", 0, 0);
+        return mobius_error(state, "concat expects at least 2 arguments");
     }
     
     // Calculate total length
@@ -175,13 +175,13 @@ EvalResult lib_concat(MobiusState* state, int arg_count) {
         if (arg.type == VAL_STRING && arg.as.string) {
             total_length += string_length(arg.as.string);
         } else {
-            return make_error(state->main_context->current_env, "concat expects all arguments to be strings", 0, 0);
+            return mobius_error(state, "concat expects all arguments to be strings");
         }
     }
     
     char* result_data = malloc(total_length + 1);
     if (!result_data) {
-        return make_error(state->main_context->current_env, "Memory allocation failed", 0, 0);
+        return mobius_error(state, "Memory allocation failed");
     }
     
     size_t offset = 0;
@@ -203,16 +203,16 @@ EvalResult lib_concat(MobiusState* state, int arg_count) {
     free(result_data);
     
     if (!result_string) {
-        return make_error(state->main_context->current_env, "String creation failed", 0, 0);
+        return mobius_error(state, "String creation failed");
     }
     
     ctx_push(state->main_context, make_string_value(result_string));
-    return make_success(1);
+    return 1;
 }
 
-EvalResult lib_contains(MobiusState* state, int arg_count) {
+int lib_contains(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return make_error(state->main_context->current_env, "contains expects exactly 2 arguments (haystack, needle)", 0, 0);
+        return mobius_error(state, "contains expects exactly 2 arguments (haystack, needle)");
     }
     
     Value needle_val = ctx_peek(state->main_context, 0);
@@ -224,7 +224,7 @@ EvalResult lib_contains(MobiusState* state, int arg_count) {
     
     if (haystack_val.type != VAL_STRING || !haystack_val.as.string ||
         needle_val.type != VAL_STRING || !needle_val.as.string) {
-        return make_error(state->main_context->current_env, "contains expects both arguments to be strings", 0, 0);
+        return mobius_error(state, "contains expects both arguments to be strings");
     }
     
     const char* haystack = string_data(haystack_val.as.string);
@@ -233,5 +233,5 @@ EvalResult lib_contains(MobiusState* state, int arg_count) {
     bool found = strstr(haystack, needle) != NULL;
     ctx_push(state->main_context , make_bool_value(found));
     
-    return make_success(1);
+    return 1;
 }

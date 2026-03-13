@@ -1,5 +1,5 @@
-#ifndef MOBIUS_H
-#define MOBIUS_H
+#ifndef MOBIUS_INTERNAL_H
+#define MOBIUS_INTERNAL_H
 
 /*
  * Mobius Scripting Language Library
@@ -26,14 +26,10 @@
 #include "plugin/plugin.h"
 #include "plugin/module_registry.h"
 
-// Library version
-#define MOBIUS_VERSION_MAJOR 0
-#define MOBIUS_VERSION_MINOR 1
-#define MOBIUS_VERSION_PATCH 0
-#define MOBIUS_VERSION_STRING "0.1.0"
+// Version macros are defined in include/mobius/mobius.h
 
 // Library initialization and cleanup (deprecated - use embedding API)
 // int mobius_init(void);
 // void mobius_cleanup(void);
 
-#endif // MOBIUS_H
+#endif // MOBIUS_INTERNAL_H
