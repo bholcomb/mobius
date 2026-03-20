@@ -113,6 +113,11 @@ MobiusErrorHandler mobius_set_error_handler(MobiusState* state,
                                            MobiusErrorHandler handler,
                                            void* userdata);
 
+/**
+ * Clear the last error stored in the interpreter.
+ */
+void mobius_clear_error(MobiusState* state);
+
 /* ====================================================================== */
 /*  Lifecycle                                                              */
 /* ====================================================================== */

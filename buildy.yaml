@@ -1,0 +1,24 @@
+project:
+  name: mobius
+  version: "0.1.0"
+  description: "Mobius Scripting Language"
+
+environment:
+  compile:
+    cpp_standard: "c++17"
+    warnings: extra
+    flags: ["-fpermissive"]
+
+  configurations:
+    debug:
+      optimization: none
+      symbols: true
+    release:
+      optimization: speed
+      defines: ["NDEBUG"]
+
+workspace:
+  modules:
+    - src
+    - src/modules
+    - examples

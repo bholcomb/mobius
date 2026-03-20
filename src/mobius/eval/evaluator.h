@@ -11,10 +11,10 @@
 #include "eval/evalResult.h"
 
 // Forward declaration for plugin system
-struct ModuleRegistry;
-struct MobiusState;
+class ModuleRegistry;
+class MobiusState;
 struct MobiusFunction;
-struct ExecutionContext;
+class ExecutionContext;
 
 // Main evaluation functions (all use stack-based calling convention)
 EvalResult evaluate_expr(Expr* expr, Environment* env);

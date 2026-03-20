@@ -2,66 +2,66 @@
 #define MOBIUS_TABLE_H
 
 #include "data/value.h"
-#include <stdbool.h>
-#include <stddef.h>
+#include "internal/ref_counted.h"
+
+#include <cstddef>
+#include <vector>
+#include <functional>
 
 #define INITIAL_TABLE_CAPACITY 8
 
-// Table entry for hash table
-typedef struct TableEntry {
+struct TableEntry {
     Value key;
     Value value;
-    bool is_occupied;
-} TableEntry;
+    bool is_occupied = false;
+};
 
-// Forward declaration
-struct MobiusState;
+class MobiusState;
 
-// Table structure - pure hash table
-typedef struct Table {
-    TableEntry* entries;     // Hash table entries
-    size_t size;             // Number of key-value pairs
-    size_t capacity;         // Size of entries array
-    struct Table* metatable; // For operator overloading
-    int ref_count;           // Reference counting for memory management
-    struct MobiusState* state; // Back-reference to owning state (for string interning)
-} Table;
+class Table : public RefCounted {
+public:
+    Table(MobiusState* state, size_t initial_capacity = INITIAL_TABLE_CAPACITY);
+    ~Table() override = default;
 
-// Table function declarations
-Table* create_table(struct MobiusState* state, size_t initial_capacity);
-void free_table(Table* table);
-Table* table_copy(Table* source);
+    Table* retain();
 
-// Table operations
-Value table_get(Table* table, Value key);
-bool table_set(Table* table, Value key, Value value);
-bool table_has_key(Table* table, Value key);
-bool table_remove(Table* table, Value key);
-size_t table_size(Table* table);
+    Value get(const Value& key) const;
+    bool set(const Value& key, const Value& value);
+    bool hasKey(const Value& key) const;
+    bool remove(const Value& key);
+    size_t size() const { return size_; }
 
-// Hash functions
-size_t hash_value(Value value, size_t capacity);
-bool values_equal_for_table(Value a, Value b);
+    Table* copy() const;
 
-// Table resizing
-void table_resize(Table* table, size_t new_capacity);
+    void setMetatable(Table* mt) { metatable_ = mt; }
+    Table* getMetatable() const { return metatable_; }
 
-// Table entry management
-TableEntry* find_table_entry(TableEntry* entries, size_t capacity, Value key);
-void table_insert_entry(TableEntry* entries, size_t capacity, Value key, Value value);
+    bool hasMetamethod(MobiusString* method_name) const;
+    Value getMetamethod(MobiusString* method_name) const;
 
-// Metatable operations
-void set_metatable(Table* table, Table* metatable);
-Table* get_metatable(Table* table);
+    // Iterate over all occupied entries. Callback receives (key, value).
+    void forEach(const std::function<void(const Value& key, const Value& value)>& fn) const;
 
-// Basic metatable functions (advanced metamethods in evaluator.h)
+    void print() const;
+    void printDebug() const;
+
+    MobiusState* getState() const { return state_; }
+
+private:
+    void resize(size_t new_capacity);
+    size_t findIndex(const Value& key) const;
+    void insertEntry(const Value& key, const Value& value);
+
+    std::vector<TableEntry> entries_;
+    size_t size_;
+    Table* metatable_;
+    MobiusState* state_;
+};
+
+// Hash helper
+size_t hash_value(const Value& value, size_t capacity);
+
+// Metamethod name validation
 const char* get_metamethod_name(const char* name);
-bool has_table_metamethod(Table* table, MobiusString* method_name);
-Value get_table_metamethod(Table* table, MobiusString* method_name);
-
-// Table debugging
-void print_table(Table* table);
-void print_table_safe(Table* table, Table** visited, int* visited_count, int max_depth);
-void print_table_debug(Table* table);
 
 #endif // MOBIUS_TABLE_H

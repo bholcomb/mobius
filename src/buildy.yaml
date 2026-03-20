@@ -1,0 +1,34 @@
+project:
+  name: mobius-core
+  description: "Mobius interpreter library and CLI"
+
+targets:
+  shared_libraries:
+    - name: mobius
+      language: cpp
+      sources:
+        - "mobius/data/*.cpp"
+        - "mobius/frontend/*.cpp"
+        - "mobius/eval/*.cpp"
+        - "mobius/internal/*.cpp"
+        - "mobius/library/*.cpp"
+        - "mobius/plugin/*.cpp"
+        - "mobius/state/*.cpp"
+        - "mobius/util/*.cpp"
+        - "mobius/repl.cpp"
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+
+  executables:
+    - name: mobius-cli
+      language: cpp
+      sources: ["main.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]

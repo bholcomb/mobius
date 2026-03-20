@@ -1,0 +1,16 @@
+project:
+  name: mobius-modules
+  description: "Built-in Mobius plugin modules"
+
+targets:
+  shared_libraries:
+    - name: math
+      language: cpp
+      sources: ["math/math_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]
