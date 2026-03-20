@@ -5,7 +5,7 @@
 CC = gcc
 CXX = g++
 CFLAGS = -Wall -Wextra -std=c99 -pedantic -g -O2 -fPIC
-CXXFLAGS = -Wall -Wextra -std=c++11 -g -O2 -fPIC
+CXXFLAGS = -Wall -Wextra -std=c++17 -g -O2 -fPIC -fpermissive
 CPPFLAGS = -Iinclude -Isrc -Isrc/mobius
 LDFLAGS = -lm -ldl
 
@@ -15,53 +15,53 @@ BUILDDIR = build
 BINDIR = bin
 OBJDIR = $(BUILDDIR)
 
-# Core library sources
+# Core library sources (C++)
 MOBIUS_SOURCES = \
-	$(SRCDIR)/mobius/data/array.c \
-	$(SRCDIR)/mobius/data/enum.c \
-	$(SRCDIR)/mobius/data/number.c \
-	$(SRCDIR)/mobius/data/table.c \
-	$(SRCDIR)/mobius/data/value.c \
-	$(SRCDIR)/mobius/frontend/ast.c \
-	$(SRCDIR)/mobius/frontend/parser.c \
-	$(SRCDIR)/mobius/frontend/scanner.c \
-	$(SRCDIR)/mobius/frontend/token.c \
-	$(SRCDIR)/mobius/eval/eval_arithmatic.c \
-	$(SRCDIR)/mobius/eval/eval_array.c \
-	$(SRCDIR)/mobius/eval/eval_core.c \
-	$(SRCDIR)/mobius/eval/eval_enum.c \
-	$(SRCDIR)/mobius/eval/eval_error.c \
-	$(SRCDIR)/mobius/eval/eval_expression.c \
-	$(SRCDIR)/mobius/eval/eval_import.c \
-	$(SRCDIR)/mobius/eval/eval_statement.c \
-	$(SRCDIR)/mobius/eval/eval_switch.c \
-	$(SRCDIR)/mobius/eval/eval_table.c \
-	$(SRCDIR)/mobius/internal/string_intern.c \
-	$(SRCDIR)/mobius/library/array.c \
-	$(SRCDIR)/mobius/library/core.c \
-	$(SRCDIR)/mobius/library/library.c \
-	$(SRCDIR)/mobius/library/math.c \
-	$(SRCDIR)/mobius/library/string.c \
-	$(SRCDIR)/mobius/library/table_lib.c \
-	$(SRCDIR)/mobius/library/types.c \
-	$(SRCDIR)/mobius/library/util.c \
-	$(SRCDIR)/mobius/state/environment.c \
-	$(SRCDIR)/mobius/state/mobius_state.c \
-	$(SRCDIR)/mobius/state/stack.c \
-	$(SRCDIR)/mobius/plugin/module_registry.c \
-	$(SRCDIR)/mobius/util/file_io.c \
-	$(SRCDIR)/mobius/util/utility.c \
-	$(SRCDIR)/mobius/repl.c \
+	$(SRCDIR)/mobius/data/array.cpp \
+	$(SRCDIR)/mobius/data/enum.cpp \
+	$(SRCDIR)/mobius/data/number.cpp \
+	$(SRCDIR)/mobius/data/table.cpp \
+	$(SRCDIR)/mobius/data/value.cpp \
+	$(SRCDIR)/mobius/frontend/ast.cpp \
+	$(SRCDIR)/mobius/frontend/parser.cpp \
+	$(SRCDIR)/mobius/frontend/scanner.cpp \
+	$(SRCDIR)/mobius/frontend/token.cpp \
+	$(SRCDIR)/mobius/eval/eval_arithmatic.cpp \
+	$(SRCDIR)/mobius/eval/eval_array.cpp \
+	$(SRCDIR)/mobius/eval/eval_core.cpp \
+	$(SRCDIR)/mobius/eval/eval_enum.cpp \
+	$(SRCDIR)/mobius/eval/eval_error.cpp \
+	$(SRCDIR)/mobius/eval/eval_expression.cpp \
+	$(SRCDIR)/mobius/eval/eval_import.cpp \
+	$(SRCDIR)/mobius/eval/eval_statement.cpp \
+	$(SRCDIR)/mobius/eval/eval_switch.cpp \
+	$(SRCDIR)/mobius/eval/eval_table.cpp \
+	$(SRCDIR)/mobius/internal/string_intern.cpp \
+	$(SRCDIR)/mobius/library/array.cpp \
+	$(SRCDIR)/mobius/library/core.cpp \
+	$(SRCDIR)/mobius/library/library.cpp \
+	$(SRCDIR)/mobius/library/math.cpp \
+	$(SRCDIR)/mobius/library/string.cpp \
+	$(SRCDIR)/mobius/library/table_lib.cpp \
+	$(SRCDIR)/mobius/library/types.cpp \
+	$(SRCDIR)/mobius/library/util.cpp \
+	$(SRCDIR)/mobius/state/environment.cpp \
+	$(SRCDIR)/mobius/state/mobius_state.cpp \
+	$(SRCDIR)/mobius/state/stack.cpp \
+	$(SRCDIR)/mobius/plugin/module_registry.cpp \
+	$(SRCDIR)/mobius/util/file_io.cpp \
+	$(SRCDIR)/mobius/util/utility.cpp \
+	$(SRCDIR)/mobius/repl.cpp \
 
 # All library sources combined  
 ALL_LIB_SOURCES = $(MOBIUS_SOURCES)
 
 # Main executable source
-MAIN_SOURCE = $(SRCDIR)/main.c
+MAIN_SOURCE = $(SRCDIR)/main.cpp
 
 # Object files - preserve directory structure to avoid naming conflicts
-MOBIUS_OBJECTS = $(MOBIUS_SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
-MAIN_OBJECT = $(MAIN_SOURCE:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
+MOBIUS_OBJECTS = $(MOBIUS_SOURCES:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
+MAIN_OBJECT = $(MAIN_SOURCE:$(SRCDIR)/%.cpp=$(OBJDIR)/%.o)
 
 ALL_OBJECTS = $(MOBIUS_OBJECTS) $(MAIN_OBJECT)
 
@@ -95,10 +95,10 @@ $(LIBMOBIUS): $(MOBIUS_OBJECTS)
 	@echo "Creating static library: $@"
 	ar rcs $@ $^
 
-# Build main executable
+# Build main executable (link with C++ linker since library contains C++)
 $(MOBIUS_EXE): $(MAIN_OBJECT) $(LIBMOBIUS)
 	@echo "Linking: $@"
-	$(CC) $(CFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS) -lstdc++
 
 # Generic rule for C object files
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
@@ -115,39 +115,39 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 # Example executables
 $(BINDIR)/embedding_example: examples/embedding_example/embedding_example.c $(LIBMOBIUS)
 	@echo "Building example: $@"
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 $(BINDIR)/simple_embedding: examples/simple_embedding/simple_embedding.c $(LIBMOBIUS)
 	@echo "Building example: $@"
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 $(BINDIR)/game_engine: examples/game_engine/game_engine.c $(LIBMOBIUS)
 	@echo "Building example: $@"
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 $(BINDIR)/multi_environment_demo: examples/multi_environment_demo/multi_environment_demo.c $(LIBMOBIUS)
 	@echo "Building example: $@"
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 $(BINDIR)/simple_userdata_test: examples/simple_userdata_test/simple_userdata_test.c $(LIBMOBIUS)
 	@echo "Building example: $@"
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 $(BINDIR)/stack_api_test: examples/stack_api_test/stack_api_test.c $(LIBMOBIUS)
 	@echo "Building example: $@"
-	$(CC) $(CFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 # Build text processing plugin as shared library
 $(BINDIR)/modules/text_processing.so: examples/text_processing_plugin/text_processing_plugin.c $(LIBMOBIUS)
 	@echo "Building plugin: $@"
 	@mkdir -p $(BINDIR)/modules
-	$(CC) $(CFLAGS) $(CPPFLAGS) -fPIC -shared -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -fPIC -shared -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 # Build math plugin as shared library
 $(BINDIR)/modules/math.so: $(SRCDIR)/modules/math/math_plugin.c $(LIBMOBIUS)
 	@echo "Building plugin: $@"
 	@mkdir -p $(BINDIR)/modules
-	$(CC) $(CFLAGS) $(CPPFLAGS) -fPIC -shared -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -fPIC -shared -o $@ $< -L$(BUILDDIR) -lmobius $(LDFLAGS)
 
 # Build all examples
 examples: $(EXAMPLES)

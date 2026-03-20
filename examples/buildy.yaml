@@ -1,0 +1,85 @@
+project:
+  name: mobius-examples
+  description: "Example programs and plugins for Mobius"
+
+targets:
+  executables:
+    - name: embedding_example
+      language: cpp
+      sources: ["embedding_example/embedding_example.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]
+
+    - name: simple_embedding
+      language: cpp
+      sources: ["simple_embedding/simple_embedding.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]
+
+    - name: game_engine
+      language: cpp
+      sources: ["game_engine/game_engine.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]
+
+    - name: multi_environment_demo
+      language: cpp
+      sources: ["multi_environment_demo/multi_environment_demo.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]
+
+    - name: simple_userdata_test
+      language: cpp
+      sources: ["simple_userdata_test/simple_userdata_test.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]
+
+    - name: stack_api_test
+      language: cpp
+      sources: ["stack_api_test/stack_api_test.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]
+
+    # cpp_class_example excluded — uses obsolete pre-stack API, needs full rewrite
+
+  shared_libraries:
+    - name: text_processing
+      language: cpp
+      sources: ["text_processing_plugin/text_processing_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius", "m", "dl"]
+      depends_on:
+        targets: ["mobius"]

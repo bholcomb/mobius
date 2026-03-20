@@ -1,35 +1,30 @@
 #ifndef MOBIUS_ENVIRONMENT_H
 #define MOBIUS_ENVIRONMENT_H
 
-#include "frontend/ast.h"
-#include "data/table.h"
+#include "data/value.h"
 
-#include <stddef.h>
-#include <stdbool.h>
+#include <string>
+#include <unordered_map>
 
-// Forward declarations
-struct ExecutionContext;
+class ExecutionContext;
 
-// Environment structure for variable scoping only
-// Stack is now global in ExecutionStack
-typedef struct Environment {
-    Table* variables;       // Table storing variable name->value mappings
-    struct Environment* enclosing;  // Parent environment for scoping
-    struct ExecutionContext* current_context;  // Current execution context
-} Environment;
+class Environment {
+public:
+    Environment(Environment* enclosing = nullptr, ExecutionContext* ctx = nullptr);
+    ~Environment();
 
-// Environment creation and management
-Environment* create_environment(Environment* enclosing);
-void free_environment(Environment* env);
+    void define(const char* name, Value value);
+    Value get(const char* name, bool* found) const;
+    bool assign(const char* name, Value value);
+    bool isDefined(const char* name) const;
+    size_t size() const;
+    void print() const;
 
-// Variable operations
-void define_variable(Environment* env, const char* name, Value value);
-Value get_variable(Environment* env, const char* name, bool* found);
-bool assign_variable(Environment* env, const char* name, Value value);
-bool is_defined(Environment* env, const char* name);
+    Environment* enclosing;
+    ExecutionContext* current_context;
 
-// Environment utilities
-void print_environment(Environment* env);
+private:
+    std::unordered_map<std::string, Value> myVariables;
+};
 
-
-#endif // MOBIUS_ENVIRONMENT_H
+#endif /* MOBIUS_ENVIRONMENT_H */

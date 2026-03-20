@@ -1,5 +1,5 @@
-#ifndef MOBIUS_PLUGIN_H
-#define MOBIUS_PLUGIN_H
+#ifndef MOBIUS_INTERNAL_PLUGIN_H
+#define MOBIUS_INTERNAL_PLUGIN_H
 
 #include "eval/evaluator.h"
 #include "data/value.h"
@@ -71,4 +71,4 @@ const char* plugin_status_string(PluginStatus status);
 void print_plugin_info(Plugin* plugin);
 void print_plugin_functions(Plugin* plugin);
 
-#endif // MOBIUS_PLUGIN_H
+#endif // MOBIUS_INTERNAL_PLUGIN_H

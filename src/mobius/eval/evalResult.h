@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 // Forward declarations
-struct ExecutionContext;
+class ExecutionContext;
 
 // Error categories for better reporting
 typedef enum {
