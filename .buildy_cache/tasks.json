@@ -1,91 +1,105 @@
 {
   "execution_plan": {
-    "estimated_time_seconds": 5.1,
+    "estimated_time_seconds": 5.199999999999999,
     "max_parallel_tasks": 45,
     "stages": [
       {
         "stage_1": [
+          "setup_dirs_001__examples",
           "setup_dirs_001__src",
-          "setup_dirs_001__src_modules",
-          "setup_dirs_001__examples"
+          "setup_dirs_001__src_modules"
         ]
       },
       {
         "stage_2": [
-          "compile_mobius_src_mobius_library_array_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_table_cpp_001__src",
-          "compile_mobius_src_mobius_library_types_cpp_001__src",
-          "compile_mobius_src_mobius_data_enum_cpp_001__src",
-          "compile_simple_userdata_test_examples_simple_userdata_test_simple_userdata_test_cpp_001__examples",
-          "compile_mobius_src_mobius_data_array_cpp_001__src",
-          "compile_mobius_src_mobius_library_table_lib_cpp_001__src",
-          "compile_math_src_modules_math_math_plugin_cpp_001__src_modules",
-          "compile_mobius_src_mobius_eval_eval_core_cpp_001__src",
-          "compile_mobius_src_mobius_data_metamethods_cpp_001__src",
-          "compile_mobius_cli_src_main_cpp_001__src",
-          "compile_mobius_src_mobius_frontend_token_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_import_cpp_001__src",
-          "compile_mobius_src_mobius_library_util_cpp_001__src",
-          "compile_mobius_src_mobius_frontend_scanner_cpp_001__src",
-          "compile_game_engine_examples_game_engine_game_engine_cpp_001__examples",
-          "compile_mobius_src_mobius_library_math_cpp_001__src",
-          "compile_stack_api_test_examples_stack_api_test_stack_api_test_cpp_001__examples",
-          "compile_mobius_src_mobius_data_value_cpp_001__src",
-          "compile_mobius_src_mobius_state_environment_cpp_001__src",
-          "compile_mobius_src_mobius_util_file_io_cpp_001__src",
-          "compile_mobius_src_mobius_data_table_cpp_001__src",
-          "compile_mobius_src_mobius_frontend_parser_cpp_001__src",
-          "compile_mobius_src_mobius_internal_string_intern_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_statement_cpp_001__src",
-          "compile_multi_environment_demo_examples_multi_environment_demo_multi_environment_demo_cpp_001__examples",
-          "compile_mobius_src_mobius_library_core_cpp_001__src",
-          "compile_mobius_src_mobius_plugin_module_registry_cpp_001__src",
+          "compile_mobius_core_src_mobius_data_value_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_arithmatic_cpp_001__src",
+          "compile_mobius_core_src_mobius_frontend_ast_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_statement_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_enum_cpp_001__src",
+          "compile_mobius_core_src_mobius_frontend_scanner_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_array_cpp_001__src",
+          "compile_mobius_core_src_mobius_data_enum_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_util_cpp_001__src",
           "compile_simple_embedding_examples_simple_embedding_simple_embedding_cpp_001__examples",
+          "compile_mobius_core_src_mobius_internal_string_intern_cpp_001__src",
+          "compile_mobius_core_src_mobius_plugin_module_registry_cpp_001__src",
           "compile_text_processing_examples_text_processing_plugin_text_processing_plugin_cpp_001__examples",
-          "compile_mobius_src_mobius_eval_eval_switch_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_array_cpp_001__src",
-          "compile_mobius_src_mobius_state_stack_cpp_001__src",
-          "compile_mobius_src_mobius_frontend_ast_cpp_001__src",
-          "compile_mobius_src_mobius_util_utility_cpp_001__src",
-          "compile_mobius_src_mobius_data_number_cpp_001__src",
-          "compile_mobius_src_mobius_repl_cpp_001__src",
-          "compile_embedding_example_examples_embedding_example_embedding_example_cpp_001__examples",
-          "compile_mobius_src_mobius_library_library_cpp_001__src",
-          "compile_mobius_src_mobius_library_string_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_expression_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_error_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_enum_cpp_001__src",
-          "compile_mobius_src_mobius_eval_eval_arithmatic_cpp_001__src",
-          "compile_mobius_src_mobius_state_mobius_state_cpp_001__src"
+          "compile_game_engine_examples_game_engine_game_engine_cpp_001__examples",
+          "compile_mobius_core_src_mobius_eval_eval_error_cpp_001__src",
+          "compile_mobius_core_src_mobius_repl_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_core_cpp_001__src",
+          "compile_math_src_modules_math_math_plugin_cpp_001__src_modules",
+          "compile_multi_environment_demo_examples_multi_environment_demo_multi_environment_demo_cpp_001__examples",
+          "compile_mobius_core_src_mobius_eval_eval_table_cpp_001__src",
+          "compile_mobius_core_src_mobius_data_array_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_types_cpp_001__src",
+          "compile_mobius_core_src_mobius_data_table_cpp_001__src",
+          "compile_mobius_core_src_mobius_util_file_io_cpp_001__src",
+          "compile_stack_api_test_examples_stack_api_test_stack_api_test_cpp_001__examples",
+          "compile_mobius_core_src_mobius_frontend_parser_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_string_cpp_001__src",
+          "compile_mobius_core_src_mobius_state_environment_cpp_001__src",
+          "compile_mobius_core_src_mobius_frontend_token_cpp_001__src",
+          "compile_simple_userdata_test_examples_simple_userdata_test_simple_userdata_test_cpp_001__examples",
+          "compile_mobius_core_src_mobius_data_metamethods_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_core_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_import_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_switch_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_math_cpp_001__src",
+          "compile_mobius_core_src_mobius_util_utility_cpp_001__src",
+          "compile_mobius_core_src_mobius_state_mobius_state_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_array_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_table_lib_cpp_001__src",
+          "compile_mobius_core_src_mobius_data_number_cpp_001__src",
+          "compile_mobius_core_src_mobius_library_library_cpp_001__src",
+          "compile_mobius_core_src_mobius_state_stack_cpp_001__src",
+          "compile_mobius_core_src_mobius_eval_eval_expression_cpp_001__src",
+          "compile_mobius_src_main_cpp_001__src",
+          "compile_embedding_example_examples_embedding_example_embedding_example_cpp_001__examples"
         ]
       },
       {
         "stage_3": [
-          "link_mobius_001__src"
+          "link_mobius_core_001__src"
         ]
       },
       {
         "stage_4": [
-          "link_mobius_cli_001__src",
+          "link_simple_embedding_001__examples",
+          "stage_libmobius_core_so_001__workspace",
+          "link_stack_api_test_001__examples",
+          "link_math_001__src_modules",
+          "link_mobius_001__src",
           "link_multi_environment_demo_001__examples",
           "link_simple_userdata_test_001__examples",
-          "link_stack_api_test_001__examples",
+          "link_game_engine_001__examples",
           "link_text_processing_001__examples",
-          "link_simple_embedding_001__examples",
-          "link_embedding_example_001__examples",
-          "link_math_001__src_modules",
-          "link_game_engine_001__examples"
+          "link_embedding_example_001__examples"
+        ]
+      },
+      {
+        "stage_5": [
+          "stage_mobius_001__workspace",
+          "stage_math_so_001__workspace",
+          "stage_multi_environment_demo_001__workspace",
+          "stage_simple_embedding_001__workspace",
+          "stage_stack_api_test_001__workspace",
+          "stage_text_processing_so_001__workspace",
+          "stage_game_engine_001__workspace",
+          "stage_simple_userdata_test_001__workspace",
+          "stage_embedding_example_001__workspace"
         ]
       }
     ],
-    "total_cpu_hours": 0.029249999999999995,
-    "total_stages": 4,
-    "total_tasks": 58
+    "total_cpu_hours": 0.029527777777777788,
+    "total_stages": 5,
+    "total_tasks": 68
   },
   "metadata": {
     "architecture": "x86_64",
     "configuration": "debug",
-    "generated_at": 1774033840,
+    "generated_at": 1774286281,
     "platform": "linux",
     "toolchain": {
       "description": "GCC C++ compiler for Linux x86_64",
@@ -94,7 +108,7 @@
       "target_architecture": "x86_64",
       "target_platform": "linux"
     },
-    "total_tasks": 58
+    "total_tasks": 68
   },
   "resolved_variables": {
     "arch": {
@@ -117,7 +131,7 @@
   "tasks": [
     {
       "task_id": "setup_dirs_001__src",
-      "task_number": 1,
+      "task_number": 2,
       "task_type": "setup",
       "inputs": [],
       "outputs": [
@@ -140,8 +154,8 @@
       "cache_key": "99ce4fea1d7d1e311cb9cec37fb3e51d169773a76e46a89d8fd6a7ad47b7456a"
     },
     {
-      "task_id": "compile_mobius_src_mobius_data_array_cpp_001__src",
-      "task_number": 9,
+      "task_id": "compile_mobius_core_src_mobius_data_array_cpp_001__src",
+      "task_number": 24,
       "task_type": "compile",
       "inputs": [
         {
@@ -170,8 +184,8 @@
       "cache_key": "f8df18383a1ef44dbc9224f8099adcd6eb1a0a850866963ec8270016738aeccf"
     },
     {
-      "task_id": "compile_mobius_src_mobius_data_enum_cpp_001__src",
-      "task_number": 7,
+      "task_id": "compile_mobius_core_src_mobius_data_enum_cpp_001__src",
+      "task_number": 11,
       "task_type": "compile",
       "inputs": [
         {
@@ -200,8 +214,8 @@
       "cache_key": "cc0ea7c36dd20641adc0c403f6abbb3482dc4e71b8c7294ee75d3605523cb9c5"
     },
     {
-      "task_id": "compile_mobius_src_mobius_data_metamethods_cpp_001__src",
-      "task_number": 13,
+      "task_id": "compile_mobius_core_src_mobius_data_metamethods_cpp_001__src",
+      "task_number": 34,
       "task_type": "compile",
       "inputs": [
         {
@@ -230,8 +244,8 @@
       "cache_key": "c43ffc64256f8f22376fe285961f17fcd6767012145f55b07cd2a0342eec08ef"
     },
     {
-      "task_id": "compile_mobius_src_mobius_data_number_cpp_001__src",
-      "task_number": 39,
+      "task_id": "compile_mobius_core_src_mobius_data_number_cpp_001__src",
+      "task_number": 43,
       "task_type": "compile",
       "inputs": [
         {
@@ -260,13 +274,13 @@
       "cache_key": "0bdf88c15e16fa84087f6196fd134b644f26256d4db0d681bae81fc7a441c472"
     },
     {
-      "task_id": "compile_mobius_src_mobius_data_table_cpp_001__src",
-      "task_number": 25,
+      "task_id": "compile_mobius_core_src_mobius_data_table_cpp_001__src",
+      "task_number": 26,
       "task_type": "compile",
       "inputs": [
         {
           "path": "src/mobius/data/table.cpp",
-          "hash": "cd7f5dfa35c6b3bf9f2f96dd5cc28bea4829c47b0ba15de5745e65d5887e4056"
+          "hash": "704d825523afb71372c140647d05bfe42fe1127a119766ea372528643f7059fc"
         }
       ],
       "outputs": [
@@ -287,11 +301,11 @@
         "memory_mb": 200,
         "disk_mb": 15
       },
-      "cache_key": "d8a5d6b0a7fa95894014a201149532a6cf08a6e16b03ae1b57f19099aa3e62bf"
+      "cache_key": "3ca1e02c7f4e6b9a260a2a8b5bdd08e0747211a0dc8fcb4b021fa5114f70451c"
     },
     {
-      "task_id": "compile_mobius_src_mobius_data_value_cpp_001__src",
-      "task_number": 22,
+      "task_id": "compile_mobius_core_src_mobius_data_value_cpp_001__src",
+      "task_number": 4,
       "task_type": "compile",
       "inputs": [
         {
@@ -320,8 +334,8 @@
       "cache_key": "7297160f6d0e89015fb047358ee7884b815b331db1384072cabfefd329040c21"
     },
     {
-      "task_id": "compile_mobius_src_mobius_frontend_ast_cpp_001__src",
-      "task_number": 37,
+      "task_id": "compile_mobius_core_src_mobius_frontend_ast_cpp_001__src",
+      "task_number": 6,
       "task_type": "compile",
       "inputs": [
         {
@@ -350,13 +364,13 @@
       "cache_key": "ba1ab312db5ef34bd584762aea9d880e29146a7feaac586e9e178f5c914424e6"
     },
     {
-      "task_id": "compile_mobius_src_mobius_frontend_parser_cpp_001__src",
-      "task_number": 26,
+      "task_id": "compile_mobius_core_src_mobius_frontend_parser_cpp_001__src",
+      "task_number": 29,
       "task_type": "compile",
       "inputs": [
         {
           "path": "src/mobius/frontend/parser.cpp",
-          "hash": "cf79a2d191cb43f67649a71904318c78016109c6b60ea4417c88b09752dde76f"
+          "hash": "7d1609a42744659c5aa7e93a748bf804a95e37871cec1499a9ce6eecbd9febfe"
         }
       ],
       "outputs": [
@@ -377,11 +391,11 @@
         "memory_mb": 200,
         "disk_mb": 15
       },
-      "cache_key": "23ae3b6d960f4d82cbd840bd2520ff2105d0fd599eb2ae61a7cc7d1217f837ee"
+      "cache_key": "6e256210bb31d43d4addfa9434954e5c56762793c710f5b143053247e60e85e7"
     },
     {
-      "task_id": "compile_mobius_src_mobius_frontend_scanner_cpp_001__src",
-      "task_number": 18,
+      "task_id": "compile_mobius_core_src_mobius_frontend_scanner_cpp_001__src",
+      "task_number": 9,
       "task_type": "compile",
       "inputs": [
         {
@@ -410,8 +424,8 @@
       "cache_key": "286d3303bc98cb258131feed25b88d3726b946b7e791aebfb8d5ca0c5a415da1"
     },
     {
-      "task_id": "compile_mobius_src_mobius_frontend_token_cpp_001__src",
-      "task_number": 15,
+      "task_id": "compile_mobius_core_src_mobius_frontend_token_cpp_001__src",
+      "task_number": 32,
       "task_type": "compile",
       "inputs": [
         {
@@ -440,8 +454,8 @@
       "cache_key": "e5d0da3a61ccb7e0b1971aa0ac2bc0aad2f7589d2fd1e4cea8fd40d9dac72a9b"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_arithmatic_cpp_001__src",
-      "task_number": 47,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_arithmatic_cpp_001__src",
+      "task_number": 5,
       "task_type": "compile",
       "inputs": [
         {
@@ -470,8 +484,8 @@
       "cache_key": "b8127db036b953e5aa090c0c2ef6b38b7d031e3b918c58101ecb6f909e9ef5b4"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_array_cpp_001__src",
-      "task_number": 35,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_array_cpp_001__src",
+      "task_number": 41,
       "task_type": "compile",
       "inputs": [
         {
@@ -500,8 +514,8 @@
       "cache_key": "3ac9c8148e177033eac651feee53ce6931f5a680b3af88023300bbbd90e33bf9"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_core_cpp_001__src",
-      "task_number": 12,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_core_cpp_001__src",
+      "task_number": 35,
       "task_type": "compile",
       "inputs": [
         {
@@ -530,8 +544,8 @@
       "cache_key": "2879e04cf01126bc02faf23257d637ccf0552dbf983eb742c9e29b2a2fbce3b3"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_enum_cpp_001__src",
-      "task_number": 46,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_enum_cpp_001__src",
+      "task_number": 8,
       "task_type": "compile",
       "inputs": [
         {
@@ -560,8 +574,8 @@
       "cache_key": "c8a659d545656b9cdc6a514f4f61c96612dc5a63dc0012251bafa3c8499a7403"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_error_cpp_001__src",
-      "task_number": 45,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_error_cpp_001__src",
+      "task_number": 18,
       "task_type": "compile",
       "inputs": [
         {
@@ -590,8 +604,8 @@
       "cache_key": "9063e8f6fc741612bfe0ea79b10eb2c2ec1d46ae64f3cebcf570f3bbd0ef6ff5"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_expression_cpp_001__src",
-      "task_number": 44,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_expression_cpp_001__src",
+      "task_number": 46,
       "task_type": "compile",
       "inputs": [
         {
@@ -620,8 +634,8 @@
       "cache_key": "6cfe2d671ced14219398015983e46381dade88141547bad4964dd033c079a177"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_import_cpp_001__src",
-      "task_number": 16,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_import_cpp_001__src",
+      "task_number": 36,
       "task_type": "compile",
       "inputs": [
         {
@@ -650,13 +664,13 @@
       "cache_key": "f19c63912f32c391ddb73c38ae42d1a348061a99a79f95d4bac3cca04ed5ffc1"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_statement_cpp_001__src",
-      "task_number": 28,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_statement_cpp_001__src",
+      "task_number": 7,
       "task_type": "compile",
       "inputs": [
         {
           "path": "src/mobius/eval/eval_statement.cpp",
-          "hash": "78204748e2b407f627a06175926b5ad6eb2adab64e7c9797f04c6b1eb4289821"
+          "hash": "c3c581cad7d95bb558d2235912f711bb4fa81a595dfafb01a3fe0c3d2607ddbc"
         }
       ],
       "outputs": [
@@ -677,11 +691,11 @@
         "memory_mb": 200,
         "disk_mb": 15
       },
-      "cache_key": "d8b89a4ab96eb48bdd87401d4226337c6367004cf20fb8ebd1ed9bc13cc7a492"
+      "cache_key": "10f5caca11543530c7aef12734ae09fafc22ad3fbffc301402d8b211009cd23e"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_switch_cpp_001__src",
-      "task_number": 34,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_switch_cpp_001__src",
+      "task_number": 37,
       "task_type": "compile",
       "inputs": [
         {
@@ -710,8 +724,8 @@
       "cache_key": "53a3ac63d279b2189d445b307414d65a7792cf4190fbb2998db3680b0b8a1169"
     },
     {
-      "task_id": "compile_mobius_src_mobius_eval_eval_table_cpp_001__src",
-      "task_number": 5,
+      "task_id": "compile_mobius_core_src_mobius_eval_eval_table_cpp_001__src",
+      "task_number": 23,
       "task_type": "compile",
       "inputs": [
         {
@@ -740,8 +754,8 @@
       "cache_key": "f62574d3c558b326957b57208662914f3fccd611340e3d0cfc347d1145a9aca6"
     },
     {
-      "task_id": "compile_mobius_src_mobius_internal_string_intern_cpp_001__src",
-      "task_number": 27,
+      "task_id": "compile_mobius_core_src_mobius_internal_string_intern_cpp_001__src",
+      "task_number": 14,
       "task_type": "compile",
       "inputs": [
         {
@@ -770,8 +784,8 @@
       "cache_key": "d7fa2952b5f2b4f6384b34674ba0b7a598f322f3204050e0f3b21095a944976f"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_array_cpp_001__src",
-      "task_number": 4,
+      "task_id": "compile_mobius_core_src_mobius_library_array_cpp_001__src",
+      "task_number": 10,
       "task_type": "compile",
       "inputs": [
         {
@@ -800,8 +814,8 @@
       "cache_key": "b19a22b7a62c406e784632366322c33275a2df6889643b11d33a13131d2de7b5"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_core_cpp_001__src",
-      "task_number": 30,
+      "task_id": "compile_mobius_core_src_mobius_library_core_cpp_001__src",
+      "task_number": 20,
       "task_type": "compile",
       "inputs": [
         {
@@ -830,8 +844,8 @@
       "cache_key": "a1ef3c1ed5b9791f75aade2362b6513b10d70caf148d43418428db10ebce9b94"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_library_cpp_001__src",
-      "task_number": 42,
+      "task_id": "compile_mobius_core_src_mobius_library_library_cpp_001__src",
+      "task_number": 44,
       "task_type": "compile",
       "inputs": [
         {
@@ -860,8 +874,8 @@
       "cache_key": "07bf65621f355bbb9909fd14c432e1d408f9b4147331e1a6089001c0e827bbea"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_math_cpp_001__src",
-      "task_number": 20,
+      "task_id": "compile_mobius_core_src_mobius_library_math_cpp_001__src",
+      "task_number": 38,
       "task_type": "compile",
       "inputs": [
         {
@@ -890,8 +904,8 @@
       "cache_key": "17bd3957542d4de4c0923bee44ed4c7495aeba79ba694eed590230b5e4b3fdf6"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_string_cpp_001__src",
-      "task_number": 43,
+      "task_id": "compile_mobius_core_src_mobius_library_string_cpp_001__src",
+      "task_number": 30,
       "task_type": "compile",
       "inputs": [
         {
@@ -920,13 +934,13 @@
       "cache_key": "95c34b6fa22a746942896ef38e8c3ecdb0aa8bc0bc6a021b8e3b65fbf5bdb0a7"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_table_lib_cpp_001__src",
-      "task_number": 10,
+      "task_id": "compile_mobius_core_src_mobius_library_table_lib_cpp_001__src",
+      "task_number": 42,
       "task_type": "compile",
       "inputs": [
         {
           "path": "src/mobius/library/table_lib.cpp",
-          "hash": "62f13a244c42cee8b6585e24680ba820861ff42bfc461b5714cae0cd9b25ba8d"
+          "hash": "e12ac95ade0176575d24480925437b846cdecfd25689fec81ca6443fb92ab7cd"
         }
       ],
       "outputs": [
@@ -947,11 +961,11 @@
         "memory_mb": 200,
         "disk_mb": 15
       },
-      "cache_key": "9241452be97403c2bfe681a4ae7783ec394f033bd5bf9d5add0e425ff0241d9e"
+      "cache_key": "5ba3e3f5c15c87b730ad8c1d9ba2590b9aa3fbfabf5110815fc55c3a9f83190d"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_types_cpp_001__src",
-      "task_number": 6,
+      "task_id": "compile_mobius_core_src_mobius_library_types_cpp_001__src",
+      "task_number": 25,
       "task_type": "compile",
       "inputs": [
         {
@@ -980,8 +994,8 @@
       "cache_key": "052f1419c37de213986129c32a1ff497a89f681b3bf42ab8d4e5ca95a840d65a"
     },
     {
-      "task_id": "compile_mobius_src_mobius_library_util_cpp_001__src",
-      "task_number": 17,
+      "task_id": "compile_mobius_core_src_mobius_library_util_cpp_001__src",
+      "task_number": 12,
       "task_type": "compile",
       "inputs": [
         {
@@ -1010,8 +1024,8 @@
       "cache_key": "542367e1e7c2c12826be748dc5a0369c50e912e6a99df3bc1f6945ee3681e0a4"
     },
     {
-      "task_id": "compile_mobius_src_mobius_plugin_module_registry_cpp_001__src",
-      "task_number": 31,
+      "task_id": "compile_mobius_core_src_mobius_plugin_module_registry_cpp_001__src",
+      "task_number": 15,
       "task_type": "compile",
       "inputs": [
         {
@@ -1040,8 +1054,8 @@
       "cache_key": "c9cef6b53d74d556ff954049b38d74533dbf31ab760a816f557eda14369d2c25"
     },
     {
-      "task_id": "compile_mobius_src_mobius_state_environment_cpp_001__src",
-      "task_number": 23,
+      "task_id": "compile_mobius_core_src_mobius_state_environment_cpp_001__src",
+      "task_number": 31,
       "task_type": "compile",
       "inputs": [
         {
@@ -1070,8 +1084,8 @@
       "cache_key": "8c62f5f197b0d30f840c09c05f0993637f16da9ecfa1f6309242f2e55582aa06"
     },
     {
-      "task_id": "compile_mobius_src_mobius_state_mobius_state_cpp_001__src",
-      "task_number": 48,
+      "task_id": "compile_mobius_core_src_mobius_state_mobius_state_cpp_001__src",
+      "task_number": 40,
       "task_type": "compile",
       "inputs": [
         {
@@ -1100,8 +1114,8 @@
       "cache_key": "65f3a3b542bc67d62610a76667309978ae1bd7633233cd1eda1cb974ef5fe626"
     },
     {
-      "task_id": "compile_mobius_src_mobius_state_stack_cpp_001__src",
-      "task_number": 36,
+      "task_id": "compile_mobius_core_src_mobius_state_stack_cpp_001__src",
+      "task_number": 45,
       "task_type": "compile",
       "inputs": [
         {
@@ -1130,8 +1144,8 @@
       "cache_key": "c3b232ae4b8aba7c706da988c6aa2f2ae9bff970d501923eb0327a762cf564f7"
     },
     {
-      "task_id": "compile_mobius_src_mobius_util_file_io_cpp_001__src",
-      "task_number": 24,
+      "task_id": "compile_mobius_core_src_mobius_util_file_io_cpp_001__src",
+      "task_number": 27,
       "task_type": "compile",
       "inputs": [
         {
@@ -1160,8 +1174,8 @@
       "cache_key": "d1bed7b0d040f8b11ea9a7892ef0a3867d53039eaac206d5e239581f778db6d0"
     },
     {
-      "task_id": "compile_mobius_src_mobius_util_utility_cpp_001__src",
-      "task_number": 38,
+      "task_id": "compile_mobius_core_src_mobius_util_utility_cpp_001__src",
+      "task_number": 39,
       "task_type": "compile",
       "inputs": [
         {
@@ -1190,8 +1204,8 @@
       "cache_key": "2d64beeb9a0307c245feb9ad3be02d8b7f0084ef99172eba2a9913ea26b24ca1"
     },
     {
-      "task_id": "compile_mobius_src_mobius_repl_cpp_001__src",
-      "task_number": 40,
+      "task_id": "compile_mobius_core_src_mobius_repl_cpp_001__src",
+      "task_number": 19,
       "task_type": "compile",
       "inputs": [
         {
@@ -1220,197 +1234,197 @@
       "cache_key": "e866dc880b65ef417219d2bb39e91e64d285d4d78e13bf146151f7bd0b30146f"
     },
     {
-      "task_id": "link_mobius_001__src",
+      "task_id": "link_mobius_core_001__src",
       "task_number": 49,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/array.o",
-          "hash": ""
+          "hash": "e0f1e4c400549a48d5c0856cea852a3c7866eab4f3619453fa061b561acb8d58"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/enum.o",
-          "hash": ""
+          "hash": "a8af2615da1974ae88b7c3ef946779d53047f9bfa898ccb75707aa4a0b860275"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/metamethods.o",
-          "hash": ""
+          "hash": "c26c01f2682f196c4ce4fdbeb0500c70c8d46e7605da3d3103d5cc73416c0bdf"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/number.o",
-          "hash": ""
+          "hash": "6ea8aa4e2959b528b6c736c21262b64df5050950d558ff5b19560ed1007dd733"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/table.o",
-          "hash": ""
+          "hash": "7c17255328b3bf8de4810e1ecf6bf7ad4336b543d51cfeba00703d0d8e02e708"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/value.o",
-          "hash": ""
+          "hash": "a285ee35f75d1e79f63a1f89c3c576ee73d1b01e9d59c45b02c9f60eb299f3d8"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/ast.o",
-          "hash": ""
+          "hash": "bfcb3c0f6880ed9e125cc1605990a267e7aaf833dd14b01ba080c1884a0542bd"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/parser.o",
-          "hash": ""
+          "hash": "a8274ceee24000530387f21ce7c2ce363789aaf5060211634aa637301c3b28cb"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/scanner.o",
-          "hash": ""
+          "hash": "68cab52ac8a52aaae9d6f828074ae788743fd302128bcd800479886a3a685ddb"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/token.o",
-          "hash": ""
+          "hash": "ebd71957e0d6749240b472adde600fbc04a28e5d3b2c0122c9a88c9bb1cb9bab"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_arithmatic.o",
-          "hash": ""
+          "hash": "94aedbdc06614e7853d5001866a2d7bf78e34241075442459a366cc7f06cf2e5"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_array.o",
-          "hash": ""
+          "hash": "d0a5202a39b1db57ba3aac64af925fd1f4eb5319818e5446b54b7ce36a2892e4"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_core.o",
-          "hash": ""
+          "hash": "70223076dbcb179801e16eeb72a5c60fef1a3dd96a4b73e9565b1a6037c2d13d"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_enum.o",
-          "hash": ""
+          "hash": "9e69481cd7f53ae9ad6e64ffd2bb952265f45eb6d7faa4d98f43a42470939117"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_error.o",
-          "hash": ""
+          "hash": "af7caf8ad78c7649deeff7850574d8fe493708ac68d9cccc11523a77483756b6"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_expression.o",
-          "hash": ""
+          "hash": "faa4637ec49fb1f61c46864566bc36decfe6d4aa7f0abfad2dff9b308781ebc9"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_import.o",
-          "hash": ""
+          "hash": "478f47af31c10f1fbfb865758dd6c0e8b4dd19a359eabdf64b8c3163fd2a6eac"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_statement.o",
-          "hash": ""
+          "hash": "0995c2afe4e3a3a1ce1dc9cd8be77a6c42959b685084bc6613c0118f3aeede8f"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_switch.o",
-          "hash": ""
+          "hash": "08edbd2c074512416ac126003e7395993c64a6adbd21f1b0fe1ce73ceeddb88d"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_table.o",
-          "hash": ""
+          "hash": "ec194ed480275ea794a0d8f3c24c9e034c1aacf6416815c620a1a75efef6e31c"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/internal/string_intern.o",
-          "hash": ""
+          "hash": "e4a3790487a84dbf478a81442e7d5aebe0c123e9d3d0d7397a8f5701a2f5eca5"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/array.o",
-          "hash": ""
+          "hash": "037b8af023b5a4dbf8e90274dd7dfcb6a9141febd8664120b0c00b71c537cd1b"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/core.o",
-          "hash": ""
+          "hash": "47864135dda0b725eb598e015c605ea73f6fae4064a5fe242f924c644f8327fa"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/library.o",
-          "hash": ""
+          "hash": "81c5f7f185858b937012b02e3b7ac9fa66dd0ff8ce100f52beff514e33a00bc7"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/math.o",
-          "hash": ""
+          "hash": "c6187d2d58ce09082c0bdc6170f7be4413ac0c0162102dd5060bee583856fbad"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/string.o",
-          "hash": ""
+          "hash": "59488e88c2e6c9e83edd4bc4410068f81028cb5f86fc76778dd08ed8f847a882"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/table_lib.o",
-          "hash": ""
+          "hash": "d75ceea38462e69fa08a76b1eadd6945f805be2fd2a5793546191a7b9a14cdc5"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/types.o",
-          "hash": ""
+          "hash": "2cb3d4196422246b535034869a170208e5aec3fa917de66702e09e67fe71a841"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/util.o",
-          "hash": ""
+          "hash": "648d2793cb4d6fbf6520cf65b3c978a19a49d94602b7eb51f288539d73024cf5"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/plugin/module_registry.o",
-          "hash": ""
+          "hash": "fcc26b6bff9c743c53bc36020268a93e46f7a9280a7f59acba275c8d4f01d82e"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/environment.o",
-          "hash": ""
+          "hash": "23d75c64484349a80b43e069f053b18ba4d2a4636a0d5cb31ce1fd831660d4c1"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/mobius_state.o",
-          "hash": ""
+          "hash": "c2c7e519b1572571df815af2f90226e6baf7fd6106164e213a96a01ed18ff8a9"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/stack.o",
-          "hash": ""
+          "hash": "05e41289cec47c9d13998a9cf6ec0e5ac4ae210fa699b4a8983e2a49381b117a"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/util/file_io.o",
-          "hash": ""
+          "hash": "85b5c25c018ec29728f55ac4fc0b2205a083cad4965b7f762c902da5ff00dde8"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/util/utility.o",
-          "hash": ""
+          "hash": "0c06b0f68c8b780a0a699c44a62c57a92319c4c56eed8b365472cd54ef8e6bf4"
         },
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/repl.o",
-          "hash": ""
+          "hash": "014c1d764f13231b45e1d91070c6d6d2bbf6d804a78e17905afa8d3b57b16bec"
         }
       ],
       "outputs": [
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmobius.so"
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmobius-core.so"
       ],
       "dependencies": [
-        "compile_mobius_src_mobius_data_array_cpp_001__src",
-        "compile_mobius_src_mobius_data_enum_cpp_001__src",
-        "compile_mobius_src_mobius_data_metamethods_cpp_001__src",
-        "compile_mobius_src_mobius_data_number_cpp_001__src",
-        "compile_mobius_src_mobius_data_table_cpp_001__src",
-        "compile_mobius_src_mobius_data_value_cpp_001__src",
-        "compile_mobius_src_mobius_frontend_ast_cpp_001__src",
-        "compile_mobius_src_mobius_frontend_parser_cpp_001__src",
-        "compile_mobius_src_mobius_frontend_scanner_cpp_001__src",
-        "compile_mobius_src_mobius_frontend_token_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_arithmatic_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_array_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_core_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_enum_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_error_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_expression_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_import_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_statement_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_switch_cpp_001__src",
-        "compile_mobius_src_mobius_eval_eval_table_cpp_001__src",
-        "compile_mobius_src_mobius_internal_string_intern_cpp_001__src",
-        "compile_mobius_src_mobius_library_array_cpp_001__src",
-        "compile_mobius_src_mobius_library_core_cpp_001__src",
-        "compile_mobius_src_mobius_library_library_cpp_001__src",
-        "compile_mobius_src_mobius_library_math_cpp_001__src",
-        "compile_mobius_src_mobius_library_string_cpp_001__src",
-        "compile_mobius_src_mobius_library_table_lib_cpp_001__src",
-        "compile_mobius_src_mobius_library_types_cpp_001__src",
-        "compile_mobius_src_mobius_library_util_cpp_001__src",
-        "compile_mobius_src_mobius_plugin_module_registry_cpp_001__src",
-        "compile_mobius_src_mobius_state_environment_cpp_001__src",
-        "compile_mobius_src_mobius_state_mobius_state_cpp_001__src",
-        "compile_mobius_src_mobius_state_stack_cpp_001__src",
-        "compile_mobius_src_mobius_util_file_io_cpp_001__src",
-        "compile_mobius_src_mobius_util_utility_cpp_001__src",
-        "compile_mobius_src_mobius_repl_cpp_001__src"
+        "compile_mobius_core_src_mobius_data_array_cpp_001__src",
+        "compile_mobius_core_src_mobius_data_enum_cpp_001__src",
+        "compile_mobius_core_src_mobius_data_metamethods_cpp_001__src",
+        "compile_mobius_core_src_mobius_data_number_cpp_001__src",
+        "compile_mobius_core_src_mobius_data_table_cpp_001__src",
+        "compile_mobius_core_src_mobius_data_value_cpp_001__src",
+        "compile_mobius_core_src_mobius_frontend_ast_cpp_001__src",
+        "compile_mobius_core_src_mobius_frontend_parser_cpp_001__src",
+        "compile_mobius_core_src_mobius_frontend_scanner_cpp_001__src",
+        "compile_mobius_core_src_mobius_frontend_token_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_arithmatic_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_array_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_core_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_enum_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_error_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_expression_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_import_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_statement_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_switch_cpp_001__src",
+        "compile_mobius_core_src_mobius_eval_eval_table_cpp_001__src",
+        "compile_mobius_core_src_mobius_internal_string_intern_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_array_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_core_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_library_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_math_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_string_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_table_lib_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_types_cpp_001__src",
+        "compile_mobius_core_src_mobius_library_util_cpp_001__src",
+        "compile_mobius_core_src_mobius_plugin_module_registry_cpp_001__src",
+        "compile_mobius_core_src_mobius_state_environment_cpp_001__src",
+        "compile_mobius_core_src_mobius_state_mobius_state_cpp_001__src",
+        "compile_mobius_core_src_mobius_state_stack_cpp_001__src",
+        "compile_mobius_core_src_mobius_util_file_io_cpp_001__src",
+        "compile_mobius_core_src_mobius_util_utility_cpp_001__src",
+        "compile_mobius_core_src_mobius_repl_cpp_001__src"
       ],
-      "command": "g++ -shared -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/enum.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/metamethods.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/number.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/table.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/value.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/ast.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/parser.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/scanner.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/token.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_arithmatic.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_core.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_enum.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_error.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_expression.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_import.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_statement.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_switch.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_table.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/internal/string_intern.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/core.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/library.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/math.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/string.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/table_lib.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/types.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/util.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/plugin/module_registry.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/environment.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/mobius_state.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/stack.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/util/file_io.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/util/utility.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/repl.o    -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmobius.so",
+      "command": "g++ -shared -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/enum.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/metamethods.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/number.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/table.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/data/value.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/ast.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/parser.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/scanner.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/frontend/token.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_arithmatic.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_core.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_enum.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_error.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_expression.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_import.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_statement.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_switch.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/eval/eval_table.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/internal/string_intern.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/core.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/library.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/math.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/string.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/table_lib.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/types.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/library/util.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/plugin/module_registry.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/environment.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/mobius_state.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/state/stack.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/util/file_io.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/util/utility.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/mobius/repl.o    -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmobius-core.so",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1421,11 +1435,11 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "d637e75b56a0e393099d3ba88d2060cd4cc58d81fea230bfc458885fcc11cb71"
+      "cache_key": "06fc2d819cf923c2468a31833d67124b3d48e8f42b88a95ca2cab51f05cb47fc"
     },
     {
-      "task_id": "compile_mobius_cli_src_main_cpp_001__src",
-      "task_number": 14,
+      "task_id": "compile_mobius_src_main_cpp_001__src",
+      "task_number": 47,
       "task_type": "compile",
       "inputs": [
         {
@@ -1454,24 +1468,24 @@
       "cache_key": "c675eb43359e12741ce9bfa9ecaa71d5252162817d7722df7e8bafaa43ad5a3a"
     },
     {
-      "task_id": "link_mobius_cli_001__src",
-      "task_number": 50,
+      "task_id": "link_mobius_001__src",
+      "task_number": 54,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/main.o",
-          "hash": ""
+          "hash": "7abcf7bb10a716d988469f5007a064b6854d2be244dd2d69f5a27285b473d324"
         }
       ],
       "outputs": [
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/mobius-cli"
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/mobius"
       ],
       "dependencies": [
-        "compile_mobius_cli_src_main_cpp_001__src",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "compile_mobius_src_main_cpp_001__src",
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/main.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/mobius-cli",
+      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/main.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/mobius",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1482,95 +1496,10 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "83bcaf769cc2c8245d79a450ac62e6521e5d9d741a7604368434534e1d1932ac"
+      "cache_key": "21f2182ead3db90d82a43afeb4bdfedc1471a649dcfe430a572fec2547873c4b"
     },
     {
       "task_id": "setup_dirs_001__src_modules",
-      "task_number": 2,
-      "task_type": "setup",
-      "inputs": [],
-      "outputs": [
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib/",
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/",
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/"
-      ],
-      "dependencies": [],
-      "command": "true",
-      "platform": "linux",
-      "architecture": "x86_64",
-      "configuration": "debug",
-      "toolchain": "gcc-cpp-linux",
-      "estimated_time": 0.1,
-      "resource_requirements": {
-        "cpu_cores": 1,
-        "memory_mb": 10,
-        "disk_mb": 1
-      },
-      "cache_key": "99ce4fea1d7d1e311cb9cec37fb3e51d169773a76e46a89d8fd6a7ad47b7456a"
-    },
-    {
-      "task_id": "compile_math_src_modules_math_math_plugin_cpp_001__src_modules",
-      "task_number": 11,
-      "task_type": "compile",
-      "inputs": [
-        {
-          "path": "src/modules/math/math_plugin.cpp",
-          "hash": "a1e528f4e5f81e962d9a7ffc829c23d7659d72852c0763be4c1a1efa5f745a81"
-        }
-      ],
-      "outputs": [
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o",
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.d"
-      ],
-      "dependencies": [
-        "setup_dirs_001__src_modules"
-      ],
-      "command": "g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.d -std=c++17 -O0 -g -Wall -Wextra -fpermissive  -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/math/math_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o",
-      "platform": "linux",
-      "architecture": "x86_64",
-      "configuration": "debug",
-      "toolchain": "gcc-cpp-linux",
-      "estimated_time": 2,
-      "resource_requirements": {
-        "cpu_cores": 1,
-        "memory_mb": 200,
-        "disk_mb": 15
-      },
-      "cache_key": "7e9bfbd19fd41f7a0e8dbe84e8c0b00bd49c9ef6426e7c0bea1361ed7b79ed26"
-    },
-    {
-      "task_id": "link_math_001__src_modules",
-      "task_number": 57,
-      "task_type": "link",
-      "inputs": [
-        {
-          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o",
-          "hash": ""
-        }
-      ],
-      "outputs": [
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmath.so"
-      ],
-      "dependencies": [
-        "compile_math_src_modules_math_math_plugin_cpp_001__src_modules",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
-      ],
-      "command": "g++ -shared -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmath.so",
-      "platform": "linux",
-      "architecture": "x86_64",
-      "configuration": "debug",
-      "toolchain": "gcc-cpp-linux",
-      "estimated_time": 1.5,
-      "resource_requirements": {
-        "cpu_cores": 1,
-        "memory_mb": 150,
-        "disk_mb": 25
-      },
-      "cache_key": "a1a19a979c340ce86399a6cd21bb80657d6b6e406b3eb9b6cb375e48bc4bc398"
-    },
-    {
-      "task_id": "setup_dirs_001__examples",
       "task_number": 3,
       "task_type": "setup",
       "inputs": [],
@@ -1594,13 +1523,98 @@
       "cache_key": "99ce4fea1d7d1e311cb9cec37fb3e51d169773a76e46a89d8fd6a7ad47b7456a"
     },
     {
+      "task_id": "compile_math_src_modules_math_math_plugin_cpp_001__src_modules",
+      "task_number": 21,
+      "task_type": "compile",
+      "inputs": [
+        {
+          "path": "src/modules/math/math_plugin.cpp",
+          "hash": "2778b810459855175a9509132e351adc0efae91239bd34b79efa40a6ef2ef15b"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o",
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.d"
+      ],
+      "dependencies": [
+        "setup_dirs_001__src_modules"
+      ],
+      "command": "g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.d -std=c++17 -O0 -g -Wall -Wextra -fpermissive  -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/math/math_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "gcc-cpp-linux",
+      "estimated_time": 2,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 200,
+        "disk_mb": 15
+      },
+      "cache_key": "f3a054462a14c935a709919ab79a3dfd150e677ed53e54345758aa94912901ab"
+    },
+    {
+      "task_id": "link_math_001__src_modules",
+      "task_number": 53,
+      "task_type": "link",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o",
+          "hash": "69be1831ddada04a5a94d7f0cdd3f62fe6d1c48ed2ea593ca7f3e7c2401ab739"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/math.so"
+      ],
+      "dependencies": [
+        "compile_math_src_modules_math_math_plugin_cpp_001__src_modules",
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
+      ],
+      "command": "g++ -shared -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/src/modules/math/math_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/math.so",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "gcc-cpp-linux",
+      "estimated_time": 1.5,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 150,
+        "disk_mb": 25
+      },
+      "cache_key": "78de7c8251753b161164e018725474d8a17c03083d27aa51496316bdaae0a643"
+    },
+    {
+      "task_id": "setup_dirs_001__examples",
+      "task_number": 1,
+      "task_type": "setup",
+      "inputs": [],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib/",
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/",
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/"
+      ],
+      "dependencies": [],
+      "command": "true",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "gcc-cpp-linux",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 10,
+        "disk_mb": 1
+      },
+      "cache_key": "99ce4fea1d7d1e311cb9cec37fb3e51d169773a76e46a89d8fd6a7ad47b7456a"
+    },
+    {
       "task_id": "compile_text_processing_examples_text_processing_plugin_text_processing_plugin_cpp_001__examples",
-      "task_number": 33,
+      "task_number": 16,
       "task_type": "compile",
       "inputs": [
         {
           "path": "examples/text_processing_plugin/text_processing_plugin.cpp",
-          "hash": "de3de22a27c86e1dd03e8b08b21c04f099fb70cb8a93fa1f8fcfc6e39b9afd74"
+          "hash": "eeea23839e4c13f4f211723d67a08bd7619cbe267c3d31006feccdb55ec05ad4"
         }
       ],
       "outputs": [
@@ -1621,27 +1635,27 @@
         "memory_mb": 200,
         "disk_mb": 15
       },
-      "cache_key": "a8c4b2d6d202b67921cb2b0123713d9c73c5247bbd7b6b0f4ef23228f85d87d7"
+      "cache_key": "7b8f30c44df9d0d8ba4e36c1cd7d88bb635f1f4ccaf0ae566cebc939afbf184c"
     },
     {
       "task_id": "link_text_processing_001__examples",
-      "task_number": 54,
+      "task_number": 58,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/text_processing_plugin/text_processing_plugin.o",
-          "hash": ""
+          "hash": "8d4e044ea9736807bcf772a7469c09a48054640150dfc715a2bd217c05a3aac9"
         }
       ],
       "outputs": [
-        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libtext_processing.so"
+        "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/text_processing.so"
       ],
       "dependencies": [
         "compile_text_processing_examples_text_processing_plugin_text_processing_plugin_cpp_001__examples",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -shared -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/text_processing_plugin/text_processing_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libtext_processing.so",
+      "command": "g++ -shared -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/text_processing_plugin/text_processing_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/text_processing.so",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1652,11 +1666,11 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "fe91666d5ddcf833673d7d2dc03615615b40c7b3631c3b281f5b9a104b793807"
+      "cache_key": "6b2b5b27851e5bf696eabb26246f75671f7b5e5143d9ae1f5b67446c7b2bec83"
     },
     {
       "task_id": "compile_embedding_example_examples_embedding_example_embedding_example_cpp_001__examples",
-      "task_number": 41,
+      "task_number": 48,
       "task_type": "compile",
       "inputs": [
         {
@@ -1686,12 +1700,12 @@
     },
     {
       "task_id": "link_embedding_example_001__examples",
-      "task_number": 56,
+      "task_number": 59,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/embedding_example/embedding_example.o",
-          "hash": ""
+          "hash": "1ba05af1abfe8bf7bdc4dd12015862084d918306624afeeae179db43cda82e0a"
         }
       ],
       "outputs": [
@@ -1699,10 +1713,10 @@
       ],
       "dependencies": [
         "compile_embedding_example_examples_embedding_example_embedding_example_cpp_001__examples",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/embedding_example/embedding_example.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/embedding_example",
+      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/embedding_example/embedding_example.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/embedding_example",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1713,11 +1727,11 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "3d9fbdf5d125239922c070fda224f7f147d0dcd3b0bf22a0146d96e0a86991b7"
+      "cache_key": "89d13fe8b0e2a922c16d760930f81ba449b3bd8dac26993a6079145b46caa018"
     },
     {
       "task_id": "compile_simple_embedding_examples_simple_embedding_simple_embedding_cpp_001__examples",
-      "task_number": 32,
+      "task_number": 13,
       "task_type": "compile",
       "inputs": [
         {
@@ -1747,12 +1761,12 @@
     },
     {
       "task_id": "link_simple_embedding_001__examples",
-      "task_number": 55,
+      "task_number": 50,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/simple_embedding/simple_embedding.o",
-          "hash": ""
+          "hash": "afa8a8088c3e5f4eaf5162cca05ea69af4e9174a87d6b1705f9bea84cb0961ab"
         }
       ],
       "outputs": [
@@ -1760,10 +1774,10 @@
       ],
       "dependencies": [
         "compile_simple_embedding_examples_simple_embedding_simple_embedding_cpp_001__examples",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/simple_embedding/simple_embedding.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_embedding",
+      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/simple_embedding/simple_embedding.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_embedding",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1774,11 +1788,11 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "671de4899d912c6796c4cd3db9c2d51cee53b31afbb710d06f6cf88de6b11261"
+      "cache_key": "1fc3694ef81420157b215659ea6b92b66feb348adeaf2f444afb624783312703"
     },
     {
       "task_id": "compile_game_engine_examples_game_engine_game_engine_cpp_001__examples",
-      "task_number": 19,
+      "task_number": 17,
       "task_type": "compile",
       "inputs": [
         {
@@ -1808,12 +1822,12 @@
     },
     {
       "task_id": "link_game_engine_001__examples",
-      "task_number": 58,
+      "task_number": 57,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/game_engine/game_engine.o",
-          "hash": ""
+          "hash": "962a1abc9513f91395759acbf5b10f2952198f423a065ec5181128172b89ebb8"
         }
       ],
       "outputs": [
@@ -1821,10 +1835,10 @@
       ],
       "dependencies": [
         "compile_game_engine_examples_game_engine_game_engine_cpp_001__examples",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/game_engine/game_engine.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/game_engine",
+      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/game_engine/game_engine.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/game_engine",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1835,11 +1849,11 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "2d56e2b16cb50627916db7b5205b07056b9fad79bb7f84092c2bccfd88654087"
+      "cache_key": "78245e31a0dcdffd1dad07f1ea67c46faf7cb22374d2e156329f9948b73eae31"
     },
     {
       "task_id": "compile_multi_environment_demo_examples_multi_environment_demo_multi_environment_demo_cpp_001__examples",
-      "task_number": 29,
+      "task_number": 22,
       "task_type": "compile",
       "inputs": [
         {
@@ -1869,12 +1883,12 @@
     },
     {
       "task_id": "link_multi_environment_demo_001__examples",
-      "task_number": 51,
+      "task_number": 55,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/multi_environment_demo/multi_environment_demo.o",
-          "hash": ""
+          "hash": "bcdbc1f746d91b1320163b97f739c149777c57e4bc992d03d1c25fa60d6036f4"
         }
       ],
       "outputs": [
@@ -1882,10 +1896,10 @@
       ],
       "dependencies": [
         "compile_multi_environment_demo_examples_multi_environment_demo_multi_environment_demo_cpp_001__examples",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/multi_environment_demo/multi_environment_demo.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/multi_environment_demo",
+      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/multi_environment_demo/multi_environment_demo.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/multi_environment_demo",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1896,11 +1910,11 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "7d3821158819efc9e3fa1fc987dc3c3b740ad6fbf049f5da95895d29ec9e8719"
+      "cache_key": "e06b79756a7edd8159208b23c4027b754039947e8ecceeda5374af9986e9774d"
     },
     {
       "task_id": "compile_simple_userdata_test_examples_simple_userdata_test_simple_userdata_test_cpp_001__examples",
-      "task_number": 8,
+      "task_number": 33,
       "task_type": "compile",
       "inputs": [
         {
@@ -1930,12 +1944,12 @@
     },
     {
       "task_id": "link_simple_userdata_test_001__examples",
-      "task_number": 52,
+      "task_number": 56,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/simple_userdata_test/simple_userdata_test.o",
-          "hash": ""
+          "hash": "4cf843ea28bc9ea1af725c72c36968994ff0caf02404b061f0268dc38f97b8b6"
         }
       ],
       "outputs": [
@@ -1943,10 +1957,10 @@
       ],
       "dependencies": [
         "compile_simple_userdata_test_examples_simple_userdata_test_simple_userdata_test_cpp_001__examples",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/simple_userdata_test/simple_userdata_test.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_userdata_test",
+      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/simple_userdata_test/simple_userdata_test.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_userdata_test",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -1957,11 +1971,11 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "a5fd37e64681c07b156c364653ff4fd91663fb429a3147e132d4049fbc675f86"
+      "cache_key": "9840832a3f63a4eeb68295b5bafe3de50ffbba3ce29f5b8828908453ec8d3003"
     },
     {
       "task_id": "compile_stack_api_test_examples_stack_api_test_stack_api_test_cpp_001__examples",
-      "task_number": 21,
+      "task_number": 28,
       "task_type": "compile",
       "inputs": [
         {
@@ -1991,12 +2005,12 @@
     },
     {
       "task_id": "link_stack_api_test_001__examples",
-      "task_number": 53,
+      "task_number": 52,
       "task_type": "link",
       "inputs": [
         {
           "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/stack_api_test/stack_api_test.o",
-          "hash": ""
+          "hash": "d01d1f753e7095bd118e57dbe95a5927786b311b8d86a136a3d30e324fd7a71d"
         }
       ],
       "outputs": [
@@ -2004,10 +2018,10 @@
       ],
       "dependencies": [
         "compile_stack_api_test_examples_stack_api_test_stack_api_test_cpp_001__examples",
-        "link_mobius_001__src",
-        "link_mobius_001__src"
+        "link_mobius_core_001__src",
+        "link_mobius_core_001__src"
       ],
-      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/stack_api_test/stack_api_test.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/stack_api_test",
+      "command": "g++ -Wl,-rpath,'$ORIGIN' /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/obj/examples/stack_api_test/stack_api_test.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/stack_api_test",
       "platform": "linux",
       "architecture": "x86_64",
       "configuration": "debug",
@@ -2018,7 +2032,297 @@
         "memory_mb": 150,
         "disk_mb": 25
       },
-      "cache_key": "3002b44f96cbf62585170c8ee78d8e4d90a6e31fd8faf3d7a1839690d3552527"
+      "cache_key": "f22afba26fd1eb32508eeafe5bd06c3ec841f17052e68ed594647836c78b25e1"
+    },
+    {
+      "task_id": "stage_mobius_001__workspace",
+      "task_number": 60,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/mobius",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/mobius"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/mobius"
+      ],
+      "dependencies": [
+        "link_mobius_001__src"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/mobius /home/bholcomb/projects/side/mobius/bin/mobius",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "e00e3ea388a8a2ad3207a9f826d58ef41f59b506c30d71c68c990db1170bce0b"
+    },
+    {
+      "task_id": "stage_libmobius_core_so_001__workspace",
+      "task_number": 51,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmobius-core.so",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmobius-core.so"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/lib/libmobius-core.so"
+      ],
+      "dependencies": [
+        "link_mobius_core_001__src"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/libmobius-core.so /home/bholcomb/projects/side/mobius/bin/lib/libmobius-core.so",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "1bd1da4caf98a7e4cc3bf7a601e8fc75af5914c8474542ef8158b442fcd495a9"
+    },
+    {
+      "task_id": "stage_math_so_001__workspace",
+      "task_number": 61,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/math.so",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/math.so"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/modules/math.so"
+      ],
+      "dependencies": [
+        "link_math_001__src_modules"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/math.so /home/bholcomb/projects/side/mobius/bin/modules/math.so",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "bf3bcbafd7179adad28a39d43d34d22af7e319158e10ac764ed3f2cc5544a4dd"
+    },
+    {
+      "task_id": "stage_text_processing_so_001__workspace",
+      "task_number": 65,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/text_processing.so",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/text_processing.so"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/modules/text_processing.so"
+      ],
+      "dependencies": [
+        "link_text_processing_001__examples"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/text_processing.so /home/bholcomb/projects/side/mobius/bin/modules/text_processing.so",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "48a7f1ae83ccadd241d2691c6a385b6440f43ebdc81a9eb5426f71939263b33c"
+    },
+    {
+      "task_id": "stage_embedding_example_001__workspace",
+      "task_number": 68,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/embedding_example",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/embedding_example"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/examples/embedding_example"
+      ],
+      "dependencies": [
+        "link_embedding_example_001__examples"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/embedding_example /home/bholcomb/projects/side/mobius/bin/examples/embedding_example",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "1fe5b3d58ddfcadfedf1f55aeb7b194492174436162b51eb0138feb2e7f7ab29"
+    },
+    {
+      "task_id": "stage_simple_embedding_001__workspace",
+      "task_number": 63,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_embedding",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_embedding"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/examples/simple_embedding"
+      ],
+      "dependencies": [
+        "link_simple_embedding_001__examples"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_embedding /home/bholcomb/projects/side/mobius/bin/examples/simple_embedding",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "484c1686297f71604dd416a8b0fa66f6360c4464ea78019b3afaae862ea92711"
+    },
+    {
+      "task_id": "stage_game_engine_001__workspace",
+      "task_number": 66,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/game_engine",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/game_engine"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/examples/game_engine"
+      ],
+      "dependencies": [
+        "link_game_engine_001__examples"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/game_engine /home/bholcomb/projects/side/mobius/bin/examples/game_engine",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "b269d2a658d9af096d433f7de1f7b578b4769582ca6c7a1deea0e08b90f15330"
+    },
+    {
+      "task_id": "stage_multi_environment_demo_001__workspace",
+      "task_number": 62,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/multi_environment_demo",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/multi_environment_demo"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/examples/multi_environment_demo"
+      ],
+      "dependencies": [
+        "link_multi_environment_demo_001__examples"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/multi_environment_demo /home/bholcomb/projects/side/mobius/bin/examples/multi_environment_demo",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "cd4a442618801695c230c416555ec5c64c4cf27ff2139dbe196842796c7dd7a9"
+    },
+    {
+      "task_id": "stage_simple_userdata_test_001__workspace",
+      "task_number": 67,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_userdata_test",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_userdata_test"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/examples/simple_userdata_test"
+      ],
+      "dependencies": [
+        "link_simple_userdata_test_001__examples"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/simple_userdata_test /home/bholcomb/projects/side/mobius/bin/examples/simple_userdata_test",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "9a3d77672d29191d0422747ce50e27d4070a37e0dd78aa994650b5f4d530b4fd"
+    },
+    {
+      "task_id": "stage_stack_api_test_001__workspace",
+      "task_number": 64,
+      "task_type": "symlink",
+      "inputs": [
+        {
+          "path": "/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/stack_api_test",
+          "hash": "symlink:/home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/stack_api_test"
+        }
+      ],
+      "outputs": [
+        "/home/bholcomb/projects/side/mobius/bin/examples/stack_api_test"
+      ],
+      "dependencies": [
+        "link_stack_api_test_001__examples"
+      ],
+      "command": "ln -sf /home/bholcomb/projects/side/mobius/build/linux-x86_64-debug/bin/stack_api_test /home/bholcomb/projects/side/mobius/bin/examples/stack_api_test",
+      "platform": "linux",
+      "architecture": "x86_64",
+      "configuration": "debug",
+      "toolchain": "",
+      "estimated_time": 0.1,
+      "resource_requirements": {
+        "cpu_cores": 1,
+        "memory_mb": 64,
+        "disk_mb": 10
+      },
+      "cache_key": "f49ff6219a7c40e6c29e450b24d5729cef7970acce99225230f546147d6fef8e"
     }
   ]
 }

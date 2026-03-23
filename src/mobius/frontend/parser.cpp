@@ -67,7 +67,7 @@ bool parser_match_any(Parser* parser, size_t count, ...) {
     va_start(args, count);
     
     for (size_t i = 0; i < count; i++) {
-        TokenType type = va_arg(args, TokenType);
+        TokenType type = (TokenType)va_arg(args, int);
         if (parser_check(parser, type)) {
             parser_advance(parser);
             va_end(args);

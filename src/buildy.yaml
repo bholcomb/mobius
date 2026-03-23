@@ -4,7 +4,7 @@ project:
 
 targets:
   shared_libraries:
-    - name: mobius
+    - name: mobius-core
       language: cpp
       sources:
         - "mobius/data/*.cpp"
@@ -22,13 +22,13 @@ targets:
         - "${workspace}/src/mobius"
 
   executables:
-    - name: mobius-cli
+    - name: mobius
       language: cpp
       sources: ["main.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]

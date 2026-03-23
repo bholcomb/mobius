@@ -154,6 +154,7 @@ int lib_getmetatable(MobiusState* state, int arg_count) {
     Table* metatable = table->getMetatable();
     
     if (metatable) {
+        metatable->retain();
         state->mainContext()->push( make_table_value(metatable));
     } else {
         state->mainContext()->push( make_nil_value());

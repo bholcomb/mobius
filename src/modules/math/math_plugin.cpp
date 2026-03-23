@@ -662,6 +662,6 @@ static Plugin math_plugin = {
 };
 
 // Required plugin entry point
-MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
+extern "C" MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
     return &math_plugin;
 }

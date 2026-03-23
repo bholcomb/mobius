@@ -9,7 +9,7 @@
     ],
     "variables": {}
   },
-  "config_hash": "fb9e8e6e915f68a3f0131282be63d7fbd16c5cbee3458f09544e9cbb92677fd9",
+  "config_hash": "aa72020c661dae3c07a2ccceeab25e580c9fe0d06c5147ae91656dbbc914a497",
   "modules": {
     "examples": {
       "path": "/home/bholcomb/projects/side/mobius/examples/buildy.yaml",
@@ -28,8 +28,8 @@
       "path": "/home/bholcomb/projects/side/mobius/src/buildy.yaml",
       "relative_path": "src",
       "targets": [
-        "mobius",
-        "mobius-cli"
+        "mobius-core",
+        "mobius"
       ]
     },
     "src/modules": {

@@ -97,9 +97,22 @@ Table::Table(MobiusState* state, size_t initial_capacity)
     entries_.resize(initial_capacity);
 }
 
+Table::~Table() {
+    if (metatable_) {
+        metatable_->RefCounted::release();
+    }
+}
+
 Table* Table::retain() {
     RefCounted::retain();
     return this;
+}
+
+void Table::setMetatable(Table* mt) {
+    if (mt == metatable_) return;
+    if (mt) mt->RefCounted::retain();
+    if (metatable_) metatable_->RefCounted::release();
+    metatable_ = mt;
 }
 
 size_t Table::findIndex(const Value& key) const {
@@ -239,7 +252,7 @@ Table* Table::copy() const {
             c->set(entry.key, entry.value);
         }
     }
-    c->metatable_ = metatable_;
+    c->setMetatable(metatable_);
     return c;
 }
 
