@@ -64,4 +64,20 @@ typedef struct {
     RuntimeError error;
 } EvalResult;
 
+#ifdef __cplusplus
+inline EvalResult make_success(int return_count) {
+    EvalResult result = {0};
+    result.return_count = return_count;
+    result.has_error = false;
+    result.has_returned = false;
+    result.has_break = false;
+    result.has_continue = false;
+    return result;
+}
+
+inline bool is_error(EvalResult result) {
+    return result.has_error;
+}
+#endif
+
 #endif

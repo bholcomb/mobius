@@ -44,7 +44,7 @@ typedef int (*MobiusCFunction)(MobiusState* state, int arg_count);
  * Usage:
  *   return mobius_error(state, "bad argument to foo()");
  */
-int mobius_error(MobiusState* state, const char* message);
+MOBIUS_API int mobius_error(MobiusState* state, const char* message);
 
 /* ====================================================================== */
 /*  Value types (for stack inspection)                                     */
@@ -82,87 +82,87 @@ typedef enum {
 /*  Stack inspection                                                       */
 /* ====================================================================== */
 
-int mobius_stack_size(MobiusState* state);
-MobiusValueType mobius_stack_type(MobiusState* state, int idx);
+MOBIUS_API int mobius_stack_size(MobiusState* state);
+MOBIUS_API MobiusValueType mobius_stack_type(MobiusState* state, int idx);
 
-bool mobius_stack_isNumber(MobiusState* state, int idx);
-bool mobius_stack_isInteger(MobiusState* state, int idx);
-bool mobius_stack_isFloat(MobiusState* state, int idx);
-bool mobius_stack_isString(MobiusState* state, int idx);
-bool mobius_stack_isBool(MobiusState* state, int idx);
-bool mobius_stack_isNil(MobiusState* state, int idx);
-bool mobius_stack_isTable(MobiusState* state, int idx);
-bool mobius_stack_isArray(MobiusState* state, int idx);
-bool mobius_stack_isFunction(MobiusState* state, int idx);
-bool mobius_stack_isUserdata(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isNumber(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isInteger(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isFloat(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isString(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isBool(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isNil(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isTable(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isArray(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isFunction(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isUserdata(MobiusState* state, int idx);
 
 /* ====================================================================== */
 /*  Stack getters — permissive (auto-convert where possible)               */
 /* ====================================================================== */
 
-int8_t      mobius_stack_asInt8(MobiusState* state, int idx);
-uint8_t     mobius_stack_asUInt8(MobiusState* state, int idx);
-int16_t     mobius_stack_asInt16(MobiusState* state, int idx);
-uint16_t    mobius_stack_asUInt16(MobiusState* state, int idx);
-int32_t     mobius_stack_asInt32(MobiusState* state, int idx);
-uint32_t    mobius_stack_asUInt32(MobiusState* state, int idx);
-int64_t     mobius_stack_asInt64(MobiusState* state, int idx);
-uint64_t    mobius_stack_asUInt64(MobiusState* state, int idx);
-float       mobius_stack_asFloat32(MobiusState* state, int idx);
-double      mobius_stack_asFloat64(MobiusState* state, int idx);
-bool        mobius_stack_asBool(MobiusState* state, int idx);
-const char* mobius_stack_asString(MobiusState* state, int idx);
+MOBIUS_API int8_t      mobius_stack_asInt8(MobiusState* state, int idx);
+MOBIUS_API uint8_t     mobius_stack_asUInt8(MobiusState* state, int idx);
+MOBIUS_API int16_t     mobius_stack_asInt16(MobiusState* state, int idx);
+MOBIUS_API uint16_t    mobius_stack_asUInt16(MobiusState* state, int idx);
+MOBIUS_API int32_t     mobius_stack_asInt32(MobiusState* state, int idx);
+MOBIUS_API uint32_t    mobius_stack_asUInt32(MobiusState* state, int idx);
+MOBIUS_API int64_t     mobius_stack_asInt64(MobiusState* state, int idx);
+MOBIUS_API uint64_t    mobius_stack_asUInt64(MobiusState* state, int idx);
+MOBIUS_API float       mobius_stack_asFloat32(MobiusState* state, int idx);
+MOBIUS_API double      mobius_stack_asFloat64(MobiusState* state, int idx);
+MOBIUS_API bool        mobius_stack_asBool(MobiusState* state, int idx);
+MOBIUS_API const char* mobius_stack_asString(MobiusState* state, int idx);
 
 /* ====================================================================== */
 /*  Stack getters — strict (respect strict_types pragma)                   */
 /* ====================================================================== */
 
-int8_t      mobius_stack_getInt8(MobiusState* state, int idx);
-uint8_t     mobius_stack_getUInt8(MobiusState* state, int idx);
-int16_t     mobius_stack_getInt16(MobiusState* state, int idx);
-uint16_t    mobius_stack_getUInt16(MobiusState* state, int idx);
-int32_t     mobius_stack_getInt32(MobiusState* state, int idx);
-uint32_t    mobius_stack_getUInt32(MobiusState* state, int idx);
-int64_t     mobius_stack_getInt64(MobiusState* state, int idx);
-uint64_t    mobius_stack_getUInt64(MobiusState* state, int idx);
-float       mobius_stack_getFloat32(MobiusState* state, int idx);
-double      mobius_stack_getFloat64(MobiusState* state, int idx);
-bool        mobius_stack_getBool(MobiusState* state, int idx);
-const char* mobius_stack_getString(MobiusState* state, int idx);
+MOBIUS_API int8_t      mobius_stack_getInt8(MobiusState* state, int idx);
+MOBIUS_API uint8_t     mobius_stack_getUInt8(MobiusState* state, int idx);
+MOBIUS_API int16_t     mobius_stack_getInt16(MobiusState* state, int idx);
+MOBIUS_API uint16_t    mobius_stack_getUInt16(MobiusState* state, int idx);
+MOBIUS_API int32_t     mobius_stack_getInt32(MobiusState* state, int idx);
+MOBIUS_API uint32_t    mobius_stack_getUInt32(MobiusState* state, int idx);
+MOBIUS_API int64_t     mobius_stack_getInt64(MobiusState* state, int idx);
+MOBIUS_API uint64_t    mobius_stack_getUInt64(MobiusState* state, int idx);
+MOBIUS_API float       mobius_stack_getFloat32(MobiusState* state, int idx);
+MOBIUS_API double      mobius_stack_getFloat64(MobiusState* state, int idx);
+MOBIUS_API bool        mobius_stack_getBool(MobiusState* state, int idx);
+MOBIUS_API const char* mobius_stack_getString(MobiusState* state, int idx);
 
 /* ====================================================================== */
 /*  Stack push                                                             */
 /* ====================================================================== */
 
-void mobius_stack_pushNil(MobiusState* state);
-void mobius_stack_pushBool(MobiusState* state, bool value);
-void mobius_stack_pushInt8(MobiusState* state, int8_t value);
-void mobius_stack_pushUInt8(MobiusState* state, uint8_t value);
-void mobius_stack_pushInt16(MobiusState* state, int16_t value);
-void mobius_stack_pushUInt16(MobiusState* state, uint16_t value);
-void mobius_stack_pushInt32(MobiusState* state, int32_t value);
-void mobius_stack_pushUInt32(MobiusState* state, uint32_t value);
-void mobius_stack_pushInt64(MobiusState* state, int64_t value);
-void mobius_stack_pushUInt64(MobiusState* state, uint64_t value);
-void mobius_stack_pushFloat32(MobiusState* state, float value);
-void mobius_stack_pushFloat64(MobiusState* state, double value);
-void mobius_stack_pushString(MobiusState* state, const char* str);
-void mobius_stack_pushNewTable(MobiusState* state, size_t capacity);
-void mobius_stack_pushNewArray(MobiusState* state, size_t capacity);
+MOBIUS_API void mobius_stack_pushNil(MobiusState* state);
+MOBIUS_API void mobius_stack_pushBool(MobiusState* state, bool value);
+MOBIUS_API void mobius_stack_pushInt8(MobiusState* state, int8_t value);
+MOBIUS_API void mobius_stack_pushUInt8(MobiusState* state, uint8_t value);
+MOBIUS_API void mobius_stack_pushInt16(MobiusState* state, int16_t value);
+MOBIUS_API void mobius_stack_pushUInt16(MobiusState* state, uint16_t value);
+MOBIUS_API void mobius_stack_pushInt32(MobiusState* state, int32_t value);
+MOBIUS_API void mobius_stack_pushUInt32(MobiusState* state, uint32_t value);
+MOBIUS_API void mobius_stack_pushInt64(MobiusState* state, int64_t value);
+MOBIUS_API void mobius_stack_pushUInt64(MobiusState* state, uint64_t value);
+MOBIUS_API void mobius_stack_pushFloat32(MobiusState* state, float value);
+MOBIUS_API void mobius_stack_pushFloat64(MobiusState* state, double value);
+MOBIUS_API void mobius_stack_pushString(MobiusState* state, const char* str);
+MOBIUS_API void mobius_stack_pushNewTable(MobiusState* state, size_t capacity);
+MOBIUS_API void mobius_stack_pushNewArray(MobiusState* state, size_t capacity);
 
 typedef void (*MobiusUserdataDestructor)(void* ptr);
-void  mobius_stack_pushUserdata(MobiusState* state, void* ptr,
-                                MobiusUserdataDestructor destructor,
-                                const char* type_name, size_t size);
-void* mobius_stack_getUserdata(MobiusState* state, int idx,
-                               const char** out_type_name);
+MOBIUS_API void  mobius_stack_pushUserdata(MobiusState* state, void* ptr,
+                                          MobiusUserdataDestructor destructor,
+                                          const char* type_name, size_t size);
+MOBIUS_API void* mobius_stack_getUserdata(MobiusState* state, int idx,
+                                          const char** out_type_name);
 
 /* ====================================================================== */
 /*  Stack manipulation                                                     */
 /* ====================================================================== */
 
-void mobius_stack_pop(MobiusState* state, int count);
-void mobius_stack_copy(MobiusState* state, int idx);
+MOBIUS_API void mobius_stack_pop(MobiusState* state, int count);
+MOBIUS_API void mobius_stack_copy(MobiusState* state, int idx);
 
 /* ====================================================================== */
 /*  Global variable access                                                 */
@@ -172,27 +172,27 @@ void mobius_stack_copy(MobiusState* state, int idx);
  * Push the value of a global variable onto the stack.
  * Pushes nil if the variable does not exist.
  */
-void mobius_stack_getGlobal(MobiusState* state, const char* name);
+MOBIUS_API void mobius_stack_getGlobal(MobiusState* state, const char* name);
 
 /**
  * Pop the top value from the stack and assign it to a global variable.
  */
-void mobius_stack_setGlobal(MobiusState* state, const char* name);
+MOBIUS_API void mobius_stack_setGlobal(MobiusState* state, const char* name);
 
 /* ====================================================================== */
 /*  Table operations (on values already on the stack)                      */
 /* ====================================================================== */
 
-void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* key);
-void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* key);
+MOBIUS_API void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* key);
+MOBIUS_API void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* key);
 
 /* ====================================================================== */
 /*  Array operations (on values already on the stack)                      */
 /* ====================================================================== */
 
-void   mobius_stack_setArrayElement(MobiusState* state, int array_idx, size_t element_idx);
-void   mobius_stack_getArrayElement(MobiusState* state, int array_idx, size_t element_idx);
-size_t mobius_stack_getArrayLength(MobiusState* state, int array_idx);
+MOBIUS_API void   mobius_stack_setArrayElement(MobiusState* state, int array_idx, size_t element_idx);
+MOBIUS_API void   mobius_stack_getArrayElement(MobiusState* state, int array_idx, size_t element_idx);
+MOBIUS_API size_t mobius_stack_getArrayLength(MobiusState* state, int array_idx);
 
 /* ====================================================================== */
 /*  Register a native C function as a global                               */
@@ -202,8 +202,8 @@ size_t mobius_stack_getArrayLength(MobiusState* state, int array_idx);
  * Register a C function so it can be called from Mobius scripts.
  * Equivalent to assigning a native-function value to a global variable.
  */
-void mobius_register_function(MobiusState* state, const char* name,
-                              MobiusCFunction func);
+MOBIUS_API void mobius_register_function(MobiusState* state, const char* name,
+                                        MobiusCFunction func);
 
 /* ====================================================================== */
 /*  Plugin registration structs                                            */

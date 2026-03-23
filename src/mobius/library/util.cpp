@@ -116,13 +116,12 @@ int lib_load(MobiusState* state, int arg_count) {
     }
     
     // Parse and execute the loaded script in the current environment
-    TokenArray tokens = scan_source(file_result.content);
+    TokenArray tokens = scan_source(file_result.content, state->stringPool());
     if (tokens.count == 0) {
         free_file_result(&file_result);
         return state->error("No code found in file");
     }
     
-    // Parse AST
     ParseResult parse_result = parse(state, tokens);
     free_token_array(&tokens);
     

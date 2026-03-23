@@ -93,7 +93,6 @@ const char* get_file_extension(const char* path) {
     return last_dot + 1;
 }
 
-// Execute a script from a string with optional filename for error reporting
 int execute_script_string(const char* source, const char* filename) {
     if (!source) {
         fprintf(stderr, "Error: No source code provided\n");
@@ -102,18 +101,16 @@ int execute_script_string(const char* source, const char* filename) {
     
     printf("Executing %s...\n", filename ? filename : "script");
     
-    // Scan tokens
-    TokenArray tokens = scan_source(source);
-    if (tokens.count == 0) {
-        fprintf(stderr, "Error: No tokens found\n");
-        return 1;
-    }
-    
     MobiusState* state = mobius_new_state(NULL);
     register_stdlib_functions(state);
-
-    // Set source context for better error reporting
     state->setSourceContext(source);
+    
+    TokenArray tokens = scan_source(source, state->stringPool());
+    if (tokens.count == 0) {
+        fprintf(stderr, "Error: No tokens found\n");
+        mobius_free_state(state);
+        return 1;
+    }
     
     // Parse AST
     ParseResult parse_result = parse(state, tokens);

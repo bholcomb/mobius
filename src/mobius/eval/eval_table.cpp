@@ -93,12 +93,13 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
         const char* member_name = expr->key.identifier;
         
         if (enum_name && member_name) {
-            // First check if an enum with this name exists
-            char enum_var_name[256];
-            snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", enum_name);
+            char enum_buf[256];
+            snprintf(enum_buf, sizeof(enum_buf), "__enum_%s", enum_name);
+            StringInternPool* pool = env->current_context->state->stringPool();
+            const char* enum_key = pool->intern(enum_buf)->data;
             
             bool enum_found = false;
-            Value enum_value = env->get(enum_var_name, &enum_found);
+            Value enum_value = env->get(enum_key, &enum_found);
             
             // Only proceed with enum access if the enum actually exists
             if (enum_found && enum_value.type == VAL_USERDATA && 

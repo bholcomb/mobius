@@ -6,6 +6,7 @@
 #include "library/table_lib.h"
 #include "library/types.h"
 #include "library/util.h"
+#include "state/mobius_state.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -87,15 +88,14 @@ static const PluginFunction library_registry[] = {
 void register_stdlib_functions(MobiusState* state) {
     if (!state || !state->globalEnv()) return;
     
-    // Iterate through the library registry and register each function
+    StringInternPool* pool = state->stringPool();
     for (size_t i = 0; library_registry[i].name != NULL; i++) {
         const PluginFunction* func = &library_registry[i];
         
-        // Create a native function value
         Value func_value = make_native_function_value(func->function);
         
-        // Register in global environment
-        state->globalEnv()->define(func->name, func_value);
+        const char* interned_name = pool->intern(func->name)->data;
+        state->globalEnv()->define(interned_name, func_value);
     }
 }
 

@@ -125,7 +125,7 @@ EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env) {
 
 // Stack-based function call evaluation
 EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
-    char full_name[256];
+    const char* full_name = nullptr;
     int call_line = 0;
     int call_column = 0;
     
@@ -257,8 +257,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     // Handle simple function() or qualified_name() syntax  
     else if (expr->callee->type == EXPR_VARIABLE) {
     VariableExpr* var_expr = &expr->callee->as.variable;
-    const char* identifier = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
-    snprintf(full_name, sizeof(full_name), "%s", identifier);
+    full_name = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
         call_line = var_expr->name.line;
         call_column = var_expr->name.column;
     }
@@ -348,13 +347,11 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
 }
 
 EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
-    // Use the extracted identifier string from the token's identifier field
     const char* name = expr->name.identifier ? expr->name.identifier : "unknown";
     
-    bool found;
-    Value value = env->get(name, &found);
+    const Value* value = env->lookup(name);
     
-    if (!found) {
+    if (!value) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "Undefined variable '%s'", name);
         
@@ -363,13 +360,13 @@ EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
             error_msg,
             "Make sure the variable is declared before use",
             ERROR_UNDEFINED,
-            0, 0,  // No line/column info available
+            0, 0,
             name,
             NULL
         );
     }
     
-    env->current_context->push( value);
+    env->current_context->push(*value);
     return make_success(1);
 }
 
@@ -380,9 +377,7 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
     }
     Value value = env->current_context->pop();
     
-    char name[256];
-    const char* identifier = expr->name.identifier ? expr->name.identifier : "unknown";
-    snprintf(name, sizeof(name), "%s", identifier);
+    const char* name = expr->name.identifier ? expr->name.identifier : "unknown";
     
     if (!env->assign(name, value)) {
         return make_error_detailed(env, "Undefined variable in assignment", 

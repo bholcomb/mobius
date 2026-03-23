@@ -71,9 +71,11 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
                                          int line, int column, EvalResult* error_result) {
     if (path_len == 0) return NULL;
     
-    // Start with the first component
+    StringInternPool* pool = env->current_context->state->stringPool();
+    const char* first_key = pool->intern(path[0])->data;
+    
     bool found = false;
-    Value current_value = env->get(path[0], &found);
+    Value current_value = env->get(first_key, &found);
     
     Table* current_table = NULL;
     if (found && current_value.type == VAL_TABLE) {
@@ -96,7 +98,7 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
             return NULL;
         }
         Value table_value = make_table_value(current_table);
-        env->define(path[0], table_value);
+        env->define(first_key, table_value);
     }
     
     // Walk through remaining path components
@@ -282,6 +284,8 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         // Note: get_or_create_nested_table handles defining the variable if needed
     } else {
         // Simple single-name import: check if table already exists, or create new one
+        StringInternPool* pool = env->current_context->state->stringPool();
+        target_name = pool->intern(target_name)->data;
         bool found = false;
         Value existing = env->get(target_name, &found);
         
@@ -314,7 +318,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         }
     }
     
-    // Populate functions from the plugin directly
+    StringInternPool* import_pool = env->current_context->state->stringPool();
     int functions_added = 0;
     for (size_t i = 0; i < plugin->function_count; i++) {
         PluginFunction* func = &plugin->functions[i];
@@ -324,9 +328,9 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         MobiusCFunction func_ptr = func->function;
         
         if (is_global) {
-            // Define function directly in global environment
+            const char* interned_func = import_pool->intern(func_name)->data;
             bool found = false;
-            env->get(func_name, &found);
+            env->get(interned_func, &found);
             if (found) {
                 EvalResult override_error = {0};
                 if (!check_function_override(func_name, NULL, 
@@ -339,7 +343,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
                 }
             }
             Value func_value = make_native_function_value(func_ptr);
-            env->define(func_name, func_value);
+            env->define(interned_func, func_value);
             functions_added++;
         } else {
             // Add to target table
@@ -360,11 +364,9 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         }
     }
     
-    // If not global import and we created a new table, define it as a variable
     if (!is_global && target_table && table_is_new) {
         Value table_value = make_table_value(target_table);
-        const char* var_name = target_name;
-        env->define(var_name, table_value);
+        env->define(target_name, table_value);
     }
     
     // Cleanup

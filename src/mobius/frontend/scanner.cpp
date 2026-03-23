@@ -55,12 +55,13 @@ static const Keyword keywords[] = {
 static const size_t keyword_count = sizeof(keywords) / sizeof(keywords[0]);
 
 // Initialize scanner state
-void init_scanner(Scanner* scanner, const char* source) {
+void init_scanner(Scanner* scanner, const char* source, StringInternPool* pool) {
     scanner->start = source;
     scanner->current = source;
     scanner->source = source;
     scanner->line = 1;
     scanner->column = 1;
+    scanner->pool = pool;
 }
 
 // Check if at end of source
@@ -153,7 +154,8 @@ Token make_simple_token(Scanner* scanner, TokenType type) {
     return make_token(type, scanner->start, 
                      (int)(scanner->current - scanner->start),
                      scanner->line, 
-                     scanner->column - (int)(scanner->current - scanner->start));
+                     scanner->column - (int)(scanner->current - scanner->start),
+                     scanner->pool);
 }
 
 // Scan string literal
@@ -421,10 +423,10 @@ Token scan_token(Scanner* scanner) {
 }
 
 // Main scanning function
-TokenArray scan_source(const char* source) {
+TokenArray scan_source(const char* source, StringInternPool* pool) {
     TokenArray array = {0};
     array.capacity = INITIAL_TOKEN_CAPACITY;
-    array.tokens = malloc(sizeof(Token) * array.capacity);
+    array.tokens = (Token*)malloc(sizeof(Token) * array.capacity);
     
     if (!array.tokens) {
         array.capacity = 0;
@@ -432,7 +434,7 @@ TokenArray scan_source(const char* source) {
     }
     
     Scanner scanner;
-    init_scanner(&scanner, source);
+    init_scanner(&scanner, source, pool);
     
     while (true) {
         Token token = scan_token(&scanner);
@@ -440,7 +442,7 @@ TokenArray scan_source(const char* source) {
         // Resize array if needed
         if (array.count >= array.capacity) {
             array.capacity *= 2;
-            Token* new_tokens = realloc(array.tokens, sizeof(Token) * array.capacity);
+            Token* new_tokens = (Token*)realloc(array.tokens, sizeof(Token) * array.capacity);
             if (!new_tokens) {
                 free_token_array(&array);
                 array.capacity = 0;

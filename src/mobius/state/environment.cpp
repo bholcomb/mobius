@@ -2,6 +2,7 @@
 #include "state/mobius_state.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 Environment::Environment(Environment* enclosing, ExecutionContext* ctx)
     : enclosing(enclosing)
@@ -13,7 +14,7 @@ Environment::~Environment()
 {
 }
 
-void Environment::define(const char* name, Value value) {
+void Environment::define(const char* name, const Value& value) {
     auto it = myVariables.find(name);
     if (it != myVariables.end()) {
         it->second = value;
@@ -36,7 +37,19 @@ Value Environment::get(const char* name, bool* found) const {
     return make_nil_value();
 }
 
-bool Environment::assign(const char* name, Value value) {
+const Value* Environment::lookup(const char* name) const {
+    const Environment* current = this;
+    while (current) {
+        auto it = current->myVariables.find(name);
+        if (it != current->myVariables.end()) {
+            return &it->second;
+        }
+        current = current->enclosing;
+    }
+    return nullptr;
+}
+
+bool Environment::assign(const char* name, const Value& value) {
     Environment* current = this;
     while (current) {
         auto it = current->myVariables.find(name);
@@ -50,9 +63,7 @@ bool Environment::assign(const char* name, Value value) {
 }
 
 bool Environment::isDefined(const char* name) const {
-    bool found = false;
-    Value v = get(name, &found);
-    return found;
+    return lookup(name) != nullptr;
 }
 
 size_t Environment::size() const {
@@ -63,7 +74,7 @@ void Environment::print() const {
     printf("Environment (variables: %zu):\n", myVariables.size());
     for (const auto& [name, val] : myVariables) {
         char* str = value_to_string(val);
-        printf("  %s = %s\n", name.c_str(), str ? str : "(null)");
+        printf("  %s = %s\n", name ? name : "(null)", str ? str : "(null)");
         free(str);
     }
     if (enclosing) {

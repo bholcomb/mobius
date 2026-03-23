@@ -32,6 +32,6 @@ const PluginFunction* get_library_registry(void);
  * Get the number of functions in the library registry
  * @return Number of registered library functions (excluding sentinel)
  */
-size_t get_library_function_count(void);
+MOBIUS_API size_t get_library_function_count(void);
 
 #endif // MOBIUS_LIBRARY_H

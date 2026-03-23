@@ -1,4 +1,5 @@
 
+#include <mobius/mobius.h>
 #include "plugin/module_registry.h"
 #include "util/utility.h"
 

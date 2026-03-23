@@ -103,7 +103,7 @@ EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env) {
 }
 
 // Arithmetic operations
-EvalResult add_values(Environment* env, Value left, Value right) {
+EvalResult add_values(Environment* env, const Value& left, const Value& right) {
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
         Table* table = (left.type == VAL_TABLE) ? left.as.table : right.as.table;
@@ -268,7 +268,7 @@ EvalResult add_values(Environment* env, Value left, Value right) {
     return make_error(env, "Cannot add these types", 0, 0);
 }
 
-EvalResult subtract_values(Environment* env, Value left, Value right) {
+EvalResult subtract_values(Environment* env, const Value& left, const Value& right) {
     (void)env;
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
@@ -324,7 +324,7 @@ EvalResult subtract_values(Environment* env, Value left, Value right) {
     return make_error(env, "Cannot subtract these types", 0, 0);
 }
 
-EvalResult multiply_values(Environment* env, Value left, Value right) {
+EvalResult multiply_values(Environment* env, const Value& left, const Value& right) {
     (void)env;
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
@@ -361,7 +361,7 @@ EvalResult multiply_values(Environment* env, Value left, Value right) {
     return make_error(env, "Cannot multiply these types", 0, 0);
 }
 
-EvalResult divide_values(Environment* env, Value left, Value right, int line, int column) {
+EvalResult divide_values(Environment* env, const Value& left, const Value& right, int line, int column) {
     (void)env;
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
@@ -402,7 +402,7 @@ EvalResult divide_values(Environment* env, Value left, Value right, int line, in
     return make_success(1);
 }
 
-EvalResult modulo_values(Environment* env, Value left, Value right, int line, int column) {
+EvalResult modulo_values(Environment* env, const Value& left, const Value& right, int line, int column) {
     (void)env;
     // Check for table metamethods first
     if (left.type == VAL_TABLE || right.type == VAL_TABLE) {
@@ -469,7 +469,7 @@ EvalResult modulo_values(Environment* env, Value left, Value right, int line, in
     return make_error(env, "Cannot modulo these types", 0, 0);
 }
 
-EvalResult compare_values(Environment* env, Value left, Value right, TokenType op) {
+EvalResult compare_values(Environment* env, const Value& left, const Value& right, TokenType op) {
     (void)env;
     bool result = false;
     

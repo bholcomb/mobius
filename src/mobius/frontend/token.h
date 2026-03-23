@@ -2,6 +2,7 @@
 #define MOBIUS_TOKEN_H
 
 #include "data/number.h" //for number enum
+#include "internal/string_intern.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -107,7 +108,8 @@ typedef enum {
 // Token structure containing all token information
 typedef struct {
     TokenType type;         // The type of the token
-    const char* identifier; // Copied identifier string (only for IDENTIFIER tokens, NULL otherwise)
+    const char* identifier; // Identifier string (points to interned->data when interned, NULL otherwise)
+    MobiusString* interned; // Interned string for this identifier (NULL for non-identifier tokens)
     int length;             // Length of the token string (for compatibility)
     int line;               // Line number where token appears
     int column;             // Column number where token starts
@@ -129,7 +131,7 @@ typedef struct {
 // Token utility functions (to be implemented later)
 const char* token_type_name(TokenType type);
 void print_token(const Token* token);
-Token make_token(TokenType type, const char* start, int length, int line, int column);
+Token make_token(TokenType type, const char* start, int length, int line, int column, StringInternPool* pool = nullptr);
 Token make_error_token(const char* message, int line, int column);
 
 // Numeric token creation helpers
