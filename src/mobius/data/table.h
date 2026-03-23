@@ -21,7 +21,7 @@ class MobiusState;
 class Table : public RefCounted {
 public:
     Table(MobiusState* state, size_t initial_capacity = INITIAL_TABLE_CAPACITY);
-    ~Table() override = default;
+    ~Table() override;
 
     Table* retain();
 
@@ -33,7 +33,7 @@ public:
 
     Table* copy() const;
 
-    void setMetatable(Table* mt) { metatable_ = mt; }
+    void setMetatable(Table* mt);
     Table* getMetatable() const { return metatable_; }
 
     bool hasMetamethod(MobiusString* method_name) const;

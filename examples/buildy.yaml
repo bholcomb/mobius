@@ -11,9 +11,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]
 
     - name: simple_embedding
       language: cpp
@@ -22,9 +22,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]
 
     - name: game_engine
       language: cpp
@@ -33,9 +33,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]
 
     - name: multi_environment_demo
       language: cpp
@@ -44,9 +44,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]
 
     - name: simple_userdata_test
       language: cpp
@@ -55,9 +55,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]
 
     - name: stack_api_test
       language: cpp
@@ -66,20 +66,21 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]
 
     # cpp_class_example excluded — uses obsolete pre-stack API, needs full rewrite
 
   shared_libraries:
     - name: text_processing
       language: cpp
+      output_prefix: ""
       sources: ["text_processing_plugin/text_processing_plugin.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]

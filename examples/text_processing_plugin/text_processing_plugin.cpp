@@ -543,6 +543,6 @@ static Plugin text_processing_plugin = {
  * Required plugin entry point
  * This function must be exported and named exactly "mobius_plugin_info"
  */
-MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
+extern "C" MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
     return &text_processing_plugin;
 }

@@ -325,7 +325,6 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
     
     // Define the function in the current environment using the stored name
     env->define(function->name, func_value);
-    function->ref_count--;
     return make_success(0);
 }
 

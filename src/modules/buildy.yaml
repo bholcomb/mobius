@@ -6,11 +6,12 @@ targets:
   shared_libraries:
     - name: math
       language: cpp
+      output_prefix: ""
       sources: ["math/math_plugin.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius", "m", "dl"]
+      libs: ["mobius-core", "m", "dl"]
       depends_on:
-        targets: ["mobius"]
+        targets: ["mobius-core"]
