@@ -1,0 +1,1185 @@
+#include "vm/vm.h"
+#include "state/mobius_state.h"
+#include "state/environment.h"
+#include "data/table.h"
+#include "data/array.h"
+#include "data/enum.h"
+#include "data/function.h"
+#include "eval/evaluator.h"
+#include "plugin/module_registry.h"
+#include "internal/string_intern.h"
+
+#include <cstdio>
+#include <cstring>
+#include <cstdarg>
+#include <cstdlib>
+#include <cmath>
+#include <new>
+
+// ============================================================================
+// Integer extraction helpers (duplicated from eval_arithmatic.cpp so the VM
+// dispatch loop can inline them without cross-TU overhead)
+// ============================================================================
+
+inline int64_t MobiusVM::vm_extract_int64(const Value& v) {
+    switch (v.as.integer.num_type) {
+        case NUM_INT8:   return v.as.integer.value.i8;
+        case NUM_UINT8:  return v.as.integer.value.u8;
+        case NUM_INT16:  return v.as.integer.value.i16;
+        case NUM_UINT16: return v.as.integer.value.u16;
+        case NUM_INT32:  return v.as.integer.value.i32;
+        case NUM_UINT32: return v.as.integer.value.u32;
+        case NUM_INT64:  return v.as.integer.value.i64;
+        case NUM_UINT64: return (int64_t)v.as.integer.value.u64;
+        default:         return 0;
+    }
+}
+
+inline uint64_t MobiusVM::vm_extract_uint64(const Value& v) {
+    switch (v.as.integer.num_type) {
+        case NUM_INT8:   return (uint64_t)v.as.integer.value.i8;
+        case NUM_UINT8:  return v.as.integer.value.u8;
+        case NUM_INT16:  return (uint64_t)v.as.integer.value.i16;
+        case NUM_UINT16: return v.as.integer.value.u16;
+        case NUM_INT32:  return (uint64_t)v.as.integer.value.i32;
+        case NUM_UINT32: return v.as.integer.value.u32;
+        case NUM_INT64:  return (uint64_t)v.as.integer.value.i64;
+        case NUM_UINT64: return v.as.integer.value.u64;
+        default:         return 0;
+    }
+}
+
+inline double MobiusVM::vm_extract_double(const Value& v) {
+    if (v.type == VAL_FLOAT64) return v.as.float64_val;
+    if (v.type == VAL_FLOAT32) return (double)v.as.float32_val;
+    if (v.type == VAL_INTEGER) return (double)vm_extract_int64(v);
+    return 0.0;
+}
+
+inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
+    return (l.type == VAL_INTEGER && l.as.integer.num_type == NUM_UINT64) ||
+           (r.type == VAL_INTEGER && r.as.integer.num_type == NUM_UINT64);
+}
+
+// ============================================================================
+// Constructor
+// ============================================================================
+
+MobiusVM::MobiusVM(MobiusState* state)
+    : state_(state), global_env_(state->globalEnv()) {}
+
+// ============================================================================
+// Error handling
+// ============================================================================
+
+void MobiusVM::runtimeError(const char* fmt, ...) {
+    char buf[512];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    int line = currentLine();
+    state_->setError(1, buf, nullptr, line, 0, nullptr);
+}
+
+int MobiusVM::currentLine() const {
+    if (call_stack_.empty()) return 0;
+    const CallInfo& ci = call_stack_.back();
+    int pc = (int)(ci.ip - ci.proto->code.data()) - 1;
+    if (pc >= 0 && pc < (int)ci.proto->line_info.size())
+        return ci.proto->line_info[pc];
+    return 0;
+}
+
+// ============================================================================
+// Public entry point
+// ============================================================================
+
+int MobiusVM::execute(Prototype* proto) {
+    registers_.resize(proto->num_registers + 256, Value());
+
+    CallInfo ci;
+    ci.proto = proto;
+    ci.ip = proto->code.data();
+    ci.base = 0;
+    ci.nresults = 0;
+    call_stack_.push_back(ci);
+
+    int rc = run();
+
+    call_stack_.pop_back();
+    return rc;
+}
+
+// ============================================================================
+// Native function bridge
+// ============================================================================
+
+int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nresults) {
+    ExecutionContext* ctx = state_->mainContext();
+    CallInfo& caller = call_stack_.back();
+
+    // Push arguments onto the C API stack
+    for (int i = 1; i <= nargs; i++) {
+        ctx->push(R(caller, func_reg + i));
+    }
+
+    ctx->pushFrame("native", nullptr, currentLine(), 0,
+                   FUNCTION_TYPE_NATIVE, nullptr, nullptr);
+    int rc = func(state_, nargs);
+    ctx->popFrame();
+
+    if (rc < 0) return -1;
+
+    // Copy results back into VM registers
+    int results_to_copy = (nresults == 0) ? rc : (nresults - 1);
+    for (int i = results_to_copy - 1; i >= 0; i--) {
+        if (ctx->stackSize() > 0) {
+            R(caller, func_reg + i) = ctx->pop();
+        } else {
+            R(caller, func_reg + i) = Value();
+        }
+    }
+
+    return 0;
+}
+
+// ============================================================================
+// Mobius function call
+// ============================================================================
+
+int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresults) {
+    Value& func_val = R(caller, func_reg);
+
+    if (func_val.type == VAL_NATIVE_FUNCTION) {
+        return callNative(func_val.as.native_function, func_reg, nargs, nresults);
+    }
+
+    if (func_val.type != VAL_FUNCTION || !func_val.as.function) {
+        runtimeError("Attempt to call a non-function value (type: %s)",
+                     value_type_name(func_val.type));
+        return -1;
+    }
+
+    MobiusFunction* mf = func_val.as.function;
+
+    if (!mf->proto) {
+        runtimeError("Function '%s' has no bytecode prototype",
+                     mf->name ? mf->name : "anonymous");
+        return -1;
+    }
+
+    if ((int)mf->param_count != nargs) {
+        runtimeError("Function '%s' expects %zu arguments but got %d",
+                     mf->name ? mf->name : "anonymous", mf->param_count, nargs);
+        return -1;
+    }
+
+    Prototype* child = mf->proto;
+
+    // Child frame base is placed right after the func register + args.
+    // Args are in caller's R[func_reg+1] .. R[func_reg+nargs].
+    // Child sees them as R[0]..R[nargs-1] relative to child_base.
+    int child_base = caller.base + func_reg + 1;
+    int needed = child_base + child->num_registers + 16;
+    if (needed > (int)registers_.size()) {
+        registers_.resize(needed, Value());
+    }
+
+    // caller.ip is already saved by OP_CALL before calling us.
+    CallInfo child_ci;
+    child_ci.proto = child;
+    child_ci.ip = child->code.data();
+    child_ci.base = child_base;
+    child_ci.nresults = nresults;
+    call_stack_.push_back(child_ci);
+
+    return 1;  // signal: switched frame, caller updates dispatch locals
+}
+
+// ============================================================================
+// Upvalue management
+// ============================================================================
+
+void MobiusVM::closeUpvalues(CallInfo& ci, int from_reg) {
+    for (auto* uv : ci.open_upvalues) {
+        if (uv->is_open) {
+            int reg_idx = (int)(uv->location - registers_.data());
+            if (reg_idx >= ci.base + from_reg) {
+                uv->closed = *uv->location;
+                uv->location = &uv->closed;
+                uv->is_open = false;
+            }
+        }
+    }
+}
+
+// ============================================================================
+// Main dispatch loop
+// ============================================================================
+
+int MobiusVM::run() {
+    CallInfo* ci = &call_stack_.back();
+    uint32_t* ip = ci->ip;
+    Prototype* proto = ci->proto;
+    int base = ci->base;
+
+    // Macro-style accessors for tight inner loop
+    #define RA(inst)  registers_[base + DECODE_A(inst)]
+    #define RB(inst)  registers_[base + DECODE_B(inst)]
+    #define RC(inst)  registers_[base + DECODE_C(inst)]
+    #define RKB(inst) RK(*ci, DECODE_B(inst))
+    #define RKC(inst) RK(*ci, DECODE_C(inst))
+    #define KBx(inst) proto->constants[DECODE_Bx(inst)]
+
+    for (;;) {
+        uint32_t inst = *ip++;
+
+        switch (DECODE_OP(inst)) {
+
+        // ================================================================
+        // Data movement
+        // ================================================================
+
+        case OP_MOVE: {
+            RA(inst) = RB(inst);
+            break;
+        }
+
+        case OP_LOADK: {
+            RA(inst) = KBx(inst);
+            break;
+        }
+
+        case OP_LOADNIL: {
+            int a = DECODE_A(inst);
+            int b = DECODE_B(inst);
+            for (int i = a; i <= a + b; i++)
+                registers_[base + i] = Value();
+            break;
+        }
+
+        case OP_LOADBOOL: {
+            RA(inst) = make_bool_value(DECODE_B(inst) != 0);
+            if (DECODE_C(inst)) ip++;
+            break;
+        }
+
+        case OP_LOADINT: {
+            int sbx = DECODE_sBx(inst);
+            RA(inst) = make_integer_value(NUM_INT64, (int64_t)sbx);
+            break;
+        }
+
+        // ================================================================
+        // Globals
+        // ================================================================
+
+        case OP_GETGLOBAL: {
+            const Value& key = KBx(inst);
+            if (key.type != VAL_STRING || !key.as.string) {
+                runtimeError("GETGLOBAL: invalid key type");
+                return -1;
+            }
+            const Value* val = global_env_->lookup(key.as.string->data);
+            if (!val) {
+                runtimeError("Undefined variable '%s'", key.as.string->data);
+                return -1;
+            }
+            RA(inst) = *val;
+            break;
+        }
+
+        case OP_SETGLOBAL: {
+            const Value& key = KBx(inst);
+            if (key.type != VAL_STRING || !key.as.string) {
+                runtimeError("SETGLOBAL: invalid key type");
+                return -1;
+            }
+            const char* name = key.as.string->data;
+            if (!global_env_->assign(name, RA(inst))) {
+                global_env_->define(name, RA(inst));
+            }
+            break;
+        }
+
+        // ================================================================
+        // Upvalues
+        // ================================================================
+
+        case OP_GETUPVAL: {
+            int b = DECODE_B(inst);
+            if (b < (int)ci->open_upvalues.size() && ci->open_upvalues[b]) {
+                RA(inst) = *ci->open_upvalues[b]->location;
+            } else {
+                RA(inst) = Value();
+            }
+            break;
+        }
+
+        case OP_SETUPVAL: {
+            int b = DECODE_B(inst);
+            if (b < (int)ci->open_upvalues.size() && ci->open_upvalues[b]) {
+                *ci->open_upvalues[b]->location = RA(inst);
+            }
+            break;
+        }
+
+        // ================================================================
+        // Tables and arrays
+        // ================================================================
+
+        case OP_NEWTABLE: {
+            Table* tbl = new (std::nothrow) Table(state_, DECODE_C(inst));
+            if (!tbl) { runtimeError("Failed to allocate table"); return -1; }
+            RA(inst) = make_table_value(tbl);
+            break;
+        }
+
+        case OP_NEWARRAY: {
+            ArrayValue* arr = new (std::nothrow) ArrayValue(DECODE_B(inst));
+            if (!arr) { runtimeError("Failed to allocate array"); return -1; }
+            RA(inst) = make_array_value(arr);
+            break;
+        }
+
+        case OP_GETTABLE: {
+            const Value& tbl = RB(inst);
+            const Value& key = RKC(inst);
+
+            if (tbl.type == VAL_TABLE && tbl.as.table) {
+                RA(inst) = tbl.as.table->get(key);
+            } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
+                if (key.type == VAL_INTEGER) {
+                    int64_t idx = vm_extract_int64(key);
+                    if (idx >= 0 && idx < (int64_t)tbl.as.array->length()) {
+                        RA(inst) = tbl.as.array->get((size_t)idx);
+                    } else {
+                        RA(inst) = Value();
+                    }
+                } else {
+                    runtimeError("Array index must be an integer");
+                    return -1;
+                }
+            } else {
+                runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
+                return -1;
+            }
+            break;
+        }
+
+        case OP_SETTABLE: {
+            Value& tbl = RA(inst);
+            const Value& key = RKB(inst);
+            const Value& val = RKC(inst);
+
+            if (tbl.type == VAL_TABLE && tbl.as.table) {
+                tbl.as.table->set(key, val);
+            } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
+                if (key.type == VAL_INTEGER) {
+                    int64_t idx = vm_extract_int64(key);
+                    if (idx >= 0) {
+                        while ((int64_t)tbl.as.array->length() <= idx)
+                            tbl.as.array->push(Value());
+                        tbl.as.array->set((size_t)idx, val);
+                    }
+                } else {
+                    runtimeError("Array index must be an integer");
+                    return -1;
+                }
+            } else {
+                runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
+                return -1;
+            }
+            break;
+        }
+
+        // ================================================================
+        // Arithmetic — integer fast path + fallback to eval helpers
+        // ================================================================
+
+        #define VM_ARITH_OP(opcode, op_char, helper_func, has_line_args) {       \
+            const Value& lhs = RKB(inst);                                         \
+            const Value& rhs = RKC(inst);                                         \
+            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {             \
+                if (vm_use_unsigned(lhs, rhs)) {                                  \
+                    uint64_t lv = vm_extract_uint64(lhs);                         \
+                    uint64_t rv = vm_extract_uint64(rhs);                         \
+                    RA(inst) = make_integer_value(NUM_UINT64,                     \
+                                                  (int64_t)(lv op_char rv));      \
+                } else {                                                          \
+                    int64_t lv = vm_extract_int64(lhs);                           \
+                    int64_t rv = vm_extract_int64(rhs);                           \
+                    RA(inst) = make_integer_value(NUM_INT64, lv op_char rv);      \
+                }                                                                  \
+            } else {                                                              \
+                Environment* env = global_env_;                                   \
+                EvalResult r = helper_func;                                       \
+                if (r.has_error) { return -1; }                                   \
+                if (env->current_context->stackSize() > 0)                        \
+                    RA(inst) = env->current_context->pop();                       \
+            }                                                                      \
+            break;                                                                 \
+        }
+
+        case OP_ADD:
+            VM_ARITH_OP(OP_ADD, +, add_values(global_env_, lhs, rhs), false)
+
+        case OP_SUB:
+            VM_ARITH_OP(OP_SUB, -, subtract_values(global_env_, lhs, rhs), false)
+
+        case OP_MUL:
+            VM_ARITH_OP(OP_MUL, *, multiply_values(global_env_, lhs, rhs), false)
+
+        case OP_DIV: {
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            Environment* env = global_env_;
+            int line = currentLine();
+            EvalResult r = divide_values(env, lhs, rhs, line, 0);
+            if (r.has_error) return -1;
+            if (env->current_context->stackSize() > 0)
+                RA(inst) = env->current_context->pop();
+            break;
+        }
+
+        case OP_MOD: {
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                if (vm_use_unsigned(lhs, rhs)) {
+                    uint64_t lv = vm_extract_uint64(lhs);
+                    uint64_t rv = vm_extract_uint64(rhs);
+                    if (rv == 0) { runtimeError("Modulo by zero"); return -1; }
+                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(lv % rv));
+                } else {
+                    int64_t lv = vm_extract_int64(lhs);
+                    int64_t rv = vm_extract_int64(rhs);
+                    if (rv == 0) { runtimeError("Modulo by zero"); return -1; }
+                    RA(inst) = make_integer_value(NUM_INT64, lv % rv);
+                }
+            } else {
+                Environment* env = global_env_;
+                int line = currentLine();
+                EvalResult r = modulo_values(env, lhs, rhs, line, 0);
+                if (r.has_error) return -1;
+                if (env->current_context->stackSize() > 0)
+                    RA(inst) = env->current_context->pop();
+            }
+            break;
+        }
+
+        #undef VM_ARITH_OP
+
+        case OP_UNM: {
+            const Value& val = RB(inst);
+            if (val.type == VAL_INTEGER) {
+                int64_t v = vm_extract_int64(val);
+                RA(inst) = make_integer_value(NUM_INT64, -v);
+            } else if (val.type == VAL_FLOAT64) {
+                RA(inst) = make_float_value(-val.as.float64_val);
+            } else if (val.type == VAL_FLOAT32) {
+                RA(inst) = make_float32_value(-val.as.float32_val);
+            } else {
+                runtimeError("Attempt to negate a %s value", value_type_name(val.type));
+                return -1;
+            }
+            break;
+        }
+
+        case OP_NOT: {
+            RA(inst) = make_bool_value(!is_truthy(RB(inst)));
+            break;
+        }
+
+        // ================================================================
+        // Bitwise operations (integer-only)
+        // ================================================================
+
+        #define VM_BITWISE_OP(op_char) {                                          \
+            const Value& lhs = RKB(inst);                                         \
+            const Value& rhs = RKC(inst);                                         \
+            if (lhs.type != VAL_INTEGER || rhs.type != VAL_INTEGER) {             \
+                runtimeError("Bitwise operations require integer operands");      \
+                return -1;                                                         \
+            }                                                                      \
+            if (vm_use_unsigned(lhs, rhs)) {                                      \
+                uint64_t lv = vm_extract_uint64(lhs);                             \
+                uint64_t rv = vm_extract_uint64(rhs);                             \
+                RA(inst) = make_integer_value(NUM_UINT64,                         \
+                                              (int64_t)(lv op_char rv));          \
+            } else {                                                              \
+                int64_t lv = vm_extract_int64(lhs);                               \
+                int64_t rv = vm_extract_int64(rhs);                               \
+                RA(inst) = make_integer_value(NUM_INT64, lv op_char rv);          \
+            }                                                                      \
+            break;                                                                 \
+        }
+
+        case OP_BAND: VM_BITWISE_OP(&)
+        case OP_BOR:  VM_BITWISE_OP(|)
+        case OP_BXOR: VM_BITWISE_OP(^)
+        case OP_SHL:  VM_BITWISE_OP(<<)
+        case OP_SHR:  VM_BITWISE_OP(>>)
+
+        #undef VM_BITWISE_OP
+
+        case OP_BNOT: {
+            const Value& val = RB(inst);
+            if (val.type != VAL_INTEGER) {
+                runtimeError("Bitwise NOT requires an integer operand");
+                return -1;
+            }
+            if (val.as.integer.num_type == NUM_UINT64) {
+                RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(~vm_extract_uint64(val)));
+            } else {
+                RA(inst) = make_integer_value(NUM_INT64, ~vm_extract_int64(val));
+            }
+            break;
+        }
+
+        // ================================================================
+        // String concatenation
+        // ================================================================
+
+        case OP_CONCAT: {
+            int b_reg = DECODE_B(inst);
+            int c_reg = DECODE_C(inst);
+
+            // Build concatenated string from R[B]..R[C]
+            std::string result;
+            for (int i = b_reg; i <= c_reg; i++) {
+                const Value& v = registers_[base + i];
+                if (v.type == VAL_STRING && v.as.string) {
+                    result.append(v.as.string->data, v.as.string->length);
+                } else {
+                    char* s = value_to_string(v);
+                    if (s) { result.append(s); free(s); }
+                }
+            }
+            RA(inst) = make_string_value_from_cstr(state_, result.c_str());
+            break;
+        }
+
+        // ================================================================
+        // Comparisons — conditional skip pattern
+        // ================================================================
+
+        case OP_EQ: {
+            int a = DECODE_A(inst);
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            bool eq = (lhs == rhs);
+            if (eq != (a != 0)) ip++;
+            break;
+        }
+
+        case OP_LT: {
+            int a = DECODE_A(inst);
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64);
+            bool lt;
+            if (l_num && r_num) {
+                if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                    if (vm_use_unsigned(lhs, rhs))
+                        lt = vm_extract_uint64(lhs) < vm_extract_uint64(rhs);
+                    else
+                        lt = vm_extract_int64(lhs) < vm_extract_int64(rhs);
+                } else {
+                    lt = vm_extract_double(lhs) < vm_extract_double(rhs);
+                }
+            } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
+                lt = strcmp(lhs.as.string->data, rhs.as.string->data) < 0;
+            } else {
+                runtimeError("Cannot compare incompatible types");
+                return -1;
+            }
+            if (lt != (a != 0)) ip++;
+            break;
+        }
+
+        case OP_LE: {
+            int a = DECODE_A(inst);
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64);
+            bool le;
+            if (l_num && r_num) {
+                if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                    if (vm_use_unsigned(lhs, rhs))
+                        le = vm_extract_uint64(lhs) <= vm_extract_uint64(rhs);
+                    else
+                        le = vm_extract_int64(lhs) <= vm_extract_int64(rhs);
+                } else {
+                    le = vm_extract_double(lhs) <= vm_extract_double(rhs);
+                }
+            } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
+                le = strcmp(lhs.as.string->data, rhs.as.string->data) <= 0;
+            } else {
+                runtimeError("Cannot compare incompatible types");
+                return -1;
+            }
+            if (le != (a != 0)) ip++;
+            break;
+        }
+
+        // ================================================================
+        // Logical test / set
+        // ================================================================
+
+        case OP_TEST: {
+            bool truthy = is_truthy(RA(inst));
+            int c = DECODE_C(inst);
+            if (truthy != (c != 0)) ip++;
+            break;
+        }
+
+        case OP_TESTSET: {
+            const Value& rb = RB(inst);
+            bool truthy = is_truthy(rb);
+            int c = DECODE_C(inst);
+            if (truthy == (c != 0)) {
+                RA(inst) = rb;
+            } else {
+                ip++;
+            }
+            break;
+        }
+
+        // ================================================================
+        // Jumps
+        // ================================================================
+
+        case OP_JMP: {
+            int offset = DECODE_sBx_wide(inst);
+            ip += offset;
+            break;
+        }
+
+        // ================================================================
+        // Function calls
+        // ================================================================
+
+        case OP_CALL: {
+            int a = DECODE_A(inst);
+            int b = DECODE_B(inst);
+            int c = DECODE_C(inst);
+            int nargs = b - 1;
+
+            ci->ip = ip;
+            int rc = callFunction(*ci, a, nargs, c);
+            if (rc < 0) return -1;
+            if (rc == 1) {
+                // callFunction pushed a new bytecode frame
+                ci = &call_stack_.back();
+                ip = ci->ip;
+                proto = ci->proto;
+                base = ci->base;
+            }
+            break;
+        }
+
+        case OP_TAILCALL: {
+            int a = DECODE_A(inst);
+            int b = DECODE_B(inst);
+            int nargs = b - 1;
+
+            ci->ip = ip;
+            int rc = callFunction(*ci, a, nargs, 0);
+            if (rc < 0) return -1;
+            if (rc == 1) {
+                ci = &call_stack_.back();
+                ip = ci->ip;
+                proto = ci->proto;
+                base = ci->base;
+            }
+            break;
+        }
+
+        case OP_RETURN: {
+            int a = DECODE_A(inst);
+            int b = DECODE_B(inst);
+
+            if (call_stack_.size() <= 1) {
+                return 0;
+            }
+
+            int nresults_available = (b == 0) ? 0 : (b - 1);
+            closeUpvalues(*ci, 0);
+
+            CallInfo returning = call_stack_.back();
+            call_stack_.pop_back();
+            ci = &call_stack_.back();
+            ip = ci->ip;
+            proto = ci->proto;
+            base = ci->base;
+
+            // The child frame's base was placed at caller's func_reg+1.
+            // The result register in the caller is func_reg (= returning.base - 1 - caller.base).
+            int func_reg_abs = returning.base - 1;
+            int nresults_wanted = returning.nresults;
+            if (nresults_wanted == 0) {
+                // Caller doesn't want results
+            } else {
+                int to_copy = nresults_wanted - 1;
+                for (int i = 0; i < to_copy; i++) {
+                    if (i < nresults_available) {
+                        registers_[func_reg_abs + i] = registers_[returning.base + a + i];
+                    } else {
+                        registers_[func_reg_abs + i] = Value();
+                    }
+                }
+            }
+            break;
+        }
+
+        // ================================================================
+        // Closures
+        // ================================================================
+
+        case OP_CLOSURE: {
+            uint16_t bx = DECODE_Bx(inst);
+            if (bx >= proto->protos.size()) {
+                runtimeError("Invalid prototype index %d", bx);
+                return -1;
+            }
+            Prototype* child_proto = proto->protos[bx];
+
+            // Create a MobiusFunction that wraps the child prototype.
+            // For now, closures compiled by the bytecode compiler will need
+            // to be bridged to the tree-walker's MobiusFunction format.
+            // Full bytecode closure support comes in Phase 4.
+            MobiusFunction* mf = (MobiusFunction*)calloc(1, sizeof(MobiusFunction));
+            mf->name = child_proto->name.empty() ? nullptr :
+                       state_->stringPool()->intern(child_proto->name.c_str())->data;
+            mf->param_count = child_proto->num_params;
+            mf->body = nullptr;
+            mf->body_count = 0;
+            mf->closure = global_env_;
+            mf->ref_count = 1;
+            mf->proto = child_proto;
+
+            // Allocate param names array
+            if (child_proto->num_params > 0 && !child_proto->local_vars.empty()) {
+                mf->param_names = (const char**)calloc(child_proto->num_params, sizeof(const char*));
+                for (int i = 0; i < child_proto->num_params && i < (int)child_proto->local_vars.size(); i++) {
+                    mf->param_names[i] = state_->stringPool()->intern(
+                        child_proto->local_vars[i].name.c_str())->data;
+                }
+            } else {
+                mf->param_names = nullptr;
+            }
+
+            RA(inst) = make_function_value(mf);
+            break;
+        }
+
+        // ================================================================
+        // Numeric for-loop
+        // ================================================================
+
+        case OP_FORPREP: {
+            int a = DECODE_A(inst);
+            int sbx = DECODE_sBx(inst);
+            // R[A] = index, R[A+1] = limit, R[A+2] = step
+            // R[A] -= R[A+2]; pc += sBx
+            Value& idx  = registers_[base + a];
+            Value& step = registers_[base + a + 2];
+            if (idx.type == VAL_INTEGER && step.type == VAL_INTEGER) {
+                int64_t iv = vm_extract_int64(idx);
+                int64_t sv = vm_extract_int64(step);
+                idx = make_integer_value(NUM_INT64, iv - sv);
+            } else {
+                double iv = vm_extract_double(idx);
+                double sv = vm_extract_double(step);
+                idx = make_float_value(iv - sv);
+            }
+            ip += sbx;
+            break;
+        }
+
+        case OP_FORLOOP: {
+            int a = DECODE_A(inst);
+            int sbx = DECODE_sBx(inst);
+            Value& idx   = registers_[base + a];
+            Value& limit = registers_[base + a + 1];
+            Value& step  = registers_[base + a + 2];
+
+            if (idx.type == VAL_INTEGER && limit.type == VAL_INTEGER && step.type == VAL_INTEGER) {
+                int64_t iv = vm_extract_int64(idx);
+                int64_t sv = vm_extract_int64(step);
+                int64_t lv = vm_extract_int64(limit);
+                iv += sv;
+                idx = make_integer_value(NUM_INT64, iv);
+                bool in_range = (sv > 0) ? (iv <= lv) : (iv >= lv);
+                if (in_range) {
+                    ip += sbx;
+                    registers_[base + a + 3] = idx;
+                }
+            } else {
+                double iv = vm_extract_double(idx);
+                double sv = vm_extract_double(step);
+                double lv = vm_extract_double(limit);
+                iv += sv;
+                idx = make_float_value(iv);
+                bool in_range = (sv > 0) ? (iv <= lv) : (iv >= lv);
+                if (in_range) {
+                    ip += sbx;
+                    registers_[base + a + 3] = idx;
+                }
+            }
+            break;
+        }
+
+        case OP_TFORLOOP: {
+            // Generic for-loop — future iterator protocol
+            runtimeError("Generic for-loop (TFORLOOP) not yet implemented");
+            return -1;
+        }
+
+        // ================================================================
+        // Enum operations
+        // ================================================================
+
+        case OP_NEWENUM: {
+            uint16_t bx = DECODE_Bx(inst);
+            const Value& name_val = proto->constants[bx];
+            const char* enum_name = (name_val.type == VAL_STRING && name_val.as.string)
+                                    ? name_val.as.string->data : "unknown";
+            EnumDefinition* edef = new (std::nothrow) EnumDefinition(enum_name, NUM_INT32);
+            if (!edef) { runtimeError("Failed to allocate enum"); return -1; }
+            RA(inst) = make_userdata_value(edef,
+                [](void* p) { if (p) static_cast<EnumDefinition*>(p)->release(); },
+                "enum_definition", sizeof(EnumDefinition));
+            break;
+        }
+
+        case OP_ENUMVAL: {
+            Value& enum_val = RA(inst);
+            if (enum_val.type != VAL_USERDATA ||
+                strcmp(enum_val.as.userdata.type_name, "enum_definition") != 0) {
+                runtimeError("ENUMVAL: target is not an enum definition");
+                return -1;
+            }
+            EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata.ptr);
+            const Value& member_val = RB(inst);
+            int member_idx = DECODE_C(inst);
+            (void)member_idx;
+            if (member_val.type == VAL_INTEGER) {
+                int64_t iv = vm_extract_int64(member_val);
+                // Use auto-member with the given value
+                char name_buf[32];
+                snprintf(name_buf, sizeof(name_buf), "member_%d", member_idx);
+                edef->addMember(name_buf, iv);
+            } else {
+                edef->addAutoMember("member");
+            }
+            break;
+        }
+
+        case OP_GETENUM: {
+            // R[A] = R[B].member[C]
+            const Value& enum_val = RB(inst);
+            if (enum_val.type != VAL_USERDATA ||
+                strcmp(enum_val.as.userdata.type_name, "enum_definition") != 0) {
+                runtimeError("GETENUM: target is not an enum definition");
+                return -1;
+            }
+            EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata.ptr);
+            int member_idx = DECODE_C(inst);
+            // Find by index (walk the members)
+            const EnumMember* member = nullptr;
+            // EnumDefinition doesn't expose by-index lookup directly,
+            // so for now use findMemberByValue with the index as a fallback
+            (void)member_idx;
+            (void)member;
+            (void)edef;
+            RA(inst) = Value(); // Placeholder — full enum access uses GETGLOBAL + GETTABLE
+            break;
+        }
+
+        // ================================================================
+        // Import
+        // ================================================================
+
+        case OP_IMPORT: {
+            // ABC format: B = module name (RK), C = alias/target name (RK)
+            const Value& mod_name_val = RK(*ci, DECODE_B(inst));
+            const Value& alias_val    = RK(*ci, DECODE_C(inst));
+
+            if (mod_name_val.type != VAL_STRING || !mod_name_val.as.string) {
+                runtimeError("IMPORT: invalid module name");
+                return -1;
+            }
+            if (alias_val.type != VAL_STRING || !alias_val.as.string) {
+                runtimeError("IMPORT: invalid alias");
+                return -1;
+            }
+            const char* module_name = mod_name_val.as.string->data;
+            const char* alias_name  = alias_val.as.string->data;
+
+            // --- Load the module ---
+            ModuleRegistry* registry = getGlobalRegistry();
+            if (!registry) {
+                runtimeError("Module registry not initialized");
+                return -1;
+            }
+
+            LoadedModule* module = registry->findModule(module_name);
+            if (!module) {
+                PluginLoadResult result = registry->loadModuleByName(module_name);
+                if (result.status != PLUGIN_STATUS_LOADED) {
+                    runtimeError("Import failed - module '%s' not found", module_name);
+                    return -1;
+                }
+                module = registry->findModule(module_name);
+            }
+            if (!module || !module->plugin) {
+                runtimeError("Module '%s' has no plugin interface", module_name);
+                return -1;
+            }
+
+            registry->incrementRefCount(module_name);
+            Plugin* plugin = module->plugin;
+            StringInternPool* pool = state_->stringPool();
+
+            bool is_global = (strcmp(alias_name, "_GLOBAL") == 0);
+
+            if (is_global) {
+                // _GLOBAL: define each module function directly in the root environment
+                for (size_t i = 0; i < plugin->function_count; i++) {
+                    PluginFunction* func = &plugin->functions[i];
+                    if (!func || !func->name || !func->function) continue;
+                    const char* fn = pool->intern(func->name)->data;
+                    Value func_val = make_native_function_value(func->function);
+                    global_env_->define(fn, func_val);
+                }
+            } else if (strchr(alias_name, '.') != nullptr) {
+                // Dotted path (e.g. "math.trig"): create/reuse nested tables
+                // Parse into components
+                char buf[256];
+                strncpy(buf, alias_name, sizeof(buf) - 1);
+                buf[sizeof(buf) - 1] = '\0';
+
+                // Split by '.' — find components
+                const char* components[32];
+                int ncomps = 0;
+                char* tok = strtok(buf, ".");
+                while (tok && ncomps < 32) {
+                    components[ncomps++] = tok;
+                    tok = strtok(nullptr, ".");
+                }
+
+                // Walk/create the nested table chain
+                // First component: get or create in global env
+                const char* first = pool->intern(components[0])->data;
+                bool found = false;
+                Value cur_val = global_env_->get(first, &found);
+                Table* cur_table = nullptr;
+
+                if (found && cur_val.type == VAL_TABLE) {
+                    cur_table = cur_val.as.table;
+                } else if (found) {
+                    runtimeError("Cannot create nested namespace '%s': "
+                                 "'%s' is not a table", alias_name, components[0]);
+                    return -1;
+                } else {
+                    cur_table = new (std::nothrow) Table(state_, 16);
+                    if (!cur_table) { runtimeError("Failed to create namespace table"); return -1; }
+                    global_env_->define(first, make_table_value(cur_table));
+                }
+
+                // Intermediate components
+                for (int i = 1; i < ncomps; i++) {
+                    Value key = make_string_value_from_cstr(state_, components[i]);
+                    Value next = cur_table->get(key);
+                    if (next.type == VAL_TABLE) {
+                        cur_table = next.as.table;
+                    } else {
+                        Table* sub = new (std::nothrow) Table(state_, 16);
+                        if (!sub) { runtimeError("Failed to create nested namespace table"); return -1; }
+                        cur_table->set(key, make_table_value(sub));
+                        cur_table = sub;
+                    }
+                }
+
+                // Fill the leaf table with module functions
+                for (size_t i = 0; i < plugin->function_count; i++) {
+                    PluginFunction* func = &plugin->functions[i];
+                    if (!func || !func->name || !func->function) continue;
+                    Value func_key = make_string_value_from_cstr(state_, func->name);
+                    Value func_val = make_native_function_value(func->function);
+                    cur_table->set(func_key, func_val);
+                }
+            } else {
+                // Simple alias (e.g. "math"): create table, define as global
+                const char* interned_alias = pool->intern(alias_name)->data;
+                bool found = false;
+                Value existing = global_env_->get(interned_alias, &found);
+                Table* mod_table = nullptr;
+
+                if (found && existing.type == VAL_TABLE) {
+                    mod_table = existing.as.table;
+                } else {
+                    mod_table = new (std::nothrow) Table(state_, 16);
+                    if (!mod_table) { runtimeError("Failed to create module table"); return -1; }
+                }
+
+                for (size_t i = 0; i < plugin->function_count; i++) {
+                    PluginFunction* func = &plugin->functions[i];
+                    if (!func || !func->name || !func->function) continue;
+                    Value func_key = make_string_value_from_cstr(state_, func->name);
+                    Value func_val = make_native_function_value(func->function);
+                    mod_table->set(func_key, func_val);
+                }
+
+                if (!found || existing.type != VAL_TABLE) {
+                    global_env_->define(interned_alias, make_table_value(mod_table));
+                }
+            }
+            break;
+        }
+
+        // ================================================================
+        // Pragma
+        // ================================================================
+
+        case OP_PRAGMA: {
+            uint16_t bx = DECODE_Bx(inst);
+            const Value& name_val = proto->constants[bx];
+            if (name_val.type != VAL_STRING || !name_val.as.string) {
+                runtimeError("PRAGMA: invalid pragma name");
+                return -1;
+            }
+            const char* pragma_name = name_val.as.string->data;
+            const Value& pval = RA(inst);
+
+            if (strcmp(pragma_name, "strict_types") == 0) {
+                state_->config().strict_mode = is_truthy(pval);
+            } else if (strcmp(pragma_name, "type_warnings") == 0) {
+                state_->config().warn_on_conversion = is_truthy(pval);
+            } else if (strcmp(pragma_name, "override_behavior") == 0) {
+                if (pval.type == VAL_STRING && pval.as.string) {
+                    const char* v = pval.as.string->data;
+                    if (strcmp(v, "error") == 0)
+                        state_->config().override_behavior = MOBIUS_OVERRIDE_ERROR;
+                    else if (strcmp(v, "warn") == 0)
+                        state_->config().override_behavior = MOBIUS_OVERRIDE_WARN;
+                    else if (strcmp(v, "quiet") == 0)
+                        state_->config().override_behavior = MOBIUS_OVERRIDE_QUIET;
+                    else {
+                        runtimeError("Invalid value for pragma override_behavior: '%s' "
+                                     "(expected 'error', 'warn', or 'quiet')", v);
+                        return -1;
+                    }
+                } else {
+                    runtimeError("Invalid value for pragma override_behavior "
+                                 "(expected 'error', 'warn', or 'quiet')");
+                    return -1;
+                }
+            } else {
+                runtimeError("Unknown pragma: '%s'", pragma_name);
+                return -1;
+            }
+            break;
+        }
+
+        // ================================================================
+        // Increment / Decrement
+        // ================================================================
+
+        case OP_INC: {
+            const Value& val = RB(inst);
+            if (val.type != VAL_INTEGER) {
+                runtimeError("Increment requires an integer operand");
+                return -1;
+            }
+            bool success;
+            RA(inst) = increment_integer(val, true, &success);
+            if (!success) { runtimeError("Failed to increment value"); return -1; }
+            break;
+        }
+
+        case OP_DEC: {
+            const Value& val = RB(inst);
+            if (val.type != VAL_INTEGER) {
+                runtimeError("Decrement requires an integer operand");
+                return -1;
+            }
+            bool success;
+            RA(inst) = increment_integer(val, false, &success);
+            if (!success) { runtimeError("Failed to decrement value"); return -1; }
+            break;
+        }
+
+        // ================================================================
+        // Type checking
+        // ================================================================
+
+        case OP_TYPECHECK: {
+            NumberType target = (NumberType)DECODE_B(inst);
+            TypeCheckConfig tc = {
+                state_->config().strict_mode,
+                state_->config().warn_on_conversion
+            };
+            TypeConversionResult conv = validate_and_convert_value(
+                RA(inst), target, true, tc);
+            if (!conv.success) {
+                runtimeError("%s", conv.error_message
+                             ? conv.error_message
+                             : "Type validation failed");
+                free(conv.error_message);
+                return -1;
+            }
+            if (conv.was_converted && state_->config().warn_on_conversion) {
+                fprintf(stderr, "Warning: Implicit type conversion at line %d\n",
+                        currentLine());
+            }
+            RA(inst) = conv.converted_value;
+            free(conv.error_message);
+            break;
+        }
+
+        case OP_ISNUM: {
+            const Value& v = RB(inst);
+            bool num = (v.type == VAL_INTEGER || v.type == VAL_FLOAT32 || v.type == VAL_FLOAT64);
+            RA(inst) = make_bool_value(num);
+            break;
+        }
+
+        case OP_TYPECOMPAT: {
+            int a = DECODE_A(inst);
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64);
+            bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
+            if (compat != (a != 0)) ip++;
+            break;
+        }
+
+        // ================================================================
+        // NOP
+        // ================================================================
+
+        case OP_NOP:
+            break;
+
+        default:
+            runtimeError("Unknown opcode %d", DECODE_OP(inst));
+            return -1;
+
+        } // switch
+    } // for(;;)
+
+    #undef RA
+    #undef RB
+    #undef RC
+    #undef RKB
+    #undef RKC
+    #undef KBx
+}

@@ -396,52 +396,158 @@ EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
     return evaluate_expr(expr->expression, env);
 }
 
+static inline int64_t integer_extract(const Value& v) {
+    switch (v.as.integer.num_type) {
+        case NUM_INT8:   return v.as.integer.value.i8;
+        case NUM_UINT8:  return v.as.integer.value.u8;
+        case NUM_INT16:  return v.as.integer.value.i16;
+        case NUM_UINT16: return v.as.integer.value.u16;
+        case NUM_INT32:  return v.as.integer.value.i32;
+        case NUM_UINT32: return v.as.integer.value.u32;
+        case NUM_INT64:  return v.as.integer.value.i64;
+        case NUM_UINT64: return (int64_t)v.as.integer.value.u64;
+        default:         return 0;
+    }
+}
+
 EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
     EvalResult left_result = evaluate_expr(expr->left, env);
     if (is_error(left_result)) {
         return left_result;
     }
-    Value left = env->current_context->pop();
-    
+
     EvalResult right_result = evaluate_expr(expr->right, env);
     if (is_error(right_result)) {
         return right_result;
     }
-    Value right = env->current_context->pop();
-    
-    switch (expr->op.type) {
+
+    auto& stk = env->current_context->stack;
+    size_t sz = stk.size();
+    Value& left  = stk[sz - 2];
+    Value& right = stk[sz - 1];
+
+    TokenType op = expr->op.type;
+
+    // ---- Integer fast path: both operands are integers ----
+    if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
+        int64_t lv = integer_extract(left);
+        int64_t rv = integer_extract(right);
+
+        switch (op) {
+            case TOKEN_PLUS:
+                left.as.integer.num_type = NUM_INT64;
+                left.as.integer.value.i64 = lv + rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_MINUS:
+                left.as.integer.num_type = NUM_INT64;
+                left.as.integer.value.i64 = lv - rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_STAR:
+                left.as.integer.num_type = NUM_INT64;
+                left.as.integer.value.i64 = lv * rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_PERCENT:
+                if (rv == 0) {
+                    stk.pop_back();
+                    stk.pop_back();
+                    return make_error_detailed(env, "Modulo by zero",
+                        "Check that the divisor is not zero before performing modulo",
+                        ERROR_DIVISION, expr->op.line, expr->op.column, NULL, NULL);
+                }
+                left.as.integer.num_type = NUM_INT64;
+                left.as.integer.value.i64 = lv % rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_SLASH: {
+                if ((double)rv == 0.0) {
+                    stk.pop_back();
+                    stk.pop_back();
+                    return make_error_detailed(env, "Division by zero",
+                        "Check that the divisor is not zero before performing division",
+                        ERROR_DIVISION, expr->op.line, expr->op.column, NULL, NULL);
+                }
+                left.type = VAL_FLOAT64;
+                left.as.float64_val = (double)lv / (double)rv;
+                stk.pop_back();
+                return make_success(1);
+            }
+            case TOKEN_LESS:
+                left.type = VAL_BOOL;
+                left.as.boolean = lv < rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_LESS_EQUAL:
+                left.type = VAL_BOOL;
+                left.as.boolean = lv <= rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_GREATER:
+                left.type = VAL_BOOL;
+                left.as.boolean = lv > rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_GREATER_EQUAL:
+                left.type = VAL_BOOL;
+                left.as.boolean = lv >= rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_EQUAL_EQUAL:
+                left.type = VAL_BOOL;
+                left.as.boolean = lv == rv;
+                stk.pop_back();
+                return make_success(1);
+            case TOKEN_BANG_EQUAL:
+                left.type = VAL_BOOL;
+                left.as.boolean = lv != rv;
+                stk.pop_back();
+                return make_success(1);
+            default:
+                break;
+        }
+    }
+
+    // ---- Slow path: pop both operands and delegate ----
+    Value right_val = std::move(stk.back());
+    stk.pop_back();
+    Value left_val = std::move(stk.back());
+    stk.pop_back();
+
+    switch (op) {
         case TOKEN_PLUS:
-            return add_values(env, left, right);
+            return add_values(env, left_val, right_val);
         case TOKEN_MINUS:
-            return subtract_values(env, left, right);
+            return subtract_values(env, left_val, right_val);
         case TOKEN_STAR:
-            return multiply_values(env, left, right);
+            return multiply_values(env, left_val, right_val);
         case TOKEN_SLASH:
-                return divide_values(env, left, right, expr->op.line, expr->op.column);
+            return divide_values(env, left_val, right_val, expr->op.line, expr->op.column);
         case TOKEN_PERCENT:
-                return modulo_values(env, left, right, expr->op.line, expr->op.column);
+            return modulo_values(env, left_val, right_val, expr->op.line, expr->op.column);
         case TOKEN_EQUAL_EQUAL:
         case TOKEN_BANG_EQUAL:
         case TOKEN_GREATER:
         case TOKEN_GREATER_EQUAL:
         case TOKEN_LESS:
         case TOKEN_LESS_EQUAL:
-            return compare_values(env, left, right, expr->op.type);
+            return compare_values(env, left_val, right_val, op);
         case TOKEN_AND:
         case TOKEN_AND_AND:
-            if (!is_truthy(left)) {
-                env->current_context->push( left);
+            if (!is_truthy(left_val)) {
+                env->current_context->push(std::move(left_val));
                 return make_success(1);
             }
-            env->current_context->push( right);
+            env->current_context->push(std::move(right_val));
             return make_success(1);
         case TOKEN_OR:
         case TOKEN_OR_OR:
-            if (is_truthy(left)) {
-                env->current_context->push( left);
+            if (is_truthy(left_val)) {
+                env->current_context->push(std::move(left_val));
                 return make_success(1);
             }
-            env->current_context->push( right);
+            env->current_context->push(std::move(right_val));
             return make_success(1);
         default:
             return make_error(env, "Unknown binary operator", expr->op.line, expr->op.column);

@@ -13,7 +13,7 @@ private:
     bool processLine(const char* line);
     bool handleCommand(const char* line);
 
-    static void printWelcome();
+    void printWelcome() const;
     void printPrompt() const;
     static void commandHelp();
     void commandEnv() const;

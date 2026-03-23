@@ -150,6 +150,7 @@ MOBIUS_API bool is_truthy(const Value& value);
 MOBIUS_API void print_value(const Value& value);
 MOBIUS_API char* value_to_string(const Value& value);
 MOBIUS_API const char* value_type_name(ValueType type);
+Value increment_integer(Value val, bool is_increment, bool* success);
 
 // Type conversion result
 typedef struct {

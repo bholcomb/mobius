@@ -15,6 +15,8 @@
 #include "repl.h"
 #include "util/utility.h"
 #include "util/file_io.h"
+#include "vm/compiler.h"
+#include "vm/vm.h"
 
 #include <new>
 #include <stdio.h>
@@ -35,6 +37,7 @@ MobiusConfig mobius_default_config(void) {
     config.warn_on_conversion = false;
     config.debug_mode = false;
     config.enable_hot_reload = false;
+    config.use_vm = false;
     config.override_behavior = MOBIUS_OVERRIDE_ERROR;
     return config;
 }
@@ -341,6 +344,11 @@ MobiusState::MobiusState(MobiusConfig* config)
 }
 
 MobiusState::~MobiusState() {
+    for (Prototype* p : owned_protos_) {
+        delete p;
+    }
+    owned_protos_.clear();
+
     delete main_context_;
     delete global_env_;
     delete metamethods_;
@@ -388,6 +396,36 @@ int MobiusState::execString(const char* code) {
                  "Check syntax and structure", 0, 0, NULL);
         free_parse_result(&parse_result);
         return MOBIUS_ERROR_SYNTAX;
+    }
+
+    if (config_.use_vm) {
+        Compiler compiler(string_pool_);
+        Prototype* proto = compiler.compile(parse_result.statements,
+                                            parse_result.count,
+                                            source_code_ ? source_code_ : "<string>");
+        free_parse_result(&parse_result);
+
+        if (!proto) {
+            setError(MOBIUS_ERROR_RUNTIME, "Bytecode compilation failed",
+                     nullptr, 0, 0, nullptr);
+            return MOBIUS_ERROR_RUNTIME;
+        }
+
+        if (config_.debug_mode) {
+            disassemble_prototype(proto);
+        }
+
+        // Prototypes are owned by the state so they outlive any
+        // MobiusFunction closures that reference child prototypes.
+        owned_protos_.push_back(proto);
+
+        MobiusVM vm(this);
+        int rc = vm.execute(proto);
+
+        if (rc != 0) {
+            return MOBIUS_ERROR_RUNTIME;
+        }
+        return MOBIUS_OK;
     }
 
     EvalResult eval_result = evaluate_program(parse_result.statements, 

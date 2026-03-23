@@ -82,6 +82,7 @@ typedef struct {
     bool   warn_on_conversion;
     bool   debug_mode;
     bool   enable_hot_reload;
+    bool   use_vm;
     MobiusOverrideBehavior override_behavior;
 } MobiusConfig;
 
