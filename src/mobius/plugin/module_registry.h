@@ -3,6 +3,7 @@
 
 #include "plugin.h"
 
+#include <mobius/mobius.h>
 #include <string>
 #include <vector>
 
@@ -16,7 +17,7 @@ struct LoadedModule {
     int ref_count = 0;
 };
 
-class ModuleRegistry {
+class MOBIUS_API ModuleRegistry {
 public:
     ModuleRegistry() = default;
     ~ModuleRegistry();
@@ -54,14 +55,6 @@ private:
     std::string last_error_;
 };
 
-// Global singleton
-ModuleRegistry* getGlobalRegistry();
-
-// Public C API wrappers (declared with extern "C" to match include/mobius/mobius.h)
-extern "C" {
-void mobius_add_plugin_directory(const char* path);
-void mobius_clear_plugin_directories();
-int mobius_scan_plugins(bool force_rescan);
-}
+MOBIUS_API ModuleRegistry* getGlobalRegistry();
 
 #endif // MOBIUS_MODULE_REGISTRY_H

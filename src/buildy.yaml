@@ -20,6 +20,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
+      flags:
+        - "-fvisibility=hidden"
+        - "-DMOBIUS_BUILDING"
 
   executables:
     - name: mobius

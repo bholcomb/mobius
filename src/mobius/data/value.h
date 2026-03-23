@@ -5,6 +5,9 @@
 #include "eval/evalResult.h"
 #include "data/number.h"
 
+#include <cstring>
+#include <mobius/mobius.h>
+
 struct MobiusFunction;
 class ArrayValue;
 struct EnumValue;
@@ -16,16 +19,18 @@ typedef int (*MobiusCFunction)(MobiusState* ctx, int arg_count);
 typedef void (*UserdataDestructor)(void* ptr);
 
 typedef enum {
+    // Non-refcounted (inline) types — must stay below VAL_STRING
     VAL_NIL,
     VAL_BOOL,
     VAL_INTEGER,
     VAL_FLOAT32,
     VAL_FLOAT64,
-    VAL_STRING,
     VAL_CHAR,
+    VAL_NATIVE_FUNCTION,
+    // Refcounted (heap-allocated) types — must stay at VAL_STRING or above
+    VAL_STRING,
     VAL_ARRAY,
     VAL_FUNCTION,
-    VAL_NATIVE_FUNCTION,
     VAL_TABLE,
     VAL_USERDATA,
     VAL_ENUM
@@ -71,14 +76,41 @@ public:
     } as;
     ValueType type;
 
-    Value();
-    ~Value();
-    Value(const Value& other);
-    Value& operator=(const Value& other);
-    Value(Value&& other) noexcept;
-    Value& operator=(Value&& other) noexcept;
+    Value() : type(VAL_NIL) { as.boolean = false; }
 
-    bool operator==(const Value& other) const;
+    ~Value() { releaseRef(); }
+
+    Value(const Value& other) : type(other.type) {
+        memcpy(&as, &other.as, sizeof(as));
+        retain();
+    }
+
+    Value& operator=(const Value& other) {
+        if (this != &other) {
+            releaseRef();
+            type = other.type;
+            memcpy(&as, &other.as, sizeof(as));
+            retain();
+        }
+        return *this;
+    }
+
+    Value(Value&& other) noexcept : type(other.type) {
+        memcpy(&as, &other.as, sizeof(as));
+        other.type = VAL_NIL;
+    }
+
+    Value& operator=(Value&& other) noexcept {
+        if (this != &other) {
+            releaseRef();
+            type = other.type;
+            memcpy(&as, &other.as, sizeof(as));
+            other.type = VAL_NIL;
+        }
+        return *this;
+    }
+
+    MOBIUS_API bool operator==(const Value& other) const;
     bool operator!=(const Value& other) const { return !(*this == other); }
 
     bool exactlyEqual(const Value& other) const;
@@ -86,30 +118,38 @@ public:
     static Value makeEnum(EnumDefinition* definition, int64_t value);
 
 private:
-    void retain() const;
-    void releaseRef();
+    void retain() const {
+        if (type < VAL_STRING) return;
+        retainSlow();
+    }
+    void releaseRef() {
+        if (type < VAL_STRING) return;
+        releaseRefSlow();
+    }
+    MOBIUS_API void retainSlow() const;
+    MOBIUS_API void releaseRefSlow();
 };
 
 // Value creation functions
-Value make_nil_value();
-Value make_bool_value(bool value);
-Value make_char_value(char value);
-Value make_integer_value(NumberType type, int64_t value);
-Value make_float32_value(float value);
-Value make_float_value(double value);
-Value make_string_value(MobiusString* string);
-Value make_string_value_from_cstr(MobiusState* state, const char* cstr);
-Value make_function_value(struct MobiusFunction* function);
-Value make_native_function_value(MobiusCFunction function);
-Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
-Value make_array_value(ArrayValue* array);
-Value make_table_value(struct Table* table);
+MOBIUS_API Value make_nil_value();
+MOBIUS_API Value make_bool_value(bool value);
+MOBIUS_API Value make_char_value(char value);
+MOBIUS_API Value make_integer_value(NumberType type, int64_t value);
+MOBIUS_API Value make_float32_value(float value);
+MOBIUS_API Value make_float_value(double value);
+MOBIUS_API Value make_string_value(MobiusString* string);
+MOBIUS_API Value make_string_value_from_cstr(MobiusState* state, const char* cstr);
+MOBIUS_API Value make_function_value(struct MobiusFunction* function);
+MOBIUS_API Value make_native_function_value(MobiusCFunction function);
+MOBIUS_API Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
+MOBIUS_API Value make_array_value(ArrayValue* array);
+MOBIUS_API Value make_table_value(struct Table* table);
 
 // Value utility functions
-bool is_truthy(const Value& value);
-void print_value(const Value& value);
-char* value_to_string(const Value& value);
-const char* value_type_name(ValueType type);
+MOBIUS_API bool is_truthy(const Value& value);
+MOBIUS_API void print_value(const Value& value);
+MOBIUS_API char* value_to_string(const Value& value);
+MOBIUS_API const char* value_type_name(ValueType type);
 
 // Type conversion result
 typedef struct {

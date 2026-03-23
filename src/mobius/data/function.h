@@ -7,13 +7,13 @@ struct Stmt;
 
 // Function representation (AST functions only - builtins are loaded as regular functions)
 typedef struct MobiusFunction {
-    char* name;               // Function name (owned string)
-    char** param_names;       // Parameter names (owned strings)
-    size_t param_count;       // Parameter count
-    struct Stmt** body;       // AST statements
-    size_t body_count;        // Number of statements in body
+    const char* name;             // Function name (interned string pointer, not owned)
+    const char** param_names;     // Parameter names (interned string pointers, not owned)
+    size_t param_count;           // Parameter count
+    struct Stmt** body;           // AST statements
+    size_t body_count;            // Number of statements in body
     struct Environment* closure;  // Lexical scope
-    int ref_count;            // Reference counter for memory management
+    int ref_count;                // Reference counter for memory management
 } MobiusFunction;
 
 #endif // MOBIUS_FUNCTION_H

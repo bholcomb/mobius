@@ -33,3 +33,6 @@ Thumbs.db
 # Backup files
 *.bak
 *.backup
+
+.buildy_cache
+

@@ -37,6 +37,7 @@ public:
     StringInternPool& operator=(const StringInternPool&) = delete;
 
     MobiusString* intern(const char* data);
+    MobiusString* intern(const char* data, size_t length);
     void stats(size_t* out_bucket_count, size_t* out_string_count,
                float* out_load_factor) const;
 

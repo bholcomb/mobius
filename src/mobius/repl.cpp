@@ -61,7 +61,7 @@ bool Repl::processLine(const char* line) {
 
     const char* source = needs_semicolon && modified_line ? modified_line : line;
 
-    TokenArray tokens = scan_source(source);
+    TokenArray tokens = scan_source(source, state_->stringPool());
     if (tokens.count == 0) {
         printf("No tokens found\n");
         free(modified_line);

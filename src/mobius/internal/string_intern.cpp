@@ -77,17 +77,21 @@ StringInternPool::~StringInternPool() {
 
 MobiusString* StringInternPool::intern(const char* data) {
     if (!data || buckets_.empty()) return nullptr;
+    return intern(data, strlen(data));
+}
 
-    size_t len = strlen(data);
-    uint32_t hash = compute_string_hash(data, len);
+MobiusString* StringInternPool::intern(const char* data, size_t length) {
+    if (!data || buckets_.empty()) return nullptr;
 
-    MobiusString* existing = find(data, len, hash);
+    uint32_t hash = compute_string_hash(data, length);
+
+    MobiusString* existing = find(data, length, hash);
     if (existing) {
         existing->ref_count++;
         return existing;
     }
 
-    return insert(data, len, hash);
+    return insert(data, length, hash);
 }
 
 void StringInternPool::stats(size_t* out_bucket_count, size_t* out_string_count,

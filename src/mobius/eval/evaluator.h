@@ -45,13 +45,11 @@ EvalResult eval_if_stmt(IfStmt* stmt, Environment* env);
 EvalResult eval_while_stmt(WhileStmt* stmt, Environment* env);
 EvalResult eval_for_stmt(ForStmt* stmt, Environment* env);
 
-// Utility functions
-EvalResult make_success(int return_count); // Pushes value onto env's stack and returns success
+// Utility functions (make_success and is_error are inline in evalResult.h)
 EvalResult make_error(Environment* env, const char* message, int line, int column);
 EvalResult make_error_detailed(Environment* env, const char* message, const char* suggestion, 
                               ErrorCategory category, int line, int column,
                               const char* function_name, const char* source_line);
-bool is_error(EvalResult result);
 
 // Type conversion and checking
 Value convert_to_string(Value value);
@@ -59,12 +57,12 @@ Value convert_to_number(Value value);
 bool are_types_compatible(ValueType a, ValueType b);
 
 // Arithmetic operations
-EvalResult add_values(Environment* env, Value left, Value right);
-EvalResult subtract_values(Environment* env, Value left, Value right);
-EvalResult multiply_values(Environment* env, Value left, Value right);
-EvalResult divide_values(Environment* env, Value left, Value right, int line, int column);
-EvalResult modulo_values(Environment* env, Value left, Value right, int line, int column);
-EvalResult compare_values(Environment* env, Value left, Value right, TokenType op);
+EvalResult add_values(Environment* env, const Value& left, const Value& right);
+EvalResult subtract_values(Environment* env, const Value& left, const Value& right);
+EvalResult multiply_values(Environment* env, const Value& left, const Value& right);
+EvalResult divide_values(Environment* env, const Value& left, const Value& right, int line, int column);
+EvalResult modulo_values(Environment* env, const Value& left, const Value& right, int line, int column);
+EvalResult compare_values(Environment* env, const Value& left, const Value& right, TokenType op);
 EvalResult logical_and(Value left, Value right);
 EvalResult logical_or(Value left, Value right);
 EvalResult logical_not(Value value);

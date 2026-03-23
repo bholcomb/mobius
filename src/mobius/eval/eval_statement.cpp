@@ -66,20 +66,19 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
         free(conversion.error_message);
     }
     
-    char name[256];
-    const char* identifier = stmt->name.identifier ? stmt->name.identifier : "unknown";
-    snprintf(name, sizeof(name), "%s", identifier);
+    const char* name = stmt->name.identifier ? stmt->name.identifier : "unknown";
     
     // Check for namespace collision: an enum with the same name shouldn't exist
-    char enum_var_name[256];
-    snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", identifier);
+    char enum_var_buf[256];
+    snprintf(enum_var_buf, sizeof(enum_var_buf), "__enum_%s", name);
+    StringInternPool* pool = env->current_context->state->stringPool();
+    const char* enum_key = pool->intern(enum_var_buf)->data;
     bool enum_exists = false;
-    env->get(enum_var_name, &enum_exists);
+    env->get(enum_key, &enum_exists);
     
     if (enum_exists) {
-        
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "Name collision: enum '%s' already exists, cannot declare variable with the same name", identifier);
+        snprintf(error_msg, sizeof(error_msg), "Name collision: enum '%s' already exists, cannot declare variable with the same name", name);
         return make_error(env, error_msg, stmt->name.line, stmt->name.column);
     }
     
@@ -251,38 +250,30 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
 
 // Function statement evaluation: func name(params) { body }
 EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
-    // Create a function object
-    MobiusFunction* function = malloc(sizeof(MobiusFunction));
+    MobiusFunction* function = (MobiusFunction*)malloc(sizeof(MobiusFunction));
     if (!function) {
         return make_error(env, "Memory allocation failed", 0, 0);
     }
     
-    // Extract function name from token
-    function->name = extract_identifier_name(&stmt->name);
+    // Use the interned identifier pointer directly (owned by the intern pool)
+    function->name = stmt->name.identifier;
     if (!function->name) {
         free(function);
         return make_error(env, "Failed to extract function name", 0, 0);
     }
     
-    // Extract parameter names from tokens
     function->param_count = stmt->param_count;
     if (stmt->param_count > 0) {
-        function->param_names = malloc(stmt->param_count * sizeof(char*));
+        function->param_names = (const char**)malloc(stmt->param_count * sizeof(const char*));
         if (!function->param_names) {
-            free(function->name);
             free(function);
             return make_error(env, "Memory allocation failed", 0, 0);
         }
         
         for (size_t i = 0; i < stmt->param_count; i++) {
-            function->param_names[i] = extract_identifier_name(&stmt->params[i]);
+            function->param_names[i] = stmt->params[i].identifier;
             if (!function->param_names[i]) {
-                // Cleanup previously allocated names
-                for (size_t j = 0; j < i; j++) {
-                    free(function->param_names[j]);
-                }
                 free(function->param_names);
-                free(function->name);
                 free(function);
                 return make_error(env, "Failed to extract parameter name", 0, 0);
             }
@@ -291,25 +282,15 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         function->param_names = NULL;
     }
     
-    // Create a copy of the body array and retain references to AST body statements
-    // This ensures the function has its own copy and proper memory management
     function->body_count = stmt->body_count;
     if (stmt->body_count > 0) {
-        function->body = malloc(stmt->body_count * sizeof(Stmt*));
+        function->body = (Stmt**)malloc(stmt->body_count * sizeof(Stmt*));
         if (!function->body) {
-            // Handle allocation failure - cleanup parameter names
-            if (function->param_names) {
-                for (size_t j = 0; j < function->param_count; j++) {
-                    free(function->param_names[j]);
-                }
-                free(function->param_names);
-            }
-            free(function->name);
+            free(function->param_names);
             free(function);
             return make_error_detailed(env, "Memory allocation failed for function body", NULL, ERROR_RUNTIME, 0, 0, NULL, NULL);
         }
         
-        // Copy the body array and retain each statement
         for (size_t i = 0; i < stmt->body_count; i++) {
             function->body[i] = stmt->body[i];
             ast_retain_stmt(stmt->body[i]);
@@ -317,13 +298,11 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
     } else {
         function->body = NULL;
     }
-    function->closure = env;  // Capture current environment as closure
-    function->ref_count = 1;  // Initialize reference count
+    function->closure = env;
+    function->ref_count = 1;
     
-    // Create function value
     Value func_value = make_function_value(function);
     
-    // Define the function in the current environment using the stored name
     env->define(function->name, func_value);
     return make_success(0);
 }

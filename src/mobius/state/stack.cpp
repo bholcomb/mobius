@@ -1,3 +1,4 @@
+#include <mobius/mobius_plugin.h>
 #include "state/stack.h"
 #include "state/mobius_state.h"
 #include "state/environment.h"
@@ -83,61 +84,86 @@ int mobius_stack_size(MobiusState* state) {
     return (int)state->mainContext()->stack.size();
 }
 
-ValueType mobius_stack_type(MobiusState* state, int idx) {
+} // extern "C" (temporarily close for internal helper)
+
+static ValueType stack_get_internal_type(MobiusState* state, int idx) {
     if (!state || !state->mainContext()) return VAL_NIL;
-    
+
     ExecutionContext* ctx = state->mainContext();
     int size = (int)ctx->stack.size();
-    
-    // Normalize negative indices
+
     if (idx < 0) {
         idx = size + idx;
     }
-    
-    // Return VAL_NIL for out of bounds
+
     if (idx < 0 || idx >= size) {
         return VAL_NIL;
     }
-    
+
     return ctx->stack[idx].type;
 }
 
+static MobiusValueType internal_to_public_type(ValueType t) {
+    switch (t) {
+        case VAL_NIL:             return MOBIUS_VAL_NIL;
+        case VAL_BOOL:            return MOBIUS_VAL_BOOL;
+        case VAL_INTEGER:         return MOBIUS_VAL_INT64;
+        case VAL_FLOAT32:         return MOBIUS_VAL_FLOAT32;
+        case VAL_FLOAT64:         return MOBIUS_VAL_FLOAT64;
+        case VAL_CHAR:            return MOBIUS_VAL_CHAR;
+        case VAL_NATIVE_FUNCTION: return MOBIUS_VAL_NATIVE_FUNCTION;
+        case VAL_STRING:          return MOBIUS_VAL_STRING;
+        case VAL_ARRAY:           return MOBIUS_VAL_ARRAY;
+        case VAL_FUNCTION:        return MOBIUS_VAL_FUNCTION;
+        case VAL_TABLE:           return MOBIUS_VAL_TABLE;
+        case VAL_USERDATA:        return MOBIUS_VAL_USERDATA;
+        case VAL_ENUM:            return MOBIUS_VAL_ENUM;
+        default:                  return MOBIUS_VAL_NIL;
+    }
+}
+
+extern "C" {
+
+MobiusValueType mobius_stack_type(MobiusState* state, int idx) {
+    return internal_to_public_type(stack_get_internal_type(state, idx));
+}
+
 bool mobius_stack_isNumber(MobiusState* state, int idx) {
-    ValueType type = mobius_stack_type(state, idx);
+    ValueType type = stack_get_internal_type(state, idx);
     return type == VAL_INTEGER || type == VAL_FLOAT32 || type == VAL_FLOAT64;
 }
 
 bool mobius_stack_isInteger(MobiusState* state, int idx) {
-    return mobius_stack_type(state, idx) == VAL_INTEGER;
+    return stack_get_internal_type(state, idx) == VAL_INTEGER;
 }
 
 bool mobius_stack_isFloat(MobiusState* state, int idx) {
-    ValueType type = mobius_stack_type(state, idx);
+    ValueType type = stack_get_internal_type(state, idx);
     return type == VAL_FLOAT32 || type == VAL_FLOAT64;
 }
 
 bool mobius_stack_isString(MobiusState* state, int idx) {
-    return mobius_stack_type(state, idx) == VAL_STRING;
+    return stack_get_internal_type(state, idx) == VAL_STRING;
 }
 
 bool mobius_stack_isBool(MobiusState* state, int idx) {
-    return mobius_stack_type(state, idx) == VAL_BOOL;
+    return stack_get_internal_type(state, idx) == VAL_BOOL;
 }
 
 bool mobius_stack_isNil(MobiusState* state, int idx) {
-    return mobius_stack_type(state, idx) == VAL_NIL;
+    return stack_get_internal_type(state, idx) == VAL_NIL;
 }
 
 bool mobius_stack_isTable(MobiusState* state, int idx) {
-    return mobius_stack_type(state, idx) == VAL_TABLE;
+    return stack_get_internal_type(state, idx) == VAL_TABLE;
 }
 
 bool mobius_stack_isArray(MobiusState* state, int idx) {
-    return mobius_stack_type(state, idx) == VAL_ARRAY;
+    return stack_get_internal_type(state, idx) == VAL_ARRAY;
 }
 
 bool mobius_stack_isFunction(MobiusState* state, int idx) {
-    ValueType type = mobius_stack_type(state, idx);
+    ValueType type = stack_get_internal_type(state, idx);
     return type == VAL_FUNCTION || type == VAL_NATIVE_FUNCTION;
 }
 
@@ -507,8 +533,9 @@ void mobius_stack_getVariable(MobiusState* state, const char* name) {
         exit(1);
     }
     
+    const char* interned = state->stringPool()->intern(name)->data;
     bool found = false;
-    Value val = state->mainContext()->current_env->get(name, &found);
+    Value val = state->mainContext()->current_env->get(interned, &found);
     
     if (!found) {
         state->mainContext()->push(make_nil_value());
@@ -523,8 +550,9 @@ void mobius_stack_getGlobal(MobiusState* state, const char* name) {
         exit(1);
     }
     
+    const char* interned = state->stringPool()->intern(name)->data;
     bool found = false;
-    Value val = state->globalEnv()->get(name, &found);
+    Value val = state->globalEnv()->get(interned, &found);
     
     if (!found) {
         state->mainContext()->push(make_nil_value());
@@ -544,8 +572,9 @@ void mobius_stack_setVariable(MobiusState* state, const char* name) {
         exit(1);
     }
     
+    const char* interned = state->stringPool()->intern(name)->data;
     Value val = state->mainContext()->pop();
-    state->mainContext()->current_env->define(name, val);
+    state->mainContext()->current_env->define(interned, val);
 }
 
 void mobius_stack_setGlobal(MobiusState* state, const char* name) {
@@ -559,8 +588,9 @@ void mobius_stack_setGlobal(MobiusState* state, const char* name) {
         exit(1);
     }
     
+    const char* interned = state->stringPool()->intern(name)->data;
     Value val = state->mainContext()->pop();
-    state->globalEnv()->define(name, val);
+    state->globalEnv()->define(interned, val);
 }
 
 // ============================================================================
@@ -679,7 +709,8 @@ void mobius_stack_copy(MobiusState* state, int idx) {
 void mobius_register_function(MobiusState* state, const char* name,
                               MobiusCFunction func) {
     if (!state || !name || !func) return;
-    state->globalEnv()->define(name, make_native_function_value(func));
+    const char* interned = state->stringPool()->intern(name)->data;
+    state->globalEnv()->define(interned, make_native_function_value(func));
 }
 
 // ============================================================================

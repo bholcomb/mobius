@@ -64,13 +64,14 @@ struct CallFrame {
 // EXECUTION CONTEXT
 // ============================================================================
 
-class ExecutionContext {
+class MOBIUS_API ExecutionContext {
 public:
     ExecutionContext(MobiusState* owner, size_t initial_stack, size_t max_depth);
     ~ExecutionContext();
 
     // Value stack operations
-    void push(Value value);
+    void push(const Value& value);
+    void push(Value&& value);
     Value pop();
     const Value& peek(size_t offset = 0) const;
     size_t stackSize() const;
@@ -101,7 +102,7 @@ private:
 // MOBIUS STATE
 // ============================================================================
 
-class MobiusState {
+class MOBIUS_API MobiusState {
 public:
     explicit MobiusState(MobiusConfig* config = nullptr);
     ~MobiusState();

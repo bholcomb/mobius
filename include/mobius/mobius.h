@@ -14,6 +14,24 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* ====================================================================== */
+/*  Shared-library export macro                                            */
+/* ====================================================================== */
+
+#ifndef MOBIUS_API
+#  if defined(_WIN32) || defined(__CYGWIN__)
+#    ifdef MOBIUS_BUILDING
+#      define MOBIUS_API __declspec(dllexport)
+#    else
+#      define MOBIUS_API __declspec(dllimport)
+#    endif
+#  elif __GNUC__ >= 4
+#    define MOBIUS_API __attribute__((visibility("default")))
+#  else
+#    define MOBIUS_API
+#  endif
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -70,7 +88,7 @@ typedef struct {
 /**
  * Return a MobiusConfig populated with sensible defaults.
  */
-MobiusConfig mobius_default_config(void);
+MOBIUS_API MobiusConfig mobius_default_config(void);
 
 /* ====================================================================== */
 /*  Error handling                                                         */
@@ -109,14 +127,14 @@ typedef void (*MobiusErrorHandler)(MobiusState* state, const MobiusError* error,
  * @param userdata  Opaque pointer forwarded to the handler (may be NULL).
  * @return The previous handler, or NULL if it was the default.
  */
-MobiusErrorHandler mobius_set_error_handler(MobiusState* state,
-                                           MobiusErrorHandler handler,
-                                           void* userdata);
+MOBIUS_API MobiusErrorHandler mobius_set_error_handler(MobiusState* state,
+                                                      MobiusErrorHandler handler,
+                                                      void* userdata);
 
 /**
  * Clear the last error stored in the interpreter.
  */
-void mobius_clear_error(MobiusState* state);
+MOBIUS_API void mobius_clear_error(MobiusState* state);
 
 /* ====================================================================== */
 /*  Lifecycle                                                              */
@@ -127,19 +145,19 @@ void mobius_clear_error(MobiusState* state);
  * @param config  Configuration, or NULL for defaults.
  * @return  Opaque state handle, or NULL on failure.
  */
-MobiusState* mobius_new_state(MobiusConfig* config);
+MOBIUS_API MobiusState* mobius_new_state(MobiusConfig* config);
 
 /**
  * Initialise the standard library (print, math, string, etc.).
  * Call once after mobius_new_state().
  * @return MOBIUS_OK on success.
  */
-int mobius_init_stdlib(MobiusState* state);
+MOBIUS_API int mobius_init_stdlib(MobiusState* state);
 
 /**
  * Destroy the interpreter and free all resources.
  */
-void mobius_free_state(MobiusState* state);
+MOBIUS_API void mobius_free_state(MobiusState* state);
 
 /* ====================================================================== */
 /*  Execution                                                              */
@@ -149,13 +167,13 @@ void mobius_free_state(MobiusState* state);
  * Execute a string of Mobius source code.
  * @return MOBIUS_OK on success, or an error code.
  */
-int mobius_exec_string(MobiusState* state, const char* code);
+MOBIUS_API int mobius_exec_string(MobiusState* state, const char* code);
 
 /**
  * Execute a Mobius source file.
  * @return MOBIUS_OK on success, or an error code.
  */
-int mobius_exec_file(MobiusState* state, const char* filename);
+MOBIUS_API int mobius_exec_file(MobiusState* state, const char* filename);
 
 /* ====================================================================== */
 /*  Module / plugin management                                             */
@@ -165,17 +183,17 @@ int mobius_exec_file(MobiusState* state, const char* filename);
  * Add a directory to the plugin search path.
  * Call before mobius_new_state() or mobius_init_stdlib().
  */
-void mobius_add_plugin_directory(const char* path);
+MOBIUS_API void mobius_add_plugin_directory(const char* path);
 
 /**
  * Return the number of currently loaded modules.
  */
-size_t mobius_get_module_count(MobiusState* state);
+MOBIUS_API size_t mobius_get_module_count(MobiusState* state);
 
 /**
  * Print a summary of loaded modules to stdout.
  */
-void mobius_print_modules(MobiusState* state);
+MOBIUS_API void mobius_print_modules(MobiusState* state);
 
 /* ====================================================================== */
 /*  REPL                                                                   */
@@ -185,7 +203,7 @@ void mobius_print_modules(MobiusState* state);
  * Start the interactive read-eval-print loop.
  * Blocks until the user exits.
  */
-void mobius_start_repl(MobiusState* state);
+MOBIUS_API void mobius_start_repl(MobiusState* state);
 
 #ifdef __cplusplus
 }

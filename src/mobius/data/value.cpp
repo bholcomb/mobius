@@ -12,56 +12,10 @@
 #include <string.h>
 
 // ============================================================================
-// Value RAII implementation
+// Value refcount slow paths (called only for heap-allocated types)
 // ============================================================================
 
-Value::Value()
-    : type(VAL_NIL)
-{
-    as.boolean = false;
-}
-
-Value::~Value() {
-    releaseRef();
-}
-
-Value::Value(const Value& other)
-    : type(other.type)
-{
-    memcpy(&as, &other.as, sizeof(as));
-    retain();
-}
-
-Value& Value::operator=(const Value& other) {
-    if (this != &other) {
-        releaseRef();
-        type = other.type;
-        memcpy(&as, &other.as, sizeof(as));
-        retain();
-    }
-    return *this;
-}
-
-Value::Value(Value&& other) noexcept
-    : type(other.type)
-{
-    memcpy(&as, &other.as, sizeof(as));
-    other.type = VAL_NIL;
-    other.as.boolean = false;
-}
-
-Value& Value::operator=(Value&& other) noexcept {
-    if (this != &other) {
-        releaseRef();
-        type = other.type;
-        memcpy(&as, &other.as, sizeof(as));
-        other.type = VAL_NIL;
-        other.as.boolean = false;
-    }
-    return *this;
-}
-
-void Value::retain() const {
+void Value::retainSlow() const {
     switch (type) {
         case VAL_STRING:
             if (as.string) as.string->retain();
@@ -83,7 +37,7 @@ void Value::retain() const {
     }
 }
 
-void Value::releaseRef() {
+void Value::releaseRefSlow() {
     switch (type) {
         case VAL_STRING:
             if (as.string) as.string->release();
@@ -96,13 +50,7 @@ void Value::releaseRef() {
                 MobiusFunction* func = as.function;
                 func->ref_count--;
                 if (func->ref_count <= 0) {
-                    if (func->name) free(func->name);
-                    if (func->param_names) {
-                        for (size_t i = 0; i < func->param_count; i++) {
-                            if (func->param_names[i]) free(func->param_names[i]);
-                        }
-                        free(func->param_names);
-                    }
+                    free(func->param_names);
                     if (func->body) {
                         for (size_t i = 0; i < func->body_count; i++) {
                             if (func->body[i]) ast_release_stmt(func->body[i]);

@@ -11,6 +11,7 @@ typedef struct {
     const char* source;     // Source code string
     int line;              // Current line number
     int column;            // Current column number
+    StringInternPool* pool; // String intern pool for identifier interning
 } Scanner;
 
 // Token array structure for returning results
@@ -21,10 +22,10 @@ typedef struct {
 } TokenArray;
 
 // Main scanning function
-TokenArray scan_source(const char* source);
+TokenArray scan_source(const char* source, StringInternPool* pool = nullptr);
 
 // Scanner utility functions
-void init_scanner(Scanner* scanner, const char* source);
+void init_scanner(Scanner* scanner, const char* source, StringInternPool* pool = nullptr);
 Token scan_token(Scanner* scanner);
 void free_token_array(TokenArray* array);
 

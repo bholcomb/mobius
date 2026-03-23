@@ -24,6 +24,8 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
         return make_error(env, "Invalid enum name", stmt->name.line, stmt->name.column);
     }
     
+    StringInternPool* pool = env->current_context->state->stringPool();
+    
     bool variable_exists = false;
     env->get(enum_name, &variable_exists);
     if (variable_exists) {
@@ -32,10 +34,11 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
         return make_error(env, error_msg, stmt->name.line, stmt->name.column);
     }
     
-    char check_enum_var_name[256];
-    snprintf(check_enum_var_name, sizeof(check_enum_var_name), "__enum_%s", enum_name);
+    char check_buf[256];
+    snprintf(check_buf, sizeof(check_buf), "__enum_%s", enum_name);
+    const char* check_key = pool->intern(check_buf)->data;
     bool enum_exists = false;
-    env->get(check_enum_var_name, &enum_exists);
+    env->get(check_key, &enum_exists);
     if (enum_exists) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "Enum '%s' is already declared", enum_name);
@@ -92,11 +95,12 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
         member = member->next;
     }
     
-    char enum_var_name[256];
-    snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", enum_name);
+    char enum_buf[256];
+    snprintf(enum_buf, sizeof(enum_buf), "__enum_%s", enum_name);
+    const char* enum_key = pool->intern(enum_buf)->data;
     
     Value enum_value = make_userdata_value(enum_def, enum_definition_destructor, "enum_definition", sizeof(EnumDefinition));
-    env->define(enum_var_name, enum_value);
+    env->define(enum_key, enum_value);
     
     env->current_context->push( make_nil_value());
     return make_success(1);
@@ -114,11 +118,13 @@ EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env) {
         return make_error(env, "Invalid enum access", expr->enum_name.line, expr->enum_name.column);
     }
     
-    char enum_var_name[256];
-    snprintf(enum_var_name, sizeof(enum_var_name), "__enum_%s", enum_name);
+    StringInternPool* pool = env->current_context->state->stringPool();
+    char enum_buf[256];
+    snprintf(enum_buf, sizeof(enum_buf), "__enum_%s", enum_name);
+    const char* enum_key = pool->intern(enum_buf)->data;
     
     bool found = false;
-    Value enum_value = env->get(enum_var_name, &found);
+    Value enum_value = env->get(enum_key, &found);
     if (!found || enum_value.type == VAL_NIL) {
         Value member_var = env->get(member_name, &found);
         if (found && member_var.type != VAL_NIL) {

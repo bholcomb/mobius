@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 199309L 
 
+#include <mobius/mobius_plugin.h>
 #include "state/mobius_state.h"
 #include "state/environment.h"
 #include "eval/evaluator.h"
@@ -61,7 +62,16 @@ ExecutionContext::ExecutionContext(MobiusState* owner, size_t initial_stack, siz
 ExecutionContext::~ExecutionContext() {
 }
 
-void ExecutionContext::push(Value value) {
+void ExecutionContext::push(const Value& value) {
+    if (stack.size() >= state->config().max_stack_size) {
+        fprintf(stderr, "Stack overflow: size %zu exceeds max %zu\n",
+                stack.size(), state->config().max_stack_size);
+        return;
+    }
+    stack.push_back(value);
+}
+
+void ExecutionContext::push(Value&& value) {
     if (stack.size() >= state->config().max_stack_size) {
         fprintf(stderr, "Stack overflow: size %zu exceeds max %zu\n",
                 stack.size(), state->config().max_stack_size);
@@ -325,9 +335,9 @@ MobiusState::MobiusState(MobiusConfig* config)
 
     registry_->scanPlugins(config_.enable_hot_reload);
 
-    global_env_->define("nil", make_nil_value());
-    global_env_->define("true", make_bool_value(true));
-    global_env_->define("false", make_bool_value(false));
+    global_env_->define(string_pool_->intern("nil")->data, make_nil_value());
+    global_env_->define(string_pool_->intern("true")->data, make_bool_value(true));
+    global_env_->define(string_pool_->intern("false")->data, make_bool_value(false));
 }
 
 MobiusState::~MobiusState() {
@@ -363,7 +373,7 @@ int MobiusState::execString(const char* code) {
 
     clearErrorInternal();
 
-    TokenArray tokens = scan_source(code);
+    TokenArray tokens = scan_source(code, string_pool_);
     if (tokens.count == 0) {
         free_token_array(&tokens);
         setError(MOBIUS_ERROR_SYNTAX, "No tokens found", NULL, 0, 0, NULL);

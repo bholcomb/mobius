@@ -29,7 +29,8 @@ bool parser_at_end(Parser* parser) {
 Token parser_peek(Parser* parser) {
     if (parser->current >= parser->token_count) {
         // Return EOF token if we're past the end
-        Token eof = {TOKEN_EOF, "", 0, 0, 0, {{0}}};
+        Token eof = {};
+        eof.type = TOKEN_EOF;
         return eof;
     }
     return parser->tokens[parser->current];
@@ -109,7 +110,10 @@ Token consume(Parser* parser, TokenType type, const char* message) {
     }
     
     parser_error_at_current(parser, message);
-    Token error_token = {TOKEN_ERROR, message, (int)strlen(message), 0, 0, {{0}}};
+    Token error_token = {};
+    error_token.type = TOKEN_ERROR;
+    error_token.identifier = message;
+    error_token.length = (int)strlen(message);
     return error_token;
 }
 

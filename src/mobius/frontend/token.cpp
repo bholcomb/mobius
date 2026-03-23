@@ -90,23 +90,27 @@ void print_token(const Token* token) {
     printf("\n");
 }
 
-Token make_token(TokenType type, const char* start, int length, int line, int column) {
-    Token token = {
-        .type = type,
-        .identifier = NULL,  // Will be set only for IDENTIFIER tokens
-        .length = length,
-        .line = line,
-        .column = column,
-        .literal = {{0}} // Initialize union to zero
-    };
+Token make_token(TokenType type, const char* start, int length, int line, int column, StringInternPool* pool) {
+    Token token;
+    memset(&token, 0, sizeof(Token));
+    token.type = type;
+    token.length = length;
+    token.line = line;
+    token.column = column;
     
-    // Copy identifier string only for IDENTIFIER tokens
     if (type == TOKEN_IDENTIFIER && start && length > 0) {
-        char* id_copy = malloc(length + 1);
-        if (id_copy) {
-            memcpy(id_copy, start, length);
-            id_copy[length] = '\0';
-            token.identifier = id_copy;
+        if (pool) {
+            MobiusString* interned = pool->intern(start, length);
+            token.interned = interned;
+            token.identifier = interned->data;
+        } else {
+            token.interned = nullptr;
+            char* id_copy = (char*)malloc(length + 1);
+            if (id_copy) {
+                memcpy(id_copy, start, length);
+                id_copy[length] = '\0';
+                token.identifier = id_copy;
+            }
         }
     }
     
@@ -114,78 +118,61 @@ Token make_token(TokenType type, const char* start, int length, int line, int co
 }
 
 Token make_error_token(const char* message, int line, int column) {
-    Token token = {
-        .type = TOKEN_ERROR,
-        .identifier = NULL,  // Error tokens don't need identifier copying
-        .length = (int)strlen(message),
-        .line = line,
-        .column = column,
-        .literal = {{0}}
-    };
-    // Note: Error message is typically a string literal, so we don't copy it
+    Token token;
+    memset(&token, 0, sizeof(Token));
+    token.type = TOKEN_ERROR;
+    token.length = (int)strlen(message);
+    token.line = line;
+    token.column = column;
     return token;
 }
 
 Token make_integer_token(const char* start, int length, int line, int column, 
                         NumberType num_type, int64_t value) {
-    (void)start; // Unused parameter
-    Token token = {
-        .type = TOKEN_INTEGER,
-        .identifier = NULL,  // Integer tokens don't need identifier copying
-        .length = length,
-        .line = line,
-        .column = column,
-        .literal = {{0}}
-    };
-    
-    // Store type and value directly - no complex union needed
+    (void)start;
+    Token token;
+    memset(&token, 0, sizeof(Token));
+    token.type = TOKEN_INTEGER;
+    token.length = length;
+    token.line = line;
+    token.column = column;
     token.literal.integer.num_type = num_type;
     token.literal.integer.value = value;
-    
     return token;
 }
 
 Token make_float_token(const char* start, int length, int line, int column, double value) {
-    (void)start; // Unused parameter
-    Token token = {
-        .type = TOKEN_FLOAT,
-        .identifier = NULL,  // Float tokens don't need identifier copying
-        .length = length,
-        .line = line,
-        .column = column,
-        .literal = {{0}}
-    };
-    
+    (void)start;
+    Token token;
+    memset(&token, 0, sizeof(Token));
+    token.type = TOKEN_FLOAT;
+    token.length = length;
+    token.line = line;
+    token.column = column;
     token.literal.float_val = value;
     return token;
 }
 
 Token make_string_token(const char* start, int length, int line, int column, const char* string) {
-    (void)start; // Unused parameter
-    Token token = {
-        .type = TOKEN_STRING,
-        .identifier = NULL,  // String tokens don't need identifier copying (use literal.string instead)
-        .length = length,
-        .line = line,
-        .column = column,
-        .literal = {{0}}
-    };
-    
+    (void)start;
+    Token token;
+    memset(&token, 0, sizeof(Token));
+    token.type = TOKEN_STRING;
+    token.length = length;
+    token.line = line;
+    token.column = column;
     token.literal.string = string;
     return token;
 }
 
 Token make_char_token(const char* start, int length, int line, int column, char character) {
-    (void)start; // Unused parameter
-    Token token = {
-        .type = TOKEN_CHAR,
-        .identifier = NULL,  // Char tokens don't need identifier copying
-        .length = length,
-        .line = line,
-        .column = column,
-        .literal = {{0}}
-    };
-    
+    (void)start;
+    Token token;
+    memset(&token, 0, sizeof(Token));
+    token.type = TOKEN_CHAR;
+    token.length = length;
+    token.line = line;
+    token.column = column;
     token.literal.character = character;
     return token;
 }
@@ -200,21 +187,21 @@ char* extract_identifier_name(const Token* token) {
     return mobius_strdup(token->identifier);
 }
 
-// Token copying functions for memory management (simplified - only copy what's needed)
 Token copy_token(const Token* token) {
     if (!token) {
-        Token empty = {0};
+        Token empty;
+        memset(&empty, 0, sizeof(Token));
         return empty;
     }
     
-    Token copy = *token;  // Shallow copy first
+    Token copy = *token;
     
-    // Copy identifier string if it exists
-    if (token->identifier) {
+    // Interned identifiers are shared pointers — just copy the pointer.
+    // Only duplicate non-interned identifier strings.
+    if (token->identifier && !token->interned) {
         copy.identifier = mobius_strdup(token->identifier);
     }
     
-    // Copy string literal if it exists
     if (token->type == TOKEN_STRING && token->literal.string) {
         copy.literal.string = mobius_strdup(token->literal.string);
     }
@@ -225,15 +212,16 @@ Token copy_token(const Token* token) {
 void free_token(Token* token) {
     if (!token) return;
     
-    // Free the copied identifier string
-    if (token->identifier) {
+    // Only free non-interned identifier strings (interned strings are owned by the pool)
+    if (token->identifier && !token->interned) {
         free((void*)token->identifier);
-        token->identifier = NULL;
     }
+    token->identifier = nullptr;
+    token->interned = nullptr;
     
     // Free the copied string literal
     if (token->type == TOKEN_STRING && token->literal.string) {
         free((void*)token->literal.string);
-        token->literal.string = NULL;
+        token->literal.string = nullptr;
     }
 }

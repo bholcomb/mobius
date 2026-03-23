@@ -10,16 +10,6 @@
 // EVALUATION RESULT HELPERS
 // ============================================================================
 
-EvalResult make_success(int return_count) {
-    EvalResult result = {0};
-    result.return_count = return_count;
-    result.has_error = false;
-    result.has_returned = false;
-    result.has_break = false;
-    result.has_continue = false;
-    return result;
-}
-
 EvalResult make_error(Environment* env, const char* message, int line, int column) {
     EvalResult result = {0};
     result.return_count = 0;
@@ -79,10 +69,6 @@ EvalResult make_error_detailed(Environment* env, const char* message, const char
     result.error.stack_trace = env->current_context->captureStackTrace();;  // No context available in basic make_error_detailed
     
     return result;
-}
-
-bool is_error(EvalResult result) {
-    return result.has_error;
 }
 
 const char* error_category_name(ErrorCategory category) {
