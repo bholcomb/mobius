@@ -10,59 +10,43 @@ typedef struct {
     Environment* bindings;  // Variable bindings from pattern (if any)
 } PatternMatchResult;
 
-// Simple comparison function that returns integer like strcmp
-// Returns: -1 if left < right, 0 if left == right, 1 if left > right
+#include <climits>
+
+// Sentinel: returned when the two values are incomparable (different type
+// families).  Callers must check for this before interpreting the result.
+static const int COMPARE_INCOMPATIBLE = INT_MIN;
+
+// Ordered comparison that mirrors strcmp conventions.
+// Returns -1 / 0 / +1 for numeric and string operands of the same family,
+// or COMPARE_INCOMPATIBLE when the types cannot be ordered.
 static int simple_compare_values(Value left, Value right) {
-    // Handle numeric comparisons with type coercion
-    if ((left.type == VAL_INTEGER || left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64) &&
-        (right.type == VAL_INTEGER || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64)) {
-        
-        double left_val = 0.0, right_val = 0.0;
-        
-        // Convert left to double
+    bool l_num = (left.type == VAL_INTEGER || left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64);
+    bool r_num = (right.type == VAL_INTEGER || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64);
+
+    if (l_num && r_num) {
+        double lv = 0.0, rv = 0.0;
         switch (left.type) {
-            case VAL_INTEGER:
-                left_val = (double)left.as.integer.value.i64;
-                break;
-            case VAL_FLOAT32:
-                left_val = (double)left.as.float32_val;
-                break;
-            case VAL_FLOAT64:
-                left_val = left.as.float64_val;
-                break;
-            default:
-                return 0; // Should not happen
+            case VAL_INTEGER:  lv = (double)left.as.integer.value.i64;  break;
+            case VAL_FLOAT32:  lv = (double)left.as.float32_val;        break;
+            case VAL_FLOAT64:  lv = left.as.float64_val;                break;
+            default: break;
         }
-        
-        // Convert right to double
         switch (right.type) {
-            case VAL_INTEGER:
-                right_val = (double)right.as.integer.value.i64;
-                break;
-            case VAL_FLOAT32:
-                right_val = (double)right.as.float32_val;
-                break;
-            case VAL_FLOAT64:
-                right_val = right.as.float64_val;
-                break;
-            default:
-                return 0; // Should not happen
+            case VAL_INTEGER:  rv = (double)right.as.integer.value.i64; break;
+            case VAL_FLOAT32:  rv = (double)right.as.float32_val;       break;
+            case VAL_FLOAT64:  rv = right.as.float64_val;               break;
+            default: break;
         }
-        
-        if (left_val < right_val) return -1;
-        if (left_val > right_val) return 1;
+        if (lv < rv) return -1;
+        if (lv > rv) return  1;
         return 0;
     }
-    
-    // String comparison
+
     if (left.type == VAL_STRING && right.type == VAL_STRING) {
-        const char* left_str = left.as.string->data;
-        const char* right_str = right.as.string->data;
-        return strcmp(left_str, right_str);
+        return strcmp(left.as.string->data, right.as.string->data);
     }
-    
-    // Different types - not comparable
-    return 0;
+
+    return COMPARE_INCOMPATIBLE;
 }
 
 
@@ -95,15 +79,15 @@ static bool value_in_range(Value value, CasePattern* pattern, Environment* env) 
     bool inclusive = pattern->as.range_pattern.inclusive;
     bool in_range = false;
     
-    // Use simple_compare_values for range checking
     int cmp_start = simple_compare_values(value, start_val);
-    int cmp_end = simple_compare_values(value, end_val);
-    
+    int cmp_end   = simple_compare_values(value, end_val);
+
+    if (cmp_start == COMPARE_INCOMPATIBLE || cmp_end == COMPARE_INCOMPATIBLE)
+        return false;
+
     if (inclusive) {
-        // value >= start && value <= end
         in_range = (cmp_start >= 0) && (cmp_end <= 0);
     } else {
-        // value >= start && value < end  
         in_range = (cmp_start >= 0) && (cmp_end < 0);
     }
     
@@ -120,35 +104,28 @@ static bool evaluate_expression_pattern(CasePattern* pattern, Value value, Envir
     
     Value rhs_val = env->current_context->pop();
     TokenType op = pattern->as.expr_pattern.op;
-    bool result = false;
     
     bool strict = env->current_context->state->config().strict_mode;
 
-    switch (op) {
-        case TOKEN_EQUAL_EQUAL:
-            result = strict ? value.exactlyEqual(rhs_val) : (value == rhs_val);
-            break;
-        case TOKEN_BANG_EQUAL:
-            result = strict ? !value.exactlyEqual(rhs_val) : (value != rhs_val);
-            break;
-        case TOKEN_GREATER:
-            result = simple_compare_values(value, rhs_val) > 0;
-            break;
-        case TOKEN_GREATER_EQUAL:
-            result = simple_compare_values(value, rhs_val) >= 0;
-            break;
-        case TOKEN_LESS:
-            result = simple_compare_values(value, rhs_val) < 0;
-            break;
-        case TOKEN_LESS_EQUAL:
-            result = simple_compare_values(value, rhs_val) <= 0;
-            break;
-        default:
-            result = false;
-            break;
+    // Equality/inequality can always be tested across types
+    if (op == TOKEN_EQUAL_EQUAL) {
+        return strict ? value.exactlyEqual(rhs_val) : (value == rhs_val);
     }
-    
-    return result;
+    if (op == TOKEN_BANG_EQUAL) {
+        return strict ? !value.exactlyEqual(rhs_val) : (value != rhs_val);
+    }
+
+    // Relational ops require comparable types; incompatible → no match
+    int cmp = simple_compare_values(value, rhs_val);
+    if (cmp == COMPARE_INCOMPATIBLE) return false;
+
+    switch (op) {
+        case TOKEN_GREATER:       return cmp > 0;
+        case TOKEN_GREATER_EQUAL: return cmp >= 0;
+        case TOKEN_LESS:          return cmp < 0;
+        case TOKEN_LESS_EQUAL:    return cmp <= 0;
+        default:                  return false;
+    }
 }
 
 

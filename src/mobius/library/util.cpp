@@ -1,12 +1,8 @@
 #include "library/util.h"
 #include "data/value.h"
 #include "state/environment.h"
+#include "state/mobius_state.h"
 #include "util/file_io.h"
-#include "frontend/scanner.h"
-#include "frontend/parser.h"
-#include "eval/evaluator.h"
-#include "frontend/parser.h"
-#include "eval/evaluator.h"
 
 #include <time.h>
 #include <stdio.h>
@@ -115,42 +111,13 @@ int lib_load(MobiusState* state, int arg_count) {
         return state->error("Failed to read file");
     }
     
-    // Parse and execute the loaded script in the current environment
-    TokenArray tokens = scan_source(file_result.content, state->stringPool());
-    if (tokens.count == 0) {
-        free_file_result(&file_result);
-        return state->error("No code found in file");
+    int exec_result = state->execString(file_result.content);
+    free_file_result(&file_result);
+
+    if (exec_result != MOBIUS_OK) {
+        return state->error("error in loaded script");
     }
-    
-    ParseResult parse_result = parse(state, tokens);
-    free_token_array(&tokens);
-    
-    if (parse_result.had_error) {
-        free_file_result(&file_result);
-        free_parse_result(&parse_result);
-        return state->error("Parse error in loaded file");
-    }
-    
-    // Set source context for better error reporting
-    const char* old_context = state->getSourceContext();
-    state->setSourceContext(file_result.content);
-    
-    // Execute the loaded script in the current environment
-    // This allows loaded functions and variables to be available in the calling script
-    EvalResult eval_result = evaluate_program(parse_result.statements, parse_result.count, state->globalEnv());
-    
-    // Restore previous source context
-    state->setSourceContext(old_context);
-    
-    // Note: We intentionally don't free the memory immediately to prevent issues
-    // with function definitions that reference the AST nodes
-    // This creates a small memory leak but ensures stability
-    
-    if (is_error(eval_result)) {
-        const char* msg = eval_result.error.message ? eval_result.error.message : "error in loaded script";
-        return state->error(msg);
-    }
-    
+
     state->mainContext()->push( make_bool_value(true));
     return 1;
 }

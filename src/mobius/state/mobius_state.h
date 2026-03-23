@@ -164,6 +164,11 @@ private:
     bool initialized_;
     const char* source_code_;
 
+    // Prototypes compiled by the VM are owned here so they outlive any
+    // MobiusFunction objects that reference them (e.g. functions defined
+    // in scripts loaded via load()).
+    std::vector<struct Prototype*> owned_protos_;
+
     void clearErrorInternal();
 };
 

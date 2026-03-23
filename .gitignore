@@ -34,5 +34,7 @@ Thumbs.db
 *.bak
 *.backup
 
-.buildy_cache
+.buildy_cache/
+build/
+
 

@@ -4,6 +4,8 @@
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
 #include "eval/evaluator.h"
+#include "vm/compiler.h"
+#include "vm/vm.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -77,6 +79,37 @@ bool Repl::processLine(const char* line) {
         return true;
     }
 
+    if (state_->config().use_vm) {
+        Compiler compiler(state_->stringPool());
+        Prototype* proto = compiler.compile(parse_result.statements,
+                                            parse_result.count, "<repl>");
+        free_parse_result(&parse_result);
+        free_token_array(&tokens);
+        free(modified_line);
+
+        if (!proto) {
+            printf("Bytecode compilation failed\n");
+            return true;
+        }
+
+        if (state_->config().debug_mode) {
+            disassemble_prototype(proto);
+        }
+
+        MobiusVM vm(state_);
+        int rc = vm.execute(proto);
+        delete proto;
+
+        if (rc != 0) {
+            InternalError* err = state_->lastError();
+            if (err && err->message) {
+                fprintf(stderr, "Runtime error: %s\n", err->message);
+            }
+        }
+
+        return true;
+    }
+
     for (size_t i = 0; i < parse_result.count; i++) {
         Stmt* stmt = parse_result.statements[i];
 
@@ -141,9 +174,10 @@ bool Repl::handleCommand(const char* line) {
     return true;
 }
 
-void Repl::printWelcome() {
-    printf("Mobius REPL v0.1.0\n");
-    printf("Type :help for commands or enter Mobius code to execute.\n");
+void Repl::printWelcome() const {
+    printf("Mobius REPL v0.1.0");
+    if (state_->config().use_vm) printf(" [bytecode VM]");
+    printf("\nType :help for commands or enter Mobius code to execute.\n");
     printf("Press Ctrl+C or type :quit to exit.\n\n");
 }
 

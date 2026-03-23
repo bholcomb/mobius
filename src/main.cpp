@@ -21,18 +21,22 @@ int main(int argc, char *argv[]) {
     const char* script_file = NULL;
     bool list_modules = false;
     bool debug_mode = false;
+    bool use_vm = false;
     
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--list-modules") == 0) {
             list_modules = true;
         } else if (strcmp(argv[i], "--debug") == 0 || strcmp(argv[i], "-d") == 0) {
             debug_mode = true;
+        } else if (strcmp(argv[i], "--vm") == 0) {
+            use_vm = true;
         } else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Mobius Scripting Language Interpreter v0.1.0\n\n");
             printf("Usage: %s [options] [script_file]\n", argv[0]);
             printf("\nOptions:\n");
             printf("  --list-modules     List loaded modules and functions\n");
             printf("  --debug, -d        Enable debug mode\n");
+            printf("  --vm               Use register-based bytecode VM\n");
             printf("  --help, -h         Show this help message\n");
             printf("\nIf no script file is provided, starts interactive REPL.\n");
             return 0;
@@ -53,6 +57,9 @@ int main(int argc, char *argv[]) {
     if (debug_mode) {
         config.debug_mode = true;
     }
+    if (use_vm) {
+        config.use_vm = true;
+    }
     
     MobiusState* state = mobius_new_state(&config);
     if (!state) {
@@ -69,7 +76,8 @@ int main(int argc, char *argv[]) {
     
     // Only show startup messages when not running a script file
     if (!script_file) {
-        printf("Mobius Scripting Language Interpreter v0.1.0\n");
+        printf("Mobius Scripting Language Interpreter v0.1.0%s\n",
+               use_vm ? " [bytecode VM]" : "");
         
         // Show discovered plugins
         ModuleRegistry* registry = getGlobalRegistry();

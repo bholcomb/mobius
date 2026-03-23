@@ -15,6 +15,7 @@ targets:
         - "mobius/plugin/*.cpp"
         - "mobius/state/*.cpp"
         - "mobius/util/*.cpp"
+        - "mobius/vm/*.cpp"
         - "mobius/repl.cpp"
       include_dirs:
         - "${workspace}/include"

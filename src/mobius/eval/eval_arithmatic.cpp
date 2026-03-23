@@ -8,6 +8,49 @@
 #include <stdlib.h>
 #include <math.h>
 
+// C-style integer promotion helpers.
+// If either operand is NUM_UINT64, arithmetic uses uint64_t and produces
+// NUM_UINT64. Otherwise all integer types widen to int64_t / NUM_INT64.
+static inline int64_t extract_int64(const Value& v) {
+    switch (v.as.integer.num_type) {
+        case NUM_INT8:   return v.as.integer.value.i8;
+        case NUM_UINT8:  return v.as.integer.value.u8;
+        case NUM_INT16:  return v.as.integer.value.i16;
+        case NUM_UINT16: return v.as.integer.value.u16;
+        case NUM_INT32:  return v.as.integer.value.i32;
+        case NUM_UINT32: return v.as.integer.value.u32;
+        case NUM_INT64:  return v.as.integer.value.i64;
+        case NUM_UINT64: return (int64_t)v.as.integer.value.u64;
+        default:         return 0;
+    }
+}
+
+static inline uint64_t extract_uint64(const Value& v) {
+    switch (v.as.integer.num_type) {
+        case NUM_INT8:   return (uint64_t)v.as.integer.value.i8;
+        case NUM_UINT8:  return v.as.integer.value.u8;
+        case NUM_INT16:  return (uint64_t)v.as.integer.value.i16;
+        case NUM_UINT16: return v.as.integer.value.u16;
+        case NUM_INT32:  return (uint64_t)v.as.integer.value.i32;
+        case NUM_UINT32: return v.as.integer.value.u32;
+        case NUM_INT64:  return (uint64_t)v.as.integer.value.i64;
+        case NUM_UINT64: return v.as.integer.value.u64;
+        default:         return 0;
+    }
+}
+
+static inline double extract_double(const Value& v) {
+    if (v.type == VAL_FLOAT64) return v.as.float64_val;
+    if (v.type == VAL_FLOAT32) return (double)v.as.float32_val;
+    if (v.type == VAL_INTEGER) return (double)extract_int64(v);
+    return 0.0;
+}
+
+static inline bool use_unsigned(const Value& l, const Value& r) {
+    return (l.type == VAL_INTEGER && l.as.integer.num_type == NUM_UINT64) ||
+           (r.type == VAL_INTEGER && r.as.integer.num_type == NUM_UINT64);
+}
+
 // Helper function to increment/decrement an integer value
 Value increment_integer(Value val, bool is_increment, bool* success) {
     *success = false;
@@ -171,94 +214,30 @@ EvalResult add_values(Environment* env, const Value& left, const Value& right) {
         return make_success(1);
     }
     
-    // Numeric addition
+    // Numeric addition — float path
     if (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64) {
-        // Determine result type: VAL_FLOAT64 (double) takes precedence over VAL_FLOAT32
-        bool use_double = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
-        
-        double left_val = 0.0;
-        double right_val = 0.0;
-        
-        // Convert left operand
-        if (left.type == VAL_FLOAT64) {
-            left_val = left.as.float64_val;
-        } else if (left.type == VAL_FLOAT32) {
-            left_val = (double)left.as.float32_val;
-        }
-        
-        // Convert integers to double if needed
-        if (left.type == VAL_INTEGER) {
-            switch (left.as.integer.num_type) {
-                case NUM_INT8:   left_val = left.as.integer.value.i8; break;
-                case NUM_UINT8:  left_val = left.as.integer.value.u8; break;
-                case NUM_INT16:  left_val = left.as.integer.value.i16; break;
-                case NUM_UINT16: left_val = left.as.integer.value.u16; break;
-                case NUM_INT32:  left_val = left.as.integer.value.i32; break;
-                case NUM_UINT32: left_val = left.as.integer.value.u32; break;
-                case NUM_INT64:  left_val = left.as.integer.value.i64; break;
-                case NUM_UINT64: left_val = left.as.integer.value.u64; break;
-                default: left_val = 0.0; break;
-            }
-        }
-        
-        // Convert right operand
-        if (right.type == VAL_FLOAT64) {
-            right_val = right.as.float64_val;
-        } else if (right.type == VAL_FLOAT32) {
-            right_val = (double)right.as.float32_val;
-        } else if (right.type == VAL_INTEGER) {
-            switch (right.as.integer.num_type) {
-                case NUM_INT8:   right_val = right.as.integer.value.i8; break;
-                case NUM_UINT8:  right_val = right.as.integer.value.u8; break;
-                case NUM_INT16:  right_val = right.as.integer.value.i16; break;
-                case NUM_UINT16: right_val = right.as.integer.value.u16; break;
-                case NUM_INT32:  right_val = right.as.integer.value.i32; break;
-                case NUM_UINT32: right_val = right.as.integer.value.u32; break;
-                case NUM_INT64:  right_val = right.as.integer.value.i64; break;
-                case NUM_UINT64: right_val = right.as.integer.value.u64; break;
-                default: right_val = 0.0; break;
-            }
-        }
-        
-        // Return appropriate result type
-        if (use_double) {
-            env->current_context->push( make_float_value(left_val + right_val));
+        bool result_is_double = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
+        double lv = extract_double(left);
+        double rv = extract_double(right);
+        if (result_is_double) {
+            env->current_context->push(make_float_value(lv + rv));
         } else {
-            env->current_context->push( make_float32_value((float)(left_val + right_val)));
+            env->current_context->push(make_float32_value((float)(lv + rv)));
         }
         return make_success(1);
     }
     
-    // Integer addition
+    // Integer addition — C-style promotion: uint64 wins over signed
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
-        // For simplicity, promote to int64 for arithmetic
-        int64_t left_val = 0, right_val = 0;
-        
-        switch (left.as.integer.num_type) {
-            case NUM_INT8:   left_val = left.as.integer.value.i8; break;
-            case NUM_UINT8:  left_val = left.as.integer.value.u8; break;
-            case NUM_INT16:  left_val = left.as.integer.value.i16; break;
-            case NUM_UINT16: left_val = left.as.integer.value.u16; break;
-            case NUM_INT32:  left_val = left.as.integer.value.i32; break;
-            case NUM_UINT32: left_val = left.as.integer.value.u32; break;
-            case NUM_INT64:  left_val = left.as.integer.value.i64; break;
-            case NUM_UINT64: left_val = (int64_t)left.as.integer.value.u64; break;
-            default: left_val = 0; break;
+        if (use_unsigned(left, right)) {
+            uint64_t lv = extract_uint64(left);
+            uint64_t rv = extract_uint64(right);
+            env->current_context->push(make_integer_value(NUM_UINT64, (int64_t)(lv + rv)));
+        } else {
+            int64_t lv = extract_int64(left);
+            int64_t rv = extract_int64(right);
+            env->current_context->push(make_integer_value(NUM_INT64, lv + rv));
         }
-        
-        switch (right.as.integer.num_type) {
-            case NUM_INT8:   right_val = right.as.integer.value.i8; break;
-            case NUM_UINT8:  right_val = right.as.integer.value.u8; break;
-            case NUM_INT16:  right_val = right.as.integer.value.i16; break;
-            case NUM_UINT16: right_val = right.as.integer.value.u16; break;
-            case NUM_INT32:  right_val = right.as.integer.value.i32; break;
-            case NUM_UINT32: right_val = right.as.integer.value.u32; break;
-            case NUM_INT64:  right_val = right.as.integer.value.i64; break;
-            case NUM_UINT64: right_val = (int64_t)right.as.integer.value.u64; break;
-            default: right_val = 0; break;
-        }
-        
-        env->current_context->push( make_integer_value(NUM_INT64, left_val + right_val));
         return make_success(1);
     }
     
@@ -284,37 +263,30 @@ EvalResult subtract_values(Environment* env, const Value& left, const Value& rig
         }
     }
     
-    // Numeric subtraction only
-    if (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64) {
-        double left_val = (left.type == VAL_FLOAT64) ? left.as.float64_val : 0.0;
-        double right_val = (right.type == VAL_FLOAT64) ? right.as.float64_val : 0.0;
-        
-        // Convert integers to double if needed (similar to add_values)
-        if (left.type == VAL_INTEGER) {
-            switch (left.as.integer.num_type) {
-                case NUM_INT32:  left_val = left.as.integer.value.i32; break;
-                // ... other cases similar to add_values
-                default: left_val = 0.0; break;
-            }
+    // Float subtraction
+    if (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64) {
+        bool result_is_double = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
+        double lv = extract_double(left);
+        double rv = extract_double(right);
+        if (result_is_double) {
+            env->current_context->push(make_float_value(lv - rv));
+        } else {
+            env->current_context->push(make_float32_value((float)(lv - rv)));
         }
-        
-        if (right.type == VAL_INTEGER) {
-            switch (right.as.integer.num_type) {
-                case NUM_INT32:  right_val = right.as.integer.value.i32; break;
-                // ... other cases similar to add_values
-                default: right_val = 0.0; break;
-            }
-        }
-        
-        env->current_context->push( make_float_value(left_val - right_val));
         return make_success(1);
     }
     
+    // Integer subtraction — C-style promotion
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
-        // Simplified integer subtraction (assuming int32 for now)
-        int64_t left_val = left.as.integer.value.i32;
-        int64_t right_val = right.as.integer.value.i32;
-        env->current_context->push( make_integer_value(NUM_INT32, left_val - right_val));
+        if (use_unsigned(left, right)) {
+            uint64_t lv = extract_uint64(left);
+            uint64_t rv = extract_uint64(right);
+            env->current_context->push(make_integer_value(NUM_UINT64, (int64_t)(lv - rv)));
+        } else {
+            int64_t lv = extract_int64(left);
+            int64_t rv = extract_int64(right);
+            env->current_context->push(make_integer_value(NUM_INT64, lv - rv));
+        }
         return make_success(1);
     }
     
@@ -340,18 +312,30 @@ EvalResult multiply_values(Environment* env, const Value& left, const Value& rig
         }
     }
     
-    // Similar pattern to add_values for numeric multiplication
-    if (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64) {
-        double left_val = (left.type == VAL_FLOAT64) ? left.as.float64_val : left.as.integer.value.i32;
-        double right_val = (right.type == VAL_FLOAT64) ? right.as.float64_val : right.as.integer.value.i32;
-        env->current_context->push( make_float_value(left_val * right_val));
+    // Float multiplication
+    if (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64) {
+        bool result_is_double = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
+        double lv = extract_double(left);
+        double rv = extract_double(right);
+        if (result_is_double) {
+            env->current_context->push(make_float_value(lv * rv));
+        } else {
+            env->current_context->push(make_float32_value((float)(lv * rv)));
+        }
         return make_success(1);
     }
     
+    // Integer multiplication — C-style promotion
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
-        int64_t left_val = left.as.integer.value.i32;
-        int64_t right_val = right.as.integer.value.i32;
-        env->current_context->push( make_integer_value(NUM_INT32, left_val * right_val));
+        if (use_unsigned(left, right)) {
+            uint64_t lv = extract_uint64(left);
+            uint64_t rv = extract_uint64(right);
+            env->current_context->push(make_integer_value(NUM_UINT64, (int64_t)(lv * rv)));
+        } else {
+            int64_t lv = extract_int64(left);
+            int64_t rv = extract_int64(right);
+            env->current_context->push(make_integer_value(NUM_INT64, lv * rv));
+        }
         return make_success(1);
     }
     
@@ -381,10 +365,8 @@ EvalResult divide_values(Environment* env, const Value& left, const Value& right
     }
     
     // Division always returns float to handle fractions
-    double left_val = (left.type == VAL_FLOAT64) ? left.as.float64_val : 
-                      (left.type == VAL_INTEGER) ? left.as.integer.value.i32 : 0.0;
-    double right_val = (right.type == VAL_FLOAT64) ? right.as.float64_val : 
-                       (right.type == VAL_INTEGER) ? right.as.integer.value.i32 : 0.0;
+    double left_val = extract_double(left);
+    double right_val = extract_double(right);
     
     if (right_val == 0.0) {
         return make_error_detailed(
@@ -421,48 +403,41 @@ EvalResult modulo_values(Environment* env, const Value& left, const Value& right
         return make_error(env, "Cannot perform modulo on tables without __mod metamethod", 0, 0);
     }
     
-    // Handle integer modulo (preferred for exact results)
+    // Integer modulo — C-style promotion
     if (left.type == VAL_INTEGER && right.type == VAL_INTEGER) {
-        int32_t left_val = left.as.integer.value.i32;
-        int32_t right_val = right.as.integer.value.i32;
-        
-        if (right_val == 0) {
-            return make_error_detailed(
-                env,
-                "Modulo by zero",
-                "Check that the divisor is not zero before performing modulo",
-                ERROR_DIVISION,
-                line, column,
-                NULL,
-                NULL
-            );
+        if (use_unsigned(left, right)) {
+            uint64_t lv = extract_uint64(left);
+            uint64_t rv = extract_uint64(right);
+            if (rv == 0) {
+                return make_error_detailed(env, "Modulo by zero",
+                    "Check that the divisor is not zero before performing modulo",
+                    ERROR_DIVISION, line, column, NULL, NULL);
+            }
+            env->current_context->push(make_integer_value(NUM_UINT64, (int64_t)(lv % rv)));
+        } else {
+            int64_t lv = extract_int64(left);
+            int64_t rv = extract_int64(right);
+            if (rv == 0) {
+                return make_error_detailed(env, "Modulo by zero",
+                    "Check that the divisor is not zero before performing modulo",
+                    ERROR_DIVISION, line, column, NULL, NULL);
+            }
+            env->current_context->push(make_integer_value(NUM_INT64, lv % rv));
         }
-        
-        env->current_context->push( make_integer_value(NUM_INT32, left_val % right_val));
         return make_success(1);
     }
     
-    // Handle float modulo using fmod
-    if ((left.type == VAL_FLOAT64 || left.type == VAL_INTEGER) &&
-        (right.type == VAL_FLOAT64 || right.type == VAL_INTEGER)) {
-        double left_val = (left.type == VAL_FLOAT64) ? left.as.float64_val : 
-                          (double)left.as.integer.value.i32;
-        double right_val = (right.type == VAL_FLOAT64) ? right.as.float64_val : 
-                           (double)right.as.integer.value.i32;
-        
-        if (right_val == 0.0) {
-            return make_error_detailed(
-                env,
-                "Modulo by zero",
+    // Float modulo using fmod
+    if ((left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || left.type == VAL_INTEGER) &&
+        (right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64 || right.type == VAL_INTEGER)) {
+        double lv = extract_double(left);
+        double rv = extract_double(right);
+        if (rv == 0.0) {
+            return make_error_detailed(env, "Modulo by zero",
                 "Check that the divisor is not zero before performing modulo",
-                ERROR_DIVISION,
-                line, column,
-                NULL,
-                NULL
-            );
+                ERROR_DIVISION, line, column, NULL, NULL);
         }
-        
-        env->current_context->push( make_float_value(fmod(left_val, right_val)));
+        env->current_context->push(make_float_value(fmod(lv, rv)));
         return make_success(1);
     }
     
@@ -531,32 +506,54 @@ EvalResult compare_values(Environment* env, const Value& left, const Value& righ
         bool strict = env->current_context->state->config().strict_mode;
         result = strict ? !left.exactlyEqual(right) : (left != right);
     } else {
-        // Numeric comparison
-        double left_val = 0.0, right_val = 0.0;
-        
-        if (left.type == VAL_FLOAT64) {
-            left_val = left.as.float64_val;
-        } else if (left.type == VAL_INTEGER) {
-            left_val = left.as.integer.value.i32; // Simplified
+        bool l_num = (left.type == VAL_INTEGER || left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64);
+        bool r_num = (right.type == VAL_INTEGER || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64);
+
+        if (l_num && r_num) {
+            bool is_float = (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 ||
+                             right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64);
+            if (is_float) {
+                double lv = extract_double(left);
+                double rv = extract_double(right);
+                switch (op) {
+                    case TOKEN_GREATER:       result = lv > rv; break;
+                    case TOKEN_GREATER_EQUAL: result = lv >= rv; break;
+                    case TOKEN_LESS:          result = lv < rv; break;
+                    case TOKEN_LESS_EQUAL:    result = lv <= rv; break;
+                    default: return make_error(env, "Unknown comparison operator", 0, 0);
+                }
+            } else if (use_unsigned(left, right)) {
+                uint64_t lv = extract_uint64(left);
+                uint64_t rv = extract_uint64(right);
+                switch (op) {
+                    case TOKEN_GREATER:       result = lv > rv; break;
+                    case TOKEN_GREATER_EQUAL: result = lv >= rv; break;
+                    case TOKEN_LESS:          result = lv < rv; break;
+                    case TOKEN_LESS_EQUAL:    result = lv <= rv; break;
+                    default: return make_error(env, "Unknown comparison operator", 0, 0);
+                }
+            } else {
+                int64_t lv = extract_int64(left);
+                int64_t rv = extract_int64(right);
+                switch (op) {
+                    case TOKEN_GREATER:       result = lv > rv; break;
+                    case TOKEN_GREATER_EQUAL: result = lv >= rv; break;
+                    case TOKEN_LESS:          result = lv < rv; break;
+                    case TOKEN_LESS_EQUAL:    result = lv <= rv; break;
+                    default: return make_error(env, "Unknown comparison operator", 0, 0);
+                }
+            }
+        } else if (left.type == VAL_STRING && right.type == VAL_STRING) {
+            int cmp = strcmp(left.as.string->data, right.as.string->data);
+            switch (op) {
+                case TOKEN_GREATER:       result = cmp > 0;  break;
+                case TOKEN_GREATER_EQUAL: result = cmp >= 0; break;
+                case TOKEN_LESS:          result = cmp < 0;  break;
+                case TOKEN_LESS_EQUAL:    result = cmp <= 0; break;
+                default: return make_error(env, "Unknown comparison operator", 0, 0);
+            }
         } else {
-            return make_error(env, "Cannot compare non-numeric types", 0, 0);
-        }
-        
-        if (right.type == VAL_FLOAT64) {
-            right_val = right.as.float64_val;
-        } else if (right.type == VAL_INTEGER) {
-            right_val = right.as.integer.value.i32; // Simplified
-        } else {
-            return make_error(env, "Cannot compare non-numeric types", 0, 0);
-        }
-        
-        switch (op) {
-            case TOKEN_GREATER:       result = left_val > right_val; break;
-            case TOKEN_GREATER_EQUAL: result = left_val >= right_val; break;
-            case TOKEN_LESS:          result = left_val < right_val; break;
-            case TOKEN_LESS_EQUAL:    result = left_val <= right_val; break;
-            default:
-                return make_error(env, "Unknown comparison operator", 0, 0);
+            return make_error(env, "Cannot compare incompatible types", 0, 0);
         }
     }
     
