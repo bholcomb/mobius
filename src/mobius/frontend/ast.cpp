@@ -53,13 +53,13 @@ Expr* make_variable_expr(Token name) {
     return expr;
 }
 
-Expr* make_assignment_expr(Token name, Expr* value) {
+Expr* make_assignment_expr(Expr* target, Expr* value) {
     Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_ASSIGNMENT;
     expr->ref_count = 1;  // Initialize reference count
-    expr->as.assignment.name = copy_token(&name);  // Deep copy token to own the identifier string
+    expr->as.assignment.target = target;
     expr->as.assignment.value = value;
     return expr;
 }
@@ -342,7 +342,9 @@ void print_expr(Expr* expr) {
             printf("%s", expr->as.variable.name.identifier ? expr->as.variable.name.identifier : "unknown");
             break;
         case EXPR_ASSIGNMENT:
-            printf("(%s = ", expr->as.assignment.name.identifier ? expr->as.assignment.name.identifier : "unknown");
+            printf("(");
+            print_expr(expr->as.assignment.target);
+            printf(" = ");
             print_expr(expr->as.assignment.value);
             printf(")");
             break;
@@ -572,6 +574,7 @@ void free_expr(Expr* expr) {
             // Token doesn't need freeing
             break;
         case EXPR_ASSIGNMENT:
+            free_expr(expr->as.assignment.target);
             free_expr(expr->as.assignment.value);
             break;
         case EXPR_TABLE_LITERAL:
@@ -754,9 +757,8 @@ void ast_release_expr(Expr* expr) {
                 ast_release_expr(expr->as.unary.right);
                 break;
             case EXPR_ASSIGNMENT:
+                ast_release_expr(expr->as.assignment.target);
                 ast_release_expr(expr->as.assignment.value);
-                // Free the copied token identifier
-                free_token(&expr->as.assignment.name);
                 break;
             case EXPR_CALL:
                 ast_release_expr(expr->as.call.callee);

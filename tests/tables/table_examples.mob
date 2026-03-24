@@ -32,9 +32,9 @@ print("colors[2]:", colors[2]);
 // 3. DYNAMIC TABLE MODIFICATION
 print("3. Dynamic Table Modification");
 
-// Adding new entries using table_insert
-table_insert(person, "city", "New York");
-table_insert(colors, 4, "purple");
+// Adding new entries using assignment syntax
+person["city"] = "New York";
+colors[4] = "purple";
 
 print("After additions - person:", person);
 print("After additions - colors:", colors);
@@ -45,9 +45,9 @@ print("4. Table Built-in Functions");
 var data = {a: 1, b: 2, c: 3};
 print("Original data:", data);
 
-// table_insert
-table_insert(data, "d", 4);
-print("After table_insert:", data);
+// assignment syntax
+data["d"] = 4;
+print("After assignment:", data);
 
 // table_has_key
 print("Has key 'a':", table_has_key(data, "a"));

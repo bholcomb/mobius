@@ -1,7 +1,9 @@
 // Comprehensive Mobius Performance Benchmark
-// Tests various operations to identify hotspots
+// Arrays benchmark dense numeric storage.
+// Tables benchmark hash-map usage with string keys.
 
 print("=== Mobius Comprehensive Performance Benchmark ===\n");
+print("Benchmark model: arrays = dense integer storage, tables = string-key hash maps\n");
 
 // ============================================================================
 // 1. Arithmetic Operations
@@ -49,10 +51,10 @@ func benchmark_function_calls() {
 }
 
 // ============================================================================
-// 3. Array Operations
+// 3. Array Operations (dense numeric storage)
 // ============================================================================
 func benchmark_arrays() {
-    print("\n3. Array Operations...");
+    print("\n3. Array Operations (Dense Numeric Storage)...");
     var start = clock();
     
     // Create and populate array
@@ -78,28 +80,39 @@ func benchmark_arrays() {
 }
 
 // ============================================================================
-// 4. Table Operations
+// 4. Table Operations (hash map string keys)
 // ============================================================================
+func build_table_keys(count) {
+    var keys = array_create(count);
+    var i = 0;
+    while (i < count) {
+        array_push(keys, concat("key_", str(i)));
+        i = i + 1;
+    }
+    return keys;
+}
+
 func benchmark_tables() {
-    print("\n4. Table Operations...");
+    print("\n4. Table Operations (String-Key Hash Map)...");
+    var keys = build_table_keys(5000);
     var start = clock();
-    
-    // Create and populate table
+
     var tbl = {};
     var i = 0;
     while (i < 5000) {
-        table_insert(tbl, i, i * 3);
+        var key = array_get(keys, i);
+        tbl[key] = i * 3;
         i = i + 1;
     }
-    
-    // Read and sum
+
     var sum = 0;
     i = 0;
     while (i < 5000) {
-        sum = sum + tbl[i];
+        var key = array_get(keys, i);
+        sum = sum + tbl[key];
         i = i + 1;
     }
-    
+
     var duration = clock() - start;
     print("   Time: ", duration, "s");
     print("   Sum: ", sum);

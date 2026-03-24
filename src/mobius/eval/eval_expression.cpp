@@ -1,5 +1,6 @@
 #include "eval/evaluator.h"
 #include "state/mobius_state.h"
+#include "data/array.h"
 #include "data/table.h"
 #include "plugin/module_registry.h"
 
@@ -370,25 +371,119 @@ EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
     return make_success(1);
 }
 
-EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
-    EvalResult value_result = evaluate_expr(expr->value, env);
+static EvalResult eval_index_assignment(Expr* container_expr, Expr* index_expr,
+                                        Expr* value_expr, Environment* env) {
+    EvalResult container_result = evaluate_expr(container_expr, env);
+    if (is_error(container_result)) {
+        return container_result;
+    }
+    Value container_value = env->current_context->pop();
+
+    EvalResult index_result = evaluate_expr(index_expr, env);
+    if (is_error(index_result)) {
+        return index_result;
+    }
+    Value index_value = env->current_context->pop();
+
+    EvalResult value_result = evaluate_expr(value_expr, env);
     if (is_error(value_result)) {
         return value_result;
     }
     Value value = env->current_context->pop();
-    
-    const char* name = expr->name.identifier ? expr->name.identifier : "unknown";
-    if (!env->assign(expr->name.interned, value)) {
-        return make_error_detailed(env, "Undefined variable in assignment", 
-                                               "Make sure the variable is declared before use",
-                                               ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL, NULL);
+
+    if (container_value.type == VAL_ARRAY) {
+        if (index_value.type != VAL_INTEGER) {
+            return make_error(env, "Array index must be an integer", 0, 0);
+        }
+
+        int64_t index = index_value.as.integer.value;
+        if (index >= 0) {
+            while ((int64_t)container_value.as.array->length() <= index) {
+                container_value.as.array->push(make_nil_value());
+            }
+            container_value.as.array->set((size_t)index, value);
+        }
+
+        env->current_context->push(value);
+        return make_success(1);
     }
-    
-    // Push the value back to stack (assignment expressions return the assigned value)
-    // Note: We push the same value, not a copy, since we want to return the assigned value
-    // But we don't free it here because it's being returned on the stack
-    env->current_context->push( value);
+
+    if (container_value.type == VAL_TABLE) {
+        if (!container_value.as.table->set(index_value, value)) {
+            return make_error(env, "Failed to assign table entry", 0, 0);
+        }
+
+        env->current_context->push(value);
+        return make_success(1);
+    }
+
+    return make_error(env, "Cannot index non-array/non-table value", 0, 0);
+}
+
+static EvalResult eval_dot_assignment(TableDotExpr* target, Expr* value_expr,
+                                      Environment* env) {
+    EvalResult table_result = evaluate_expr(target->table, env);
+    if (is_error(table_result)) {
+        return table_result;
+    }
+    Value table_value = env->current_context->pop();
+
+    if (table_value.type != VAL_TABLE) {
+        return make_error(env, "Cannot access property of non-table value", 0, 0);
+    }
+
+    EvalResult value_result = evaluate_expr(value_expr, env);
+    if (is_error(value_result)) {
+        return value_result;
+    }
+    Value value = env->current_context->pop();
+
+    MobiusState* state = env->current_context->state;
+    MobiusString* key = state->stringPool()->intern(target->key.identifier);
+    if (!table_value.as.table->set(make_string_value(key), value)) {
+        return make_error(env, "Failed to assign table property", 0, 0);
+    }
+
+    env->current_context->push(value);
     return make_success(1);
+}
+
+EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
+    switch (expr->target->type) {
+        case EXPR_VARIABLE: {
+            EvalResult value_result = evaluate_expr(expr->value, env);
+            if (is_error(value_result)) {
+                return value_result;
+            }
+            Value value = env->current_context->pop();
+
+            Token& name = expr->target->as.variable.name;
+            if (!env->assign(name.interned, value)) {
+                return make_error_detailed(env, "Undefined variable in assignment",
+                                           "Make sure the variable is declared before use",
+                                           ERROR_UNDEFINED, name.line, name.column, NULL, NULL);
+            }
+
+            env->current_context->push(value);
+            return make_success(1);
+        }
+
+        case EXPR_ARRAY_INDEX:
+            return eval_index_assignment(expr->target->as.array_index.array,
+                                         expr->target->as.array_index.index,
+                                         expr->value, env);
+
+        case EXPR_TABLE_INDEX:
+            return eval_index_assignment(expr->target->as.table_index.table,
+                                         expr->target->as.table_index.index,
+                                         expr->value, env);
+
+        case EXPR_TABLE_DOT:
+            return eval_dot_assignment(&expr->target->as.table_dot, expr->value, env);
+
+        default:
+            return make_error(env, "Invalid assignment target", 0, 0);
+    }
 }
 
 EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {

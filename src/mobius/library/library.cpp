@@ -17,64 +17,62 @@
 
 static const PluginFunction library_registry[] = {
     // Core functions
-    {"print", lib_print, SIZE_MAX},  // Variadic: 0 or more args
-    {"typeof", lib_typeof, 1},       // Exactly 1 arg
-    {"str", lib_str, 1},             // Exactly 1 arg
-    {"int", lib_int, 1},             // Exactly 1 arg
-    {"float", lib_float, 1},         // Exactly 1 arg
-    
+    {"print",   lib_print,  SIZE_MAX, "Print values to stdout"},
+    {"typeof",  lib_typeof, 1,        "Return the type name of a value as a string"},
+    {"str",     lib_str,    1,        "Convert a value to its string representation"},
+    {"int",     lib_int,    1,        "Convert a value to an integer"},
+    {"float",   lib_float,  1,        "Convert a value to a float"},
+
     // Math functions
-    {"abs", lib_abs, 1},             // Exactly 1 arg
-    {"min", lib_min, 2},            // At least 2 args, variadic
-    {"max", lib_max, 2},            // At least 2 args, variadic
-    {"pow", lib_pow, 2},             // Exactly 2 args
-    {"sqrt", lib_sqrt, 1},           // Exactly 1 arg
-    {"floor", lib_floor, 1},         // Exactly 1 arg
-    {"ceil", lib_ceil, 1},           // Exactly 1 arg
-    {"round", lib_round, 1},         // Exactly 1 arg
-    
+    {"abs",   lib_abs,   1,        "Absolute value"},
+    {"min",   lib_min,   2,        "Minimum of two or more values"},
+    {"max",   lib_max,   2,        "Maximum of two or more values"},
+    {"pow",   lib_pow,   2,        "Raise base to an exponent"},
+    {"sqrt",  lib_sqrt,  1,        "Square root"},
+    {"floor", lib_floor, 1,        "Round down to nearest integer"},
+    {"ceil",  lib_ceil,  1,        "Round up to nearest integer"},
+    {"round", lib_round, 1,        "Round to nearest integer"},
+
     // String functions
-    {"len", lib_len, 1},             // Exactly 1 arg (works for strings and arrays)
-    {"upper", lib_upper, 1},         // Exactly 1 arg
-    {"lower", lib_lower, 1},         // Exactly 1 arg
-    {"substr", lib_substr, 3},       // Exactly 3 args
-    {"concat", lib_concat, 2},      // At least 2 args, variadic
-    {"contains", lib_contains, 2},   // Exactly 2 args
-    
+    {"len",      lib_len,      1,        "Length of a string or array"},
+    {"upper",    lib_upper,    1,        "Convert string to uppercase"},
+    {"lower",    lib_lower,    1,        "Convert string to lowercase"},
+    {"substr",   lib_substr,   3,        "Extract a substring (string, start, length)"},
+    {"concat",   lib_concat,   2,        "Concatenate two or more strings"},
+    {"contains", lib_contains, 2,        "Return true if string contains a substring"},
+
     // Table functions
-    {"table_insert", lib_table_insert, 3},     // Exactly 3 args
-    {"table_remove", lib_table_remove, 2},     // Exactly 2 args
-    {"table_has_key", lib_table_has_key, 2},   // Exactly 2 args
-    {"table_size", lib_table_size, 1},         // Exactly 1 arg
-    {"setmetatable", lib_setmetatable, 2},     // Exactly 2 args
-    {"getmetatable", lib_getmetatable, 1},     // Exactly 1 arg
-    {"pairs", lib_pairs, 1},                   // Exactly 1 arg
-    
+    {"table_remove",  lib_table_remove,  2, "Remove a key from a table"},
+    {"table_has_key", lib_table_has_key, 2, "Return true if a key exists in a table"},
+    {"table_size",    lib_table_size,    1, "Return the number of entries in a table"},
+    {"setmetatable",  lib_setmetatable,  2, "Set the metatable for a table"},
+    {"getmetatable",  lib_getmetatable,  1, "Get the metatable of a table"},
+    {"pairs",         lib_pairs,         1, "Return an array of [key, value] pairs for a table"},
+
     // Array functions
-    {"array_create", lib_array_create, 0},     // 0 or 1 args
-    {"array_push", lib_array_push, 2},         // Exactly 2 args
-    {"array_pop", lib_array_pop, 1},           // Exactly 1 arg
-    {"array_get", lib_array_get, 2},           // Exactly 2 args
-    {"array_set", lib_array_set, 3},           // Exactly 3 args
-    {"array_length", lib_array_length, 1},     // Exactly 1 arg
-    {"array_slice", lib_array_slice, 3},       // Exactly 3 args
-    {"array_concat", lib_array_concat, 2},    // At least 2 args, variadic
-    {"array_reverse", lib_array_reverse, 1},   // Exactly 1 arg
-    {"array_find", lib_array_find, 2},         // Exactly 2 args
-    
+    {"array_create",  lib_array_create,  0,        "Create a new empty array with optional capacity hint"},
+    {"array_push",    lib_array_push,    2,        "Append a value to the end of an array"},
+    {"array_pop",     lib_array_pop,     1,        "Remove and return the last element of an array"},
+    {"array_get",     lib_array_get,     2,        "Get element at a zero-based index"},
+    {"array_set",     lib_array_set,     3,        "Set element at a zero-based index (strict bounds)"},
+    {"array_length",  lib_array_length,  1,        "Return the number of elements in an array"},
+    {"array_slice",   lib_array_slice,   3,        "Return a sub-array from start (inclusive) to end (exclusive)"},
+    {"array_concat",  lib_array_concat,  2,        "Return a new array combining two or more arrays"},
+    {"array_reverse", lib_array_reverse, 1,        "Return a reversed copy of an array"},
+    {"array_find",    lib_array_find,    2,        "Return the index of a value, or -1 if not found"},
+
     // Type system functions
-    // Note: set_strict_types() and set_type_warnings() removed - use #pragma instead
-    {"get_type_config", lib_get_type_config, 0},       // No args
-    
+    {"get_type_config", lib_get_type_config, 0, "Return the current type checking configuration"},
+
     // Utility functions
-    {"random", lib_random, 0},                     // 0, 1, or 2 args
-    {"time", lib_time, 0},                         // No args
-    {"clock", lib_clock, 0},                       // No args
-    {"load", lib_load, 1},                         // Exactly 1 arg
-    {"id", lib_id, 1},                             // Exactly 1 arg - get identity/address
-    
+    {"random", lib_random, 0, "Random float in [0,1), or integer in [min,max] with 1 or 2 args"},
+    {"time",   lib_time,   0, "Return the current Unix timestamp as an integer"},
+    {"clock",  lib_clock,  0, "Return elapsed CPU time in seconds as a float"},
+    {"load",   lib_load,   1, "Execute a Mobius script file by path"},
+    {"id",     lib_id,     1, "Return the memory address of a heap-allocated value"},
+
     // Sentinel
-    {NULL, NULL, 0}
+    {NULL, NULL, 0, NULL}
 };
 
 // =============================================================================

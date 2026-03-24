@@ -1,0 +1,81 @@
+print("Testing nested index assignment syntax...");
+
+func fail(message) {
+    print("FAIL:", message);
+    missing_nested_assignment_failure();
+}
+
+func expect(condition, message) {
+    if (!condition) {
+        fail(message);
+    }
+}
+
+var t = {};
+var direct_result = t["answer"] = 42;
+expect(direct_result == 42, "direct table assignment should return the assigned value");
+expect(t.answer == 42, "direct table assignment should store the value");
+
+var nested_table = {
+    user: {
+        profile: {
+            name: "old"
+        }
+    }
+};
+
+var dot_result = nested_table.user.profile.name = "alice";
+expect(dot_result == "alice", "dot assignment should return the assigned value");
+expect(nested_table.user.profile.name == "alice", "dot assignment should update nested tables");
+
+var bracket_result = nested_table["user"]["profile"]["name"] = "bob";
+expect(bracket_result == "bob", "nested bracket assignment should return the assigned value");
+expect(nested_table.user.profile.name == "bob", "nested bracket assignment should update nested tables");
+
+var arrays = [
+    [1, 2, 3],
+    [{label: "first"}, {label: "second"}]
+];
+
+var array_result = arrays[0][2] = 99;
+expect(array_result == 99, "nested array assignment should return the assigned value");
+expect(arrays[0][2] == 99, "nested array assignment should update the inner array");
+
+var array_table_result = arrays[1][0].label = "updated";
+expect(array_table_result == "updated", "array to table assignment should return the assigned value");
+expect(arrays[1][0].label == "updated", "array to table assignment should update the nested table");
+
+var mixed = {
+    items: [
+        {meta: {hits: 1}},
+        {meta: {hits: 2}}
+    ],
+    lookup: {
+        primary: [10, 20, 30]
+    }
+};
+
+var mixed_table_result = mixed.items[1].meta["hits"] = 7;
+expect(mixed_table_result == 7, "table-array-table assignment should return the assigned value");
+expect(mixed.items[1].meta.hits == 7, "table-array-table assignment should update nested data");
+
+var mixed_array_result = mixed.lookup["primary"][0] = 111;
+expect(mixed_array_result == 111, "table-array assignment should return the assigned value");
+expect(mixed.lookup.primary[0] == 111, "table-array assignment should update nested arrays");
+
+var expandable = [[]];
+var expand_result = expandable[0][2] = 5;
+expect(expand_result == 5, "expanding nested array assignment should return the assigned value");
+expect(expandable[0][2] == 5, "expanding nested array assignment should grow the inner array");
+expect(expandable[0][0] == nil, "expanded nested array slots should be nil-filled");
+
+var wrappers = [
+    {values: [0, 1]},
+    {values: [{deep: "old"}]}
+];
+
+var deep_result = wrappers[1].values[0].deep = "new";
+expect(deep_result == "new", "deep mixed assignment should return the assigned value");
+expect(wrappers[1].values[0].deep == "new", "deep mixed assignment should update nested structures");
+
+print("PASS: nested index assignment syntax works!");

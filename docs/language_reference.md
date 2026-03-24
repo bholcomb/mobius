@@ -733,7 +733,6 @@ person.city = "Boston"
 
 | Function                            | Description                                |
 |-------------------------------------|--------------------------------------------|
-| `table_insert(t, key, value)`       | Insert or update a key-value pair          |
 | `table_remove(t, key)`              | Remove a key                               |
 | `table_has_key(t, key)`             | Return `true` if the key exists            |
 | `table_size(t)`                     | Return the number of entries               |
@@ -741,8 +740,8 @@ person.city = "Boston"
 
 ```mobius
 var config = {}
-table_insert(config, "debug", true)
-table_insert(config, "version", "1.0")
+config["debug"] = true
+config["version"] = "1.0"
 
 print(table_has_key(config, "debug"))    // true
 print(table_size(config))               // 2

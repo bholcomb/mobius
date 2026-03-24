@@ -324,17 +324,6 @@ array_find([10, 20, 30], 99)    // -1
 
 ## Table Functions
 
-### table_insert(table, key, value)
-
-Insert or update a key-value pair in a table.
-
-```mobius
-var t = {}
-table_insert(t, "name", "Alice")
-table_insert(t, "age", 30)
-print(t.name)    // "Alice"
-```
-
 ### table_remove(table, key)
 
 Remove a key and its associated value from a table.

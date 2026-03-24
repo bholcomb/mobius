@@ -12,33 +12,6 @@
 // UNIFIED TABLE FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-int lib_table_insert(MobiusState* state, int arg_count) {
-    if (arg_count != 3) {
-        return state->error("table_insert expects exactly 3 arguments (table, key, value)");
-    }
-    
-    Value value = state->mainContext()->peek( 0);
-    Value key = state->mainContext()->peek( 1);
-    Value table_val = state->mainContext()->peek( 2);
-    
-    // Remove arguments
-    for (int i = 0; i < 3; i++) {
-        state->mainContext()->pop();
-    }
-    
-    if (table_val.type != VAL_TABLE) {
-        return state->error("table_insert first argument must be a table");
-    }
-    
-    Table* table = table_val.as.table;
-    if (!table->set(key, value)) {
-        return state->error("Failed to insert into table");
-    }
-    
-    state->mainContext()->push( make_nil_value());
-    return 1;
-}
-
 int lib_table_remove(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
         return state->error("table_remove expects exactly 2 arguments (table, key)");
