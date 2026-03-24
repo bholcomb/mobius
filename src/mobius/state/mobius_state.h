@@ -9,6 +9,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <vector>
+#include <unordered_map>
+#include <string>
 
 // ============================================================================
 // FORWARD DECLARATIONS
@@ -179,6 +181,14 @@ public:
     InternalError* lastError() const { return last_error_; }
     Metamethods* metamethods() const { return metamethods_; }
 
+    // Flat global variable array — indexed by compile-time slot numbers.
+    int assignGlobalSlot(const char* name);
+    Value& globalSlot(int idx) { return globals_[idx]; }
+    const Value& globalSlot(int idx) const { return globals_[idx]; }
+    int globalSlotCount() const { return (int)globals_.size(); }
+    int findGlobalSlot(const char* name) const;
+    const char* globalSlotName(int idx) const;
+
     // Native call context — set by MobiusVM before calling a MobiusCFunction.
     NativeCallContext* nativeContext() const { return native_ctx_; }
     void setNativeContext(NativeCallContext* ctx) { native_ctx_ = ctx; }
@@ -220,6 +230,10 @@ private:
     MobiusConfig config_;
     bool initialized_;
     const char* source_code_;
+
+    // Flat global variable array — replaces Environment hash map for hot path.
+    std::vector<Value> globals_;
+    std::unordered_map<std::string, int> global_slot_map_;
 
     // Prototypes compiled by the VM are owned here so they outlive any
     // MobiusFunction objects that reference them (e.g. functions defined

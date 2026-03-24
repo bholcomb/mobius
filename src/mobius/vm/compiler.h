@@ -8,6 +8,8 @@
 #include <vector>
 #include <cstdint>
 
+class MobiusState;
+
 // ============================================================================
 // Compiler — translates an AST into a Prototype (bytecode + constants)
 //
@@ -21,7 +23,7 @@
 
 class Compiler {
 public:
-    explicit Compiler(StringInternPool* pool);
+    explicit Compiler(StringInternPool* pool, MobiusState* state = nullptr);
 
     Prototype* compile(Stmt** statements, size_t count, const char* source_name);
 
@@ -57,6 +59,7 @@ private:
 
     FunctionState* current_;
     StringInternPool* pool_;
+    MobiusState* state_;
 
     // --- Register management ---
     int allocReg();
@@ -89,6 +92,8 @@ private:
     void patchJump(int jump_idx);
     void emitReturn(int first_reg, int count);
     int emitLoadK(int reg, int const_idx);
+    void emitGetGlobal(int reg, const char* name);
+    void emitSetGlobal(int reg, const char* name);
 
     // --- Expression compilation ---
     // Returns the register holding the result.

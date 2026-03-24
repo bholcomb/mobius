@@ -2,12 +2,14 @@
 #define MOBIUS_VALUE_H
 
 #include "internal/string_intern.h"
+#include "internal/ref_counted.h"
 #include "data/number.h"
+#include "data/function.h"
 
 #include <cstring>
+#include <cstdlib>
 #include <mobius/mobius.h>
 
-struct MobiusFunction;
 class ArrayValue;
 struct EnumValue;
 class EnumDefinition;
@@ -24,6 +26,14 @@ struct UserdataObject {
     const char*  type_name;
     size_t       size;
 };
+
+// Value flags — stored in the int8_t `flags` field of Value.
+#define VAL_FLAG_DEFINED   0x01  // slot has been explicitly assigned a value
+#define VAL_FLAG_DELETED   0x02  // slot was defined then explicitly removed
+#define VAL_FLAG_READONLY  0x04  // value cannot be reassigned (const, builtins)
+#define VAL_FLAG_INTERNED  0x08  // heap object is interned; skip refcount release
+#define VAL_FLAG_MARKED    0x10  // reserved: GC mark phase
+#define VAL_FLAG_FROZEN    0x20  // reserved: container contents are immutable
 
 enum ValueType : int8_t {
     // Non-refcounted (inline) types — must stay below VAL_STRING
@@ -114,15 +124,22 @@ public:
     static Value makeEnum(EnumDefinition* definition, int64_t value);
 
 private:
-    void retain() const {
+    inline void retain() const {
         if (type < VAL_STRING) return;
-        retainSlow();
+        switch (type) {
+            case VAL_STRING:   if (as.string) as.string->retain(); break;
+            case VAL_ARRAY:    if (as.array) ((RefCounted*)as.array)->retain(); break;
+            case VAL_FUNCTION: if (as.function) as.function->ref_count++; break;
+            case VAL_TABLE:    if (as.table) ((RefCounted*)as.table)->retain(); break;
+            case VAL_USERDATA: if (as.userdata) as.userdata->ref_count++; break;
+            case VAL_ENUM:     if (as.enum_def) ((RefCounted*)as.enum_def)->retain(); break;
+            default: break;
+        }
     }
-    void releaseRef() {
+    inline void releaseRef() {
         if (type < VAL_STRING) return;
         releaseRefSlow();
     }
-    MOBIUS_API void retainSlow() const;
     MOBIUS_API void releaseRefSlow();
 };
 
