@@ -68,13 +68,15 @@ size_t hash_value(const Value& value, size_t capacity) {
         case VAL_NATIVE_FUNCTION: hash = (size_t)(uintptr_t)value.as.native_function; break;
         case VAL_TABLE:  hash = (size_t)(uintptr_t)value.as.table; break;
         case VAL_USERDATA:
-            hash = (size_t)(uintptr_t)value.as.userdata.ptr;
-            if (value.as.userdata.type_name)
-                hash ^= hash_string_for_table(value.as.userdata.type_name);
+            if (value.as.userdata) {
+                hash = (size_t)(uintptr_t)value.as.userdata->ptr;
+                if (value.as.userdata->type_name)
+                    hash ^= hash_string_for_table(value.as.userdata->type_name);
+            }
             break;
         case VAL_ENUM:
-            hash = (size_t)(uintptr_t)value.as.enum_val.definition;
-            hash ^= (size_t)value.as.enum_val.value;
+            hash = (size_t)(uintptr_t)value.as.enum_def;
+            hash ^= (size_t)value.aux;
             break;
     }
 

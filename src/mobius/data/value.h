@@ -17,12 +17,20 @@ class MobiusState;
 typedef int (*MobiusCFunction)(MobiusState* ctx, int arg_count);
 typedef void (*UserdataDestructor)(void* ptr);
 
-typedef enum {
+struct UserdataObject {
+    int          ref_count;
+    void*        ptr;
+    UserdataDestructor destructor;
+    const char*  type_name;
+    size_t       size;
+};
+
+enum ValueType : int8_t {
     // Non-refcounted (inline) types — must stay below VAL_STRING
     VAL_NIL,
     VAL_BOOL,
     VAL_INT64,   // signed int64_t  — stored in as.i64
-    VAL_UINT64,    // unsigned uint64_t — stored in as.u64
+    VAL_UINT64,  // unsigned uint64_t — stored in as.u64
     VAL_FLOAT64,
     VAL_CHAR,
     VAL_NATIVE_FUNCTION,
@@ -33,7 +41,7 @@ typedef enum {
     VAL_TABLE,
     VAL_USERDATA,
     VAL_ENUM
-} ValueType;
+};
 
 class Value {
 public:
@@ -50,51 +58,49 @@ public:
         struct MobiusFunction* function;
         MobiusCFunction native_function;
         struct Table* table;
-        struct {
-            void* ptr;
-            UserdataDestructor destructor;
-            const char* type_name;
-            size_t size;
-        } userdata;
+        UserdataObject* userdata;
+        EnumDefinition* enum_def;    // VAL_ENUM — member index stored in aux
 
-        struct {
-            struct EnumDefinition* definition;
-            int32_t value;
-        } enum_val;
-
-        ValueData() : boolean(false) {}
+        ValueData() : i64(0) {}
     } as;
     ValueType type;
+    int8_t    flags;
+    uint8_t   _pad[2];
+    int32_t   aux;       // VAL_ENUM: member index
 
-    Value() : type(VAL_NIL) { as.boolean = false; }
+    Value() : type(VAL_NIL), flags(0), aux(0) { as.i64 = 0; }
 
     ~Value() { releaseRef(); }
 
-    Value(const Value& other) : type(other.type) {
-        memcpy(&as, &other.as, sizeof(as));
+    Value(const Value& other) : type(other.type), flags(other.flags), aux(other.aux) {
+        as.i64 = other.as.i64;
         retain();
     }
 
     Value& operator=(const Value& other) {
         if (this != &other) {
             releaseRef();
-            type = other.type;
-            memcpy(&as, &other.as, sizeof(as));
+            type  = other.type;
+            flags = other.flags;
+            aux   = other.aux;
+            as.i64 = other.as.i64;
             retain();
         }
         return *this;
     }
 
-    Value(Value&& other) noexcept : type(other.type) {
-        memcpy(&as, &other.as, sizeof(as));
+    Value(Value&& other) noexcept : type(other.type), flags(other.flags), aux(other.aux) {
+        as.i64 = other.as.i64;
         other.type = VAL_NIL;
     }
 
     Value& operator=(Value&& other) noexcept {
         if (this != &other) {
             releaseRef();
-            type = other.type;
-            memcpy(&as, &other.as, sizeof(as));
+            type  = other.type;
+            flags = other.flags;
+            aux   = other.aux;
+            as.i64 = other.as.i64;
             other.type = VAL_NIL;
         }
         return *this;
@@ -173,7 +179,7 @@ inline bool is_truthy(const Value& value) {
         case VAL_FUNCTION: return value.as.function != nullptr;
         case VAL_NATIVE_FUNCTION: return value.as.native_function != nullptr;
         case VAL_TABLE: return value.as.table != nullptr;
-        case VAL_USERDATA: return value.as.userdata.ptr != nullptr;
+        case VAL_USERDATA: return value.as.userdata != nullptr && value.as.userdata->ptr != nullptr;
         case VAL_ENUM: return true;
         default: return false;
     }
