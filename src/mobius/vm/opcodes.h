@@ -218,6 +218,15 @@ enum OpCode : uint8_t {
     // -- Fused test-and-jump --
     OP_TESTJMP,     // A sBx     if !is_truthy(R[A]) then pc += sBx
 
+    // -- Type-specialized arithmetic (both operands same type, no type checks) --
+    OP_ADD_II,      // A B C     R[A] = RK(B).i64  + RK(C).i64   -> VAL_INT64
+    OP_ADD_FF,      // A B C     R[A] = RK(B).f64  + RK(C).f64   -> VAL_FLOAT64
+    OP_SUB_II,      // A B C     R[A] = RK(B).i64  - RK(C).i64   -> VAL_INT64
+    OP_SUB_FF,      // A B C     R[A] = RK(B).f64  - RK(C).f64   -> VAL_FLOAT64
+    OP_MUL_II,      // A B C     R[A] = RK(B).i64  * RK(C).i64   -> VAL_INT64
+    OP_MUL_FF,      // A B C     R[A] = RK(B).f64  * RK(C).f64   -> VAL_FLOAT64
+    OP_MOD_II,      // A B C     R[A] = RK(B).i64  % RK(C).i64   -> VAL_INT64
+
     // -- Miscellaneous --
     OP_LEN,         // A B       R[A] = length(R[B])  (array length or table size)
 
@@ -328,6 +337,14 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"MODI",      FMT_AsBx},
 
         {"TESTJMP",   FMT_AsBx},
+
+        {"ADD_II",    FMT_ABC},
+        {"ADD_FF",    FMT_ABC},
+        {"SUB_II",    FMT_ABC},
+        {"SUB_FF",    FMT_ABC},
+        {"MUL_II",    FMT_ABC},
+        {"MUL_FF",    FMT_ABC},
+        {"MOD_II",    FMT_ABC},
 
         {"LEN",       FMT_ABC},
 

@@ -576,21 +576,37 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         rk_right = (uint8_t)right;
     }
 
+    // Determine operand types for specialized opcode selection.
+    // An RK operand from tryExprAsRK always came from a literal, so we can
+    // recover its ValueType from the original expression node.
+    auto exprLiteralType = [](Expr* e) -> ValueType {
+        if (e->type == EXPR_LITERAL) return e->as.literal.value.type;
+        return VAL_NIL;
+    };
+    ValueType lt = left_is_rk ? exprLiteralType(expr->left) : VAL_NIL;
+    ValueType rt = right_is_rk ? exprLiteralType(expr->right) : VAL_NIL;
+    bool both_i64 = (lt == VAL_INT64 && rt == VAL_INT64);
+    bool both_f64 = (lt == VAL_FLOAT64 && rt == VAL_FLOAT64);
+
     switch (expr->op.type) {
         case TOKEN_PLUS:
-            emitABC(OP_ADD, (uint8_t)reg, rk_left, rk_right);
+            emitABC(both_i64 ? OP_ADD_II : both_f64 ? OP_ADD_FF : OP_ADD,
+                    (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_MINUS:
-            emitABC(OP_SUB, (uint8_t)reg, rk_left, rk_right);
+            emitABC(both_i64 ? OP_SUB_II : both_f64 ? OP_SUB_FF : OP_SUB,
+                    (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_STAR:
-            emitABC(OP_MUL, (uint8_t)reg, rk_left, rk_right);
+            emitABC(both_i64 ? OP_MUL_II : both_f64 ? OP_MUL_FF : OP_MUL,
+                    (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_SLASH:
             emitABC(OP_DIV, (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_PERCENT:
-            emitABC(OP_MOD, (uint8_t)reg, rk_left, rk_right);
+            emitABC(both_i64 ? OP_MOD_II : OP_MOD,
+                    (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_AMPERSAND:
             emitABC(OP_BAND, (uint8_t)reg, rk_left, rk_right);
