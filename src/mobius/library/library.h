@@ -4,7 +4,6 @@
 #include "data/value.h"
 #include "state/environment.h"
 #include "state/mobius_state.h"
-#include "eval/evaluator.h"
 #include "plugin/plugin.h"
 
 // =============================================================================

@@ -9,7 +9,6 @@ targets:
       sources:
         - "mobius/data/*.cpp"
         - "mobius/frontend/*.cpp"
-        - "mobius/eval/*.cpp"
         - "mobius/internal/*.cpp"
         - "mobius/library/*.cpp"
         - "mobius/plugin/*.cpp"

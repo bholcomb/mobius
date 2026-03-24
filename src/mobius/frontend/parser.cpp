@@ -201,8 +201,10 @@ Expr* parse_primary(Parser* parser) {
         // With simplified integer representation, value is already stored as int64_t
         NumberType num_type = token.literal.integer.num_type;
         int64_t int_value = token.literal.integer.value;
-        
-        Value value = make_integer_value(num_type, int_value);
+
+        Value value = (num_type == NUM_UINT64)
+            ? make_uint64_value((uint64_t)int_value)
+            : make_int64_value(int_value);
         return make_literal_expr(value);
     }
     
@@ -1279,7 +1281,9 @@ CasePattern* parse_case_pattern(Parser* parser) {
     // Simple value patterns
     if (parser_check(parser, TOKEN_INTEGER)) {
         Token token = parser_advance(parser);
-        Value value = make_integer_value(token.literal.integer.num_type, token.literal.integer.value);
+        Value value = (token.literal.integer.num_type == NUM_UINT64)
+            ? make_uint64_value((uint64_t)token.literal.integer.value)
+            : make_int64_value(token.literal.integer.value);
         return make_value_pattern(value);
     } else if (parser_check(parser, TOKEN_FLOAT)) {
         Token token = parser_advance(parser);
@@ -1403,8 +1407,11 @@ CasePattern* parse_case_pattern(Parser* parser) {
         // Map type names to ValueType enum
         if (strcmp(type_name, "string") == 0) {
             value_type = VAL_STRING;
-        } else if (strcmp(type_name, "int") == 0 || strcmp(type_name, "integer") == 0) {
-            value_type = VAL_INTEGER;
+        } else if (strcmp(type_name, "int") == 0 || strcmp(type_name, "integer") == 0 ||
+                   strcmp(type_name, "int64") == 0) {
+            value_type = VAL_INT64;
+        } else if (strcmp(type_name, "uint64") == 0) {
+            value_type = VAL_UINT64;
         } else if (strcmp(type_name, "float") == 0) {
             value_type = VAL_FLOAT64;
         } else if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0) {

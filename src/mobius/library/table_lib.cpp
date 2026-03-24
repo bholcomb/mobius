@@ -3,7 +3,6 @@
 #include "data/array.h"
 #include "data/value.h"
 #include "state/environment.h"
-#include "eval/evaluator.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,12 +16,12 @@ int lib_table_remove(MobiusState* state, int arg_count) {
         return state->error("table_remove expects exactly 2 arguments (table, key)");
     }
     
-    Value key = state->mainContext()->peek( 0);
-    Value table_val = state->mainContext()->peek( 1);
+    Value key = state->npeek(0);
+    Value table_val = state->npeek(1);
     
     // Remove arguments
-    state->mainContext()->pop();
-    state->mainContext()->pop();
+    state->npop();
+    state->npop();
     
     if (table_val.type != VAL_TABLE) {
         return state->error("table_remove first argument must be a table");
@@ -32,9 +31,9 @@ int lib_table_remove(MobiusState* state, int arg_count) {
     bool success = table->remove(key);
     
     if (success) {
-        state->mainContext()->push( make_bool_value(true));
+        state->npush(make_bool_value(true));
     } else {
-        state->mainContext()->push( make_bool_value(false));
+        state->npush(make_bool_value(false));
     }
     
     return 1;
@@ -45,12 +44,12 @@ int lib_table_has_key(MobiusState* state, int arg_count) {
         return state->error("table_has_key expects exactly 2 arguments (table, key)");
     }
     
-    Value key = state->mainContext()->peek( 0);
-    Value table_val = state->mainContext()->peek( 1);
+    Value key = state->npeek(0);
+    Value table_val = state->npeek(1);
     
     // Remove arguments
-    state->mainContext()->pop();
-    state->mainContext()->pop();
+    state->npop();
+    state->npop();
     
     if (table_val.type != VAL_TABLE) {
         return state->error("table_has_key first argument must be a table");
@@ -59,7 +58,7 @@ int lib_table_has_key(MobiusState* state, int arg_count) {
     Table* table = table_val.as.table;
     bool has_key = table->hasKey(key);
     
-    state->mainContext()->push( make_bool_value(has_key));
+    state->npush(make_bool_value(has_key));
     return 1;
 }
 
@@ -68,8 +67,8 @@ int lib_table_size(MobiusState* state, int arg_count) {
         return state->error("table_size expects exactly 1 argument");
     }
     
-    Value table_val = state->mainContext()->peek( 0);
-    state->mainContext()->pop(); // Remove argument
+    Value table_val = state->npeek(0);
+    state->npop(); // Remove argument
     
     if (table_val.type != VAL_TABLE) {
         return state->error("table_size argument must be a table");
@@ -78,7 +77,7 @@ int lib_table_size(MobiusState* state, int arg_count) {
     Table* table = table_val.as.table;
     size_t size = table->size();
     
-    state->mainContext()->push( make_integer_value(NUM_INT64, (int64_t)size));
+    state->npush(make_int64_value((int64_t)size));
     return 1;
 }
 
@@ -87,12 +86,12 @@ int lib_setmetatable(MobiusState* state, int arg_count) {
         return state->error("setmetatable expects exactly 2 arguments (table, metatable)");
     }
     
-    Value metatable_val = state->mainContext()->peek( 0);
-    Value table_val = state->mainContext()->peek( 1);
+    Value metatable_val = state->npeek(0);
+    Value table_val = state->npeek(1);
     
     // Remove arguments
-    state->mainContext()->pop();
-    state->mainContext()->pop();
+    state->npop();
+    state->npop();
     
     if (table_val.type != VAL_TABLE) {
         return state->error("setmetatable first argument must be a table");
@@ -107,7 +106,7 @@ int lib_setmetatable(MobiusState* state, int arg_count) {
     
     table->setMetatable(metatable);
     
-    state->mainContext()->push( table_val); // Return the original table
+    state->npush(table_val); // Return the original table
     return 1;
 }
 
@@ -116,8 +115,8 @@ int lib_getmetatable(MobiusState* state, int arg_count) {
         return state->error("getmetatable expects exactly 1 argument");
     }
     
-    Value table_val = state->mainContext()->peek( 0);
-    state->mainContext()->pop(); // Remove argument
+    Value table_val = state->npeek(0);
+    state->npop(); // Remove argument
     
     if (table_val.type != VAL_TABLE) {
         return state->error("getmetatable argument must be a table");
@@ -128,9 +127,9 @@ int lib_getmetatable(MobiusState* state, int arg_count) {
     
     if (metatable) {
         metatable->retain();
-        state->mainContext()->push( make_table_value(metatable));
+        state->npush(make_table_value(metatable));
     } else {
-        state->mainContext()->push( make_nil_value());
+        state->npush(make_nil_value());
     }
     
     return 1;
@@ -141,8 +140,8 @@ int lib_pairs(MobiusState* state, int arg_count) {
         return state->error("pairs expects exactly 1 argument");
     }
     
-    Value table_val = state->mainContext()->peek( 0);
-    state->mainContext()->pop(); // Remove argument
+    Value table_val = state->npeek(0);
+    state->npop(); // Remove argument
     
     if (table_val.type != VAL_TABLE) {
         return state->error("pairs argument must be a table");
@@ -177,6 +176,6 @@ int lib_pairs(MobiusState* state, int arg_count) {
     }
     
     // Push the pairs array onto the stack
-    state->mainContext()->push( make_array_value(pairs_array));
+    state->npush(make_array_value(pairs_array));
     return 1;
 }

@@ -1,7 +1,6 @@
 #ifndef MOBIUS_INTERNAL_PLUGIN_H
 #define MOBIUS_INTERNAL_PLUGIN_H
 
-#include "eval/evaluator.h"
 #include "data/value.h"
 #include <mobius/mobius_plugin.h>
 #include <stddef.h>

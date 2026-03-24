@@ -2,7 +2,6 @@
 #define MOBIUS_VALUE_H
 
 #include "internal/string_intern.h"
-#include "eval/evalResult.h"
 #include "data/number.h"
 
 #include <cstring>
@@ -22,7 +21,8 @@ typedef enum {
     // Non-refcounted (inline) types — must stay below VAL_STRING
     VAL_NIL,
     VAL_BOOL,
-    VAL_INTEGER,
+    VAL_INT64,   // signed int64_t  — stored in as.i64
+    VAL_UINT64,    // unsigned uint64_t — stored in as.u64
     VAL_FLOAT64,
     VAL_CHAR,
     VAL_NATIVE_FUNCTION,
@@ -39,11 +39,8 @@ class Value {
 public:
     union ValueData {
         bool boolean;
-        struct {
-            NumberType num_type;
-            int64_t value;
-        } integer;
-
+        int64_t  i64;    // VAL_INT64
+        uint64_t u64;    // VAL_UINT64
         double double_val;
 
         MobiusString* string;
@@ -128,12 +125,24 @@ MOBIUS_API Value make_nil_value();
 MOBIUS_API Value make_bool_value(bool value);
 MOBIUS_API Value make_char_value(char value);
 
-inline Value make_integer_value(NumberType numtype, int64_t val) {
+inline Value make_int64_value(int64_t val) {
     Value value;
-    value.type = VAL_INTEGER;
-    value.as.integer.num_type = numtype;
-    value.as.integer.value = val;
+    value.type = VAL_INT64;
+    value.as.i64 = val;
     return value;
+}
+
+inline Value make_uint64_value(uint64_t val) {
+    Value value;
+    value.type = VAL_UINT64;
+    value.as.u64 = val;
+    return value;
+}
+
+// Compatibility shim — use make_int64_value / make_uint64_value in new code.
+inline Value make_integer_value(NumberType numtype, int64_t val) {
+    if (numtype == NUM_UINT64) return make_uint64_value((uint64_t)val);
+    return make_int64_value(val);
 }
 
 inline Value make_float_value(double val) {
@@ -155,7 +164,8 @@ inline bool is_truthy(const Value& value) {
     switch (value.type) {
         case VAL_NIL: return false;
         case VAL_BOOL: return value.as.boolean;
-        case VAL_INTEGER: return value.as.integer.value != 0;
+        case VAL_INT64: return value.as.i64 != 0;
+        case VAL_UINT64:  return value.as.u64 != 0;
         case VAL_FLOAT64: return value.as.double_val != 0.0;
         case VAL_STRING: return value.as.string != nullptr && value.as.string->length > 0;
         case VAL_CHAR: return value.as.character != '\0';

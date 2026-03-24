@@ -3,7 +3,6 @@
 #include <mobius/mobius_plugin.h>
 #include "state/mobius_state.h"
 #include "state/environment.h"
-#include "eval/evaluator.h"
 #include "frontend/ast.h"
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
@@ -37,7 +36,6 @@ MobiusConfig mobius_default_config(void) {
     config.warn_on_conversion = false;
     config.debug_mode = false;
     config.enable_hot_reload = false;
-    config.use_vm = true;
     config.override_behavior = MOBIUS_OVERRIDE_ERROR;
     return config;
 }
@@ -56,67 +54,12 @@ static uint64_t get_time_ns(void) {
 // EXECUTION CONTEXT IMPLEMENTATION
 // ============================================================================
 
-ExecutionContext::ExecutionContext(MobiusState* owner, size_t initial_stack, size_t max_depth)
+ExecutionContext::ExecutionContext(MobiusState* owner, size_t max_depth)
     : state(owner), current_env(nullptr), max_depth_(max_depth) {
-    stack.reserve(initial_stack);
     call_frames_.reserve(64);
 }
 
 ExecutionContext::~ExecutionContext() {
-}
-
-void ExecutionContext::push(const Value& value) {
-    if (stack.size() >= state->config().max_stack_size) {
-        fprintf(stderr, "Stack overflow: size %zu exceeds max %zu\n",
-                stack.size(), state->config().max_stack_size);
-        return;
-    }
-    stack.push_back(value);
-}
-
-void ExecutionContext::push(Value&& value) {
-    if (stack.size() >= state->config().max_stack_size) {
-        fprintf(stderr, "Stack overflow: size %zu exceeds max %zu\n",
-                stack.size(), state->config().max_stack_size);
-        return;
-    }
-    stack.push_back(std::move(value));
-}
-
-Value ExecutionContext::pop() {
-    if (stack.empty()) {
-        fprintf(stderr, "Stack underflow\n");
-        return make_nil_value();
-    }
-    Value result = std::move(stack.back());
-    stack.pop_back();
-    return result;
-}
-
-const Value& ExecutionContext::peek(size_t offset) const {
-    static Value nil_sentinel;
-    if (stack.empty()) {
-        fprintf(stderr, "Stack empty\n");
-        nil_sentinel = make_nil_value();
-        return nil_sentinel;
-    }
-
-    if (offset >= stack.size()) {
-        fprintf(stderr, "Stack peek offset %zu out of bounds (size: %zu)\n",
-                offset, stack.size());
-        nil_sentinel = make_nil_value();
-        return nil_sentinel;
-    }
-
-    return stack[stack.size() - 1 - offset];
-}
-
-size_t ExecutionContext::stackSize() const {
-    return stack.size();
-}
-
-void ExecutionContext::stackClear() {
-    stack.clear();
 }
 
 // ============================================================================
@@ -139,8 +82,8 @@ void ExecutionContext::pushFrame(const char* function_name, const char* filename
     frame.type = type;
     frame.function_ptr = function_ptr;
     frame.env = env;
-    frame.stack_base = stack.size();
-    frame.stack_top = stack.size();
+    frame.stack_base = 0;
+    frame.stack_top = 0;
     frame.start_time = get_time_ns();
 
     call_frames_.push_back(frame);
@@ -311,7 +254,7 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
 MobiusState::MobiusState(MobiusConfig* config)
     : global_env_(nullptr), registry_(nullptr), string_pool_(nullptr),
       metamethods_(nullptr),
-      main_context_(nullptr), last_error_(nullptr),
+      main_context_(nullptr), native_ctx_(nullptr), last_error_(nullptr),
       error_handler_(default_error_handler), error_handler_userdata_(nullptr),
       initialized_(false), source_code_(nullptr) {
     
@@ -324,7 +267,7 @@ MobiusState::MobiusState(MobiusConfig* config)
     if (!metamethods_) return;
 
     main_context_ = new (std::nothrow) ExecutionContext(
-        this, config_.initial_stack_size, config_.max_call_depth);
+        this, config_.max_call_depth);
     if (!main_context_) return;
 
     global_env_ = new (std::nothrow) Environment();
@@ -398,51 +341,39 @@ int MobiusState::execString(const char* code) {
         return MOBIUS_ERROR_SYNTAX;
     }
 
-    if (config_.use_vm) {
-        Compiler compiler(string_pool_);
-        Prototype* proto = compiler.compile(parse_result.statements,
-                                            parse_result.count,
-                                            source_code_ ? source_code_ : "<string>");
-        free_parse_result(&parse_result);
-
-        if (!proto) {
-            setError(MOBIUS_ERROR_RUNTIME, "Bytecode compilation failed",
-                     nullptr, 0, 0, nullptr);
-            return MOBIUS_ERROR_RUNTIME;
-        }
-
-        if (config_.debug_mode) {
-            disassemble_prototype(proto);
-        }
-
-        // Prototypes are owned by the state so they outlive any
-        // MobiusFunction closures that reference child prototypes.
-        owned_protos_.push_back(proto);
-
-        MobiusVM vm(this);
-        int rc = vm.execute(proto);
-
-        if (rc != 0) {
-            return MOBIUS_ERROR_RUNTIME;
-        }
-        return MOBIUS_OK;
-    }
-
-    EvalResult eval_result = evaluate_program(parse_result.statements, 
-                                             parse_result.count, 
-                                             global_env_);
+    Compiler compiler(string_pool_);
+    Prototype* proto = compiler.compile(parse_result.statements,
+                                        parse_result.count,
+                                        source_code_ ? source_code_ : "<string>");
     free_parse_result(&parse_result);
 
-    if (is_error(eval_result)) {
-        setError(MOBIUS_ERROR_RUNTIME, 
-                 eval_result.error.message,
-                 eval_result.error.suggestion,
-                 eval_result.error.line,
-                 eval_result.error.column,
-                 eval_result.error.function_name);
+    if (!proto) {
+        setError(MOBIUS_ERROR_RUNTIME, "Bytecode compilation failed",
+                 nullptr, 0, 0, nullptr);
         return MOBIUS_ERROR_RUNTIME;
     }
 
+    if (config_.debug_mode) {
+        disassemble_prototype(proto);
+    }
+
+    // Prototypes are owned by the state so they outlive any
+    // MobiusFunction closures that reference child prototypes.
+    owned_protos_.push_back(proto);
+
+    // Save and restore native_ctx_ so that re-entrant calls from native
+    // functions (e.g. load()) don't clobber the outer call's context.
+    NativeCallContext* saved_ctx = native_ctx_;
+    native_ctx_ = nullptr;
+
+    MobiusVM vm(this);
+    int rc = vm.execute(proto);
+
+    native_ctx_ = saved_ctx;
+
+    if (rc != 0) {
+        return MOBIUS_ERROR_RUNTIME;
+    }
     return MOBIUS_OK;
 }
 

@@ -3,7 +3,6 @@
 #include "state/environment.h"
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
-#include "eval/evaluator.h"
 #include "vm/compiler.h"
 #include "vm/vm.h"
 
@@ -79,65 +78,32 @@ bool Repl::processLine(const char* line) {
         return true;
     }
 
-    if (state_->config().use_vm) {
-        Compiler compiler(state_->stringPool());
-        Prototype* proto = compiler.compile(parse_result.statements,
-                                            parse_result.count, "<repl>");
-        free_parse_result(&parse_result);
-        free_token_array(&tokens);
-        free(modified_line);
-
-        if (!proto) {
-            printf("Bytecode compilation failed\n");
-            return true;
-        }
-
-        if (state_->config().debug_mode) {
-            disassemble_prototype(proto);
-        }
-
-        MobiusVM vm(state_);
-        int rc = vm.execute(proto);
-        delete proto;
-
-        if (rc != 0) {
-            InternalError* err = state_->lastError();
-            if (err && err->message) {
-                fprintf(stderr, "Runtime error: %s\n", err->message);
-            }
-        }
-
-        return true;
-    }
-
-    for (size_t i = 0; i < parse_result.count; i++) {
-        Stmt* stmt = parse_result.statements[i];
-
-        if (stmt->type == STMT_EXPRESSION) {
-            ExpressionStmt* expr_stmt = &stmt->as.expression;
-            EvalResult result = evaluate_expr(expr_stmt->expression, state_->globalEnv());
-
-            if (is_error(result)) {
-                print_runtime_error(result.error);
-            } else if (result.return_count > 0) {
-                Value val = state_->mainContext()->pop();
-                if (val.type != VAL_NIL) {
-                    print_value(val);
-                    printf("\n");
-                }
-            }
-        } else {
-            EvalResult result = evaluate_stmt(stmt, state_->globalEnv());
-
-            if (is_error(result)) {
-                print_runtime_error(result.error);
-            }
-        }
-    }
-
+    Compiler compiler(state_->stringPool());
+    Prototype* proto = compiler.compile(parse_result.statements,
+                                        parse_result.count, "<repl>");
     free_parse_result(&parse_result);
     free_token_array(&tokens);
     free(modified_line);
+
+    if (!proto) {
+        printf("Bytecode compilation failed\n");
+        return true;
+    }
+
+    if (state_->config().debug_mode) {
+        disassemble_prototype(proto);
+    }
+
+    MobiusVM vm(state_);
+    int rc = vm.execute(proto);
+    delete proto;
+
+    if (rc != 0) {
+        InternalError* err = state_->lastError();
+        if (err && err->message) {
+            fprintf(stderr, "Runtime error: %s\n", err->message);
+        }
+    }
 
     return true;
 }
@@ -175,8 +141,7 @@ bool Repl::handleCommand(const char* line) {
 }
 
 void Repl::printWelcome() const {
-    printf("Mobius REPL v0.1.0");
-    if (state_->config().use_vm) printf(" [bytecode VM]");
+    printf("Mobius REPL v0.1.0 [bytecode VM]");
     printf("\nType :help for commands or enter Mobius code to execute.\n");
     printf("Press Ctrl+C or type :quit to exit.\n\n");
 }

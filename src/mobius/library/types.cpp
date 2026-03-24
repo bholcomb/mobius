@@ -2,7 +2,6 @@
 #include "data/value.h"
 #include "state/environment.h"
 #include "data/table.h"
-#include "eval/evaluator.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -35,6 +34,6 @@ int lib_get_type_config(MobiusState* state, int arg_count) {
     Value warn_value = make_bool_value(state->config().warn_on_conversion);
     config_table->set(warn_key, warn_value);
     
-    state->mainContext()->push(make_table_value(config_table));
+    state->npush(make_table_value(config_table));
     return 1;
 }

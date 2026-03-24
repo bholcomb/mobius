@@ -2,7 +2,6 @@
 #include "data/array.h"
 #include "data/value.h"
 #include "state/environment.h"
-#include "eval/evaluator.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,13 +17,13 @@ int lib_array_create(MobiusState* state, int arg_count) {
 
     size_t capacity = 8; // Default capacity
     if (arg_count == 1) {
-        Value arg = state->mainContext()->peek( 0);
-        state->mainContext()->pop(); // Remove argument
+        Value arg = state->npeek(0);
+        state->npop(); // Remove argument
         
-        if (arg.type != VAL_INTEGER) {
+        if (arg.type != VAL_INT64) {
             return state->error("array_create capacity must be an integer");
         }
-        capacity = (size_t)arg.as.integer.value;
+        capacity = (size_t)arg.as.i64;
         if (capacity == 0) capacity = 8; // Minimum capacity
     }
 
@@ -33,7 +32,7 @@ int lib_array_create(MobiusState* state, int arg_count) {
         return state->error("Failed to create array");
     }
 
-    state->mainContext()->push( make_array_value(array));
+    state->npush(make_array_value(array));
     return 1;
 }
 
@@ -42,12 +41,12 @@ int lib_array_push(MobiusState* state, int arg_count) {
         return state->error("array_push expects exactly 2 arguments (array, value)");
     }
 
-    Value value = state->mainContext()->peek( 0);
-    Value array_val = state->mainContext()->peek( 1);
+    Value value = state->npeek(0);
+    Value array_val = state->npeek(1);
     
     // Remove arguments
-    state->mainContext()->pop();
-    state->mainContext()->pop();
+    state->npop();
+    state->npop();
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_push first argument must be an array");
@@ -64,8 +63,8 @@ int lib_array_pop(MobiusState* state, int arg_count) {
         return state->error("array_pop expects exactly 1 argument");
     }
 
-    Value array_val = state->mainContext()->peek( 0);
-    state->mainContext()->pop(); // Remove argument
+    Value array_val = state->npeek(0);
+    state->npop(); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_pop argument must be an array");
@@ -73,13 +72,13 @@ int lib_array_pop(MobiusState* state, int arg_count) {
 
     ArrayValue* array = array_val.as.array;
     if (array->length() == 0) {
-        state->mainContext()->push( make_nil_value());
+        state->npush(make_nil_value());
         return 1;
     }
 
     Value popped_value = array->pop();
 
-    state->mainContext()->push( popped_value);
+    state->npush(popped_value);
     return 1;
 }
 
@@ -88,30 +87,30 @@ int lib_array_get(MobiusState* state, int arg_count) {
         return state->error("array_get expects exactly 2 arguments (array, index)");
     }
 
-    Value index_val = state->mainContext()->peek( 0);
-    Value array_val = state->mainContext()->peek( 1);
+    Value index_val = state->npeek(0);
+    Value array_val = state->npeek(1);
     
     // Remove arguments
-    state->mainContext()->pop();
-    state->mainContext()->pop();
+    state->npop();
+    state->npop();
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_get first argument must be an array");
     }
 
-    if (index_val.type != VAL_INTEGER) {
+    if (index_val.type != VAL_INT64) {
         return state->error("array_get index must be an integer");
     }
 
     ArrayValue* array = array_val.as.array;
-    int64_t index = index_val.as.integer.value;
+    int64_t index = index_val.as.i64;
 
     if (index < 0 || index >= (int64_t)array->length()) {
-        state->mainContext()->push( make_nil_value());
+        state->npush(make_nil_value());
         return 1;
     }
 
-    state->mainContext()->push( array->get((size_t)index));
+    state->npush(array->get((size_t)index));
     return 1;
 }
 
@@ -120,25 +119,25 @@ int lib_array_set(MobiusState* state, int arg_count) {
         return state->error("array_set expects exactly 3 arguments (array, index, value)");
     }
 
-    Value value = state->mainContext()->peek( 0);
-    Value index_val = state->mainContext()->peek( 1);
-    Value array_val = state->mainContext()->peek( 2);
+    Value value = state->npeek(0);
+    Value index_val = state->npeek(1);
+    Value array_val = state->npeek(2);
     
     // Remove arguments
     for (int i = 0; i < 3; i++) {
-        state->mainContext()->pop();
+        state->npop();
     }
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_set first argument must be an array");
     }
 
-    if (index_val.type != VAL_INTEGER) {
+    if (index_val.type != VAL_INT64) {
         return state->error("array_set index must be an integer");
     }
 
     ArrayValue* array = array_val.as.array;
-    int64_t index = index_val.as.integer.value;
+    int64_t index = index_val.as.i64;
 
     if (index < 0 || index >= (int64_t)array->length()) {
         return state->error("array_set index out of bounds");
@@ -154,15 +153,15 @@ int lib_array_length(MobiusState* state, int arg_count) {
         return state->error("array_length expects exactly 1 argument");
     }
 
-    Value array_val = state->mainContext()->peek( 0);
-    state->mainContext()->pop(); // Remove argument
+    Value array_val = state->npeek(0);
+    state->npop(); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_length argument must be an array");
     }
 
     ArrayValue* array = array_val.as.array;
-    state->mainContext()->push( make_integer_value(NUM_INT64, (int64_t)array->length()));
+    state->npush(make_int64_value((int64_t)array->length()));
     return 1;
 }
 
@@ -171,26 +170,26 @@ int lib_array_slice(MobiusState* state, int arg_count) {
         return state->error("array_slice expects exactly 3 arguments (array, start, end)");
     }
 
-    Value end_val = state->mainContext()->peek( 0);
-    Value start_val = state->mainContext()->peek( 1);
-    Value array_val = state->mainContext()->peek( 2);
+    Value end_val = state->npeek(0);
+    Value start_val = state->npeek(1);
+    Value array_val = state->npeek(2);
     
     // Remove arguments
     for (int i = 0; i < 3; i++) {
-        state->mainContext()->pop();
+        state->npop();
     }
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_slice first argument must be an array");
     }
 
-    if (start_val.type != VAL_INTEGER || end_val.type != VAL_INTEGER) {
+    if (start_val.type != VAL_INT64 || end_val.type != VAL_INT64) {
         return state->error("array_slice start and end must be integers");
     }
 
     ArrayValue* array = array_val.as.array;
-    int64_t start = start_val.as.integer.value;
-    int64_t end = end_val.as.integer.value;
+    int64_t start = start_val.as.i64;
+    int64_t end = end_val.as.i64;
 
     // Handle negative indices
     if (start < 0) start = 0;
@@ -198,7 +197,7 @@ int lib_array_slice(MobiusState* state, int arg_count) {
     if (start >= end) {
         // Return empty array
         ArrayValue* empty_array = new ArrayValue(8);
-        state->mainContext()->push( make_array_value(empty_array));
+        state->npush(make_array_value(empty_array));
         return 1;
     }
 
@@ -212,7 +211,7 @@ int lib_array_slice(MobiusState* state, int arg_count) {
         slice_array->push((*array)[start + i]);
     }
 
-    state->mainContext()->push( make_array_value(slice_array));
+    state->npush(make_array_value(slice_array));
     return 1;
 }
 
@@ -224,11 +223,11 @@ int lib_array_concat(MobiusState* state, int arg_count) {
     // Calculate total length
     size_t total_length = 0;
     for (int i = 0; i < arg_count; i++) {
-        Value arg = state->mainContext()->peek( i);
+        Value arg = state->npeek(i);
         if (arg.type != VAL_ARRAY) {
             // Clean up arguments before returning error
             for (int j = 0; j < arg_count; j++) {
-                state->mainContext()->pop();
+                state->npop();
             }
             return state->error("array_concat expects all arguments to be arrays");
         }
@@ -239,14 +238,14 @@ int lib_array_concat(MobiusState* state, int arg_count) {
     if (!result_array) {
         // Clean up arguments before returning error
         for (int i = 0; i < arg_count; i++) {
-            state->mainContext()->pop();
+            state->npop();
         }
         return state->error("Failed to create result array");
     }
 
     // Copy elements from all arrays (in reverse order due to stack)
     for (int i = arg_count - 1; i >= 0; i--) {
-        Value arg = state->mainContext()->peek( i);
+        Value arg = state->npeek(i);
         ArrayValue* array = arg.as.array;
         for (size_t j = 0; j < array->length(); j++) {
             result_array->push((*array)[j]);
@@ -255,10 +254,10 @@ int lib_array_concat(MobiusState* state, int arg_count) {
 
     // Remove arguments
     for (int i = 0; i < arg_count; i++) {
-        state->mainContext()->pop();
+        state->npop();
     }
 
-    state->mainContext()->push( make_array_value(result_array));
+    state->npush(make_array_value(result_array));
     return 1;
 }
 
@@ -267,8 +266,8 @@ int lib_array_reverse(MobiusState* state, int arg_count) {
         return state->error("array_reverse expects exactly 1 argument");
     }
 
-    Value array_val = state->mainContext()->peek( 0);
-    state->mainContext()->pop(); // Remove argument
+    Value array_val = state->npeek(0);
+    state->npop(); // Remove argument
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_reverse argument must be an array");
@@ -278,7 +277,7 @@ int lib_array_reverse(MobiusState* state, int arg_count) {
     
     array->reverse();
 
-    state->mainContext()->push( array_val); // Return the same array (don't free since we're returning it)
+    state->npush(array_val); // Return the same array (don't free since we're returning it)
     return 1;
 }
 
@@ -287,12 +286,12 @@ int lib_array_find(MobiusState* state, int arg_count) {
         return state->error("array_find expects exactly 2 arguments (array, value)");
     }
 
-    Value search_val = state->mainContext()->peek( 0);
-    Value array_val = state->mainContext()->peek( 1);
+    Value search_val = state->npeek(0);
+    Value array_val = state->npeek(1);
     
     // Remove arguments
-    state->mainContext()->pop();
-    state->mainContext()->pop();
+    state->npop();
+    state->npop();
 
     if (array_val.type != VAL_ARRAY) {
         return state->error("array_find first argument must be an array");
@@ -304,12 +303,12 @@ int lib_array_find(MobiusState* state, int arg_count) {
     bool strict = state->config().strict_mode;
     for (size_t i = 0; i < array->length(); i++) {
         if (strict ? (*array)[i].exactlyEqual(search_val) : (*array)[i] == search_val) {
-            state->mainContext()->push( make_integer_value(NUM_INT64, (int64_t)i));
+            state->npush(make_int64_value((int64_t)i));
             return 1;
         }
     }
 
     // Not found
-    state->mainContext()->push( make_integer_value(NUM_INT64, -1));
+    state->npush(make_int64_value(-1));
     return 1;
 }

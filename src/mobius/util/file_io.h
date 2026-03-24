@@ -18,8 +18,4 @@ void free_file_result(FileResult* result);
 bool file_exists(const char* path);
 const char* get_file_extension(const char* path);
 
-// Script execution
-int execute_script_file(const char* path);
-int execute_script_string(const char* source, const char* filename);
-
 #endif // MOBIUS_FILE_IO_H

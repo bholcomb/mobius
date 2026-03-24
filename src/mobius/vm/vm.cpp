@@ -22,22 +22,22 @@
 // ============================================================================
 
 inline int64_t MobiusVM::vm_extract_int64(const Value& v) {
-    return v.as.integer.value;
+    return v.as.i64;
 }
 
 inline uint64_t MobiusVM::vm_extract_uint64(const Value& v) {
-    return (uint64_t)v.as.integer.value;
+    return v.as.u64;
 }
 
 inline double MobiusVM::vm_extract_double(const Value& v) {
-    if (v.type == VAL_FLOAT64) return v.as.double_val;
-    if (v.type == VAL_INTEGER) return (double)v.as.integer.value;
+    if (v.type == VAL_FLOAT64)  return v.as.double_val;
+    if (v.type == VAL_UINT64)   return (double)v.as.u64;
+    if (v.type == VAL_INT64)  return (double)v.as.i64;
     return 0.0;
 }
 
 inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
-    return (l.type == VAL_INTEGER && l.as.integer.num_type == NUM_UINT64) ||
-           (r.type == VAL_INTEGER && r.as.integer.num_type == NUM_UINT64);
+    return l.type == VAL_UINT64 || r.type == VAL_UINT64;
 }
 
 // ============================================================================
@@ -103,25 +103,41 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
     ExecutionContext* ctx = state_->mainContext();
     CallInfo& caller = call_stack_.back();
 
-    // Push arguments onto the C API stack
-    for (int i = 1; i <= nargs; i++) {
-        ctx->push(R(caller, func_reg + i));
+    // Point the C-API stack directly at the argument slots in the register array.
+    // Arguments live at R[func_reg+1] .. R[func_reg+nargs].
+    int args_base = caller.base + func_reg + 1;
+
+    // Ensure there is room for the native function to push results beyond the args.
+    int needed = args_base + nargs + 16;
+    if (needed > (int)registers_.size()) {
+        registers_.resize(needed, Value());
     }
+
+    NativeCallContext nctx;
+    nctx.registers = registers_.data();
+    nctx.base      = args_base;
+    nctx.top       = args_base + nargs;
+    nctx.capacity  = (int)registers_.size();
+    state_->setNativeContext(&nctx);
 
     ctx->pushFrame("native", nullptr, currentLine(), 0,
                    FUNCTION_TYPE_NATIVE, nullptr, nullptr);
     int rc = func(state_, nargs);
     ctx->popFrame();
 
+    state_->setNativeContext(nullptr);
+
     if (rc < 0) return -1;
 
-    // Copy results back into VM registers
-    int results_to_copy = (nresults == 0) ? rc : (nresults - 1);
-    for (int i = results_to_copy - 1; i >= 0; i--) {
-        if (ctx->stackSize() > 0) {
-            R(caller, func_reg + i) = ctx->pop();
+    // Results were pushed into registers_[args_base..nctx.top-1].
+    // Shift them to start at func_reg (overwriting the function slot).
+    int dest = caller.base + func_reg;
+    int n = (nresults == 0) ? rc : (nresults - 1);
+    for (int i = 0; i < n; i++) {
+        if (args_base + i < nctx.top) {
+            registers_[dest + i] = registers_[args_base + i];
         } else {
-            R(caller, func_reg + i) = Value();
+            registers_[dest + i] = Value();
         }
     }
 
@@ -220,18 +236,38 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
 
     if (method.type == VAL_NATIVE_FUNCTION) {
         ExecutionContext* ctx = state_->mainContext();
-        ctx->push(lhs);
-        ctx->push(rhs);
+
+        // Place lhs and rhs in scratch registers beyond the current frame.
+        int caller_base = call_stack_.back().base;
+        int caller_regs = call_stack_.back().proto->num_registers;
+        int scratch = caller_base + caller_regs;
+
+        int needed = scratch + 4;
+        if (needed > (int)registers_.size())
+            registers_.resize(needed, Value());
+
+        registers_[scratch]     = lhs;
+        registers_[scratch + 1] = rhs;
+
+        NativeCallContext nctx;
+        nctx.registers = registers_.data();
+        nctx.base      = scratch;
+        nctx.top       = scratch + 2;
+        nctx.capacity  = (int)registers_.size();
+        state_->setNativeContext(&nctx);
+
         ctx->pushFrame("metamethod", nullptr, currentLine(), 0,
                        FUNCTION_TYPE_NATIVE, nullptr, nullptr);
         int rc = method.as.native_function(state_, 2);
         ctx->popFrame();
+        state_->setNativeContext(nullptr);
+
         if (rc < 0) {
             runtimeError("Metamethod '%s' failed", mm_name->data);
             return -1;
         }
-        if (rc > 0 && ctx->stackSize() > 0) {
-            out = ctx->pop();
+        if (rc > 0 && nctx.top > scratch) {
+            out = registers_[scratch];
         } else {
             out = Value();
         }
@@ -344,7 +380,7 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_LOADINT: {
             int sbx = DECODE_sBx(inst);
-            RA(inst) = make_integer_value(NUM_INT64, (int64_t)sbx);
+            RA(inst) = make_int64_value((int64_t)sbx);
             break;
         }
 
@@ -426,7 +462,7 @@ int MobiusVM::run(size_t base_depth) {
             if (tbl.type == VAL_TABLE && tbl.as.table) {
                 RA(inst) = tbl.as.table->get(key);
             } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
-                if (key.type == VAL_INTEGER) {
+                if (key.type == VAL_INT64) {
                     int64_t idx = vm_extract_int64(key);
                     if (idx >= 0 && idx < (int64_t)tbl.as.array->length()) {
                         RA(inst) = tbl.as.array->get((size_t)idx);
@@ -452,7 +488,7 @@ int MobiusVM::run(size_t base_depth) {
             if (tbl.type == VAL_TABLE && tbl.as.table) {
                 tbl.as.table->set(key, val);
             } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
-                if (key.type == VAL_INTEGER) {
+                if (key.type == VAL_INT64) {
                     int64_t idx = vm_extract_int64(key);
                     if (idx >= 0) {
                         while ((int64_t)tbl.as.array->length() <= idx)
@@ -477,11 +513,12 @@ int MobiusVM::run(size_t base_depth) {
         case OP_ADD: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs))
-                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) + vm_extract_uint64(rhs)));
+                    RA(inst) = make_uint64_value(vm_extract_uint64(lhs) + vm_extract_uint64(rhs));
                 else
-                    RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) + vm_extract_int64(rhs));
+                    RA(inst) = make_int64_value(vm_extract_int64(lhs) + vm_extract_int64(rhs));
             } else if (lhs.type == VAL_STRING || rhs.type == VAL_STRING) {
                 std::string result;
                 auto append_val = [&](const Value& v) {
@@ -495,9 +532,7 @@ int MobiusVM::run(size_t base_depth) {
                 append_val(lhs);
                 append_val(rhs);
                 RA(inst) = make_string_value_from_cstr(state_, result.c_str());
-            } else if ((lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) &&
-                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64) &&
-                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64)) {
+            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
                 RA(inst) = make_float_value(vm_extract_double(lhs) + vm_extract_double(rhs));
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
@@ -518,14 +553,13 @@ int MobiusVM::run(size_t base_depth) {
         case OP_SUB: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs))
-                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) - vm_extract_uint64(rhs)));
+                    RA(inst) = make_uint64_value(vm_extract_uint64(lhs) - vm_extract_uint64(rhs));
                 else
-                    RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) - vm_extract_int64(rhs));
-            } else if ((lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) &&
-                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64) &&
-                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64)) {
+                    RA(inst) = make_int64_value(vm_extract_int64(lhs) - vm_extract_int64(rhs));
+            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
                 RA(inst) = make_float_value(vm_extract_double(lhs) - vm_extract_double(rhs));
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
@@ -546,14 +580,13 @@ int MobiusVM::run(size_t base_depth) {
         case OP_MUL: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs))
-                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) * vm_extract_uint64(rhs)));
+                    RA(inst) = make_uint64_value(vm_extract_uint64(lhs) * vm_extract_uint64(rhs));
                 else
-                    RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) * vm_extract_int64(rhs));
-            } else if ((lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) &&
-                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64) &&
-                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64)) {
+                    RA(inst) = make_int64_value(vm_extract_int64(lhs) * vm_extract_int64(rhs));
+            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
                 RA(inst) = make_float_value(vm_extract_double(lhs) * vm_extract_double(rhs));
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
@@ -595,17 +628,18 @@ int MobiusVM::run(size_t base_depth) {
         case OP_MOD: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs)) {
                     uint64_t lv = vm_extract_uint64(lhs);
                     uint64_t rv = vm_extract_uint64(rhs);
                     if (rv == 0) { runtimeError("Modulo by zero"); return -1; }
-                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(lv % rv));
+                    RA(inst) = make_uint64_value(lv % rv);
                 } else {
                     int64_t lv = vm_extract_int64(lhs);
                     int64_t rv = vm_extract_int64(rhs);
                     if (rv == 0) { runtimeError("Modulo by zero"); return -1; }
-                    RA(inst) = make_integer_value(NUM_INT64, lv % rv);
+                    RA(inst) = make_int64_value(lv % rv);
                 }
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
@@ -616,8 +650,7 @@ int MobiusVM::run(size_t base_depth) {
                 if (rc < 0) return -1;
                 if (rc == 0) { runtimeError("Cannot modulo: no __mod metamethod on table"); return -1; }
                 RA(inst) = out;
-            } else if ((lhs.type == VAL_FLOAT64 || lhs.type == VAL_INTEGER) &&
-                        (rhs.type == VAL_FLOAT64 || rhs.type == VAL_INTEGER)) {
+            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
                 double lv = vm_extract_double(lhs);
                 double rv = vm_extract_double(rhs);
                 if (rv == 0.0) { runtimeError("Modulo by zero"); return -1; }
@@ -631,8 +664,8 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_UNM: {
             const Value& val = RB(inst);
-            if (val.type == VAL_INTEGER) {
-                RA(inst) = make_integer_value(NUM_INT64, -vm_extract_int64(val));
+            if (val.type == VAL_INT64) {
+                RA(inst) = make_int64_value(-vm_extract_int64(val));
             } else if (val.type == VAL_FLOAT64) {
                 RA(inst) = make_float_value(-val.as.double_val);
             } else {
@@ -651,24 +684,20 @@ int MobiusVM::run(size_t base_depth) {
         // Bitwise operations (integer-only)
         // ================================================================
 
-        #define VM_BITWISE_OP(op_char) {                                          \
-            const Value& lhs = RKB(inst);                                         \
-            const Value& rhs = RKC(inst);                                         \
-            if (lhs.type != VAL_INTEGER || rhs.type != VAL_INTEGER) {             \
-                runtimeError("Bitwise operations require integer operands");      \
-                return -1;                                                         \
-            }                                                                      \
-            if (vm_use_unsigned(lhs, rhs)) {                                      \
-                uint64_t lv = vm_extract_uint64(lhs);                             \
-                uint64_t rv = vm_extract_uint64(rhs);                             \
-                RA(inst) = make_integer_value(NUM_UINT64,                         \
-                                              (int64_t)(lv op_char rv));          \
-            } else {                                                              \
-                int64_t lv = vm_extract_int64(lhs);                               \
-                int64_t rv = vm_extract_int64(rhs);                               \
-                RA(inst) = make_integer_value(NUM_INT64, lv op_char rv);          \
-            }                                                                      \
-            break;                                                                 \
+        #define VM_BITWISE_OP(op_char) {                                                    \
+            const Value& lhs = RKB(inst);                                                   \
+            const Value& rhs = RKC(inst);                                                   \
+            if ((lhs.type != VAL_INT64 && lhs.type != VAL_UINT64) ||                      \
+                (rhs.type != VAL_INT64 && rhs.type != VAL_UINT64)) {                      \
+                runtimeError("Bitwise operations require integer operands");                \
+                return -1;                                                                   \
+            }                                                                               \
+            if (vm_use_unsigned(lhs, rhs)) {                                                \
+                RA(inst) = make_uint64_value(vm_extract_uint64(lhs) op_char vm_extract_uint64(rhs)); \
+            } else {                                                                        \
+                RA(inst) = make_int64_value(vm_extract_int64(lhs) op_char vm_extract_int64(rhs));    \
+            }                                                                               \
+            break;                                                                          \
         }
 
         case OP_BAND: VM_BITWISE_OP(&)
@@ -681,14 +710,13 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_BNOT: {
             const Value& val = RB(inst);
-            if (val.type != VAL_INTEGER) {
+            if (val.type == VAL_UINT64) {
+                RA(inst) = make_uint64_value(~vm_extract_uint64(val));
+            } else if (val.type == VAL_INT64) {
+                RA(inst) = make_int64_value(~vm_extract_int64(val));
+            } else {
                 runtimeError("Bitwise NOT requires an integer operand");
                 return -1;
-            }
-            if (val.as.integer.num_type == NUM_UINT64) {
-                RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(~vm_extract_uint64(val)));
-            } else {
-                RA(inst) = make_integer_value(NUM_INT64, ~vm_extract_int64(val));
             }
             break;
         }
@@ -744,11 +772,11 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64);
-            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64);
+            bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
             bool lt;
             if (l_num && r_num) {
-                if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                if (lhs.type != VAL_FLOAT64 && rhs.type != VAL_FLOAT64) {
                     if (vm_use_unsigned(lhs, rhs))
                         lt = vm_extract_uint64(lhs) < vm_extract_uint64(rhs);
                     else
@@ -779,11 +807,11 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64);
-            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64);
+            bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
             bool le;
             if (l_num && r_num) {
-                if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                if (lhs.type != VAL_FLOAT64 && rhs.type != VAL_FLOAT64) {
                     if (vm_use_unsigned(lhs, rhs))
                         le = vm_extract_uint64(lhs) <= vm_extract_uint64(rhs);
                     else
@@ -1017,10 +1045,10 @@ int MobiusVM::run(size_t base_depth) {
             int sbx = DECODE_sBx(inst);
             Value& idx  = regs[a];
             Value& step = regs[a + 2];
-            if (idx.type == VAL_INTEGER && step.type == VAL_INTEGER) {
+            if (idx.type == VAL_INT64 && step.type == VAL_INT64) {
                 int64_t iv = vm_extract_int64(idx);
                 int64_t sv = vm_extract_int64(step);
-                idx = make_integer_value(NUM_INT64, iv - sv);
+                idx = make_int64_value(iv - sv);
             } else {
                 double iv = vm_extract_double(idx);
                 double sv = vm_extract_double(step);
@@ -1037,12 +1065,12 @@ int MobiusVM::run(size_t base_depth) {
             Value& limit = regs[a + 1];
             Value& step  = regs[a + 2];
 
-            if (idx.type == VAL_INTEGER && limit.type == VAL_INTEGER && step.type == VAL_INTEGER) {
+            if (idx.type == VAL_INT64 && limit.type == VAL_INT64 && step.type == VAL_INT64) {
                 int64_t iv = vm_extract_int64(idx);
                 int64_t sv = vm_extract_int64(step);
                 int64_t lv = vm_extract_int64(limit);
                 iv += sv;
-                idx = make_integer_value(NUM_INT64, iv);
+                idx = make_int64_value(iv);
                 bool in_range = (sv > 0) ? (iv <= lv) : (iv >= lv);
                 if (in_range) {
                     ip += sbx;
@@ -1097,7 +1125,7 @@ int MobiusVM::run(size_t base_depth) {
             const Value& member_val = RB(inst);
             int member_idx = DECODE_C(inst);
             (void)member_idx;
-            if (member_val.type == VAL_INTEGER) {
+            if (member_val.type == VAL_INT64) {
                 int64_t iv = vm_extract_int64(member_val);
                 // Use auto-member with the given value
                 char name_buf[32];
@@ -1321,7 +1349,7 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_INC: {
             const Value& val = RB(inst);
-            if (val.type != VAL_INTEGER) {
+            if (val.type != VAL_INT64) {
                 runtimeError("Increment requires an integer operand");
                 return -1;
             }
@@ -1333,7 +1361,7 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_DEC: {
             const Value& val = RB(inst);
-            if (val.type != VAL_INTEGER) {
+            if (val.type != VAL_INT64) {
                 runtimeError("Decrement requires an integer operand");
                 return -1;
             }
@@ -1373,7 +1401,7 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_ISNUM: {
             const Value& v = RB(inst);
-            bool num = (v.type == VAL_INTEGER || v.type == VAL_FLOAT64);
+            bool num = (v.type == VAL_INT64 || v.type == VAL_FLOAT64);
             RA(inst) = make_bool_value(num);
             break;
         }
@@ -1382,8 +1410,8 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64);
-            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64);
+            bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_FLOAT64);
             bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
             if (compat != (a != 0)) ip++;
             break;
@@ -1405,11 +1433,11 @@ int MobiusVM::run(size_t base_depth) {
         case OP_LEN: {
             const Value& val = RB(inst);
             if (val.type == VAL_ARRAY && val.as.array) {
-                RA(inst) = make_integer_value(NUM_INT64, (int64_t)val.as.array->length());
+                RA(inst) = make_int64_value((int64_t)val.as.array->length());
             } else if (val.type == VAL_TABLE && val.as.table) {
-                RA(inst) = make_integer_value(NUM_INT64, (int64_t)val.as.table->size());
+                RA(inst) = make_int64_value((int64_t)val.as.table->size());
             } else if (val.type == VAL_STRING && val.as.string) {
-                RA(inst) = make_integer_value(NUM_INT64, (int64_t)val.as.string->length);
+                RA(inst) = make_int64_value((int64_t)val.as.string->length);
             } else {
                 runtimeError("Attempt to get length of a %s value", value_type_name(val.type));
                 return -1;

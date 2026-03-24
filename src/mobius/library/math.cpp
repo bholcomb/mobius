@@ -1,7 +1,6 @@
 #include "library/math.h"
 #include "data/value.h"
 #include "state/environment.h"
-#include "eval/evaluator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -16,12 +15,12 @@ int lib_abs(MobiusState* state, int arg_count) {
         return state->error("abs expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     Value result;
     
-    if (arg.type == VAL_INTEGER) {
-        int64_t val = arg.as.integer.value;
-        result = make_integer_value(NUM_INT64, val < 0 ? -val : val);
+    if (arg.type == VAL_INT64) {
+        int64_t val = arg.as.i64;
+        result = make_int64_value(val < 0 ? -val : val);
     } else if (arg.type == VAL_FLOAT64) {
         result = make_float_value(fabs(arg.as.double_val));
     } else {
@@ -29,10 +28,10 @@ int lib_abs(MobiusState* state, int arg_count) {
     }
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( result);
+    state->npush(result);
     
     return 1;
 }
@@ -42,16 +41,16 @@ int lib_min(MobiusState* state, int arg_count) {
         return state->error("min expects at least 2 arguments");
     }
 
-    Value min_val = state->mainContext()->peek( arg_count - 1);  // First argument
+    Value min_val = state->npeek(arg_count - 1);  // First argument
     
     for (int i = arg_count - 2; i >= 0; i--) {
-        Value current = state->mainContext()->peek( i);
+        Value current = state->npeek(i);
         
         // Compare numeric values
         bool is_less = false;
-        if (min_val.type == VAL_INTEGER && current.type == VAL_INTEGER) {
-            int64_t min_int = min_val.as.integer.value;
-            int64_t current_int = current.as.integer.value;
+        if (min_val.type == VAL_INT64 && current.type == VAL_INT64) {
+            int64_t min_int = min_val.as.i64;
+            int64_t current_int = current.as.i64;
             is_less = current_int < min_int;
         } else if (min_val.type == VAL_FLOAT64 && current.type == VAL_FLOAT64) {
             is_less = current.as.double_val < min_val.as.double_val;
@@ -66,11 +65,11 @@ int lib_min(MobiusState* state, int arg_count) {
     
     // Pop all arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        state->mainContext()->pop();
+        state->npop();
     }
     
     // Push result onto stack
-    state->mainContext()->push( min_val);
+    state->npush(min_val);
     
     return 1;
 }
@@ -80,16 +79,16 @@ int lib_max(MobiusState* state, int arg_count) {
         return state->error("max expects at least 2 arguments");
     }
 
-    Value max_val = state->mainContext()->peek( arg_count - 1);  // First argument
+    Value max_val = state->npeek(arg_count - 1);  // First argument
     
     for (int i = arg_count - 2; i >= 0; i--) {
-        Value current = state->mainContext()->peek( i);
+        Value current = state->npeek(i);
         
         // Compare numeric values (similar logic to min but reversed)
         bool is_greater = false;
-        if (max_val.type == VAL_INTEGER && current.type == VAL_INTEGER) {
-            int64_t max_int = max_val.as.integer.value;
-            int64_t current_int = current.as.integer.value;
+        if (max_val.type == VAL_INT64 && current.type == VAL_INT64) {
+            int64_t max_int = max_val.as.i64;
+            int64_t current_int = current.as.i64;
             is_greater = current_int > max_int;
         } else if (max_val.type == VAL_FLOAT64 && current.type == VAL_FLOAT64) {
             is_greater = current.as.double_val > max_val.as.double_val;
@@ -104,11 +103,11 @@ int lib_max(MobiusState* state, int arg_count) {
     
     // Pop all arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        state->mainContext()->pop();
+        state->npop();
     }
     
     // Push result onto stack
-    state->mainContext()->push( max_val);
+    state->npush(max_val);
     
     return 1;
 }
@@ -118,16 +117,16 @@ int lib_pow(MobiusState* state, int arg_count) {
         return state->error("pow expects 2 arguments");
     }
 
-    Value base = state->mainContext()->peek( 1);
-    Value exponent = state->mainContext()->peek( 0);
+    Value base = state->npeek(1);
+    Value exponent = state->npeek(0);
     
     double base_val, exp_val;
     
     // Convert base to double
     if (base.type == VAL_FLOAT64) {
         base_val = base.as.double_val;
-    } else if (base.type == VAL_INTEGER) {
-        base_val = (double)base.as.integer.value;
+    } else if (base.type == VAL_INT64) {
+        base_val = (double)base.as.i64;
     } else {
         return state->error("pow expects numeric arguments");
     }
@@ -135,8 +134,8 @@ int lib_pow(MobiusState* state, int arg_count) {
     // Convert exponent to double (similar logic)
     if (exponent.type == VAL_FLOAT64) {
         exp_val = exponent.as.double_val;
-    } else if (exponent.type == VAL_INTEGER) {
-        exp_val = (double)exponent.as.integer.value;
+    } else if (exponent.type == VAL_INT64) {
+        exp_val = (double)exponent.as.i64;
     } else {
         return state->error("pow expects numeric arguments");
     }
@@ -144,11 +143,11 @@ int lib_pow(MobiusState* state, int arg_count) {
     double result_val = pow(base_val, exp_val);
     
     // Pop arguments from stack
-    state->mainContext()->pop();
-    state->mainContext()->pop();
+    state->npop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( make_float_value(result_val));
+    state->npush(make_float_value(result_val));
     
     return 1;
 }
@@ -158,14 +157,14 @@ int lib_sqrt(MobiusState* state, int arg_count) {
         return state->error("sqrt expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     double val;
     
     // Convert to double
     if (arg.type == VAL_FLOAT64) {
         val = arg.as.double_val;
-    } else if (arg.type == VAL_INTEGER) {
-        val = (double)arg.as.integer.value;
+    } else if (arg.type == VAL_INT64) {
+        val = (double)arg.as.i64;
     } else {
         return state->error("sqrt expects a numeric argument");
     }
@@ -175,10 +174,10 @@ int lib_sqrt(MobiusState* state, int arg_count) {
     }
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( make_float_value(sqrt(val)));
+    state->npush(make_float_value(sqrt(val)));
     
     return 1;
 }
@@ -188,26 +187,26 @@ int lib_floor(MobiusState* state, int arg_count) {
         return state->error("floor expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     double val;
     
     // Convert to double
     if (arg.type == VAL_FLOAT64) {
         val = arg.as.double_val;
-    } else if (arg.type == VAL_INTEGER) {
+    } else if (arg.type == VAL_INT64) {
         // Integer floor is just the integer itself
-        state->mainContext()->pop();
-        state->mainContext()->push( arg);
+        state->npop();
+        state->npush(arg);
         return 1;
     } else {
         return state->error("floor expects a numeric argument");
     }
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( make_float_value(floor(val)));
+    state->npush(make_float_value(floor(val)));
     
     return 1;
 }
@@ -217,26 +216,26 @@ int lib_ceil(MobiusState* state, int arg_count) {
         return state->error("ceil expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     double val;
     
     // Convert to double
     if (arg.type == VAL_FLOAT64) {
         val = arg.as.double_val;
-    } else if (arg.type == VAL_INTEGER) {
+    } else if (arg.type == VAL_INT64) {
         // Integer ceil is just the integer itself
-        state->mainContext()->pop();
-        state->mainContext()->push( arg);
+        state->npop();
+        state->npush(arg);
         return 1;
     } else {
         return state->error("ceil expects a numeric argument");
     }
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( make_float_value(ceil(val)));
+    state->npush(make_float_value(ceil(val)));
     
     return 1;
 }
@@ -246,26 +245,26 @@ int lib_round(MobiusState* state, int arg_count) {
         return state->error("round expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     double val;
     
     // Convert to double
     if (arg.type == VAL_FLOAT64) {
         val = arg.as.double_val;
-    } else if (arg.type == VAL_INTEGER) {
+    } else if (arg.type == VAL_INT64) {
         // Integer round is just the integer itself
-        state->mainContext()->pop();
-        state->mainContext()->push( arg);
+        state->npop();
+        state->npush(arg);
         return 1;
     } else {
         return state->error("round expects a numeric argument");
     }
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( make_float_value(round(val)));
+    state->npush(make_float_value(round(val)));
     
     return 1;
 }
