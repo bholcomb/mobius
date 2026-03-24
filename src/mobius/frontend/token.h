@@ -52,7 +52,6 @@ typedef enum {
     TOKEN_OR_OR,            // ||
     TOKEN_LEFT_SHIFT,       // <<
     TOKEN_RIGHT_SHIFT,      // >>
-    TOKEN_ARROW,            // ->
     TOKEN_DOT_DOT,          // .. (range operator)
     TOKEN_DOT_DOT_DOT,      // ... (rest operator)
 

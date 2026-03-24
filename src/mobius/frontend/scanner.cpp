@@ -352,8 +352,6 @@ Token scan_token(Scanner* scanner) {
                 return make_simple_token(scanner, TOKEN_MINUS_MINUS);
             } else if (match(scanner, '=')) {
                 return make_simple_token(scanner, TOKEN_MINUS_EQUAL);
-            } else if (match(scanner, '>')) {
-                return make_simple_token(scanner, TOKEN_ARROW);
             } else {
                 return make_simple_token(scanner, TOKEN_MINUS);
             }
