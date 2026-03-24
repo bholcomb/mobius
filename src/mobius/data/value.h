@@ -127,9 +127,21 @@ private:
 };
 
 // Value creation functions
-MOBIUS_API Value make_nil_value();
-MOBIUS_API Value make_bool_value(bool value);
-MOBIUS_API Value make_char_value(char value);
+inline Value make_nil_value() { return Value(); }
+
+inline Value make_bool_value(bool val) {
+    Value value;
+    value.type = VAL_BOOL;
+    value.as.boolean = val;
+    return value;
+}
+
+inline Value make_char_value(char val) {
+    Value value;
+    value.type = VAL_CHAR;
+    value.as.character = val;
+    return value;
+}
 
 inline Value make_int64_value(int64_t val) {
     Value value;
