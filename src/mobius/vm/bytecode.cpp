@@ -1,6 +1,7 @@
 #include "vm/bytecode.h"
 
 #include <cstdio>
+#include <cstring>
 
 static void print_constant(const Prototype* proto, int idx) {
     if (idx < 0 || idx >= (int)proto->constants.size()) {
@@ -276,6 +277,56 @@ void disassemble_instruction(const Prototype* proto, int offset) {
             printf("pc += %d (-> %04d)", sbx, offset + 1 + sbx);
             break;
         }
+
+        case FMT_ABC_D: {
+            uint8_t a = DECODE_A(inst);
+            uint8_t b = DECODE_B(inst);
+            uint8_t c = DECODE_C(inst);
+            uint64_t raw = 0;
+            if (offset + 2 < (int)proto->code.size()) {
+                raw = (uint64_t)proto->code[offset + 1]
+                    | ((uint64_t)proto->code[offset + 2] << 32);
+            }
+            const char* sym = "?";
+            switch (op) {
+                case OP_ADDK: sym = "+"; break;
+                case OP_SUBK: sym = "-"; break;
+                case OP_MULK: sym = "*"; break;
+                case OP_DIVK: sym = "/"; break;
+                case OP_MODK: sym = "%"; break;
+                default: break;
+            }
+            printf("R[%d] = R[%d] %s ", a, b, sym);
+            if (c == VAL_INT64) {
+                int64_t k; memcpy(&k, &raw, 8);
+                printf("%ld", (long)k);
+            } else {
+                double k; memcpy(&k, &raw, 8);
+                printf("%g", k);
+            }
+            printf(" (+2 data words)");
+            break;
+        }
+
+        case FMT_FUSED2: {
+            uint8_t a = DECODE_A(inst);
+            uint8_t b = DECODE_B(inst);
+            if (op == OP_MOVE_ADDI) {
+                uint32_t inst2 = (offset + 1 < (int)proto->code.size()) ? proto->code[offset + 1] : 0;
+                int sbx = DECODE_sBx(inst2);
+                printf("R[%d] = R[%d]; R[%d] += %d (+1 fused word)", a, b, a, sbx);
+            } else if (op == OP_GETGLOBAL_GETTABLE) {
+                uint32_t inst2 = (offset + 1 < (int)proto->code.size()) ? proto->code[offset + 1] : 0;
+                uint8_t c2 = DECODE_C(inst2);
+                uint16_t bx = DECODE_Bx(inst);
+                printf("R[%d] = globals[%d][", a, bx);
+                print_rk(proto, c2);
+                printf("] (+1 fused word)");
+            } else {
+                printf("A=%d B=%d (+fused)", a, b);
+            }
+            break;
+        }
     }
 
     printf("\n");
@@ -306,6 +357,10 @@ void disassemble_prototype(const Prototype* proto, const char* label) {
     for (int i = 0; i < (int)proto->code.size(); i++) {
         printf("  ");
         disassemble_instruction(proto, i);
+        OpCode op = (OpCode)DECODE_OP(proto->code[i]);
+        const OpcodeInfo& inf = opcode_info(op);
+        if (inf.format == FMT_ABC_D) i += 2;
+        else if (inf.format == FMT_FUSED2) i += 1;
     }
 
     for (int i = 0; i < (int)proto->protos.size(); i++) {
