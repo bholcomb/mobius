@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 
 // ============================================================================
 // Constructor
@@ -354,6 +355,112 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     }
     if (expr->op.type == TOKEN_OR || expr->op.type == TOKEN_OR_OR) {
         return compileLogicalOr(expr, dest);
+    }
+
+    // Constant folding: evaluate operations on two literal operands at compile time
+    if (expr->left->type == EXPR_LITERAL && expr->right->type == EXPR_LITERAL) {
+        const Value& lv = expr->left->as.literal.value;
+        const Value& rv = expr->right->as.literal.value;
+        bool l_int = (lv.type == VAL_INTEGER);
+        bool r_int = (rv.type == VAL_INTEGER);
+        bool l_flt = (lv.type == VAL_FLOAT32 || lv.type == VAL_FLOAT64);
+        bool r_flt = (rv.type == VAL_FLOAT32 || rv.type == VAL_FLOAT64);
+        bool both_num = (l_int || l_flt) && (r_int || r_flt);
+
+        if (both_num) {
+            auto to_double = [](const Value& v) -> double {
+                if (v.type == VAL_INTEGER) return (double)v.as.integer.value.i64;
+                if (v.type == VAL_FLOAT32) return (double)v.as.float32_val;
+                return v.as.float64_val;
+            };
+
+            bool folded = false;
+            Value result;
+
+            switch (expr->op.type) {
+                case TOKEN_PLUS:
+                case TOKEN_MINUS:
+                case TOKEN_STAR: {
+                    if (l_int && r_int) {
+                        int64_t a = lv.as.integer.value.i64;
+                        int64_t b = rv.as.integer.value.i64;
+                        int64_t r;
+                        if (expr->op.type == TOKEN_PLUS)       r = a + b;
+                        else if (expr->op.type == TOKEN_MINUS)  r = a - b;
+                        else                                    r = a * b;
+                        result = make_integer_value(NUM_INT64, r);
+                    } else {
+                        double a = to_double(lv), b = to_double(rv), r;
+                        if (expr->op.type == TOKEN_PLUS)       r = a + b;
+                        else if (expr->op.type == TOKEN_MINUS)  r = a - b;
+                        else                                    r = a * b;
+                        result = make_float_value(r);
+                    }
+                    folded = true;
+                    break;
+                }
+                case TOKEN_SLASH: {
+                    double b = to_double(rv);
+                    if (b != 0.0) {
+                        result = make_float_value(to_double(lv) / b);
+                        folded = true;
+                    }
+                    break;
+                }
+                case TOKEN_PERCENT: {
+                    if (l_int && r_int) {
+                        int64_t b = rv.as.integer.value.i64;
+                        if (b != 0) {
+                            result = make_integer_value(NUM_INT64, lv.as.integer.value.i64 % b);
+                            folded = true;
+                        }
+                    } else {
+                        double b = to_double(rv);
+                        if (b != 0.0) {
+                            result = make_float_value(fmod(to_double(lv), b));
+                            folded = true;
+                        }
+                    }
+                    break;
+                }
+                default: break;
+            }
+
+            if (folded) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                if (result.type == VAL_INTEGER) {
+                    int64_t iv = result.as.integer.value.i64;
+                    if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
+                        emitAsBx(OP_LOADINT, (uint8_t)reg, (int)iv);
+                    } else {
+                        int ki = current_->proto->addIntConstant(iv);
+                        emitLoadK(reg, ki);
+                    }
+                } else {
+                    int ki = current_->proto->addFloatConstant(result.as.float64_val);
+                    emitLoadK(reg, ki);
+                }
+                return reg;
+            }
+        }
+
+        // String concatenation folding: "hello" + " world" => "hello world"
+        if (lv.type == VAL_STRING && rv.type == VAL_STRING &&
+            lv.as.string && rv.as.string && expr->op.type == TOKEN_PLUS) {
+            size_t total = lv.as.string->length + rv.as.string->length;
+            char* buf = (char*)malloc(total + 1);
+            memcpy(buf, lv.as.string->data, lv.as.string->length);
+            memcpy(buf + lv.as.string->length, rv.as.string->data, rv.as.string->length);
+            buf[total] = '\0';
+
+            MobiusString* folded_str = pool_->intern(buf);
+            free(buf);
+
+            int reg = (dest >= 0) ? dest : allocReg();
+            int ki = current_->proto->addStringConstant(folded_str);
+            emitLoadK(reg, ki);
+            return reg;
+        }
     }
 
     int reg = (dest >= 0) ? dest : allocReg();
@@ -860,6 +967,8 @@ void Compiler::compileStmt(Stmt* stmt) {
 void Compiler::compileBlock(Stmt** stmts, size_t count) {
     for (size_t i = 0; i < count; i++) {
         compileStmt(stmts[i]);
+        if (stmts[i]->type == STMT_RETURN)
+            break;
     }
 }
 

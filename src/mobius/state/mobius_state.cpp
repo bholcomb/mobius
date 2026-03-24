@@ -37,7 +37,7 @@ MobiusConfig mobius_default_config(void) {
     config.warn_on_conversion = false;
     config.debug_mode = false;
     config.enable_hot_reload = false;
-    config.use_vm = false;
+    config.use_vm = true;
     config.override_behavior = MOBIUS_OVERRIDE_ERROR;
     return config;
 }

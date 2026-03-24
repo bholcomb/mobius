@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# VM test runner — runs all tests through the bytecode VM backend
-# Usage: ./test_simple_vm.sh
+# Tree-walk test runner — runs all tests through the tree-walk interpreter backend
+# Usage: ./test_simple_tw.sh
 
 echo
 
@@ -37,8 +37,8 @@ TEST_FILES=$(find tests -name "*.mob" | sort)
 for test_file in $TEST_FILES; do
     printf "%-50s " "$test_file"
     
-    # Run the test with --vm and capture output/exit code
-    if timeout 10 ./bin/mobius --vm "$test_file" >/dev/null 2>&1; then
+    # Run the test with --tree-walk and capture output/exit code
+    if timeout 10 ./bin/mobius --tree-walk "$test_file" >/dev/null 2>&1; then
         # Test succeeded (exit code 0)
         if is_expected_to_fail "$test_file"; then
             echo "❌ FAIL (expected to fail but passed)"
@@ -62,7 +62,7 @@ for test_file in $TEST_FILES; do
 done
 
 echo
-echo "=== VM Test Summary ==="
+echo "=== Tree-Walk Test Summary ==="
 echo "Total Tests:  $((PASSED + FAILED))"
 echo "Passed:       $PASSED"
 echo "Failed:       $FAILED"
@@ -77,9 +77,9 @@ fi
 
 echo
 if [ $FAILED -eq 0 ]; then
-    echo "🎉 All VM tests passed!"
+    echo "🎉 All tree-walk tests passed!"
     SUCCESS_RATE="100"
 else
     SUCCESS_RATE=$((PASSED * 100 / (PASSED + FAILED)))
-    echo "❌ VM Success Rate: $SUCCESS_RATE%"
+    echo "❌ Tree-Walk Success Rate: $SUCCESS_RATE%"
 fi
