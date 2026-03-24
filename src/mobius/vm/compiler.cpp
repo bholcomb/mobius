@@ -339,6 +339,27 @@ int Compiler::compileVariable(VariableExpr* expr, int dest) {
     return reg;
 }
 
+// Try to represent an expression as an RK operand (constant pool ref or register).
+// Returns true if the expression is a numeric literal that fits in the RK constant
+// pool (index < 128). Sets *rk to the RK-encoded value. If false, the caller
+// should compile normally to a register.
+bool Compiler::tryExprAsRK(Expr* e, uint8_t* rk) {
+    if (e->type != EXPR_LITERAL) return false;
+    const Value& v = e->as.literal.value;
+    int ki = -1;
+    if (v.type == VAL_INT64)
+        ki = current_->proto->addIntConstant(v.as.i64);
+    else if (v.type == VAL_UINT64)
+        ki = current_->proto->addIntConstant((int64_t)v.as.u64);
+    else if (v.type == VAL_FLOAT64)
+        ki = current_->proto->addFloatConstant(v.as.double_val);
+    else
+        return false;
+    if (ki < 0 || ki > (int)RK_INDEX_MASK) return false;
+    *rk = MAKE_RK((uint8_t)ki);
+    return true;
+}
+
 // --- Binary ---
 
 int Compiler::compileBinary(BinaryExpr* expr, int dest) {
@@ -458,14 +479,82 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         }
     }
 
+    // Try arithmetic-with-immediate (AsBx format): R[A] = R[A] op sBx
+    // sBx range is -SBX16_BIAS..SBX16_BIAS (±32767)
+    {
+        OpCode imm_op = OP_NOP;
+        switch (expr->op.type) {
+            case TOKEN_PLUS:    imm_op = OP_ADDI; break;
+            case TOKEN_MINUS:   imm_op = OP_SUBI; break;
+            case TOKEN_STAR:    imm_op = OP_MULI; break;
+            case TOKEN_PERCENT: imm_op = OP_MODI; break;
+            default: break;
+        }
+
+        if (imm_op != OP_NOP) {
+            auto try_imm = [](Expr* e, int* out) -> bool {
+                if (e->type != EXPR_LITERAL) return false;
+                const Value& v = e->as.literal.value;
+                if (v.type != VAL_INT64) return false;
+                int64_t iv = v.as.i64;
+                if (iv < -SBX16_BIAS || iv > SBX16_BIAS) return false;
+                *out = (int)iv;
+                return true;
+            };
+
+            int imm;
+            // Right operand is immediate: R[dest] = R[left] op imm
+            if (try_imm(expr->right, &imm)) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                int save_reg = current_->free_reg;
+                int left_reg = compileExpr(expr->left, reg);
+                if (left_reg != reg)
+                    emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)left_reg, 0);
+                emitAsBx(imm_op, (uint8_t)reg, imm);
+                setFreeReg(save_reg);
+                if (dest < 0) {
+                    current_->free_reg = reg + 1;
+                    if (current_->free_reg > current_->max_reg)
+                        current_->max_reg = current_->free_reg;
+                }
+                return reg;
+            }
+            // Left operand is immediate (commutative ops only: + and *)
+            if ((imm_op == OP_ADDI || imm_op == OP_MULI) && try_imm(expr->left, &imm)) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                int save_reg = current_->free_reg;
+                int right_reg = compileExpr(expr->right, reg);
+                if (right_reg != reg)
+                    emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)right_reg, 0);
+                emitAsBx(imm_op, (uint8_t)reg, imm);
+                setFreeReg(save_reg);
+                if (dest < 0) {
+                    current_->free_reg = reg + 1;
+                    if (current_->free_reg > current_->max_reg)
+                        current_->max_reg = current_->free_reg;
+                }
+                return reg;
+            }
+        }
+    }
+
     int reg = (dest >= 0) ? dest : allocReg();
     int save_reg = current_->free_reg;
 
-    int left = compileExpr(expr->left);
-    int right = compileExpr(expr->right);
+    // Try RK encoding: if either operand is a literal, reference it directly
+    // from the constant pool instead of loading it into a register.
+    uint8_t rk_left, rk_right;
+    bool left_is_rk = tryExprAsRK(expr->left, &rk_left);
+    bool right_is_rk = tryExprAsRK(expr->right, &rk_right);
 
-    uint8_t rk_left = (uint8_t)left;
-    uint8_t rk_right = (uint8_t)right;
+    if (!left_is_rk) {
+        int left = compileExpr(expr->left);
+        rk_left = (uint8_t)left;
+    }
+    if (!right_is_rk) {
+        int right = compileExpr(expr->right);
+        rk_right = (uint8_t)right;
+    }
 
     switch (expr->op.type) {
         case TOKEN_PLUS:
@@ -1115,18 +1204,134 @@ void Compiler::compileBlockStmt(BlockStmt* stmt) {
     endScope();
 }
 
+// --- Condition compilation (fused compare+branch) ---
+// When a condition is a comparison, emit OP_LT/LE/EQ directly followed by
+// OP_JMP, skipping the 4-instruction LOADBOOL+TEST pattern.
+// Returns the jump index to patch (jumps when condition is FALSE).
+
+int Compiler::compileConditionJump(Expr* condition) {
+    if (condition->type == EXPR_BINARY) {
+        BinaryExpr* bin = &condition->as.binary;
+        TokenType op = bin->op.type;
+
+        if (op == TOKEN_LESS || op == TOKEN_LESS_EQUAL ||
+            op == TOKEN_GREATER || op == TOKEN_GREATER_EQUAL ||
+            op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL) {
+
+            currentLine_ = bin->op.line;
+
+            // Try compare-with-immediate: RHS is an integer literal in sBx range
+            if (bin->right->type == EXPR_LITERAL &&
+                bin->right->as.literal.value.type == VAL_INT64) {
+                int64_t iv = bin->right->as.literal.value.as.i64;
+                if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
+                    int save = current_->free_reg;
+                    int left = compileExpr(bin->left);
+                    int imm = (int)iv;
+
+                    switch (op) {
+                        case TOKEN_LESS:
+                            emitAsBx(OP_LTI, (uint8_t)left, imm); break;
+                        case TOKEN_LESS_EQUAL:
+                            emitAsBx(OP_LEI, (uint8_t)left, imm); break;
+                        case TOKEN_GREATER:
+                            emitAsBx(OP_GTI, (uint8_t)left, imm); break;
+                        case TOKEN_GREATER_EQUAL:
+                            emitAsBx(OP_GEI, (uint8_t)left, imm); break;
+                        case TOKEN_EQUAL_EQUAL:
+                            emitAsBx(OP_EQI, (uint8_t)left, imm); break;
+                        case TOKEN_BANG_EQUAL:
+                            emitAsBx(OP_NEI, (uint8_t)left, imm); break;
+                        default: break;
+                    }
+
+                    int jmp = emitJump();
+                    setFreeReg(save);
+                    return jmp;
+                }
+            }
+
+            // Try compare-with-immediate: LHS is an integer literal in sBx range (swap operands)
+            if (bin->left->type == EXPR_LITERAL &&
+                bin->left->as.literal.value.type == VAL_INT64) {
+                int64_t iv = bin->left->as.literal.value.as.i64;
+                if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
+                    int save = current_->free_reg;
+                    int right = compileExpr(bin->right);
+                    int imm = (int)iv;
+
+                    // Swap: (imm < R) == (R > imm), etc.
+                    switch (op) {
+                        case TOKEN_LESS:
+                            emitAsBx(OP_GTI, (uint8_t)right, imm); break;
+                        case TOKEN_LESS_EQUAL:
+                            emitAsBx(OP_GEI, (uint8_t)right, imm); break;
+                        case TOKEN_GREATER:
+                            emitAsBx(OP_LTI, (uint8_t)right, imm); break;
+                        case TOKEN_GREATER_EQUAL:
+                            emitAsBx(OP_LEI, (uint8_t)right, imm); break;
+                        case TOKEN_EQUAL_EQUAL:
+                            emitAsBx(OP_EQI, (uint8_t)right, imm); break;
+                        case TOKEN_BANG_EQUAL:
+                            emitAsBx(OP_NEI, (uint8_t)right, imm); break;
+                        default: break;
+                    }
+
+                    int jmp = emitJump();
+                    setFreeReg(save);
+                    return jmp;
+                }
+            }
+
+            // General compare path — use RK encoding when possible
+            int save = current_->free_reg;
+            uint8_t rk_left, rk_right;
+            if (!tryExprAsRK(bin->left, &rk_left)) {
+                int left = compileExpr(bin->left);
+                rk_left = (uint8_t)left;
+            }
+            if (!tryExprAsRK(bin->right, &rk_right)) {
+                int right = compileExpr(bin->right);
+                rk_right = (uint8_t)right;
+            }
+
+            switch (op) {
+                case TOKEN_LESS:
+                    emitABC(OP_LT, 0, rk_left, rk_right); break;
+                case TOKEN_LESS_EQUAL:
+                    emitABC(OP_LE, 0, rk_left, rk_right); break;
+                case TOKEN_GREATER:
+                    emitABC(OP_LT, 0, rk_right, rk_left); break;
+                case TOKEN_GREATER_EQUAL:
+                    emitABC(OP_LE, 0, rk_right, rk_left); break;
+                case TOKEN_EQUAL_EQUAL:
+                    emitABC(OP_EQ, 0, rk_left, rk_right); break;
+                case TOKEN_BANG_EQUAL:
+                    emitABC(OP_EQ, 1, rk_left, rk_right); break;
+                default: break;
+            }
+
+            int jmp = emitJump();
+            setFreeReg(save);
+            return jmp;
+        }
+    }
+
+    // Fallback: compile expression to a register, then TESTJMP
+    int save = current_->free_reg;
+    int cond_reg = compileExpr(condition);
+    int jmp = current_->proto->currentPC();
+    emitAsBx(OP_TESTJMP, (uint8_t)cond_reg, 0);  // patched later
+    setFreeReg(save);
+    return jmp;
+}
+
 // --- If statement ---
 
 void Compiler::compileIfStmt(IfStmt* stmt) {
     currentLine_ = 0;
 
-    int save = current_->free_reg;
-    int cond_reg = compileExpr(stmt->condition);
-
-    // TEST cond_reg, skip if false
-    emitABC(OP_TEST, (uint8_t)cond_reg, 0, 0);
-    int jmp_else = emitJump();
-    setFreeReg(save);
+    int jmp_else = compileConditionJump(stmt->condition);
 
     // Then branch
     compileStmt(stmt->then_branch);
@@ -1150,11 +1355,7 @@ void Compiler::compileWhileStmt(WhileStmt* stmt) {
     loop.scope_depth = current_->scope_depth;
     current_->loops.push_back(loop);
 
-    int save = current_->free_reg;
-    int cond_reg = compileExpr(stmt->condition);
-    emitABC(OP_TEST, (uint8_t)cond_reg, 0, 0);
-    int jmp_exit = emitJump();
-    setFreeReg(save);
+    int jmp_exit = compileConditionJump(stmt->condition);
 
     compileStmt(stmt->body);
 
@@ -1174,7 +1375,174 @@ void Compiler::compileWhileStmt(WhileStmt* stmt) {
 
 // --- For statement ---
 
+// Detect if a for-statement matches the numeric for-loop pattern:
+//   for (var <name> = <start>; <name> < <limit>; <name> = <name> + <step>)
+// Returns true if the pattern is matched and sets the output parameters.
+static bool isNumericForLoop(ForStmt* stmt, const char** var_name,
+                             Expr** start_expr, Expr** limit_expr,
+                             int64_t* step_val, bool* count_up) {
+    if (!stmt->initializer || !stmt->condition || !stmt->increment)
+        return false;
+
+    // Initializer must be a var statement
+    if (stmt->initializer->type != STMT_VAR)
+        return false;
+    VarStmt* var = &stmt->initializer->as.var;
+    if (!var->initializer)
+        return false;
+    *var_name = var->name.identifier;
+    *start_expr = var->initializer;
+
+    // Condition must be a binary comparison involving the loop variable
+    if (stmt->condition->type != EXPR_BINARY)
+        return false;
+    BinaryExpr* cond = &stmt->condition->as.binary;
+    TokenType cmp = cond->op.type;
+
+    // <var> < limit  or  <var> <= limit  (counting up)
+    if ((cmp == TOKEN_LESS || cmp == TOKEN_LESS_EQUAL) &&
+        cond->left->type == EXPR_VARIABLE &&
+        strcmp(cond->left->as.variable.name.identifier, *var_name) == 0) {
+        *limit_expr = cond->right;
+        *count_up = true;
+    }
+    // <var> > limit  or  <var> >= limit  (counting down)
+    else if ((cmp == TOKEN_GREATER || cmp == TOKEN_GREATER_EQUAL) &&
+             cond->left->type == EXPR_VARIABLE &&
+             strcmp(cond->left->as.variable.name.identifier, *var_name) == 0) {
+        *limit_expr = cond->right;
+        *count_up = false;
+    }
+    else return false;
+
+    // Increment: i = i + step, i = i - step, i++, or i--
+    Expr* inc = stmt->increment;
+
+    // Handle i++ / i--
+    if (inc->type == EXPR_INCREMENT) {
+        IncrementExpr* ie = &inc->as.increment;
+        if (strcmp(ie->name.identifier, *var_name) != 0)
+            return false;
+        *step_val = ie->is_increment ? 1 : -1;
+        return (*count_up == (*step_val > 0));
+    }
+
+    if (inc->type != EXPR_ASSIGNMENT)
+        return false;
+    AssignmentExpr* assign = &inc->as.assignment;
+
+    // Target must be the loop variable
+    if (assign->target->type != EXPR_VARIABLE ||
+        strcmp(assign->target->as.variable.name.identifier, *var_name) != 0)
+        return false;
+
+    // Value must be <var> + <literal> or <var> - <literal>
+    if (assign->value->type != EXPR_BINARY)
+        return false;
+    BinaryExpr* step_expr = &assign->value->as.binary;
+    if (step_expr->op.type != TOKEN_PLUS && step_expr->op.type != TOKEN_MINUS)
+        return false;
+
+    // Left side of addition must be the loop var
+    if (step_expr->left->type != EXPR_VARIABLE ||
+        strcmp(step_expr->left->as.variable.name.identifier, *var_name) != 0)
+        return false;
+
+    // Right side must be an integer literal
+    if (step_expr->right->type != EXPR_LITERAL ||
+        step_expr->right->as.literal.value.type != VAL_INT64)
+        return false;
+    int64_t sv = step_expr->right->as.literal.value.as.i64;
+    if (step_expr->op.type == TOKEN_MINUS) sv = -sv;
+    if (sv == 0) return false;
+    *step_val = sv;
+
+    return (*count_up == (sv > 0));
+}
+
 void Compiler::compileForStmt(ForStmt* stmt) {
+    // Try numeric for-loop optimization: FORPREP/FORLOOP
+    const char* var_name = nullptr;
+    Expr* start_expr = nullptr;
+    Expr* limit_expr = nullptr;
+    int64_t step_val = 0;
+    bool count_up = true;
+
+    if (isNumericForLoop(stmt, &var_name, &start_expr, &limit_expr,
+                         &step_val, &count_up)) {
+        beginScope();
+
+        // Reserve 4 consecutive registers: index, limit, step, loop_var
+        // Use addLocal with internal names for the 3 hidden registers so the
+        // locals vector stays in sync with register indices.
+        int base = current_->free_reg;
+        addLocal("(for index)");
+        addLocal("(for limit)");
+        addLocal("(for step)");
+        int var_reg = addLocal(var_name);
+        int idx_reg = base;
+        int limit_reg = base + 1;
+        int step_reg = base + 2;
+
+        // Compile start and limit values
+        compileExpr(start_expr, idx_reg);
+        compileExpr(limit_expr, limit_reg);
+
+        // For <= comparisons, FORLOOP uses <=, which is what we want.
+        // For < comparisons, adjust limit: limit = limit - 1 (integer only)
+        BinaryExpr* cond = &stmt->condition->as.binary;
+        if (count_up && cond->op.type == TOKEN_LESS) {
+            emitAsBx(OP_SUBI, (uint8_t)limit_reg, 1);
+        } else if (!count_up && cond->op.type == TOKEN_GREATER) {
+            emitAsBx(OP_ADDI, (uint8_t)limit_reg, 1);
+        }
+
+        // Load step
+        if (step_val >= -SBX16_BIAS && step_val <= SBX16_BIAS) {
+            emitAsBx(OP_LOADINT, (uint8_t)step_reg, (int)step_val);
+        } else {
+            int ki = current_->proto->addIntConstant(step_val);
+            emitLoadK(step_reg, ki);
+        }
+
+        // FORPREP: R[A] -= R[A+2]; jump to FORLOOP
+        int forprep_pc = current_->proto->currentPC();
+        emitAsBx(OP_FORPREP, (uint8_t)base, 0);  // patch later
+
+        LoopContext loop;
+        loop.start_pc = current_->proto->currentPC();
+        loop.is_for_loop = true;
+        loop.scope_depth = current_->scope_depth;
+        current_->loops.push_back(loop);
+
+        // Body
+        compileStmt(stmt->body);
+
+        // Patch continue jumps to FORLOOP
+        for (int jmp : current_->loops.back().continue_jumps) {
+            patchJump(jmp);
+        }
+
+        // FORLOOP: R[A] += R[A+2]; if in range: jump back to body start, R[A+3]=R[A]
+        int forloop_pc = current_->proto->currentPC();
+        int body_start = loop.start_pc;
+        int back_offset = body_start - (forloop_pc + 1);
+        emitAsBx(OP_FORLOOP, (uint8_t)base, back_offset);
+
+        // Patch FORPREP to jump to FORLOOP
+        current_->proto->patchJump(forprep_pc, forloop_pc);
+
+        // Patch break jumps to after FORLOOP
+        for (int jmp : current_->loops.back().break_jumps) {
+            patchJump(jmp);
+        }
+        current_->loops.pop_back();
+
+        endScope();
+        return;
+    }
+
+    // General for-loop (non-numeric pattern)
     beginScope();
 
     // Initializer
@@ -1192,11 +1560,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
 
     // Condition
     if (stmt->condition) {
-        int save = current_->free_reg;
-        int cond_reg = compileExpr(stmt->condition);
-        emitABC(OP_TEST, (uint8_t)cond_reg, 0, 0);
-        jmp_exit = emitJump();
-        setFreeReg(save);
+        jmp_exit = compileConditionJump(stmt->condition);
     }
 
     // Body

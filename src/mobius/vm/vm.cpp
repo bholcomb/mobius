@@ -839,6 +839,82 @@ int MobiusVM::run(size_t base_depth) {
         }
 
         // ================================================================
+        // Comparison with immediate
+        // ================================================================
+
+        case OP_LTI: {
+            const Value& lhs = regs[DECODE_A(inst)];
+            int imm = DECODE_sBx(inst);
+            bool result;
+            if (lhs.type == VAL_INT64) result = lhs.as.i64 < imm;
+            else if (lhs.type == VAL_UINT64) result = (imm < 0) ? false : lhs.as.u64 < (uint64_t)imm;
+            else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val < (double)imm;
+            else { runtimeError("LTI requires numeric operand"); return -1; }
+            if (result) ip++;
+            break;
+        }
+
+        case OP_LEI: {
+            const Value& lhs = regs[DECODE_A(inst)];
+            int imm = DECODE_sBx(inst);
+            bool result;
+            if (lhs.type == VAL_INT64) result = lhs.as.i64 <= imm;
+            else if (lhs.type == VAL_UINT64) result = (imm < 0) ? false : lhs.as.u64 <= (uint64_t)imm;
+            else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val <= (double)imm;
+            else { runtimeError("LEI requires numeric operand"); return -1; }
+            if (result) ip++;
+            break;
+        }
+
+        case OP_EQI: {
+            const Value& lhs = regs[DECODE_A(inst)];
+            int imm = DECODE_sBx(inst);
+            bool result;
+            if (lhs.type == VAL_INT64) result = lhs.as.i64 == imm;
+            else if (lhs.type == VAL_UINT64) result = (imm < 0) ? false : lhs.as.u64 == (uint64_t)imm;
+            else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val == (double)imm;
+            else result = false;
+            if (result) ip++;
+            break;
+        }
+
+        case OP_NEI: {
+            const Value& lhs = regs[DECODE_A(inst)];
+            int imm = DECODE_sBx(inst);
+            bool result;
+            if (lhs.type == VAL_INT64) result = lhs.as.i64 != imm;
+            else if (lhs.type == VAL_UINT64) result = (imm < 0) ? true : lhs.as.u64 != (uint64_t)imm;
+            else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val != (double)imm;
+            else result = true;
+            if (result) ip++;
+            break;
+        }
+
+        case OP_GTI: {
+            const Value& lhs = regs[DECODE_A(inst)];
+            int imm = DECODE_sBx(inst);
+            bool result;
+            if (lhs.type == VAL_INT64) result = lhs.as.i64 > imm;
+            else if (lhs.type == VAL_UINT64) result = (imm < 0) ? true : lhs.as.u64 > (uint64_t)imm;
+            else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val > (double)imm;
+            else { runtimeError("GTI requires numeric operand"); return -1; }
+            if (result) ip++;
+            break;
+        }
+
+        case OP_GEI: {
+            const Value& lhs = regs[DECODE_A(inst)];
+            int imm = DECODE_sBx(inst);
+            bool result;
+            if (lhs.type == VAL_INT64) result = lhs.as.i64 >= imm;
+            else if (lhs.type == VAL_UINT64) result = (imm < 0) ? true : lhs.as.u64 >= (uint64_t)imm;
+            else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val >= (double)imm;
+            else { runtimeError("GEI requires numeric operand"); return -1; }
+            if (result) ip++;
+            break;
+        }
+
+        // ================================================================
         // Logical test / set
         // ================================================================
 
@@ -846,6 +922,12 @@ int MobiusVM::run(size_t base_depth) {
             bool truthy = is_truthy(RA(inst));
             int c = DECODE_C(inst);
             if (truthy != (c != 0)) ip++;
+            break;
+        }
+
+        case OP_TESTJMP: {
+            if (!is_truthy(regs[DECODE_A(inst)]))
+                ip += DECODE_sBx(inst);
             break;
         }
 
@@ -1368,6 +1450,67 @@ int MobiusVM::run(size_t base_depth) {
             bool success;
             RA(inst) = increment_integer(val, false, &success);
             if (!success) { runtimeError("Failed to decrement value"); return -1; }
+            break;
+        }
+
+        // ================================================================
+        // Arithmetic with immediate
+        // ================================================================
+
+        case OP_ADDI: {
+            int a = DECODE_A(inst);
+            int imm = DECODE_sBx(inst);
+            Value& val = regs[a];
+            if (val.type == VAL_INT64)
+                val = make_int64_value(val.as.i64 + imm);
+            else if (val.type == VAL_UINT64)
+                val = make_uint64_value(val.as.u64 + (uint64_t)(int64_t)imm);
+            else if (val.type == VAL_FLOAT64)
+                val = make_float_value(val.as.double_val + imm);
+            else { runtimeError("ADDI requires numeric operand"); return -1; }
+            break;
+        }
+
+        case OP_SUBI: {
+            int a = DECODE_A(inst);
+            int imm = DECODE_sBx(inst);
+            Value& val = regs[a];
+            if (val.type == VAL_INT64)
+                val = make_int64_value(val.as.i64 - imm);
+            else if (val.type == VAL_UINT64)
+                val = make_uint64_value(val.as.u64 - (uint64_t)(int64_t)imm);
+            else if (val.type == VAL_FLOAT64)
+                val = make_float_value(val.as.double_val - imm);
+            else { runtimeError("SUBI requires numeric operand"); return -1; }
+            break;
+        }
+
+        case OP_MULI: {
+            int a = DECODE_A(inst);
+            int imm = DECODE_sBx(inst);
+            Value& val = regs[a];
+            if (val.type == VAL_INT64)
+                val = make_int64_value(val.as.i64 * imm);
+            else if (val.type == VAL_UINT64)
+                val = make_uint64_value(val.as.u64 * (uint64_t)(int64_t)imm);
+            else if (val.type == VAL_FLOAT64)
+                val = make_float_value(val.as.double_val * imm);
+            else { runtimeError("MULI requires numeric operand"); return -1; }
+            break;
+        }
+
+        case OP_MODI: {
+            int a = DECODE_A(inst);
+            int imm = DECODE_sBx(inst);
+            if (imm == 0) { runtimeError("Modulo by zero"); return -1; }
+            Value& val = regs[a];
+            if (val.type == VAL_INT64)
+                val = make_int64_value(val.as.i64 % imm);
+            else if (val.type == VAL_UINT64)
+                val = make_uint64_value(val.as.u64 % (uint64_t)(int64_t)imm);
+            else if (val.type == VAL_FLOAT64)
+                val = make_float_value(fmod(val.as.double_val, (double)imm));
+            else { runtimeError("MODI requires numeric operand"); return -1; }
             break;
         }
 
