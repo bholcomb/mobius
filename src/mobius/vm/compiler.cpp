@@ -50,6 +50,8 @@ Prototype* Compiler::endCompiler() {
     Prototype* proto = current_->proto;
     proto->num_registers = current_->max_reg;
 
+    peepholeOptimize(proto);
+
     FunctionState* fs = current_;
     current_ = fs->enclosing;
     delete fs;
@@ -194,6 +196,10 @@ uint8_t Compiler::makeRK(int const_idx) {
 
 int Compiler::emitABC(OpCode op, uint8_t a, uint8_t b, uint8_t c) {
     return current_->proto->emitABC(op, a, b, c, currentLine_);
+}
+
+int Compiler::emitABC_D64(OpCode op, uint8_t a, uint8_t b, uint8_t c, uint64_t data) {
+    return current_->proto->emitABC_D64(op, a, b, c, data, currentLine_);
 }
 
 int Compiler::emitABx(OpCode op, uint8_t a, uint16_t bx) {
@@ -507,6 +513,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             case TOKEN_PLUS:    imm_op = OP_ADDI; break;
             case TOKEN_MINUS:   imm_op = OP_SUBI; break;
             case TOKEN_STAR:    imm_op = OP_MULI; break;
+            case TOKEN_SLASH:   imm_op = OP_DIVI; break;
             case TOKEN_PERCENT: imm_op = OP_MODI; break;
             default: break;
         }
@@ -547,6 +554,74 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 if (right_reg != reg)
                     emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)right_reg, 0);
                 emitAsBx(imm_op, (uint8_t)reg, imm);
+                setFreeReg(save_reg);
+                if (dest < 0) {
+                    current_->free_reg = reg + 1;
+                    if (current_->free_reg > current_->max_reg)
+                        current_->max_reg = current_->free_reg;
+                }
+                return reg;
+            }
+        }
+    }
+
+    // Try inline-data constant opcode (*K): one register operand, one 64-bit
+    // constant embedded in the instruction stream. Handles any numeric literal
+    // regardless of range.
+    {
+        OpCode k_op = OP_NOP;
+        switch (expr->op.type) {
+            case TOKEN_PLUS:    k_op = OP_ADDK; break;
+            case TOKEN_MINUS:   k_op = OP_SUBK; break;
+            case TOKEN_STAR:    k_op = OP_MULK; break;
+            case TOKEN_SLASH:   k_op = OP_DIVK; break;
+            case TOKEN_PERCENT: k_op = OP_MODK; break;
+            default: break;
+        }
+
+        if (k_op != OP_NOP) {
+            auto try_literal = [](Expr* e, uint64_t* out_raw, uint8_t* out_tag) -> bool {
+                if (e->type != EXPR_LITERAL) return false;
+                const Value& v = e->as.literal.value;
+                if (v.type == VAL_INT64) {
+                    uint64_t raw;
+                    memcpy(&raw, &v.as.i64, 8);
+                    *out_raw = raw;
+                    *out_tag = (uint8_t)VAL_INT64;
+                    return true;
+                }
+                if (v.type == VAL_FLOAT64) {
+                    uint64_t raw;
+                    memcpy(&raw, &v.as.double_val, 8);
+                    *out_raw = raw;
+                    *out_tag = (uint8_t)VAL_FLOAT64;
+                    return true;
+                }
+                return false;
+            };
+
+            uint64_t raw;
+            uint8_t tag;
+
+            if (try_literal(expr->right, &raw, &tag)) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                int save_reg = current_->free_reg;
+                int src_reg = compileExpr(expr->left, reg);
+                emitABC_D64(k_op, (uint8_t)reg, (uint8_t)src_reg, tag, raw);
+                setFreeReg(save_reg);
+                if (dest < 0) {
+                    current_->free_reg = reg + 1;
+                    if (current_->free_reg > current_->max_reg)
+                        current_->max_reg = current_->free_reg;
+                }
+                return reg;
+            }
+
+            if ((k_op == OP_ADDK || k_op == OP_MULK) && try_literal(expr->left, &raw, &tag)) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                int save_reg = current_->free_reg;
+                int src_reg = compileExpr(expr->right, reg);
+                emitABC_D64(k_op, (uint8_t)reg, (uint8_t)src_reg, tag, raw);
                 setFreeReg(save_reg);
                 if (dest < 0) {
                     current_->free_reg = reg + 1;
@@ -2117,6 +2192,188 @@ void Compiler::compileEnumStmt(EnumStmt* stmt) {
     emitSetGlobal(enum_reg, interned);
 
     setFreeReg(save);
+}
+
+// ============================================================================
+// Peephole optimizer — fuse common instruction sequences into superinstructions
+// ============================================================================
+
+void Compiler::peepholeOptimize(Prototype* proto) {
+    auto& code = proto->code;
+    auto& lines = proto->line_info;
+    size_t n = code.size();
+    if (n < 2) return;
+
+    // Build a set of jump targets so we don't fuse across them.
+    // Any instruction that is a jump target cannot be the second half of a fused pair.
+    std::vector<bool> is_target(n, false);
+    for (size_t i = 0; i < n; i++) {
+        OpCode op = (OpCode)DECODE_OP(code[i]);
+        const auto& info = opcode_info(op);
+
+        if (info.format == FMT_ABC_D) {
+            i += 2; // skip inline data words
+            continue;
+        }
+        if (info.format == FMT_FUSED2) {
+            i += 1; // skip fused second word
+            continue;
+        }
+
+        int target = -1;
+        if (info.format == FMT_sBx) {
+            int offset = DECODE_sBx_wide(code[i]);
+            target = (int)i + 1 + offset;
+        } else if (info.format == FMT_AsBx) {
+            if (op == OP_TESTJMP || op == OP_FORPREP || op == OP_FORLOOP ||
+                op == OP_IFORPREP || op == OP_IFORLOOP) {
+                int offset = DECODE_sBx(code[i]);
+                target = (int)i + 1 + offset;
+            }
+        }
+        if (target >= 0 && target < (int)n) {
+            is_target[target] = true;
+        }
+    }
+
+    // Scan for fusible pairs. We build a new code/lines vector in place.
+    std::vector<uint32_t> new_code;
+    std::vector<int> new_lines;
+    new_code.reserve(n);
+    new_lines.reserve(n);
+
+    // Map from old instruction index to new instruction index for jump patching.
+    std::vector<int> remap(n, -1);
+
+    for (size_t i = 0; i < n; i++) {
+        remap[i] = (int)new_code.size();
+        OpCode op = (OpCode)DECODE_OP(code[i]);
+        const auto& info = opcode_info(op);
+
+        // Skip multi-word instructions (copy them verbatim)
+        if (info.format == FMT_ABC_D) {
+            new_code.push_back(code[i]);
+            new_lines.push_back(lines[i]);
+            if (i + 1 < n) { remap[i+1] = (int)new_code.size(); new_code.push_back(code[i+1]); new_lines.push_back(lines[i+1]); }
+            if (i + 2 < n) { remap[i+2] = (int)new_code.size(); new_code.push_back(code[i+2]); new_lines.push_back(lines[i+2]); }
+            i += 2;
+            continue;
+        }
+        if (info.format == FMT_FUSED2) {
+            new_code.push_back(code[i]);
+            new_lines.push_back(lines[i]);
+            if (i + 1 < n) { remap[i+1] = (int)new_code.size(); new_code.push_back(code[i+1]); new_lines.push_back(lines[i+1]); }
+            i += 1;
+            continue;
+        }
+
+        // Pattern 1: MOVE A,B,_ + ADDI A,sBx  =>  MOVE_ADDI A,B,_ | AsBx(_,A,sBx)
+        if (op == OP_MOVE && i + 1 < n && !is_target[i + 1]) {
+            OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
+            if (op2 == OP_ADDI) {
+                uint8_t move_a = DECODE_A(code[i]);
+                uint8_t move_b = DECODE_B(code[i]);
+                uint8_t addi_a = DECODE_A(code[i + 1]);
+                if (move_a == addi_a) {
+                    new_code.push_back(ENCODE_ABC(OP_MOVE_ADDI, move_a, move_b, 0));
+                    new_lines.push_back(lines[i]);
+                    remap[i + 1] = (int)new_code.size();
+                    new_code.push_back(code[i + 1]); // keep ADDI encoding as data word
+                    new_lines.push_back(lines[i + 1]);
+                    i++;
+                    continue;
+                }
+            }
+        }
+
+        // Pattern 2: GETGLOBAL A,Bx + GETTABLE A,A,RK(C)  =>  GETGLOBAL_GETTABLE
+        if (op == OP_GETGLOBAL && i + 1 < n && !is_target[i + 1]) {
+            OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
+            if (op2 == OP_GETTABLE) {
+                uint8_t gg_a = DECODE_A(code[i]);
+                uint16_t gg_bx = DECODE_Bx(code[i]);
+                uint8_t gt_a = DECODE_A(code[i + 1]);
+                uint8_t gt_b = DECODE_B(code[i + 1]);
+                if (gg_a == gt_a && gg_a == gt_b) {
+                    new_code.push_back(ENCODE_ABx(OP_GETGLOBAL_GETTABLE, gg_a, gg_bx));
+                    new_lines.push_back(lines[i]);
+                    remap[i + 1] = (int)new_code.size();
+                    new_code.push_back(code[i + 1]); // keep GETTABLE encoding as data word
+                    new_lines.push_back(lines[i + 1]);
+                    i++;
+                    continue;
+                }
+            }
+        }
+
+        // No fusion — copy verbatim
+        new_code.push_back(code[i]);
+        new_lines.push_back(lines[i]);
+    }
+
+    // Fill any unmapped positions (shouldn't happen, but safety)
+    for (size_t i = 0; i < n; i++) {
+        if (remap[i] < 0) {
+            remap[i] = (i > 0) ? remap[i - 1] : 0;
+        }
+    }
+
+    // Remap jump targets in the new code
+    for (size_t i = 0; i < new_code.size(); i++) {
+        OpCode op = (OpCode)DECODE_OP(new_code[i]);
+        const auto& info = opcode_info(op);
+
+        if (info.format == FMT_ABC_D) { i += 2; continue; }
+        if (info.format == FMT_FUSED2) { i += 1; continue; }
+
+        bool is_jump = false;
+        int old_target = -1;
+
+        if (info.format == FMT_sBx) {
+            // Find original instruction index for this new position
+            // We need the reverse map: new_i -> old_i
+            // Instead, compute old target from the old offset stored in the instruction
+            // Since we kept the original instruction encoding, the offset is relative
+            // to the original position. We need to find the original index.
+            is_jump = true;
+        } else if (info.format == FMT_AsBx) {
+            if (op == OP_TESTJMP || op == OP_FORPREP || op == OP_FORLOOP ||
+                op == OP_IFORPREP || op == OP_IFORLOOP) {
+                is_jump = true;
+            }
+        }
+
+        if (!is_jump) continue;
+
+        // Find the original instruction index that maps to new index i
+        int orig_i = -1;
+        for (size_t j = 0; j < n; j++) {
+            if (remap[j] == (int)i) { orig_i = (int)j; break; }
+        }
+        if (orig_i < 0) continue;
+
+        if (info.format == FMT_sBx) {
+            int old_offset = DECODE_sBx_wide(new_code[i]);
+            old_target = orig_i + 1 + old_offset;
+            if (old_target >= 0 && old_target < (int)n) {
+                int new_target = remap[old_target];
+                int new_offset = new_target - ((int)i + 1);
+                new_code[i] = ENCODE_sBx(op, new_offset);
+            }
+        } else {
+            uint8_t a = DECODE_A(new_code[i]);
+            int old_offset = DECODE_sBx(new_code[i]);
+            old_target = orig_i + 1 + old_offset;
+            if (old_target >= 0 && old_target < (int)n) {
+                int new_target = remap[old_target];
+                int new_offset = new_target - ((int)i + 1);
+                new_code[i] = ENCODE_AsBx(op, a, new_offset);
+            }
+        }
+    }
+
+    code = std::move(new_code);
+    lines = std::move(new_lines);
 }
 
 // --- Pragma ---

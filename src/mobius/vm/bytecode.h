@@ -147,6 +147,14 @@ public:
         return emit(ENCODE_AsBx(op, a, sbx), line);
     }
 
+    int emitABC_D64(OpCode op, uint8_t a, uint8_t b, uint8_t c,
+                    uint64_t data, int line = 0) {
+        int idx = emitABC(op, a, b, c, line);
+        emit((uint32_t)(data & 0xFFFFFFFF), line);
+        emit((uint32_t)(data >> 32), line);
+        return idx;
+    }
+
     int emitJump(int offset, int line = 0) {
         return emit(ENCODE_sBx(OP_JMP, offset), line);
     }

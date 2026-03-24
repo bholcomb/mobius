@@ -86,6 +86,7 @@ private:
     // --- Code emission wrappers ---
     int currentLine_ = 0;
     int emitABC(OpCode op, uint8_t a, uint8_t b, uint8_t c);
+    int emitABC_D64(OpCode op, uint8_t a, uint8_t b, uint8_t c, uint64_t data);
     int emitABx(OpCode op, uint8_t a, uint16_t bx);
     int emitAsBx(OpCode op, uint8_t a, int sbx);
     int emitJump();
@@ -142,6 +143,7 @@ private:
     // --- Helpers ---
     Prototype* endCompiler();
     FunctionState* initCompiler(FunctionState* enclosing, const char* name);
+    void peepholeOptimize(Prototype* proto);
 };
 
 #endif // MOBIUS_VM_COMPILER_H

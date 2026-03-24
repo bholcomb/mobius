@@ -345,50 +345,102 @@ int MobiusVM::run(size_t base_depth) {
         regs = registers_.data() + base; \
     } while(0)
 
-    for (;;) {
-        uint32_t inst = *ip++;
+    uint32_t inst;
 
-        switch (DECODE_OP(inst)) {
+#if defined(__GNUC__) || defined(__clang__)
+    // Computed-goto dispatch: each opcode handler jumps directly to the next,
+    // giving the CPU per-opcode branch prediction instead of one shared
+    // indirect branch.
+    static const void* dispatch_table[] = {
+        &&L_OP_MOVE, &&L_OP_LOADK, &&L_OP_LOADNIL, &&L_OP_LOADBOOL, &&L_OP_LOADINT,
+        &&L_OP_GETUPVAL, &&L_OP_SETUPVAL, &&L_OP_GETGLOBAL, &&L_OP_SETGLOBAL,
+        &&L_OP_NEWTABLE, &&L_OP_NEWARRAY, &&L_OP_GETTABLE, &&L_OP_SETTABLE,
+        &&L_OP_ADD, &&L_OP_SUB, &&L_OP_MUL, &&L_OP_DIV, &&L_OP_MOD,
+        &&L_OP_UNM, &&L_OP_NOT,
+        &&L_OP_BAND, &&L_OP_BOR, &&L_OP_BXOR, &&L_OP_BNOT, &&L_OP_SHL, &&L_OP_SHR,
+        &&L_OP_CONCAT,
+        &&L_OP_EQ, &&L_OP_LT, &&L_OP_LE,
+        &&L_OP_TEST, &&L_OP_TESTSET,
+        &&L_OP_JMP,
+        &&L_OP_CALL, &&L_OP_TAILCALL, &&L_OP_RETURN,
+        &&L_OP_CLOSURE, &&L_OP_CLOSE,
+        &&L_OP_FORPREP, &&L_OP_FORLOOP, &&L_OP_IFORPREP, &&L_OP_IFORLOOP,
+        &&L_OP_TFORLOOP,
+        &&L_OP_NEWENUM, &&L_OP_ENUMVAL, &&L_OP_GETENUM,
+        &&L_OP_IMPORT, &&L_OP_PRAGMA,
+        &&L_OP_INC, &&L_OP_DEC,
+        &&L_OP_TYPECHECK, &&L_OP_ISNUM, &&L_OP_TYPECOMPAT, &&L_OP_TYPEIS,
+        &&L_OP_LTI, &&L_OP_LEI, &&L_OP_EQI, &&L_OP_NEI, &&L_OP_GTI, &&L_OP_GEI,
+        &&L_OP_ADDI, &&L_OP_SUBI, &&L_OP_MULI, &&L_OP_DIVI, &&L_OP_MODI,
+        &&L_OP_TESTJMP,
+        &&L_OP_ADD_II, &&L_OP_ADD_FF, &&L_OP_SUB_II, &&L_OP_SUB_FF,
+        &&L_OP_MUL_II, &&L_OP_MUL_FF, &&L_OP_MOD_II,
+        &&L_OP_ADDK, &&L_OP_SUBK, &&L_OP_MULK, &&L_OP_DIVK, &&L_OP_MODK,
+        &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_GETTABLE,
+        &&L_OP_LEN,
+        &&L_OP_NOP,
+    };
+    static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
+                  "dispatch_table must match OpCode enum");
+
+    #define VM_DISPATCH() do { inst = *ip++; goto *dispatch_table[DECODE_OP(inst)]; } while(0)
+    #define VM_CASE(op) L_##op:
+    #define VM_NEXT() VM_DISPATCH()
+    #define VM_DEFAULT() L_VM_DEFAULT:
+
+    VM_DISPATCH();
+
+#else
+    // Switch-based dispatch for MSVC and other compilers.
+    #define VM_DISPATCH() for(;;) { inst = *ip++; switch(DECODE_OP(inst)) {
+    #define VM_CASE(op) case op:
+    #define VM_NEXT() break
+    #define VM_DEFAULT() default:
+    #define VM_END_DISPATCH() }} /* switch, for */
+
+    VM_DISPATCH()
+
+#endif
 
         // ================================================================
         // Data movement
         // ================================================================
 
-        case OP_MOVE: {
+        VM_CASE(OP_MOVE) {
             RA(inst) = RB(inst);
-            break;
+            VM_NEXT();
         }
 
-        case OP_LOADK: {
+        VM_CASE(OP_LOADK) {
             RA(inst) = KBx(inst);
-            break;
+            VM_NEXT();
         }
 
-        case OP_LOADNIL: {
+        VM_CASE(OP_LOADNIL) {
             int a = DECODE_A(inst);
             int b = DECODE_B(inst);
             for (int i = a; i <= a + b; i++)
                 regs[i] = Value();
-            break;
+            VM_NEXT();
         }
 
-        case OP_LOADBOOL: {
+        VM_CASE(OP_LOADBOOL) {
             RA(inst) = make_bool_value(DECODE_B(inst) != 0);
             if (DECODE_C(inst)) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_LOADINT: {
+        VM_CASE(OP_LOADINT) {
             int sbx = DECODE_sBx(inst);
             RA(inst) = make_int64_value((int64_t)sbx);
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Globals
         // ================================================================
 
-        case OP_GETGLOBAL: {
+        VM_CASE(OP_GETGLOBAL) {
             int slot = DECODE_Bx(inst);
             const Value& gv = state_->globalSlot(slot);
             if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
@@ -396,10 +448,10 @@ int MobiusVM::run(size_t base_depth) {
                 return -1;
             }
             RA(inst) = gv;
-            break;
+            VM_NEXT();
         }
 
-        case OP_SETGLOBAL: {
+        VM_CASE(OP_SETGLOBAL) {
             int slot = DECODE_Bx(inst);
             Value& gv = state_->globalSlot(slot);
             if (MOBIUS_UNLIKELY(gv.flags & VAL_FLAG_READONLY)) {
@@ -408,50 +460,50 @@ int MobiusVM::run(size_t base_depth) {
             }
             gv = RA(inst);
             gv.flags |= VAL_FLAG_DEFINED;
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Upvalues
         // ================================================================
 
-        case OP_GETUPVAL: {
+        VM_CASE(OP_GETUPVAL) {
             int b = DECODE_B(inst);
             if (b < (int)ci->open_upvalues.size() && ci->open_upvalues[b]) {
                 RA(inst) = *ci->open_upvalues[b]->location;
             } else {
                 RA(inst) = Value();
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_SETUPVAL: {
+        VM_CASE(OP_SETUPVAL) {
             int b = DECODE_B(inst);
             if (b < (int)ci->open_upvalues.size() && ci->open_upvalues[b]) {
                 *ci->open_upvalues[b]->location = RA(inst);
             }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Tables and arrays
         // ================================================================
 
-        case OP_NEWTABLE: {
+        VM_CASE(OP_NEWTABLE) {
             Table* tbl = new (std::nothrow) Table(state_, DECODE_C(inst));
             if (!tbl) { runtimeError("Failed to allocate table"); return -1; }
             RA(inst) = make_table_value(tbl);
-            break;
+            VM_NEXT();
         }
 
-        case OP_NEWARRAY: {
+        VM_CASE(OP_NEWARRAY) {
             ArrayValue* arr = new (std::nothrow) ArrayValue(DECODE_B(inst));
             if (!arr) { runtimeError("Failed to allocate array"); return -1; }
             RA(inst) = make_array_value(arr);
-            break;
+            VM_NEXT();
         }
 
-        case OP_GETTABLE: {
+        VM_CASE(OP_GETTABLE) {
             const Value& tbl = RB(inst);
             const Value& key = RKC(inst);
 
@@ -473,10 +525,10 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_SETTABLE: {
+        VM_CASE(OP_SETTABLE) {
             Value& tbl = RA(inst);
             const Value& key = RKB(inst);
             const Value& val = RKC(inst);
@@ -499,14 +551,14 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Arithmetic — fully inline, no tree-walker delegation
         // ================================================================
 
-        case OP_ADD: {
+        VM_CASE(OP_ADD) {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
             if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
@@ -556,10 +608,10 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Cannot add these types");
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_SUB: {
+        VM_CASE(OP_SUB) {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
             if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
@@ -596,10 +648,10 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Cannot subtract these types");
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_MUL: {
+        VM_CASE(OP_MUL) {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
             if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
@@ -636,13 +688,20 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Cannot multiply these types");
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_DIV: {
+        VM_CASE(OP_DIV) {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+            if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
+                int64_t rv = rhs.as.i64;
+                if (MOBIUS_UNLIKELY(rv == 0)) { runtimeError("Division by zero"); return -1; }
+                Value& dst = RA(inst);
+                dst.as.i64 = lhs.as.i64 / rv;
+                dst.type = VAL_INT64;
+                dst.flags = 0;
+            } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
                 ci->ip = ip;
@@ -655,12 +714,15 @@ int MobiusVM::run(size_t base_depth) {
                 double lv = vm_extract_double(lhs);
                 double rv = vm_extract_double(rhs);
                 if (rv == 0.0) { runtimeError("Division by zero"); return -1; }
-                RA(inst) = make_float_value(lv / rv);
+                Value& dst = RA(inst);
+                dst.as.double_val = lv / rv;
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_MOD: {
+        VM_CASE(OP_MOD) {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
             if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
@@ -711,10 +773,10 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Cannot modulo these types");
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_UNM: {
+        VM_CASE(OP_UNM) {
             const Value& val = RB(inst);
             if (val.type == VAL_INT64) {
                 RA(inst) = make_int64_value(-vm_extract_int64(val));
@@ -724,12 +786,12 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Attempt to negate a %s value", value_type_name(val.type));
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_NOT: {
+        VM_CASE(OP_NOT) {
             RA(inst) = make_bool_value(!is_truthy(RB(inst)));
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
@@ -749,18 +811,18 @@ int MobiusVM::run(size_t base_depth) {
             } else {                                                                        \
                 RA(inst) = make_int64_value(vm_extract_int64(lhs) op_char vm_extract_int64(rhs));    \
             }                                                                               \
-            break;                                                                          \
+            VM_NEXT();                                                                        \
         }
 
-        case OP_BAND: VM_BITWISE_OP(&)
-        case OP_BOR:  VM_BITWISE_OP(|)
-        case OP_BXOR: VM_BITWISE_OP(^)
-        case OP_SHL:  VM_BITWISE_OP(<<)
-        case OP_SHR:  VM_BITWISE_OP(>>)
+        VM_CASE(OP_BAND) VM_BITWISE_OP(&)
+        VM_CASE(OP_BOR) VM_BITWISE_OP(|)
+        VM_CASE(OP_BXOR) VM_BITWISE_OP(^)
+        VM_CASE(OP_SHL) VM_BITWISE_OP(<<)
+        VM_CASE(OP_SHR) VM_BITWISE_OP(>>)
 
         #undef VM_BITWISE_OP
 
-        case OP_BNOT: {
+        VM_CASE(OP_BNOT) {
             const Value& val = RB(inst);
             if (val.type == VAL_UINT64) {
                 RA(inst) = make_uint64_value(~vm_extract_uint64(val));
@@ -770,14 +832,14 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Bitwise NOT requires an integer operand");
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // String concatenation
         // ================================================================
 
-        case OP_CONCAT: {
+        VM_CASE(OP_CONCAT) {
             int b_reg = DECODE_B(inst);
             int c_reg = DECODE_C(inst);
 
@@ -793,14 +855,14 @@ int MobiusVM::run(size_t base_depth) {
                 }
             }
             RA(inst) = make_string_value_from_cstr(state_, result.c_str());
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Comparisons — conditional skip pattern
         // ================================================================
 
-        case OP_EQ: {
+        VM_CASE(OP_EQ) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
@@ -817,10 +879,10 @@ int MobiusVM::run(size_t base_depth) {
                 eq = (lhs == rhs);
             }
             if (eq != (a != 0)) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_LT: {
+        VM_CASE(OP_LT) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
@@ -852,10 +914,10 @@ int MobiusVM::run(size_t base_depth) {
                 return -1;
             }
             if (lt != (a != 0)) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_LE: {
+        VM_CASE(OP_LE) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
@@ -887,14 +949,14 @@ int MobiusVM::run(size_t base_depth) {
                 return -1;
             }
             if (le != (a != 0)) ip++;
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Comparison with immediate
         // ================================================================
 
-        case OP_LTI: {
+        VM_CASE(OP_LTI) {
             const Value& lhs = regs[DECODE_A(inst)];
             int imm = DECODE_sBx(inst);
             bool result;
@@ -903,10 +965,10 @@ int MobiusVM::run(size_t base_depth) {
             else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val < (double)imm;
             else { runtimeError("LTI requires numeric operand"); return -1; }
             if (result) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_LEI: {
+        VM_CASE(OP_LEI) {
             const Value& lhs = regs[DECODE_A(inst)];
             int imm = DECODE_sBx(inst);
             bool result;
@@ -915,10 +977,10 @@ int MobiusVM::run(size_t base_depth) {
             else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val <= (double)imm;
             else { runtimeError("LEI requires numeric operand"); return -1; }
             if (result) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_EQI: {
+        VM_CASE(OP_EQI) {
             const Value& lhs = regs[DECODE_A(inst)];
             int imm = DECODE_sBx(inst);
             bool result;
@@ -927,10 +989,10 @@ int MobiusVM::run(size_t base_depth) {
             else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val == (double)imm;
             else result = false;
             if (result) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_NEI: {
+        VM_CASE(OP_NEI) {
             const Value& lhs = regs[DECODE_A(inst)];
             int imm = DECODE_sBx(inst);
             bool result;
@@ -939,10 +1001,10 @@ int MobiusVM::run(size_t base_depth) {
             else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val != (double)imm;
             else result = true;
             if (result) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_GTI: {
+        VM_CASE(OP_GTI) {
             const Value& lhs = regs[DECODE_A(inst)];
             int imm = DECODE_sBx(inst);
             bool result;
@@ -951,10 +1013,10 @@ int MobiusVM::run(size_t base_depth) {
             else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val > (double)imm;
             else { runtimeError("GTI requires numeric operand"); return -1; }
             if (result) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_GEI: {
+        VM_CASE(OP_GEI) {
             const Value& lhs = regs[DECODE_A(inst)];
             int imm = DECODE_sBx(inst);
             bool result;
@@ -963,82 +1025,203 @@ int MobiusVM::run(size_t base_depth) {
             else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val >= (double)imm;
             else { runtimeError("GEI requires numeric operand"); return -1; }
             if (result) ip++;
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Logical test / set
         // ================================================================
 
-        case OP_TEST: {
+        VM_CASE(OP_TEST) {
             bool truthy = is_truthy(RA(inst));
             int c = DECODE_C(inst);
             if (truthy != (c != 0)) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_TESTJMP: {
+        VM_CASE(OP_TESTJMP) {
             if (!is_truthy(regs[DECODE_A(inst)]))
                 ip += DECODE_sBx(inst);
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Type-specialized arithmetic — no type checks, direct field ops
         // ================================================================
-        case OP_ADD_II: {
+        VM_CASE(OP_ADD_II) {
             Value& dst = RA(inst);
             dst.as.i64 = RKB(inst).as.i64 + RKC(inst).as.i64;
             dst.type = VAL_INT64;
             dst.flags = 0;
-            break;
+            VM_NEXT();
         }
-        case OP_ADD_FF: {
+        VM_CASE(OP_ADD_FF) {
             Value& dst = RA(inst);
             dst.as.double_val = RKB(inst).as.double_val + RKC(inst).as.double_val;
             dst.type = VAL_FLOAT64;
             dst.flags = 0;
-            break;
+            VM_NEXT();
         }
-        case OP_SUB_II: {
+        VM_CASE(OP_SUB_II) {
             Value& dst = RA(inst);
             dst.as.i64 = RKB(inst).as.i64 - RKC(inst).as.i64;
             dst.type = VAL_INT64;
             dst.flags = 0;
-            break;
+            VM_NEXT();
         }
-        case OP_SUB_FF: {
+        VM_CASE(OP_SUB_FF) {
             Value& dst = RA(inst);
             dst.as.double_val = RKB(inst).as.double_val - RKC(inst).as.double_val;
             dst.type = VAL_FLOAT64;
             dst.flags = 0;
-            break;
+            VM_NEXT();
         }
-        case OP_MUL_II: {
+        VM_CASE(OP_MUL_II) {
             Value& dst = RA(inst);
             dst.as.i64 = RKB(inst).as.i64 * RKC(inst).as.i64;
             dst.type = VAL_INT64;
             dst.flags = 0;
-            break;
+            VM_NEXT();
         }
-        case OP_MUL_FF: {
+        VM_CASE(OP_MUL_FF) {
             Value& dst = RA(inst);
             dst.as.double_val = RKB(inst).as.double_val * RKC(inst).as.double_val;
             dst.type = VAL_FLOAT64;
             dst.flags = 0;
-            break;
+            VM_NEXT();
         }
-        case OP_MOD_II: {
+        VM_CASE(OP_MOD_II) {
             int64_t rv = RKC(inst).as.i64;
             if (MOBIUS_UNLIKELY(rv == 0)) { runtimeError("Modulo by zero"); return -1; }
             Value& dst = RA(inst);
             dst.as.i64 = RKB(inst).as.i64 % rv;
             dst.type = VAL_INT64;
             dst.flags = 0;
-            break;
+            VM_NEXT();
         }
 
-        case OP_TESTSET: {
+        // ================================================================
+        // Inline-data arithmetic: ABC + 2 data words (64-bit constant)
+        // ================================================================
+
+#define READ_INLINE64() ((uint64_t)ip[0] | ((uint64_t)ip[1] << 32)); ip += 2
+
+        VM_CASE(OP_ADDK) {
+            uint8_t tag = DECODE_C(inst);
+            uint64_t raw = READ_INLINE64();
+            Value& dst = RA(inst);
+            const Value& src = regs[DECODE_B(inst)];
+            if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
+                int64_t k; memcpy(&k, &raw, 8);
+                dst.as.i64 = src.as.i64 + k;
+                dst.type = VAL_INT64; dst.flags = 0;
+            } else if (tag == VAL_FLOAT64 && src.type == VAL_FLOAT64) {
+                double k; memcpy(&k, &raw, 8);
+                dst.as.double_val = src.as.double_val + k;
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            } else {
+                double sv = vm_extract_double(src);
+                if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); sv += (double)k; }
+                else { double k; memcpy(&k, &raw, 8); sv += k; }
+                dst.as.double_val = sv;
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            }
+            VM_NEXT();
+        }
+
+        VM_CASE(OP_SUBK) {
+            uint8_t tag = DECODE_C(inst);
+            uint64_t raw = READ_INLINE64();
+            Value& dst = RA(inst);
+            const Value& src = regs[DECODE_B(inst)];
+            if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
+                int64_t k; memcpy(&k, &raw, 8);
+                dst.as.i64 = src.as.i64 - k;
+                dst.type = VAL_INT64; dst.flags = 0;
+            } else if (tag == VAL_FLOAT64 && src.type == VAL_FLOAT64) {
+                double k; memcpy(&k, &raw, 8);
+                dst.as.double_val = src.as.double_val - k;
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            } else {
+                double sv = vm_extract_double(src);
+                if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); sv -= (double)k; }
+                else { double k; memcpy(&k, &raw, 8); sv -= k; }
+                dst.as.double_val = sv;
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            }
+            VM_NEXT();
+        }
+
+        VM_CASE(OP_MULK) {
+            uint8_t tag = DECODE_C(inst);
+            uint64_t raw = READ_INLINE64();
+            Value& dst = RA(inst);
+            const Value& src = regs[DECODE_B(inst)];
+            if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
+                int64_t k; memcpy(&k, &raw, 8);
+                dst.as.i64 = src.as.i64 * k;
+                dst.type = VAL_INT64; dst.flags = 0;
+            } else if (tag == VAL_FLOAT64 && src.type == VAL_FLOAT64) {
+                double k; memcpy(&k, &raw, 8);
+                dst.as.double_val = src.as.double_val * k;
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            } else {
+                double sv = vm_extract_double(src);
+                if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); sv *= (double)k; }
+                else { double k; memcpy(&k, &raw, 8); sv *= k; }
+                dst.as.double_val = sv;
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            }
+            VM_NEXT();
+        }
+
+        VM_CASE(OP_DIVK) {
+            uint8_t tag = DECODE_C(inst);
+            uint64_t raw = READ_INLINE64();
+            Value& dst = RA(inst);
+            const Value& src = regs[DECODE_B(inst)];
+            if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
+                int64_t k; memcpy(&k, &raw, 8);
+                if (MOBIUS_UNLIKELY(k == 0)) { runtimeError("Division by zero"); return -1; }
+                dst.as.i64 = src.as.i64 / k;
+                dst.type = VAL_INT64; dst.flags = 0;
+            } else {
+                double sv = vm_extract_double(src);
+                double kv;
+                if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); kv = (double)k; }
+                else { memcpy(&kv, &raw, 8); }
+                if (kv == 0.0) { runtimeError("Division by zero"); return -1; }
+                dst.as.double_val = sv / kv;
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            }
+            VM_NEXT();
+        }
+
+        VM_CASE(OP_MODK) {
+            uint8_t tag = DECODE_C(inst);
+            uint64_t raw = READ_INLINE64();
+            Value& dst = RA(inst);
+            const Value& src = regs[DECODE_B(inst)];
+            if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
+                int64_t k; memcpy(&k, &raw, 8);
+                if (MOBIUS_UNLIKELY(k == 0)) { runtimeError("Modulo by zero"); return -1; }
+                dst.as.i64 = src.as.i64 % k;
+                dst.type = VAL_INT64; dst.flags = 0;
+            } else {
+                double sv = vm_extract_double(src);
+                double kv;
+                if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); kv = (double)k; }
+                else { memcpy(&kv, &raw, 8); }
+                if (kv == 0.0) { runtimeError("Modulo by zero"); return -1; }
+                dst.as.double_val = fmod(sv, kv);
+                dst.type = VAL_FLOAT64; dst.flags = 0;
+            }
+            VM_NEXT();
+        }
+
+#undef READ_INLINE64
+
+        VM_CASE(OP_TESTSET) {
             const Value& rb = RB(inst);
             bool truthy = is_truthy(rb);
             int c = DECODE_C(inst);
@@ -1047,24 +1230,24 @@ int MobiusVM::run(size_t base_depth) {
             } else {
                 ip++;
             }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Jumps
         // ================================================================
 
-        case OP_JMP: {
+        VM_CASE(OP_JMP) {
             int offset = DECODE_sBx_wide(inst);
             ip += offset;
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Function calls
         // ================================================================
 
-        case OP_CALL: {
+        VM_CASE(OP_CALL) {
             int a = DECODE_A(inst);
             int b = DECODE_B(inst);
             int c = DECODE_C(inst);
@@ -1080,10 +1263,10 @@ int MobiusVM::run(size_t base_depth) {
                 base = ci->base;
                 regs = registers_.data() + base;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_TAILCALL: {
+        VM_CASE(OP_TAILCALL) {
             int a = DECODE_A(inst);
             int b = DECODE_B(inst);
             int nargs = b - 1;
@@ -1098,10 +1281,10 @@ int MobiusVM::run(size_t base_depth) {
                 base = ci->base;
                 regs = registers_.data() + base;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_RETURN: {
+        VM_CASE(OP_RETURN) {
             int a = DECODE_A(inst);
             int b = DECODE_B(inst);
 
@@ -1138,14 +1321,14 @@ int MobiusVM::run(size_t base_depth) {
             proto = ci->proto;
             base = ci->base;
             regs = registers_.data() + base;
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Closures
         // ================================================================
 
-        case OP_CLOSURE: {
+        VM_CASE(OP_CLOSURE) {
             uint16_t bx = DECODE_Bx(inst);
             if (bx >= proto->protos.size()) {
                 runtimeError("Invalid prototype index %d", bx);
@@ -1216,20 +1399,20 @@ int MobiusVM::run(size_t base_depth) {
             }
 
             RA(inst) = make_function_value(mf);
-            break;
+            VM_NEXT();
         }
 
-        case OP_CLOSE: {
+        VM_CASE(OP_CLOSE) {
             int a = DECODE_A(inst);
             closeUpvalues(*ci, a);
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Numeric for-loop
         // ================================================================
 
-        case OP_FORPREP: {
+        VM_CASE(OP_FORPREP) {
             int a = DECODE_A(inst);
             int sbx = DECODE_sBx(inst);
             Value& idx  = regs[a];
@@ -1244,10 +1427,10 @@ int MobiusVM::run(size_t base_depth) {
                 idx = make_float_value(iv - sv);
             }
             ip += sbx;
-            break;
+            VM_NEXT();
         }
 
-        case OP_FORLOOP: {
+        VM_CASE(OP_FORLOOP) {
             int a = DECODE_A(inst);
             int sbx = DECODE_sBx(inst);
             Value& idx   = regs[a];
@@ -1277,18 +1460,18 @@ int MobiusVM::run(size_t base_depth) {
                     regs[a + 3] = idx;
                 }
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_IFORPREP: {
+        VM_CASE(OP_IFORPREP) {
             int a = DECODE_A(inst);
             regs[a].type = VAL_INT64;
             regs[a].as.i64 -= regs[a + 2].as.i64;
             ip += DECODE_sBx(inst);
-            break;
+            VM_NEXT();
         }
 
-        case OP_IFORLOOP: {
+        VM_CASE(OP_IFORLOOP) {
             int a = DECODE_A(inst);
             int64_t sv = regs[a + 2].as.i64;
             int64_t iv = regs[a].as.i64 + sv;
@@ -1299,10 +1482,10 @@ int MobiusVM::run(size_t base_depth) {
                 regs[a + 3].as.i64 = iv;
                 regs[a + 3].type = VAL_INT64;
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_TFORLOOP: {
+        VM_CASE(OP_TFORLOOP) {
             // Generic for-loop — future iterator protocol
             runtimeError("Generic for-loop (TFORLOOP) not yet implemented");
             return -1;
@@ -1312,7 +1495,7 @@ int MobiusVM::run(size_t base_depth) {
         // Enum operations
         // ================================================================
 
-        case OP_NEWENUM: {
+        VM_CASE(OP_NEWENUM) {
             uint16_t bx = DECODE_Bx(inst);
             const Value& name_val = proto->constants[bx];
             const char* enum_name = (name_val.type == VAL_STRING && name_val.as.string)
@@ -1322,10 +1505,10 @@ int MobiusVM::run(size_t base_depth) {
             RA(inst) = make_userdata_value(edef,
                 [](void* p) { if (p) static_cast<EnumDefinition*>(p)->release(); },
                 "enum_definition", sizeof(EnumDefinition));
-            break;
+            VM_NEXT();
         }
 
-        case OP_ENUMVAL: {
+        VM_CASE(OP_ENUMVAL) {
             Value& enum_val = RA(inst);
             if (enum_val.type != VAL_USERDATA || !enum_val.as.userdata ||
                 strcmp(enum_val.as.userdata->type_name, "enum_definition") != 0) {
@@ -1345,10 +1528,10 @@ int MobiusVM::run(size_t base_depth) {
             } else {
                 edef->addAutoMember("member");
             }
-            break;
+            VM_NEXT();
         }
 
-        case OP_GETENUM: {
+        VM_CASE(OP_GETENUM) {
             // R[A] = R[B].member[C]
             const Value& enum_val = RB(inst);
             if (enum_val.type != VAL_USERDATA || !enum_val.as.userdata ||
@@ -1366,14 +1549,14 @@ int MobiusVM::run(size_t base_depth) {
             (void)member;
             (void)edef;
             RA(inst) = Value(); // Placeholder — full enum access uses GETGLOBAL + GETTABLE
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Import
         // ================================================================
 
-        case OP_IMPORT: {
+        VM_CASE(OP_IMPORT) {
             // ABC format: B = module name (RK), C = alias/target name (RK)
             const Value& mod_name_val = RK(*ci, DECODE_B(inst));
             const Value& alias_val    = RK(*ci, DECODE_C(inst));
@@ -1532,14 +1715,14 @@ int MobiusVM::run(size_t base_depth) {
                     global_env_->define(interned_alias, tval);
                 }
             }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Pragma
         // ================================================================
 
-        case OP_PRAGMA: {
+        VM_CASE(OP_PRAGMA) {
             uint16_t bx = DECODE_Bx(inst);
             const Value& name_val = proto->constants[bx];
             if (name_val.type != VAL_STRING || !name_val.as.string) {
@@ -1576,14 +1759,14 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Unknown pragma: '%s'", pragma_name);
                 return -1;
             }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Increment / Decrement
         // ================================================================
 
-        case OP_INC: {
+        VM_CASE(OP_INC) {
             const Value& val = RB(inst);
             if (val.type != VAL_INT64) {
                 runtimeError("Increment requires an integer operand");
@@ -1592,10 +1775,10 @@ int MobiusVM::run(size_t base_depth) {
             bool success;
             RA(inst) = increment_integer(val, true, &success);
             if (!success) { runtimeError("Failed to increment value"); return -1; }
-            break;
+            VM_NEXT();
         }
 
-        case OP_DEC: {
+        VM_CASE(OP_DEC) {
             const Value& val = RB(inst);
             if (val.type != VAL_INT64) {
                 runtimeError("Decrement requires an integer operand");
@@ -1604,14 +1787,14 @@ int MobiusVM::run(size_t base_depth) {
             bool success;
             RA(inst) = increment_integer(val, false, &success);
             if (!success) { runtimeError("Failed to decrement value"); return -1; }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Arithmetic with immediate
         // ================================================================
 
-        case OP_ADDI: {
+        VM_CASE(OP_ADDI) {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
             Value& val = regs[a];
@@ -1622,10 +1805,10 @@ int MobiusVM::run(size_t base_depth) {
             else if (val.type == VAL_FLOAT64)
                 val.as.double_val += imm;
             else { runtimeError("ADDI requires numeric operand"); return -1; }
-            break;
+            VM_NEXT();
         }
 
-        case OP_SUBI: {
+        VM_CASE(OP_SUBI) {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
             Value& val = regs[a];
@@ -1636,10 +1819,10 @@ int MobiusVM::run(size_t base_depth) {
             else if (val.type == VAL_FLOAT64)
                 val.as.double_val -= imm;
             else { runtimeError("SUBI requires numeric operand"); return -1; }
-            break;
+            VM_NEXT();
         }
 
-        case OP_MULI: {
+        VM_CASE(OP_MULI) {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
             Value& val = regs[a];
@@ -1650,10 +1833,25 @@ int MobiusVM::run(size_t base_depth) {
             else if (val.type == VAL_FLOAT64)
                 val.as.double_val *= imm;
             else { runtimeError("MULI requires numeric operand"); return -1; }
-            break;
+            VM_NEXT();
         }
 
-        case OP_MODI: {
+        VM_CASE(OP_DIVI) {
+            int a = DECODE_A(inst);
+            int imm = DECODE_sBx(inst);
+            if (MOBIUS_UNLIKELY(imm == 0)) { runtimeError("Division by zero"); return -1; }
+            Value& val = regs[a];
+            if (MOBIUS_LIKELY(val.type == VAL_INT64)) {
+                val.as.i64 /= imm;
+            } else if (val.type == VAL_UINT64)
+                val.as.u64 /= (uint64_t)(int64_t)imm;
+            else if (val.type == VAL_FLOAT64)
+                val.as.double_val /= imm;
+            else { runtimeError("DIVI requires numeric operand"); return -1; }
+            VM_NEXT();
+        }
+
+        VM_CASE(OP_MODI) {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
             if (MOBIUS_UNLIKELY(imm == 0)) { runtimeError("Modulo by zero"); return -1; }
@@ -1665,14 +1863,14 @@ int MobiusVM::run(size_t base_depth) {
             else if (val.type == VAL_FLOAT64)
                 val.as.double_val = fmod(val.as.double_val, (double)imm);
             else { runtimeError("MODI requires numeric operand"); return -1; }
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Type checking
         // ================================================================
 
-        case OP_TYPECHECK: {
+        VM_CASE(OP_TYPECHECK) {
             NumberType target = (NumberType)DECODE_B(inst);
             TypeCheckConfig tc = {
                 state_->config().strict_mode,
@@ -1693,17 +1891,17 @@ int MobiusVM::run(size_t base_depth) {
             }
             RA(inst) = conv.converted_value;
             free(conv.error_message);
-            break;
+            VM_NEXT();
         }
 
-        case OP_ISNUM: {
+        VM_CASE(OP_ISNUM) {
             const Value& v = RB(inst);
             bool num = (v.type == VAL_INT64 || v.type == VAL_FLOAT64);
             RA(inst) = make_bool_value(num);
-            break;
+            VM_NEXT();
         }
 
-        case OP_TYPECOMPAT: {
+        VM_CASE(OP_TYPECOMPAT) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
@@ -1711,23 +1909,23 @@ int MobiusVM::run(size_t base_depth) {
             bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_FLOAT64);
             bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
             if (compat != (a != 0)) ip++;
-            break;
+            VM_NEXT();
         }
 
-        case OP_TYPEIS: {
+        VM_CASE(OP_TYPEIS) {
             int a = DECODE_A(inst);
             const Value& val = RB(inst);
             uint8_t expected_type = DECODE_C(inst);
             bool match = ((uint8_t)val.type == expected_type);
             if (match != (a != 0)) ip++;
-            break;
+            VM_NEXT();
         }
 
         // ================================================================
         // Length
         // ================================================================
 
-        case OP_LEN: {
+        VM_CASE(OP_LEN) {
             const Value& val = RB(inst);
             if (val.type == VAL_ARRAY && val.as.array) {
                 RA(inst) = make_int64_value((int64_t)val.as.array->length());
@@ -1739,22 +1937,85 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("Attempt to get length of a %s value", value_type_name(val.type));
                 return -1;
             }
-            break;
+            VM_NEXT();
+        }
+
+        // ================================================================
+        // Superinstructions (fused multi-instruction patterns)
+        // ================================================================
+
+        VM_CASE(OP_MOVE_ADDI) {
+            // Fused: MOVE R[A]=R[B] then ADDI R[A]+=sBx
+            // Word 0: ABC(OP_MOVE_ADDI, A, B, _)
+            // Word 1: AsBx(_, A, sBx)  — second word encodes the ADDI operands
+            RA(inst) = RB(inst);
+            uint32_t inst2 = *ip++;
+            int a2 = DECODE_A(inst2);
+            int imm = DECODE_sBx(inst2);
+            Value& val = regs[a2];
+            if (MOBIUS_LIKELY(val.type == VAL_INT64)) {
+                val.as.i64 += imm;
+            } else if (val.type == VAL_UINT64)
+                val.as.u64 += (uint64_t)(int64_t)imm;
+            else if (val.type == VAL_FLOAT64)
+                val.as.double_val += imm;
+            else { runtimeError("ADDI requires numeric operand"); return -1; }
+            VM_NEXT();
+        }
+
+        VM_CASE(OP_GETGLOBAL_GETTABLE) {
+            // Fused: GETGLOBAL R[A]=globals[K[Bx]] then GETTABLE R[A]=R[A][RK(C)]
+            // Word 0: ABx(OP_GETGLOBAL_GETTABLE, A, Bx)
+            // Word 1: ABC(_, _, _, C)  — second word's C field = RK for table key
+            int a = DECODE_A(inst);
+            int slot = DECODE_Bx(inst);
+            const Value& gv = state_->globalSlot(slot);
+            if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
+                runtimeError("Undefined variable '%s'", state_->globalSlotName(slot));
+                return -1;
+            }
+            regs[a] = gv;
+
+            uint32_t inst2 = *ip++;
+            uint8_t c2 = DECODE_C(inst2);
+            const Value& key = IS_CONSTANT(c2)
+                ? ci->proto->constants[RK_AS_CONSTANT(c2)]
+                : regs[c2];
+            const Value& tbl = regs[a];
+            if (MOBIUS_LIKELY(tbl.type == VAL_TABLE && tbl.as.table)) {
+                regs[a] = tbl.as.table->get(key);
+            } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
+                if (key.type == VAL_INT64) {
+                    int64_t idx = vm_extract_int64(key);
+                    if (idx >= 0 && idx < (int64_t)tbl.as.array->length())
+                        regs[a] = tbl.as.array->get((size_t)idx);
+                    else
+                        regs[a] = Value();
+                } else {
+                    runtimeError("Array index must be an integer");
+                    return -1;
+                }
+            } else {
+                runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
+                return -1;
+            }
+            VM_NEXT();
         }
 
         // ================================================================
         // NOP
         // ================================================================
 
-        case OP_NOP:
-            break;
+        VM_CASE(OP_NOP)
+            VM_NEXT();
 
-        default:
+        VM_DEFAULT()
             runtimeError("Unknown opcode %d", DECODE_OP(inst));
             return -1;
 
-        } // switch
-    } // for(;;)
+#if !defined(__GNUC__) && !defined(__clang__)
+        VM_END_DISPATCH()
+#endif
 
     #undef RA
     #undef RB
@@ -1763,4 +2024,11 @@ int MobiusVM::run(size_t base_depth) {
     #undef RKC
     #undef KBx
     #undef REFRESH_FRAME
+    #undef VM_DISPATCH
+    #undef VM_CASE
+    #undef VM_NEXT
+    #undef VM_DEFAULT
+#if !defined(__GNUC__) && !defined(__clang__)
+    #undef VM_END_DISPATCH
+#endif
 }
