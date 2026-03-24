@@ -5,7 +5,7 @@
 #include "data/array.h"
 #include "data/enum.h"
 #include "data/function.h"
-#include "eval/evaluator.h"
+#include "data/metamethods.h"
 #include "plugin/module_registry.h"
 #include "internal/string_intern.h"
 
@@ -216,10 +216,88 @@ void MobiusVM::closeUpvalues(CallInfo& ci, int from_reg) {
 }
 
 // ============================================================================
+// VM-native metamethod dispatch
+// ============================================================================
+
+int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
+                             const Value& lhs, const Value& rhs, Value& out) {
+    if (table_val.type != VAL_TABLE || !table_val.as.table) return 0;
+
+    Value method = table_val.as.table->getMetamethod(mm_name);
+    if (method.type == VAL_NIL) return 0;
+
+    if (method.type == VAL_NATIVE_FUNCTION) {
+        ExecutionContext* ctx = state_->mainContext();
+        ctx->push(lhs);
+        ctx->push(rhs);
+        ctx->pushFrame("metamethod", nullptr, currentLine(), 0,
+                       FUNCTION_TYPE_NATIVE, nullptr, nullptr);
+        int rc = method.as.native_function(state_, 2);
+        ctx->popFrame();
+        if (rc < 0) {
+            runtimeError("Metamethod '%s' failed", mm_name->data);
+            return -1;
+        }
+        if (rc > 0 && ctx->stackSize() > 0) {
+            out = ctx->pop();
+        } else {
+            out = Value();
+        }
+        return 1;
+    }
+
+    if (method.type == VAL_FUNCTION && method.as.function) {
+        MobiusFunction* mf = method.as.function;
+        if (!mf->proto) {
+            runtimeError("Metamethod '%s' has no bytecode prototype", mm_name->data);
+            return -1;
+        }
+        if ((int)mf->param_count != 2) {
+            runtimeError("Metamethod '%s' expects 2 arguments but got %zu params",
+                         mm_name->data, mf->param_count);
+            return -1;
+        }
+
+        int caller_base = call_stack_.back().base;
+        int caller_num_regs = call_stack_.back().proto->num_registers;
+        int scratch = caller_base + caller_num_regs;
+
+        Prototype* child = mf->proto;
+        int needed = scratch + 3 + child->num_registers + 16;
+        if (needed > (int)registers_.size())
+            registers_.resize(needed, Value());
+
+        registers_[scratch]     = method;
+        registers_[scratch + 1] = lhs;
+        registers_[scratch + 2] = rhs;
+
+        int child_base = scratch + 1;
+        CallInfo child_ci;
+        child_ci.proto = child;
+        child_ci.ip = child->code.data();
+        child_ci.base = child_base;
+        child_ci.nresults = 2;
+
+        size_t stop_depth = call_stack_.size();
+        call_stack_.push_back(child_ci);
+
+        int rc = run(stop_depth);
+
+        if (rc < 0) return -1;
+
+        out = registers_[scratch];
+        return 1;
+    }
+
+    runtimeError("'%s' metamethod must be a function", mm_name->data);
+    return -1;
+}
+
+// ============================================================================
 // Main dispatch loop
 // ============================================================================
 
-int MobiusVM::run() {
+int MobiusVM::run(size_t base_depth) {
     CallInfo* ci = &call_stack_.back();
     uint32_t* ip = ci->ip;
     Prototype* proto = ci->proto;
@@ -232,6 +310,11 @@ int MobiusVM::run() {
     #define RKB(inst) RK(*ci, DECODE_B(inst))
     #define RKC(inst) RK(*ci, DECODE_C(inst))
     #define KBx(inst) proto->constants[DECODE_Bx(inst)]
+    #define REFRESH_FRAME() do { \
+        ci = &call_stack_.back(); \
+        proto = ci->proto; \
+        base = ci->base; \
+    } while(0)
 
     for (;;) {
         uint32_t inst = *ip++;
@@ -396,51 +479,133 @@ int MobiusVM::run() {
         }
 
         // ================================================================
-        // Arithmetic — integer fast path + fallback to eval helpers
+        // Arithmetic — fully inline, no tree-walker delegation
         // ================================================================
 
-        #define VM_ARITH_OP(opcode, op_char, helper_func, has_line_args) {       \
-            const Value& lhs = RKB(inst);                                         \
-            const Value& rhs = RKC(inst);                                         \
-            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {             \
-                if (vm_use_unsigned(lhs, rhs)) {                                  \
-                    uint64_t lv = vm_extract_uint64(lhs);                         \
-                    uint64_t rv = vm_extract_uint64(rhs);                         \
-                    RA(inst) = make_integer_value(NUM_UINT64,                     \
-                                                  (int64_t)(lv op_char rv));      \
-                } else {                                                          \
-                    int64_t lv = vm_extract_int64(lhs);                           \
-                    int64_t rv = vm_extract_int64(rhs);                           \
-                    RA(inst) = make_integer_value(NUM_INT64, lv op_char rv);      \
-                }                                                                  \
-            } else {                                                              \
-                Environment* env = global_env_;                                   \
-                EvalResult r = helper_func;                                       \
-                if (r.has_error) { return -1; }                                   \
-                if (env->current_context->stackSize() > 0)                        \
-                    RA(inst) = env->current_context->pop();                       \
-            }                                                                      \
-            break;                                                                 \
+        case OP_ADD: {
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                if (vm_use_unsigned(lhs, rhs))
+                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) + vm_extract_uint64(rhs)));
+                else
+                    RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) + vm_extract_int64(rhs));
+            } else if (lhs.type == VAL_STRING || rhs.type == VAL_STRING) {
+                std::string result;
+                auto append_val = [&](const Value& v) {
+                    if (v.type == VAL_STRING && v.as.string) {
+                        result.append(v.as.string->data, v.as.string->length);
+                    } else {
+                        char* s = value_to_string(v);
+                        if (s) { result.append(s); free(s); }
+                    }
+                };
+                append_val(lhs);
+                append_val(rhs);
+                RA(inst) = make_string_value_from_cstr(state_, result.c_str());
+            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 ||
+                         rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64) &&
+                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64) &&
+                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64)) {
+                bool use_f64 = (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64);
+                double r = vm_extract_double(lhs) + vm_extract_double(rhs);
+                RA(inst) = use_f64 ? make_float_value(r) : make_float32_value((float)r);
+            } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->add(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                if (rc == 0) { runtimeError("Cannot add: no __add metamethod on table"); return -1; }
+                RA(inst) = out;
+            } else {
+                runtimeError("Cannot add these types");
+                return -1;
+            }
+            break;
         }
 
-        case OP_ADD:
-            VM_ARITH_OP(OP_ADD, +, add_values(global_env_, lhs, rhs), false)
+        case OP_SUB: {
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                if (vm_use_unsigned(lhs, rhs))
+                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) - vm_extract_uint64(rhs)));
+                else
+                    RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) - vm_extract_int64(rhs));
+            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 ||
+                         rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64) &&
+                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64) &&
+                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64)) {
+                bool use_f64 = (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64);
+                double r = vm_extract_double(lhs) - vm_extract_double(rhs);
+                RA(inst) = use_f64 ? make_float_value(r) : make_float32_value((float)r);
+            } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->sub(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                if (rc == 0) { runtimeError("Cannot subtract: no __sub metamethod on table"); return -1; }
+                RA(inst) = out;
+            } else {
+                runtimeError("Cannot subtract these types");
+                return -1;
+            }
+            break;
+        }
 
-        case OP_SUB:
-            VM_ARITH_OP(OP_SUB, -, subtract_values(global_env_, lhs, rhs), false)
-
-        case OP_MUL:
-            VM_ARITH_OP(OP_MUL, *, multiply_values(global_env_, lhs, rhs), false)
+        case OP_MUL: {
+            const Value& lhs = RKB(inst);
+            const Value& rhs = RKC(inst);
+            if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
+                if (vm_use_unsigned(lhs, rhs))
+                    RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) * vm_extract_uint64(rhs)));
+                else
+                    RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) * vm_extract_int64(rhs));
+            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 ||
+                         rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64) &&
+                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64) &&
+                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64)) {
+                bool use_f64 = (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64);
+                double r = vm_extract_double(lhs) * vm_extract_double(rhs);
+                RA(inst) = use_f64 ? make_float_value(r) : make_float32_value((float)r);
+            } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->mul(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                if (rc == 0) { runtimeError("Cannot multiply: no __mul metamethod on table"); return -1; }
+                RA(inst) = out;
+            } else {
+                runtimeError("Cannot multiply these types");
+                return -1;
+            }
+            break;
+        }
 
         case OP_DIV: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            Environment* env = global_env_;
-            int line = currentLine();
-            EvalResult r = divide_values(env, lhs, rhs, line, 0);
-            if (r.has_error) return -1;
-            if (env->current_context->stackSize() > 0)
-                RA(inst) = env->current_context->pop();
+            if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->div(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                if (rc == 0) { runtimeError("Cannot divide: no __div metamethod on table"); return -1; }
+                RA(inst) = out;
+            } else {
+                double lv = vm_extract_double(lhs);
+                double rv = vm_extract_double(rhs);
+                if (rv == 0.0) { runtimeError("Division by zero"); return -1; }
+                RA(inst) = make_float_value(lv / rv);
+            }
             break;
         }
 
@@ -459,18 +624,27 @@ int MobiusVM::run() {
                     if (rv == 0) { runtimeError("Modulo by zero"); return -1; }
                     RA(inst) = make_integer_value(NUM_INT64, lv % rv);
                 }
+            } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->mod(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                if (rc == 0) { runtimeError("Cannot modulo: no __mod metamethod on table"); return -1; }
+                RA(inst) = out;
+            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 || lhs.type == VAL_INTEGER) &&
+                        (rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64 || rhs.type == VAL_INTEGER)) {
+                double lv = vm_extract_double(lhs);
+                double rv = vm_extract_double(rhs);
+                if (rv == 0.0) { runtimeError("Modulo by zero"); return -1; }
+                RA(inst) = make_float_value(fmod(lv, rv));
             } else {
-                Environment* env = global_env_;
-                int line = currentLine();
-                EvalResult r = modulo_values(env, lhs, rhs, line, 0);
-                if (r.has_error) return -1;
-                if (env->current_context->stackSize() > 0)
-                    RA(inst) = env->current_context->pop();
+                runtimeError("Cannot modulo these types");
+                return -1;
             }
             break;
         }
-
-        #undef VM_ARITH_OP
 
         case OP_UNM: {
             const Value& val = RB(inst);
@@ -570,7 +744,18 @@ int MobiusVM::run() {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            bool eq = (lhs == rhs);
+            bool eq;
+            if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->eq(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                eq = (rc == 1) ? is_truthy(out) : (lhs == rhs);
+            } else {
+                eq = (lhs == rhs);
+            }
             if (eq != (a != 0)) ip++;
             break;
         }
@@ -593,6 +778,15 @@ int MobiusVM::run() {
                 }
             } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
                 lt = strcmp(lhs.as.string->data, rhs.as.string->data) < 0;
+            } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->lt(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                if (rc == 0) { runtimeError("Cannot compare: no __lt metamethod on table"); return -1; }
+                lt = is_truthy(out);
             } else {
                 runtimeError("Cannot compare incompatible types");
                 return -1;
@@ -619,6 +813,15 @@ int MobiusVM::run() {
                 }
             } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
                 le = strcmp(lhs.as.string->data, rhs.as.string->data) <= 0;
+            } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+                const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+                Value out;
+                ci->ip = ip;
+                int rc = callMetamethod(tbl, state_->metamethods()->le(), lhs, rhs, out);
+                REFRESH_FRAME();
+                if (rc < 0) return -1;
+                if (rc == 0) { runtimeError("Cannot compare: no __le metamethod on table"); return -1; }
+                le = is_truthy(out);
             } else {
                 runtimeError("Cannot compare incompatible types");
                 return -1;
@@ -704,7 +907,7 @@ int MobiusVM::run() {
             int a = DECODE_A(inst);
             int b = DECODE_B(inst);
 
-            if (call_stack_.size() <= 1) {
+            if (call_stack_.size() <= base_depth) {
                 return 0;
             }
 
@@ -713,18 +916,11 @@ int MobiusVM::run() {
 
             CallInfo returning = call_stack_.back();
             call_stack_.pop_back();
-            ci = &call_stack_.back();
-            ip = ci->ip;
-            proto = ci->proto;
-            base = ci->base;
 
-            // The child frame's base was placed at caller's func_reg+1.
-            // The result register in the caller is func_reg (= returning.base - 1 - caller.base).
+            // Copy return values before checking depth boundary
             int func_reg_abs = returning.base - 1;
             int nresults_wanted = returning.nresults;
-            if (nresults_wanted == 0) {
-                // Caller doesn't want results
-            } else {
+            if (nresults_wanted != 0) {
                 int to_copy = nresults_wanted - 1;
                 for (int i = 0; i < to_copy; i++) {
                     if (i < nresults_available) {
@@ -734,6 +930,16 @@ int MobiusVM::run() {
                     }
                 }
             }
+
+            // If we've returned to the boundary, exit this run() invocation
+            if (call_stack_.size() <= base_depth) {
+                return 0;
+            }
+
+            ci = &call_stack_.back();
+            ip = ci->ip;
+            proto = ci->proto;
+            base = ci->base;
             break;
         }
 
@@ -1182,4 +1388,5 @@ int MobiusVM::run() {
     #undef RKB
     #undef RKC
     #undef KBx
+    #undef REFRESH_FRAME
 }

@@ -1,0 +1,94 @@
+// Test that arithmetic metamethods are actually called and produce correct results
+print("=== Arithmetic Metamethod Call Tests ===");
+
+// Define metamethod handlers
+func add_handler(a, b) {
+    return {value: a.value + b.value};
+}
+
+func sub_handler(a, b) {
+    return {value: a.value - b.value};
+}
+
+func mul_handler(a, b) {
+    return {value: a.value * b.value};
+}
+
+func div_handler(a, b) {
+    return {value: a.value / b.value};
+}
+
+func mod_handler(a, b) {
+    return {value: a.value % b.value};
+}
+
+// Create metatable with all arithmetic metamethods
+var meta = {
+    ["__add"] = add_handler,
+    ["__sub"] = sub_handler,
+    ["__mul"] = mul_handler,
+    ["__div"] = div_handler,
+    ["__mod"] = mod_handler
+};
+
+// Create test tables
+var t1 = {value: 20};
+var t2 = {value: 6};
+setmetatable(t1, meta);
+
+// Test __add
+var result = t1 + t2;
+print("__add: 20 + 6 =", result.value);
+if (result.value != 26) {
+    print("FAIL: __add expected 26, got", result.value);
+    exit(1);
+}
+
+// Test __sub
+result = t1 - t2;
+print("__sub: 20 - 6 =", result.value);
+if (result.value != 14) {
+    print("FAIL: __sub expected 14, got", result.value);
+    exit(1);
+}
+
+// Test __mul
+result = t1 * t2;
+print("__mul: 20 * 6 =", result.value);
+if (result.value != 120) {
+    print("FAIL: __mul expected 120, got", result.value);
+    exit(1);
+}
+
+// Test __div
+result = t1 / t2;
+print("__div: 20 / 6 =", result.value);
+
+// Test __mod
+result = t1 % t2;
+print("__mod: 20 % 6 =", result.value);
+if (result.value != 2) {
+    print("FAIL: __mod expected 2, got", result.value);
+    exit(1);
+}
+
+// Test with different values to confirm it's not cached
+var t3 = {value: 100};
+var t4 = {value: 7};
+setmetatable(t3, meta);
+
+result = t3 + t4;
+print("__add: 100 + 7 =", result.value);
+if (result.value != 107) {
+    print("FAIL: __add expected 107, got", result.value);
+    exit(1);
+}
+
+result = t3 * t4;
+print("__mul: 100 * 7 =", result.value);
+if (result.value != 700) {
+    print("FAIL: __mul expected 700, got", result.value);
+    exit(1);
+}
+
+print("=== All arithmetic metamethod call tests passed! ===");

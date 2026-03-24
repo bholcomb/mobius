@@ -84,7 +84,8 @@ private:
     static inline bool     vm_use_unsigned(const Value& l, const Value& r);
 
     // The main dispatch loop. Returns 0 on success, -1 on error.
-    int run();
+    // base_depth: the call_stack_ depth at which OP_RETURN should exit.
+    int run(size_t base_depth = 1);
 
     // Helpers
     int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
@@ -93,6 +94,14 @@ private:
     void runtimeError(const char* fmt, ...);
 
     int currentLine() const;
+
+    // VM-native metamethod dispatch.  Looks up `mm_name` on the table,
+    // calls it with (lhs, rhs), and stores the result in `out`.
+    // Returns  1 = success (result in out),
+    //          0 = no metamethod found,
+    //         -1 = error (runtimeError already called).
+    int callMetamethod(const Value& table_val, MobiusString* mm_name,
+                       const Value& lhs, const Value& rhs, Value& out);
 };
 
 #endif // MOBIUS_VM_VM_H

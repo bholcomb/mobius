@@ -658,3 +658,25 @@ TypeConversionResult validate_and_convert_value(const Value& value, NumberType t
     result.error_message = mobius_strdup("Unknown target type");
     return result;
 }
+
+Value increment_integer(Value val, bool is_increment, bool* success) {
+    *success = false;
+    if (val.type != VAL_INTEGER) return make_nil_value();
+
+    int64_t delta = is_increment ? 1 : -1;
+    *success = true;
+
+    switch (val.as.integer.num_type) {
+        case NUM_INT8:   return make_integer_value(NUM_INT8,   val.as.integer.value.i8  + delta);
+        case NUM_UINT8:  return make_integer_value(NUM_UINT8,  val.as.integer.value.u8  + delta);
+        case NUM_INT16:  return make_integer_value(NUM_INT16,  val.as.integer.value.i16 + delta);
+        case NUM_UINT16: return make_integer_value(NUM_UINT16, val.as.integer.value.u16 + delta);
+        case NUM_INT32:  return make_integer_value(NUM_INT32,  val.as.integer.value.i32 + delta);
+        case NUM_UINT32: return make_integer_value(NUM_UINT32, val.as.integer.value.u32 + delta);
+        case NUM_INT64:  return make_integer_value(NUM_INT64,  val.as.integer.value.i64 + delta);
+        case NUM_UINT64: return make_integer_value(NUM_UINT64, (int64_t)(val.as.integer.value.u64 + (uint64_t)delta));
+        default:
+            *success = false;
+            return make_nil_value();
+    }
+}
