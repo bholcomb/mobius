@@ -1,4 +1,4 @@
-#include "state/mobius_state.h"
+#include <mobius/mobius.h>
 #include <mobius/mobius_plugin.h>
 #include <stdio.h>
 #include <assert.h>

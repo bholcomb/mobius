@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "../../src/mobius/state/mobius_state.h"
-#include "../../src/mobius/library/library.h"
+#include <mobius/mobius.h>
 
 int main() {
     printf("=== Multi-Environment Demo ===\n");

@@ -7,8 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "../../src/mobius/state/mobius_state.h"
-#include "../../src/mobius/library/library.h"
+#include <mobius/mobius.h>
 
 int main(void) {
     printf("🚀 Simple Mobius Embedding Example\n");
@@ -30,7 +29,7 @@ int main(void) {
     
     printf("✅ Mobius interpreter initialized\n");
     printf("Version: 0.1.0\n");
-    printf("Available functions: %zu\n\n", get_library_function_count());
+    printf("Interpreter ready.\n\n");
     
     // Execute a simple script
     const char* script = 
