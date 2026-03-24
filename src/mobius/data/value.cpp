@@ -95,25 +95,7 @@ Value make_bool_value(bool val) {
     return value;
 }
 
-Value make_integer_value(NumberType numtype, int64_t val) {
-    Value value;
-    value.type = VAL_INTEGER;
-    value.as.integer.num_type = numtype;
-
-    switch (numtype) {
-        case NUM_INT8:   value.as.integer.value.i8  = (int8_t)val; break;
-        case NUM_UINT8:  value.as.integer.value.u8  = (uint8_t)val; break;
-        case NUM_INT16:  value.as.integer.value.i16 = (int16_t)val; break;
-        case NUM_UINT16: value.as.integer.value.u16 = (uint16_t)val; break;
-        case NUM_INT32:  value.as.integer.value.i32 = (int32_t)val; break;
-        case NUM_UINT32: value.as.integer.value.u32 = (uint32_t)val; break;
-        case NUM_INT64:  value.as.integer.value.i64 = val; break;
-        case NUM_UINT64: value.as.integer.value.u64 = (uint64_t)val; break;
-        default: break;
-    }
-
-    return value;
-}
+// make_integer_value is now inline in value.h
 
 Value make_float32_value(float val) {
     Value value;
@@ -122,12 +104,7 @@ Value make_float32_value(float val) {
     return value;
 }
 
-Value make_float_value(double val) {
-    Value value;
-    value.type = VAL_FLOAT64;
-    value.as.float64_val = val;
-    return value;
-}
+// make_float_value is now inline in value.h
 
 Value make_string_value(MobiusString* string) {
     Value value;
@@ -185,36 +162,7 @@ Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* 
 // Value utility functions
 // ============================================================================
 
-bool is_truthy(const Value& value) {
-    switch (value.type) {
-        case VAL_NIL: return false;
-        case VAL_BOOL: return value.as.boolean;
-        case VAL_INTEGER: {
-            switch (value.as.integer.num_type) {
-                case NUM_INT8:   return value.as.integer.value.i8 != 0;
-                case NUM_UINT8:  return value.as.integer.value.u8 != 0;
-                case NUM_INT16:  return value.as.integer.value.i16 != 0;
-                case NUM_UINT16: return value.as.integer.value.u16 != 0;
-                case NUM_INT32:  return value.as.integer.value.i32 != 0;
-                case NUM_UINT32: return value.as.integer.value.u32 != 0;
-                case NUM_INT64:  return value.as.integer.value.i64 != 0;
-                case NUM_UINT64: return value.as.integer.value.u64 != 0;
-                default: return false;
-            }
-        }
-        case VAL_FLOAT32: return value.as.float32_val != 0.0f;
-        case VAL_FLOAT64: return value.as.float64_val != 0.0;
-        case VAL_STRING: return value.as.string != NULL && value.as.string->length > 0;
-        case VAL_CHAR: return value.as.character != '\0';
-        case VAL_ARRAY: return value.as.array != NULL && value.as.array->length() > 0;
-        case VAL_FUNCTION: return value.as.function != NULL;
-        case VAL_NATIVE_FUNCTION: return value.as.native_function != NULL;
-        case VAL_TABLE: return value.as.table != NULL;
-        case VAL_USERDATA: return value.as.userdata.ptr != NULL;
-        case VAL_ENUM: return true;
-        default: return false;
-    }
-}
+// is_truthy is now inline in value.h
 
 bool Value::operator==(const Value& other) const {
     if ((type == VAL_INTEGER || type == VAL_FLOAT32 || type == VAL_FLOAT64) &&
