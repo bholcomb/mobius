@@ -35,10 +35,10 @@ for (var i = 0; i < 3; i++) {
     print(i);  // Should print 0, 1, 2
 }
 
-// Test with different integer types
-var small: int8 = 100;
-small++;
-print(small);  // Should print 101
+// Test with typed integers
+var signed: int64 = 100;
+signed++;
+print(signed);  // Should print 101
 
 var large: int64 = 1000000;
 --large;
@@ -55,4 +55,3 @@ print(x);  // Should print 3
 var y = 0;
 y--;
 print(y);  // Should print -1
-

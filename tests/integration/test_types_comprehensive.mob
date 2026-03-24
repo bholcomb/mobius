@@ -1,22 +1,10 @@
 // Comprehensive type annotation test suite
 print("=== Mobius Type Annotation Test Suite ===");
 
-print("\n1. Basic Integer Types");
-var i8: int8 = 127;
-var u8: uint8 = 255;
-var i16: int16 = 32767;
-var u16: uint16 = 65535;
-var i32: int32 = 2147483647;
-var u32: uint32 = 4294967295;
+print("\n1. Integer Types");
 var i64: int64 = 9223372036854775807;
 var u64: uint64 = 18446744073709551615;
 
-print("int8 max:", i8);
-print("uint8 max:", u8);
-print("int16 max:", i16);
-print("uint16 max:", u16);
-print("int32 max:", i32);
-print("uint32 max:", u32);
 print("int64 max:", i64);
 print("uint64 max:", u64);
 
@@ -25,13 +13,11 @@ var f: float64 = 3.14159265359;
 print("float:", f);
 
 print("\n3. Type Conversions (Lenient Mode)");
-var conv1: int32 = 42.7;     // float to int
-var conv2: float64 = 42;       // int to float
-var conv3: uint8 = 100;      // int to uint8
+var conv1: int64 = 42.7;      // float to int
+var conv2: float64 = 42;      // int to float
 
-print("42.7 -> int32:", conv1);
+print("42.7 -> int64:", conv1);
 print("42 -> float:", conv2);
-print("100 -> uint8:", conv3);
 
 print("\n4. Type Configuration");
 var cfg = get_type_config();
@@ -40,11 +26,11 @@ print("warn_on_conversion:", cfg["warn_on_conversion"]);
 
 print("\n5. Enable Warnings and Test");
 #pragma type_warnings true
-var warned: int16 = 123.456;  // Should show warning
+var warned: int64 = 123.456;  // Should show warning
 print("With warning:", warned);
 
 print("\n6. Mixed Expressions");
-var mixed: float64 = i32 + f;   // int32 + float should work
+var mixed: float64 = i64 + f;   // int64 + float should work
 print("Mixed arithmetic result:", mixed);
 
 print("\n7. No Type Annotation (Dynamic)");

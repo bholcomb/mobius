@@ -42,16 +42,11 @@ var_decl            ::= "var" IDENTIFIER [ type_annotation ] [ "=" expression ] 
 
 type_annotation     ::= ":" type_name
 
-type_name           ::= "int8" | "int16" | "int32" | "int64"
-                      | "uint8" | "uint16" | "uint32" | "uint64"
-                      | "float32" | "float64"
-                      | "string" | "bool" | "char"
-                      | "array" | "table" | "function"
+type_name           ::= "int64" | "uint64" | "float64"
 
 enum_decl           ::= "enum" IDENTIFIER [ ":" integer_type ] "{" enum_body "}" terminator
 
-integer_type        ::= "int8"  | "int16"  | "int32"  | "int64"
-                      | "uint8" | "uint16" | "uint32" | "uint64"
+integer_type        ::= "int64" | "uint64"
 
 enum_body           ::= enum_member { "," enum_member } [ "," ]
 
@@ -113,13 +108,10 @@ range_pattern       ::= literal ".." literal
 
 type_pattern        ::= "is" type_identifier
 
-type_identifier     ::= "nil" | "bool"
-                      | "int" | "float"
-                      | "int8" | "int16" | "int32" | "int64"
-                      | "uint8" | "uint16" | "uint32" | "uint64"
-                      | "float32" | "float64"
-                      | "string" | "char"
-                      | "array" | "table" | "function" | "enum"
+type_identifier     ::= "nil" | "bool" | "boolean"
+                      | "int" | "integer" | "float"
+                      | "string"
+                      | "array" | "table" | "function"
 
 enum_pattern        ::= IDENTIFIER "." IDENTIFIER
 

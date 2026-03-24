@@ -10,6 +10,12 @@ registration.
 - `<mobius/mobius.h>` — core embedding API (state lifecycle, execution, config)
 - `<mobius/mobius_plugin.h>` — stack API, native functions, value types
 
+Scripts only use **`int64`**, **`uint64`**, and **`float64`** as numeric type
+annotations; integers live as **`int64`** in the VM. The stack API still offers
+**`pushInt8`**, **`asInt32`**, and other narrow helpers: they convert at the C
+boundary for backward compatibility. Prefer **`pushInt64`** / **`pushUInt64`**
+and **`asInt64`** / **`asUInt64`** (and **`Float64`**) in new embedding code.
+
 ---
 
 ## Table of Contents
@@ -183,16 +189,16 @@ int n = mobius_stack_size(state);
 ```c
 mobius_stack_pushNil(state);
 mobius_stack_pushBool(state, true);
-mobius_stack_pushInt32(state, 42);
-mobius_stack_pushInt64(state, 1000000LL);
+mobius_stack_pushInt64(state, 42);
+mobius_stack_pushUInt64(state, 1000000ULL);
 mobius_stack_pushFloat64(state, 3.14);
 mobius_stack_pushString(state, "hello");
 ```
 
-All integer widths are supported: `pushInt8`, `pushUInt8`, `pushInt16`,
-`pushUInt16`, `pushInt32`, `pushUInt32`, `pushInt64`, `pushUInt64`.
-
-Float types: `pushFloat32`, `pushFloat64`.
+**Recommended:** `pushInt64`, `pushUInt64`, `pushFloat64` (and matching `as` /
+`get` functions). Narrow **`pushInt8`** … **`pushInt32`** and **`pushFloat32`**
+remain available; they widen when pushing and the runtime stores integers as
+**`int64`**.
 
 ### Reading Values
 
@@ -209,7 +215,7 @@ bool     b = mobius_stack_asBool(state, -1);
 on type mismatch:
 
 ```c
-int32_t  i = mobius_stack_getInt32(state, -1);
+int64_t  i = mobius_stack_getInt64(state, -1);
 const char* s = mobius_stack_getString(state, -1);
 ```
 
@@ -221,7 +227,7 @@ MobiusValueType type = mobius_stack_type(state, -1);
 // Convenience predicates
 if (mobius_stack_isNumber(state, -1))   { /* int or float */ }
 if (mobius_stack_isInteger(state, -1))  { /* any int type */ }
-if (mobius_stack_isFloat(state, -1))    { /* float32 or float64 */ }
+if (mobius_stack_isFloat(state, -1))    { /* floating-point */ }
 if (mobius_stack_isString(state, -1))   { /* string */ }
 if (mobius_stack_isBool(state, -1))     { /* bool */ }
 if (mobius_stack_isNil(state, -1))      { /* nil */ }
@@ -282,7 +288,7 @@ mobius_stack_pushNewTable(state, 4);    // capacity hint
 mobius_stack_pushString(state, "Alice");
 mobius_stack_setTableField(state, -2, "name");
 
-mobius_stack_pushInt32(state, 30);
+mobius_stack_pushInt64(state, 30);
 mobius_stack_setTableField(state, -2, "age");
 
 // Assign the table to a global
@@ -555,10 +561,10 @@ mobius_init_stdlib(state_a);
 mobius_init_stdlib(state_b);
 
 // Each state has its own globals
-mobius_stack_pushInt32(state_a, 100);
+mobius_stack_pushInt64(state_a, 100);
 mobius_stack_setGlobal(state_a, "value");
 
-mobius_stack_pushInt32(state_b, 200);
+mobius_stack_pushInt64(state_b, 200);
 mobius_stack_setGlobal(state_b, "value");
 
 mobius_exec_string(state_a, "print(value)");    // prints 100
@@ -603,8 +609,10 @@ mobius_free_state(state_b);
 |-----------------------------------------------|------------------|
 | `mobius_stack_pushNil(state)`                  | nil              |
 | `mobius_stack_pushBool(state, val)`            | boolean          |
-| `mobius_stack_pushInt8(state, val)` ... `pushUInt64` | integer (all widths) |
-| `mobius_stack_pushFloat32(state, val)` / `pushFloat64` | float     |
+| `mobius_stack_pushInt64(state, val)` / `pushUInt64` | integer (preferred) |
+| `mobius_stack_pushInt8` … `pushInt32`, `pushUInt8` … | backward-compat (widen to int64) |
+| `mobius_stack_pushFloat64(state, val)` | float (preferred) |
+| `mobius_stack_pushFloat32(state, val)` | backward-compat |
 | `mobius_stack_pushString(state, str)`          | string           |
 | `mobius_stack_pushNewTable(state, cap)`        | empty table      |
 | `mobius_stack_pushNewArray(state, cap)`        | empty array      |

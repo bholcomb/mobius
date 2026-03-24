@@ -321,7 +321,7 @@ typedef struct EnumMemberDef {
 typedef struct {
     Token keyword;                 // The 'enum' token for error reporting
     Token name;                    // Enum name
-    NumberType underlying_type;   // Underlying integer type (NUM_INT32 default)
+    NumberType underlying_type;   // Underlying integer type (NUM_INT64 default)
     bool has_explicit_type;        // Whether type was explicitly specified
     EnumMemberDef* members;        // Linked list of enum members
 } EnumStmt;

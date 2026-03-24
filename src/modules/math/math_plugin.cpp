@@ -288,7 +288,7 @@ int math_gcd(MobiusState* state, int arg_count) {
     }
     
     mobius_stack_pop(state, 2);
-    mobius_stack_pushInt32(state, (int32_t)a);
+    mobius_stack_pushInt64(state, a);
     return 1;
 }
 
@@ -306,7 +306,7 @@ int math_lcm(MobiusState* state, int arg_count) {
     
     if (a == 0 || b == 0) {
         mobius_stack_pop(state, 2);
-        mobius_stack_pushInt32(state, 0);
+        mobius_stack_pushInt64(state, 0);
         return 1;
     }
     
@@ -321,7 +321,7 @@ int math_lcm(MobiusState* state, int arg_count) {
     
     int64_t lcm_val = (a / gcd_val) * b;
     mobius_stack_pop(state, 2);
-    mobius_stack_pushInt32(state, (int32_t)lcm_val);
+    mobius_stack_pushInt64(state, lcm_val);
     return 1;
 }
 

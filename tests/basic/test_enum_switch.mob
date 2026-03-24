@@ -51,7 +51,7 @@ switch (weekend) {
 }
 
 // Test enum with integer values
-enum Priority: int32 {
+enum Priority: int64 {
     LOW = 1,
     MEDIUM = 5,
     HIGH = 10,

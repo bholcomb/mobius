@@ -7,18 +7,18 @@ print("strict_mode:", config["strict_mode"]);
 print("warn_on_conversion:", config["warn_on_conversion"]);
 
 print("\n=== Testing Lenient Mode (default) ===");
-var a: int32 = 3.8;  // Should convert
-print("a (float->int32):", a);
+var a: int64 = 3.8;  // Should convert
+print("a (float->int64):", a);
 
 print("\n=== Enable Type Warnings ===");
 #pragma type_warnings true
-var b: int32 = 4.9;  // Should convert but warn
-print("b (float->int32 with warning):", b);
+var b: int64 = 4.9;  // Should convert but warn
+print("b (float->int64 with warning):", b);
 
 print("\n=== Enable Strict Mode ===");
 #pragma strict_types true
 print("Strict mode enabled, now testing conversions...");
 
 // This should fail in strict mode
-var c: int32 = 5.5;  // Should error
+var c: int64 = 5.5;  // Should error
 print("This line should not be reached");

@@ -276,7 +276,7 @@ int Compiler::compileLiteral(LiteralExpr* expr, int dest) {
             emitABC(OP_LOADBOOL, (uint8_t)reg, v.as.boolean ? 1 : 0, 0);
             break;
         case VAL_INTEGER: {
-            int64_t iv = v.as.integer.value.i64;
+            int64_t iv = v.as.integer.value;
             if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                 emitAsBx(OP_LOADINT, (uint8_t)reg, (int)iv);
             } else {
@@ -285,13 +285,8 @@ int Compiler::compileLiteral(LiteralExpr* expr, int dest) {
             }
             break;
         }
-        case VAL_FLOAT32: {
-            int ki = current_->proto->addFloatConstant((double)v.as.float32_val);
-            emitLoadK(reg, ki);
-            break;
-        }
         case VAL_FLOAT64: {
-            int ki = current_->proto->addFloatConstant(v.as.float64_val);
+            int ki = current_->proto->addFloatConstant(v.as.double_val);
             emitLoadK(reg, ki);
             break;
         }
@@ -363,15 +358,14 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         const Value& rv = expr->right->as.literal.value;
         bool l_int = (lv.type == VAL_INTEGER);
         bool r_int = (rv.type == VAL_INTEGER);
-        bool l_flt = (lv.type == VAL_FLOAT32 || lv.type == VAL_FLOAT64);
-        bool r_flt = (rv.type == VAL_FLOAT32 || rv.type == VAL_FLOAT64);
+        bool l_flt = (lv.type == VAL_FLOAT64);
+        bool r_flt = (rv.type == VAL_FLOAT64);
         bool both_num = (l_int || l_flt) && (r_int || r_flt);
 
         if (both_num) {
             auto to_double = [](const Value& v) -> double {
-                if (v.type == VAL_INTEGER) return (double)v.as.integer.value.i64;
-                if (v.type == VAL_FLOAT32) return (double)v.as.float32_val;
-                return v.as.float64_val;
+                if (v.type == VAL_INTEGER) return (double)v.as.integer.value;
+                return v.as.double_val;
             };
 
             bool folded = false;
@@ -382,8 +376,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 case TOKEN_MINUS:
                 case TOKEN_STAR: {
                     if (l_int && r_int) {
-                        int64_t a = lv.as.integer.value.i64;
-                        int64_t b = rv.as.integer.value.i64;
+                        int64_t a = lv.as.integer.value;
+                        int64_t b = rv.as.integer.value;
                         int64_t r;
                         if (expr->op.type == TOKEN_PLUS)       r = a + b;
                         else if (expr->op.type == TOKEN_MINUS)  r = a - b;
@@ -409,9 +403,9 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 }
                 case TOKEN_PERCENT: {
                     if (l_int && r_int) {
-                        int64_t b = rv.as.integer.value.i64;
+                        int64_t b = rv.as.integer.value;
                         if (b != 0) {
-                            result = make_integer_value(NUM_INT64, lv.as.integer.value.i64 % b);
+                            result = make_integer_value(NUM_INT64, lv.as.integer.value % b);
                             folded = true;
                         }
                     } else {
@@ -429,7 +423,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             if (folded) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 if (result.type == VAL_INTEGER) {
-                    int64_t iv = result.as.integer.value.i64;
+                    int64_t iv = result.as.integer.value;
                     if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                         emitAsBx(OP_LOADINT, (uint8_t)reg, (int)iv);
                     } else {
@@ -437,7 +431,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                         emitLoadK(reg, ki);
                     }
                 } else {
-                    int ki = current_->proto->addFloatConstant(result.as.float64_val);
+                    int ki = current_->proto->addFloatConstant(result.as.double_val);
                     emitLoadK(reg, ki);
                 }
                 return reg;

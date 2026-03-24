@@ -55,17 +55,10 @@ typedef enum {
     MOBIUS_VAL_BOOL,
 
     /* Integer types */
-    MOBIUS_VAL_INT8,
-    MOBIUS_VAL_INT16,
-    MOBIUS_VAL_INT32,
     MOBIUS_VAL_INT64,
-    MOBIUS_VAL_UINT8,
-    MOBIUS_VAL_UINT16,
-    MOBIUS_VAL_UINT32,
     MOBIUS_VAL_UINT64,
 
     /* Float types */
-    MOBIUS_VAL_FLOAT32,
     MOBIUS_VAL_FLOAT64,
 
     MOBIUS_VAL_STRING,

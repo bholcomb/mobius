@@ -95,17 +95,6 @@ Value make_bool_value(bool val) {
     return value;
 }
 
-// make_integer_value is now inline in value.h
-
-Value make_float32_value(float val) {
-    Value value;
-    value.type = VAL_FLOAT32;
-    value.as.float32_val = val;
-    return value;
-}
-
-// make_float_value is now inline in value.h
-
 Value make_string_value(MobiusString* string) {
     Value value;
     value.type = VAL_STRING;
@@ -162,48 +151,28 @@ Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* 
 // Value utility functions
 // ============================================================================
 
-// is_truthy is now inline in value.h
-
 bool Value::operator==(const Value& other) const {
-    if ((type == VAL_INTEGER || type == VAL_FLOAT32 || type == VAL_FLOAT64) &&
-        (other.type == VAL_INTEGER || other.type == VAL_FLOAT32 || other.type == VAL_FLOAT64)) {
+    if ((type == VAL_INTEGER || type == VAL_FLOAT64) &&
+        (other.type == VAL_INTEGER || other.type == VAL_FLOAT64)) {
 
         double a_val = 0.0, b_val = 0.0;
 
         if (type == VAL_FLOAT64) {
-            a_val = as.float64_val;
-        } else if (type == VAL_FLOAT32) {
-            a_val = (double)as.float32_val;
-        } else if (type == VAL_INTEGER) {
-            switch (as.integer.num_type) {
-                case NUM_INT8:   a_val = as.integer.value.i8; break;
-                case NUM_UINT8:  a_val = as.integer.value.u8; break;
-                case NUM_INT16:  a_val = as.integer.value.i16; break;
-                case NUM_UINT16: a_val = as.integer.value.u16; break;
-                case NUM_INT32:  a_val = as.integer.value.i32; break;
-                case NUM_UINT32: a_val = as.integer.value.u32; break;
-                case NUM_INT64:  a_val = as.integer.value.i64; break;
-                case NUM_UINT64: a_val = as.integer.value.u64; break;
-                default: a_val = 0.0; break;
-            }
+            a_val = as.double_val;
+        } else {
+            if (as.integer.num_type == NUM_UINT64)
+                a_val = (double)(uint64_t)as.integer.value;
+            else
+                a_val = (double)as.integer.value;
         }
 
         if (other.type == VAL_FLOAT64) {
-            b_val = other.as.float64_val;
-        } else if (other.type == VAL_FLOAT32) {
-            b_val = (double)other.as.float32_val;
-        } else if (other.type == VAL_INTEGER) {
-            switch (other.as.integer.num_type) {
-                case NUM_INT8:   b_val = other.as.integer.value.i8; break;
-                case NUM_UINT8:  b_val = other.as.integer.value.u8; break;
-                case NUM_INT16:  b_val = other.as.integer.value.i16; break;
-                case NUM_UINT16: b_val = other.as.integer.value.u16; break;
-                case NUM_INT32:  b_val = other.as.integer.value.i32; break;
-                case NUM_UINT32: b_val = other.as.integer.value.u32; break;
-                case NUM_INT64:  b_val = other.as.integer.value.i64; break;
-                case NUM_UINT64: b_val = other.as.integer.value.u64; break;
-                default: b_val = 0.0; break;
-            }
+            b_val = other.as.double_val;
+        } else {
+            if (other.as.integer.num_type == NUM_UINT64)
+                b_val = (double)(uint64_t)other.as.integer.value;
+            else
+                b_val = (double)other.as.integer.value;
         }
 
         return a_val == b_val;
@@ -238,9 +207,8 @@ bool Value::exactlyEqual(const Value& other) const {
     switch (type) {
         case VAL_NIL:    return true;
         case VAL_BOOL:   return as.boolean == other.as.boolean;
-        case VAL_INTEGER: return as.integer.value.i64 == other.as.integer.value.i64;
-        case VAL_FLOAT32: return as.float32_val == other.as.float32_val;
-        case VAL_FLOAT64: return as.float64_val == other.as.float64_val;
+        case VAL_INTEGER: return as.integer.value == other.as.integer.value;
+        case VAL_FLOAT64: return as.double_val == other.as.double_val;
         case VAL_STRING: return as.string && other.as.string && *as.string == *other.as.string;
         case VAL_CHAR:   return as.character == other.as.character;
         case VAL_ARRAY:  return as.array == other.as.array;
@@ -266,30 +234,17 @@ void print_value(const Value& value) {
             printf(value.as.boolean ? "true" : "false");
             break;
         case VAL_INTEGER:
-            switch (value.as.integer.num_type) {
-                case NUM_INT8:   printf("%d", value.as.integer.value.i8); break;
-                case NUM_UINT8:  printf("%u", value.as.integer.value.u8); break;
-                case NUM_INT16:  printf("%d", value.as.integer.value.i16); break;
-                case NUM_UINT16: printf("%u", value.as.integer.value.u16); break;
-                case NUM_INT32:  printf("%d", value.as.integer.value.i32); break;
-                case NUM_UINT32: printf("%u", value.as.integer.value.u32); break;
-                case NUM_INT64:  printf("%ld", value.as.integer.value.i64); break;
-                case NUM_UINT64: printf("%lu", value.as.integer.value.u64); break;
-                default: printf("unknown_int"); break;
-            }
-            break;
-        case VAL_FLOAT32:
-            if (value.as.float32_val == (float)(int)value.as.float32_val) {
-                printf("%.1f", value.as.float32_val);
+            if (value.as.integer.num_type == NUM_UINT64) {
+                printf("%lu", (uint64_t)value.as.integer.value);
             } else {
-                printf("%g", value.as.float32_val);
+                printf("%ld", value.as.integer.value);
             }
             break;
         case VAL_FLOAT64:
-            if (value.as.float64_val == (double)(long long)value.as.float64_val) {
-                printf("%.1f", value.as.float64_val);
+            if (value.as.double_val == (double)(long long)value.as.double_val) {
+                printf("%.1f", value.as.double_val);
             } else {
-                printf("%g", value.as.float64_val);
+                printf("%g", value.as.double_val);
             }
             break;
         case VAL_STRING:
@@ -365,34 +320,19 @@ char* value_to_string(const Value& value) {
             if (result) strcpy(result, value.as.boolean ? "true" : "false");
             break;
         case VAL_INTEGER:
-            switch (value.as.integer.num_type) {
-                case NUM_INT8:   snprintf(buffer, sizeof(buffer), "%d", value.as.integer.value.i8); break;
-                case NUM_UINT8:  snprintf(buffer, sizeof(buffer), "%u", value.as.integer.value.u8); break;
-                case NUM_INT16:  snprintf(buffer, sizeof(buffer), "%d", value.as.integer.value.i16); break;
-                case NUM_UINT16: snprintf(buffer, sizeof(buffer), "%u", value.as.integer.value.u16); break;
-                case NUM_INT32:  snprintf(buffer, sizeof(buffer), "%d", value.as.integer.value.i32); break;
-                case NUM_UINT32: snprintf(buffer, sizeof(buffer), "%u", value.as.integer.value.u32); break;
-                case NUM_INT64:  snprintf(buffer, sizeof(buffer), "%ld", value.as.integer.value.i64); break;
-                case NUM_UINT64: snprintf(buffer, sizeof(buffer), "%lu", value.as.integer.value.u64); break;
-                default: strcpy(buffer, "0"); break;
-            }
-            result = (char*)malloc(strlen(buffer) + 1);
-            if (result) strcpy(result, buffer);
-            break;
-        case VAL_FLOAT32:
-            if (value.as.float32_val == (float)(int)value.as.float32_val) {
-                snprintf(buffer, sizeof(buffer), "%.1f", value.as.float32_val);
+            if (value.as.integer.num_type == NUM_UINT64) {
+                snprintf(buffer, sizeof(buffer), "%lu", (uint64_t)value.as.integer.value);
             } else {
-                snprintf(buffer, sizeof(buffer), "%g", value.as.float32_val);
+                snprintf(buffer, sizeof(buffer), "%ld", value.as.integer.value);
             }
             result = (char*)malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
         case VAL_FLOAT64:
-            if (value.as.float64_val == (double)(long long)value.as.float64_val) {
-                snprintf(buffer, sizeof(buffer), "%.1f", value.as.float64_val);
+            if (value.as.double_val == (double)(long long)value.as.double_val) {
+                snprintf(buffer, sizeof(buffer), "%.1f", value.as.double_val);
             } else {
-                snprintf(buffer, sizeof(buffer), "%g", value.as.float64_val);
+                snprintf(buffer, sizeof(buffer), "%g", value.as.double_val);
             }
             result = (char*)malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
@@ -466,7 +406,6 @@ const char* value_type_name(ValueType type) {
         case VAL_NIL: return "nil";
         case VAL_BOOL: return "bool";
         case VAL_INTEGER: return "integer";
-        case VAL_FLOAT32: return "float32";
         case VAL_FLOAT64: return "float";
         case VAL_STRING: return "string";
         case VAL_CHAR: return "char";
@@ -496,7 +435,6 @@ Value Value::makeEnum(EnumDefinition* definition, int64_t val) {
     return value;
 }
 
-
 TypeConversionResult validate_and_convert_value(const Value& value, NumberType target_type, bool is_annotated, TypeCheckConfig config) {
     TypeConversionResult result = {false, make_nil_value(), NULL, false};
 
@@ -509,36 +447,22 @@ TypeConversionResult validate_and_convert_value(const Value& value, NumberType t
 
     if (is_integer_type(target_type)) {
         int64_t int_value = 0;
-        bool conversion_needed = true;
+        bool conversion_needed = false;
 
         if (value.type == VAL_INTEGER) {
-            int_value = value.as.integer.value.i64;
-            conversion_needed = (target_type != NUM_INT64);
-        } else if (value.type == VAL_FLOAT32) {
-            if (config.strict_mode) {
-                result.error_message = mobius_strdup("Cannot convert float32 to integer in strict mode");
-                return result;
-            }
-            int_value = (int64_t)value.as.float32_val;
-            conversion_needed = true;
+            int_value = value.as.integer.value;
+            conversion_needed = (value.as.integer.num_type != target_type);
         } else if (value.type == VAL_FLOAT64) {
             if (config.strict_mode) {
                 result.error_message = mobius_strdup("Cannot convert float to integer in strict mode");
                 return result;
             }
-            int_value = (int64_t)value.as.float64_val;
+            int_value = (int64_t)value.as.double_val;
             conversion_needed = true;
         } else {
             result.error_message = (char*)malloc(256);
             snprintf(result.error_message, 256, "Cannot convert %s to %s",
                     value_type_name(value.type), number_type_name(target_type));
-            return result;
-        }
-
-        if (!value_fits_in_type(int_value, target_type)) {
-            result.error_message = (char*)malloc(256);
-            snprintf(result.error_message, 256, "Value %ld out of range for %s",
-                    int_value, number_type_name(target_type));
             return result;
         }
 
@@ -549,60 +473,26 @@ TypeConversionResult validate_and_convert_value(const Value& value, NumberType t
     }
 
     if (is_float_type(target_type)) {
+        double float_value = 0.0;
         bool conversion_needed = false;
 
-        if (target_type == NUM_FLOAT32) {
-            float float32_value = 0.0f;
-
-            if (value.type == VAL_FLOAT32) {
-                float32_value = value.as.float32_val;
-            } else if (value.type == VAL_FLOAT64) {
-                if (config.strict_mode) {
-                    result.error_message = mobius_strdup("Cannot convert float64 to float32 in strict mode");
-                    return result;
-                }
-                float32_value = (float)value.as.float64_val;
-                conversion_needed = true;
-            } else if (value.type == VAL_INTEGER) {
-                if (config.strict_mode) {
-                    result.error_message = mobius_strdup("Cannot convert integer to float32 in strict mode");
-                    return result;
-                }
-                float32_value = (float)value.as.integer.value.i64;
-                conversion_needed = true;
-            } else {
-                result.error_message = (char*)malloc(256);
-                snprintf(result.error_message, 256, "Cannot convert %s to %s",
-                        value_type_name(value.type), number_type_name(target_type));
+        if (value.type == VAL_FLOAT64) {
+            float_value = value.as.double_val;
+        } else if (value.type == VAL_INTEGER) {
+            if (config.strict_mode) {
+                result.error_message = mobius_strdup("Cannot convert integer to float in strict mode");
                 return result;
             }
-
-            result.converted_value = make_float32_value(float32_value);
+            float_value = (double)value.as.integer.value;
+            conversion_needed = true;
         } else {
-            double float_value = 0.0;
-
-            if (value.type == VAL_FLOAT64) {
-                float_value = value.as.float64_val;
-            } else if (value.type == VAL_FLOAT32) {
-                float_value = (double)value.as.float32_val;
-                conversion_needed = true;
-            } else if (value.type == VAL_INTEGER) {
-                if (config.strict_mode) {
-                    result.error_message = mobius_strdup("Cannot convert integer to float in strict mode");
-                    return result;
-                }
-                float_value = (double)value.as.integer.value.i64;
-                conversion_needed = true;
-            } else {
-                result.error_message = (char*)malloc(256);
-                snprintf(result.error_message, 256, "Cannot convert %s to %s",
-                        value_type_name(value.type), number_type_name(target_type));
-                return result;
-            }
-
-            result.converted_value = make_float_value(float_value);
+            result.error_message = (char*)malloc(256);
+            snprintf(result.error_message, 256, "Cannot convert %s to %s",
+                    value_type_name(value.type), number_type_name(target_type));
+            return result;
         }
 
+        result.converted_value = make_float_value(float_value);
         result.success = true;
         result.was_converted = conversion_needed;
         return result;
@@ -618,18 +508,5 @@ Value increment_integer(Value val, bool is_increment, bool* success) {
 
     int64_t delta = is_increment ? 1 : -1;
     *success = true;
-
-    switch (val.as.integer.num_type) {
-        case NUM_INT8:   return make_integer_value(NUM_INT8,   val.as.integer.value.i8  + delta);
-        case NUM_UINT8:  return make_integer_value(NUM_UINT8,  val.as.integer.value.u8  + delta);
-        case NUM_INT16:  return make_integer_value(NUM_INT16,  val.as.integer.value.i16 + delta);
-        case NUM_UINT16: return make_integer_value(NUM_UINT16, val.as.integer.value.u16 + delta);
-        case NUM_INT32:  return make_integer_value(NUM_INT32,  val.as.integer.value.i32 + delta);
-        case NUM_UINT32: return make_integer_value(NUM_UINT32, val.as.integer.value.u32 + delta);
-        case NUM_INT64:  return make_integer_value(NUM_INT64,  val.as.integer.value.i64 + delta);
-        case NUM_UINT64: return make_integer_value(NUM_UINT64, (int64_t)(val.as.integer.value.u64 + (uint64_t)delta));
-        default:
-            *success = false;
-            return make_nil_value();
-    }
+    return make_integer_value(val.as.integer.num_type, val.as.integer.value + delta);
 }

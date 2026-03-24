@@ -1,31 +1,27 @@
 // Test type checking and conversion
 print("=== Basic Type Annotations ===");
-var x: int32 = 42;
+var x: int64 = 42;
 var y: float64 = 3.14;
-var z: uint8 = 255;
+var z: uint64 = 255;
 
-print("x (int32):", x);
+print("x (int64):", x);
 print("y (float):", y);
-print("z (uint8):", z);
+print("z (uint64):", z);
 
 print("\n=== Type Conversion Tests ===");
-var a: int32 = 3.8;  // Should convert float to int32
+var a: int64 = 3.8;  // Should convert float to int64
 var b: float64 = 100;  // Should convert int to float
-var c: uint16 = 1000; // Should work within range
 
-print("a (float->int32):", a);
+print("a (float->int64):", a);
 print("b (int->float):", b);
-print("c (uint16):", c);
 
 print("\n=== Mixed arithmetic ===");
 var result: float64 = x + y;
 print("x + y =", result);
 
-print("\n=== Testing different integer sizes ===");
-var small: int8 = 100;
-var medium: int16 = 30000;
-var large: int64 = 5000000000;
+print("\n=== Testing integer sizes ===");
+var signed: int64 = 5000000000;
+var unsigned: uint64 = 18000000000000000000;
 
-print("small (int8):", small);
-print("medium (int16):", medium);
-print("large (int64):", large);
+print("signed (int64):", signed);
+print("unsigned (uint64):", unsigned);

@@ -22,37 +22,16 @@
 // ============================================================================
 
 inline int64_t MobiusVM::vm_extract_int64(const Value& v) {
-    switch (v.as.integer.num_type) {
-        case NUM_INT8:   return v.as.integer.value.i8;
-        case NUM_UINT8:  return v.as.integer.value.u8;
-        case NUM_INT16:  return v.as.integer.value.i16;
-        case NUM_UINT16: return v.as.integer.value.u16;
-        case NUM_INT32:  return v.as.integer.value.i32;
-        case NUM_UINT32: return v.as.integer.value.u32;
-        case NUM_INT64:  return v.as.integer.value.i64;
-        case NUM_UINT64: return (int64_t)v.as.integer.value.u64;
-        default:         return 0;
-    }
+    return v.as.integer.value;
 }
 
 inline uint64_t MobiusVM::vm_extract_uint64(const Value& v) {
-    switch (v.as.integer.num_type) {
-        case NUM_INT8:   return (uint64_t)v.as.integer.value.i8;
-        case NUM_UINT8:  return v.as.integer.value.u8;
-        case NUM_INT16:  return (uint64_t)v.as.integer.value.i16;
-        case NUM_UINT16: return v.as.integer.value.u16;
-        case NUM_INT32:  return (uint64_t)v.as.integer.value.i32;
-        case NUM_UINT32: return v.as.integer.value.u32;
-        case NUM_INT64:  return (uint64_t)v.as.integer.value.i64;
-        case NUM_UINT64: return v.as.integer.value.u64;
-        default:         return 0;
-    }
+    return (uint64_t)v.as.integer.value;
 }
 
 inline double MobiusVM::vm_extract_double(const Value& v) {
-    if (v.type == VAL_FLOAT64) return v.as.float64_val;
-    if (v.type == VAL_FLOAT32) return (double)v.as.float32_val;
-    if (v.type == VAL_INTEGER) return (double)vm_extract_int64(v);
+    if (v.type == VAL_FLOAT64) return v.as.double_val;
+    if (v.type == VAL_INTEGER) return (double)v.as.integer.value;
     return 0.0;
 }
 
@@ -315,11 +294,11 @@ int MobiusVM::run(size_t base_depth) {
     uint32_t* ip = ci->ip;
     Prototype* proto = ci->proto;
     int base = ci->base;
+    Value* regs = registers_.data() + base;
 
-    // Macro-style accessors for tight inner loop
-    #define RA(inst)  registers_[base + DECODE_A(inst)]
-    #define RB(inst)  registers_[base + DECODE_B(inst)]
-    #define RC(inst)  registers_[base + DECODE_C(inst)]
+    #define RA(inst)  regs[DECODE_A(inst)]
+    #define RB(inst)  regs[DECODE_B(inst)]
+    #define RC(inst)  regs[DECODE_C(inst)]
     #define RKB(inst) RK(*ci, DECODE_B(inst))
     #define RKC(inst) RK(*ci, DECODE_C(inst))
     #define KBx(inst) proto->constants[DECODE_Bx(inst)]
@@ -327,6 +306,7 @@ int MobiusVM::run(size_t base_depth) {
         ci = &call_stack_.back(); \
         proto = ci->proto; \
         base = ci->base; \
+        regs = registers_.data() + base; \
     } while(0)
 
     for (;;) {
@@ -352,7 +332,7 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             int b = DECODE_B(inst);
             for (int i = a; i <= a + b; i++)
-                registers_[base + i] = Value();
+                regs[i] = Value();
             break;
         }
 
@@ -515,13 +495,10 @@ int MobiusVM::run(size_t base_depth) {
                 append_val(lhs);
                 append_val(rhs);
                 RA(inst) = make_string_value_from_cstr(state_, result.c_str());
-            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 ||
-                         rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64) &&
-                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64) &&
-                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64)) {
-                bool use_f64 = (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64);
-                double r = vm_extract_double(lhs) + vm_extract_double(rhs);
-                RA(inst) = use_f64 ? make_float_value(r) : make_float32_value((float)r);
+            } else if ((lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) &&
+                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64) &&
+                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64)) {
+                RA(inst) = make_float_value(vm_extract_double(lhs) + vm_extract_double(rhs));
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
@@ -546,13 +523,10 @@ int MobiusVM::run(size_t base_depth) {
                     RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) - vm_extract_uint64(rhs)));
                 else
                     RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) - vm_extract_int64(rhs));
-            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 ||
-                         rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64) &&
-                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64) &&
-                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64)) {
-                bool use_f64 = (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64);
-                double r = vm_extract_double(lhs) - vm_extract_double(rhs);
-                RA(inst) = use_f64 ? make_float_value(r) : make_float32_value((float)r);
+            } else if ((lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) &&
+                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64) &&
+                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64)) {
+                RA(inst) = make_float_value(vm_extract_double(lhs) - vm_extract_double(rhs));
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
@@ -577,13 +551,10 @@ int MobiusVM::run(size_t base_depth) {
                     RA(inst) = make_integer_value(NUM_UINT64, (int64_t)(vm_extract_uint64(lhs) * vm_extract_uint64(rhs)));
                 else
                     RA(inst) = make_integer_value(NUM_INT64, vm_extract_int64(lhs) * vm_extract_int64(rhs));
-            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 ||
-                         rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64) &&
-                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64) &&
-                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64)) {
-                bool use_f64 = (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64);
-                double r = vm_extract_double(lhs) * vm_extract_double(rhs);
-                RA(inst) = use_f64 ? make_float_value(r) : make_float32_value((float)r);
+            } else if ((lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) &&
+                        (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64) &&
+                        (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64)) {
+                RA(inst) = make_float_value(vm_extract_double(lhs) * vm_extract_double(rhs));
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
@@ -645,8 +616,8 @@ int MobiusVM::run(size_t base_depth) {
                 if (rc < 0) return -1;
                 if (rc == 0) { runtimeError("Cannot modulo: no __mod metamethod on table"); return -1; }
                 RA(inst) = out;
-            } else if ((lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64 || lhs.type == VAL_INTEGER) &&
-                        (rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64 || rhs.type == VAL_INTEGER)) {
+            } else if ((lhs.type == VAL_FLOAT64 || lhs.type == VAL_INTEGER) &&
+                        (rhs.type == VAL_FLOAT64 || rhs.type == VAL_INTEGER)) {
                 double lv = vm_extract_double(lhs);
                 double rv = vm_extract_double(rhs);
                 if (rv == 0.0) { runtimeError("Modulo by zero"); return -1; }
@@ -661,12 +632,9 @@ int MobiusVM::run(size_t base_depth) {
         case OP_UNM: {
             const Value& val = RB(inst);
             if (val.type == VAL_INTEGER) {
-                int64_t v = vm_extract_int64(val);
-                RA(inst) = make_integer_value(NUM_INT64, -v);
+                RA(inst) = make_integer_value(NUM_INT64, -vm_extract_int64(val));
             } else if (val.type == VAL_FLOAT64) {
-                RA(inst) = make_float_value(-val.as.float64_val);
-            } else if (val.type == VAL_FLOAT32) {
-                RA(inst) = make_float32_value(-val.as.float32_val);
+                RA(inst) = make_float_value(-val.as.double_val);
             } else {
                 runtimeError("Attempt to negate a %s value", value_type_name(val.type));
                 return -1;
@@ -736,7 +704,7 @@ int MobiusVM::run(size_t base_depth) {
             // Build concatenated string from R[B]..R[C]
             std::string result;
             for (int i = b_reg; i <= c_reg; i++) {
-                const Value& v = registers_[base + i];
+                const Value& v = regs[i];
                 if (v.type == VAL_STRING && v.as.string) {
                     result.append(v.as.string->data, v.as.string->length);
                 } else {
@@ -776,8 +744,8 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64);
-            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64);
+            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64);
             bool lt;
             if (l_num && r_num) {
                 if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
@@ -811,8 +779,8 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64);
-            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64);
+            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64);
             bool le;
             if (l_num && r_num) {
                 if (lhs.type == VAL_INTEGER && rhs.type == VAL_INTEGER) {
@@ -889,11 +857,11 @@ int MobiusVM::run(size_t base_depth) {
             int rc = callFunction(*ci, a, nargs, c);
             if (rc < 0) return -1;
             if (rc == 1) {
-                // callFunction pushed a new bytecode frame
                 ci = &call_stack_.back();
                 ip = ci->ip;
                 proto = ci->proto;
                 base = ci->base;
+                regs = registers_.data() + base;
             }
             break;
         }
@@ -911,6 +879,7 @@ int MobiusVM::run(size_t base_depth) {
                 ip = ci->ip;
                 proto = ci->proto;
                 base = ci->base;
+                regs = registers_.data() + base;
             }
             break;
         }
@@ -943,7 +912,6 @@ int MobiusVM::run(size_t base_depth) {
                 }
             }
 
-            // If we've returned to the boundary, exit this run() invocation
             if (call_stack_.size() <= base_depth) {
                 return 0;
             }
@@ -952,6 +920,7 @@ int MobiusVM::run(size_t base_depth) {
             ip = ci->ip;
             proto = ci->proto;
             base = ci->base;
+            regs = registers_.data() + base;
             break;
         }
 
@@ -997,7 +966,7 @@ int MobiusVM::run(size_t base_depth) {
                     const UpvalueDesc& desc = child_proto->upvalues[u];
                     if (desc.in_stack) {
                         // Capture from current frame's registers
-                        Value* reg_ptr = &registers_[base + desc.index];
+                        Value* reg_ptr = &regs[desc.index];
                         // Check if we already have an open upvalue for this register
                         Upvalue* existing = nullptr;
                         for (auto* ouv : ci->open_upvalues) {
@@ -1046,10 +1015,8 @@ int MobiusVM::run(size_t base_depth) {
         case OP_FORPREP: {
             int a = DECODE_A(inst);
             int sbx = DECODE_sBx(inst);
-            // R[A] = index, R[A+1] = limit, R[A+2] = step
-            // R[A] -= R[A+2]; pc += sBx
-            Value& idx  = registers_[base + a];
-            Value& step = registers_[base + a + 2];
+            Value& idx  = regs[a];
+            Value& step = regs[a + 2];
             if (idx.type == VAL_INTEGER && step.type == VAL_INTEGER) {
                 int64_t iv = vm_extract_int64(idx);
                 int64_t sv = vm_extract_int64(step);
@@ -1066,9 +1033,9 @@ int MobiusVM::run(size_t base_depth) {
         case OP_FORLOOP: {
             int a = DECODE_A(inst);
             int sbx = DECODE_sBx(inst);
-            Value& idx   = registers_[base + a];
-            Value& limit = registers_[base + a + 1];
-            Value& step  = registers_[base + a + 2];
+            Value& idx   = regs[a];
+            Value& limit = regs[a + 1];
+            Value& step  = regs[a + 2];
 
             if (idx.type == VAL_INTEGER && limit.type == VAL_INTEGER && step.type == VAL_INTEGER) {
                 int64_t iv = vm_extract_int64(idx);
@@ -1079,7 +1046,7 @@ int MobiusVM::run(size_t base_depth) {
                 bool in_range = (sv > 0) ? (iv <= lv) : (iv >= lv);
                 if (in_range) {
                     ip += sbx;
-                    registers_[base + a + 3] = idx;
+                    regs[a + 3] = idx;
                 }
             } else {
                 double iv = vm_extract_double(idx);
@@ -1090,7 +1057,7 @@ int MobiusVM::run(size_t base_depth) {
                 bool in_range = (sv > 0) ? (iv <= lv) : (iv >= lv);
                 if (in_range) {
                     ip += sbx;
-                    registers_[base + a + 3] = idx;
+                    regs[a + 3] = idx;
                 }
             }
             break;
@@ -1111,7 +1078,7 @@ int MobiusVM::run(size_t base_depth) {
             const Value& name_val = proto->constants[bx];
             const char* enum_name = (name_val.type == VAL_STRING && name_val.as.string)
                                     ? name_val.as.string->data : "unknown";
-            EnumDefinition* edef = new (std::nothrow) EnumDefinition(enum_name, NUM_INT32);
+            EnumDefinition* edef = new (std::nothrow) EnumDefinition(enum_name, NUM_INT64);
             if (!edef) { runtimeError("Failed to allocate enum"); return -1; }
             RA(inst) = make_userdata_value(edef,
                 [](void* p) { if (p) static_cast<EnumDefinition*>(p)->release(); },
@@ -1406,7 +1373,7 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_ISNUM: {
             const Value& v = RB(inst);
-            bool num = (v.type == VAL_INTEGER || v.type == VAL_FLOAT32 || v.type == VAL_FLOAT64);
+            bool num = (v.type == VAL_INTEGER || v.type == VAL_FLOAT64);
             RA(inst) = make_bool_value(num);
             break;
         }
@@ -1415,8 +1382,8 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT32 || lhs.type == VAL_FLOAT64);
-            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64);
+            bool l_num = (lhs.type == VAL_INTEGER || lhs.type == VAL_FLOAT64);
+            bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT64);
             bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
             if (compat != (a != 0)) ip++;
             break;

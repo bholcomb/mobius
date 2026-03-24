@@ -92,19 +92,16 @@ int lib_int(MobiusState* state, int arg_count) {
         case VAL_INTEGER:
             result = arg;  // Already an integer
             break;
-        case VAL_FLOAT32:
-            result = make_integer_value(NUM_INT32, (int32_t)arg.as.float32_val);
-            break;
         case VAL_FLOAT64:
-            result = make_integer_value(NUM_INT32, (int32_t)arg.as.float64_val);
+            result = make_integer_value(NUM_INT64, (int64_t)arg.as.double_val);
             break;
         case VAL_STRING: {
             if (arg.as.string) {
                 const char* str = arg.as.string->data;
                 char* endptr;
-                long val = strtol(str, &endptr, 10);
+                long long val = strtoll(str, &endptr, 10);
                 if (*endptr == '\0') {
-                    result = make_integer_value(NUM_INT32, (int32_t)val);
+                    result = make_integer_value(NUM_INT64, (int64_t)val);
                 } else {
                     return state->error("Cannot convert string to integer");
                 }
@@ -114,7 +111,7 @@ int lib_int(MobiusState* state, int arg_count) {
             break;
         }
         case VAL_BOOL:
-            result = make_integer_value(NUM_INT32, arg.as.boolean ? 1 : 0);
+            result = make_integer_value(NUM_INT64, arg.as.boolean ? 1 : 0);
             break;
         default:
             return state->error("Cannot convert value to integer");
@@ -138,22 +135,8 @@ int lib_float(MobiusState* state, int arg_count) {
         case VAL_FLOAT64:
             result = arg;  // Already a float
             break;
-        case VAL_FLOAT32:
-            result = make_float_value((double)arg.as.float32_val);
-            break;
         case VAL_INTEGER: {
-            int64_t val;
-            switch (arg.as.integer.num_type) {
-                case NUM_INT8:   val = arg.as.integer.value.i8; break;
-                case NUM_UINT8:  val = arg.as.integer.value.u8; break;
-                case NUM_INT16:  val = arg.as.integer.value.i16; break;
-                case NUM_UINT16: val = arg.as.integer.value.u16; break;
-                case NUM_INT32:  val = arg.as.integer.value.i32; break;
-                case NUM_UINT32: val = arg.as.integer.value.u32; break;
-                case NUM_INT64:  val = arg.as.integer.value.i64; break;
-                case NUM_UINT64: val = arg.as.integer.value.u64; break;
-                default: val = arg.as.integer.value.i32; break;
-            }
+            int64_t val = arg.as.integer.value;
             result = make_float_value((double)val);
             break;
         }

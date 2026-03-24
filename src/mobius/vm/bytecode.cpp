@@ -16,13 +16,10 @@ static void print_constant(const Prototype* proto, int idx) {
             printf("%s", v.as.boolean ? "true" : "false");
             break;
         case VAL_INTEGER:
-            printf("%ld", (long)v.as.integer.value.i64);
+            printf("%ld", (long)v.as.integer.value);
             break;
         case VAL_FLOAT64:
-            printf("%g", v.as.float64_val);
-            break;
-        case VAL_FLOAT32:
-            printf("%gf", (double)v.as.float32_val);
+            printf("%g", v.as.double_val);
             break;
         case VAL_STRING:
             printf("\"%s\"", v.as.string ? v.as.string->data : "(null)");

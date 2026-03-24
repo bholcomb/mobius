@@ -30,7 +30,7 @@ int lib_random(MobiusState* state, int arg_count) {
         if (arg.type != VAL_INTEGER) {
             return state->error("random expects an integer argument");
         }
-        int64_t max_val = arg.as.integer.value.i64;
+        int64_t max_val = arg.as.integer.value;
         if (max_val <= 0) {
             return state->error("random expects a positive integer");
         }
@@ -49,8 +49,8 @@ int lib_random(MobiusState* state, int arg_count) {
             return state->error("random expects integer arguments");
         }
         
-        int64_t min_val = min_arg.as.integer.value.i64;
-        int64_t max_val = max_arg.as.integer.value.i64;
+        int64_t min_val = min_arg.as.integer.value;
+        int64_t max_val = max_arg.as.integer.value;
         
         if (min_val > max_val) {
             return state->error("random min value must be <= max value");

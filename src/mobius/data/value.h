@@ -23,7 +23,6 @@ typedef enum {
     VAL_NIL,
     VAL_BOOL,
     VAL_INTEGER,
-    VAL_FLOAT32,
     VAL_FLOAT64,
     VAL_CHAR,
     VAL_NATIVE_FUNCTION,
@@ -42,16 +41,10 @@ public:
         bool boolean;
         struct {
             NumberType num_type;
-            union {
-                int8_t   i8;    uint8_t  u8;
-                int16_t  i16;   uint16_t u16;
-                int32_t  i32;   uint32_t u32;
-                int64_t  i64;   uint64_t u64;
-            } value;
+            int64_t value;
         } integer;
 
-        float float32_val;
-        double float64_val;
+        double double_val;
 
         MobiusString* string;
         char character;
@@ -139,26 +132,14 @@ inline Value make_integer_value(NumberType numtype, int64_t val) {
     Value value;
     value.type = VAL_INTEGER;
     value.as.integer.num_type = numtype;
-    switch (numtype) {
-        case NUM_INT8:   value.as.integer.value.i8  = (int8_t)val; break;
-        case NUM_UINT8:  value.as.integer.value.u8  = (uint8_t)val; break;
-        case NUM_INT16:  value.as.integer.value.i16 = (int16_t)val; break;
-        case NUM_UINT16: value.as.integer.value.u16 = (uint16_t)val; break;
-        case NUM_INT32:  value.as.integer.value.i32 = (int32_t)val; break;
-        case NUM_UINT32: value.as.integer.value.u32 = (uint32_t)val; break;
-        case NUM_INT64:  value.as.integer.value.i64 = val; break;
-        case NUM_UINT64: value.as.integer.value.u64 = (uint64_t)val; break;
-        default: break;
-    }
+    value.as.integer.value = val;
     return value;
 }
-
-MOBIUS_API Value make_float32_value(float value);
 
 inline Value make_float_value(double val) {
     Value value;
     value.type = VAL_FLOAT64;
-    value.as.float64_val = val;
+    value.as.double_val = val;
     return value;
 }
 
@@ -170,26 +151,12 @@ MOBIUS_API Value make_userdata_value(void* ptr, UserdataDestructor destructor, c
 MOBIUS_API Value make_array_value(ArrayValue* array);
 MOBIUS_API Value make_table_value(struct Table* table);
 
-// Value utility functions
 inline bool is_truthy(const Value& value) {
     switch (value.type) {
         case VAL_NIL: return false;
         case VAL_BOOL: return value.as.boolean;
-        case VAL_INTEGER: {
-            switch (value.as.integer.num_type) {
-                case NUM_INT8:   return value.as.integer.value.i8 != 0;
-                case NUM_UINT8:  return value.as.integer.value.u8 != 0;
-                case NUM_INT16:  return value.as.integer.value.i16 != 0;
-                case NUM_UINT16: return value.as.integer.value.u16 != 0;
-                case NUM_INT32:  return value.as.integer.value.i32 != 0;
-                case NUM_UINT32: return value.as.integer.value.u32 != 0;
-                case NUM_INT64:  return value.as.integer.value.i64 != 0;
-                case NUM_UINT64: return value.as.integer.value.u64 != 0;
-                default: return false;
-            }
-        }
-        case VAL_FLOAT32: return value.as.float32_val != 0.0f;
-        case VAL_FLOAT64: return value.as.float64_val != 0.0;
+        case VAL_INTEGER: return value.as.integer.value != 0;
+        case VAL_FLOAT64: return value.as.double_val != 0.0;
         case VAL_STRING: return value.as.string != nullptr && value.as.string->length > 0;
         case VAL_CHAR: return value.as.character != '\0';
         case VAL_ARRAY: return value.as.array != nullptr;
@@ -207,7 +174,6 @@ MOBIUS_API char* value_to_string(const Value& value);
 MOBIUS_API const char* value_type_name(ValueType type);
 Value increment_integer(Value val, bool is_increment, bool* success);
 
-// Type conversion result
 typedef struct {
     bool success;
     Value converted_value;

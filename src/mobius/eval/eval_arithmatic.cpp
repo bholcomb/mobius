@@ -12,37 +12,16 @@
 // If either operand is NUM_UINT64, arithmetic uses uint64_t and produces
 // NUM_UINT64. Otherwise all integer types widen to int64_t / NUM_INT64.
 static inline int64_t extract_int64(const Value& v) {
-    switch (v.as.integer.num_type) {
-        case NUM_INT8:   return v.as.integer.value.i8;
-        case NUM_UINT8:  return v.as.integer.value.u8;
-        case NUM_INT16:  return v.as.integer.value.i16;
-        case NUM_UINT16: return v.as.integer.value.u16;
-        case NUM_INT32:  return v.as.integer.value.i32;
-        case NUM_UINT32: return v.as.integer.value.u32;
-        case NUM_INT64:  return v.as.integer.value.i64;
-        case NUM_UINT64: return (int64_t)v.as.integer.value.u64;
-        default:         return 0;
-    }
+    return v.as.integer.value;
 }
 
 static inline uint64_t extract_uint64(const Value& v) {
-    switch (v.as.integer.num_type) {
-        case NUM_INT8:   return (uint64_t)v.as.integer.value.i8;
-        case NUM_UINT8:  return v.as.integer.value.u8;
-        case NUM_INT16:  return (uint64_t)v.as.integer.value.i16;
-        case NUM_UINT16: return v.as.integer.value.u16;
-        case NUM_INT32:  return (uint64_t)v.as.integer.value.i32;
-        case NUM_UINT32: return v.as.integer.value.u32;
-        case NUM_INT64:  return (uint64_t)v.as.integer.value.i64;
-        case NUM_UINT64: return v.as.integer.value.u64;
-        default:         return 0;
-    }
+    return (uint64_t)v.as.integer.value;
 }
 
 static inline double extract_double(const Value& v) {
-    if (v.type == VAL_FLOAT64) return v.as.float64_val;
-    if (v.type == VAL_FLOAT32) return (double)v.as.float32_val;
-    if (v.type == VAL_INTEGER) return (double)extract_int64(v);
+    if (v.type == VAL_FLOAT64) return v.as.double_val;
+    if (v.type == VAL_INTEGER) return (double)v.as.integer.value;
     return 0.0;
 }
 
@@ -223,16 +202,8 @@ EvalResult add_values(Environment* env, const Value& left, const Value& right) {
         return make_success(1);
     }
     
-    // Numeric addition — float path
-    if (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64) {
-        bool result_is_double = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
-        double lv = extract_double(left);
-        double rv = extract_double(right);
-        if (result_is_double) {
-            env->current_context->push(make_float_value(lv + rv));
-        } else {
-            env->current_context->push(make_float32_value((float)(lv + rv)));
-        }
+    if (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64) {
+        env->current_context->push(make_float_value(extract_double(left) + extract_double(right)));
         return make_success(1);
     }
     
@@ -271,16 +242,8 @@ EvalResult subtract_values(Environment* env, const Value& left, const Value& rig
         }
     }
     
-    // Float subtraction
-    if (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64) {
-        bool result_is_double = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
-        double lv = extract_double(left);
-        double rv = extract_double(right);
-        if (result_is_double) {
-            env->current_context->push(make_float_value(lv - rv));
-        } else {
-            env->current_context->push(make_float32_value((float)(lv - rv)));
-        }
+    if (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64) {
+        env->current_context->push(make_float_value(extract_double(left) - extract_double(right)));
         return make_success(1);
     }
     
@@ -319,16 +282,8 @@ EvalResult multiply_values(Environment* env, const Value& left, const Value& rig
         }
     }
     
-    // Float multiplication
-    if (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64) {
-        bool result_is_double = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
-        double lv = extract_double(left);
-        double rv = extract_double(right);
-        if (result_is_double) {
-            env->current_context->push(make_float_value(lv * rv));
-        } else {
-            env->current_context->push(make_float32_value((float)(lv * rv)));
-        }
+    if (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64) {
+        env->current_context->push(make_float_value(extract_double(left) * extract_double(right)));
         return make_success(1);
     }
     
@@ -428,9 +383,8 @@ EvalResult modulo_values(Environment* env, const Value& left, const Value& right
         return make_success(1);
     }
     
-    // Float modulo using fmod
-    if ((left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 || left.type == VAL_INTEGER) &&
-        (right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64 || right.type == VAL_INTEGER)) {
+    if ((left.type == VAL_FLOAT64 || left.type == VAL_INTEGER) &&
+        (right.type == VAL_FLOAT64 || right.type == VAL_INTEGER)) {
         double lv = extract_double(left);
         double rv = extract_double(right);
         if (rv == 0.0) {
@@ -512,12 +466,11 @@ EvalResult compare_values(Environment* env, const Value& left, const Value& righ
         bool strict = env->current_context->state->config().strict_mode;
         result = strict ? !left.exactlyEqual(right) : (left != right);
     } else {
-        bool l_num = (left.type == VAL_INTEGER || left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64);
-        bool r_num = (right.type == VAL_INTEGER || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64);
+        bool l_num = (left.type == VAL_INTEGER || left.type == VAL_FLOAT64);
+        bool r_num = (right.type == VAL_INTEGER || right.type == VAL_FLOAT64);
 
         if (l_num && r_num) {
-            bool is_float = (left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64 ||
-                             right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64);
+            bool is_float = (left.type == VAL_FLOAT64 || right.type == VAL_FLOAT64);
             if (is_float) {
                 double lv = extract_double(left);
                 double rv = extract_double(right);

@@ -1,9 +1,9 @@
 // Test type annotations
 // REQUIRE: a = 42
 // REQUIRE: c = 255
-var a: int32 = 42;
+var a: int64 = 42;
 var b: float64 = 3.14;
-var c: uint8 = 255;
+var c: uint64 = 255;
 var d = 100;  // No type annotation
 
 print("a =", a);

@@ -1,12 +1,12 @@
 // Comprehensive enum integration test
 
-enum HttpStatus : uint16 {
+enum HttpStatus : uint64 {
     OK = 200,
     NOT_FOUND = 404,
     SERVER_ERROR = 500
 }
 
-enum LogLevel : uint8 {
+enum LogLevel : uint64 {
     DEBUG = 0,
     INFO = 1,
     WARN = 2,

@@ -24,6 +24,7 @@
 #include <mobius/mobius_plugin.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <ctype.h>
 
@@ -101,7 +102,7 @@ int text_word_count(MobiusState* state, int arg_count) {
     }
     
     mobius_stack_pop(state, 1);
-    mobius_stack_pushInt32(state, word_count);
+    mobius_stack_pushInt64(state, word_count);
     return 1;
 }
 
@@ -133,7 +134,7 @@ int text_line_count(MobiusState* state, int arg_count) {
     }
     
     mobius_stack_pop(state, 1);
-    mobius_stack_pushInt32(state, line_count);
+    mobius_stack_pushInt64(state, line_count);
     return 1;
 }
 
@@ -161,7 +162,7 @@ int text_char_count(MobiusState* state, int arg_count) {
     int count = count_char(text, target);
     
     mobius_stack_pop(state, 2);
-    mobius_stack_pushInt32(state, count);
+    mobius_stack_pushInt64(state, count);
     return 1;
 }
 
@@ -364,7 +365,7 @@ int text_pad_left(MobiusState* state, int arg_count) {
     }
     
     const char* pad_char_str = mobius_stack_asString(state, -1);
-    int width = mobius_stack_asInt32(state, -2);
+    int64_t width = mobius_stack_asInt64(state, -2);
     const char* text = mobius_stack_asString(state, -3);
     
     if (strlen(pad_char_str) != 1) {

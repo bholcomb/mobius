@@ -40,15 +40,8 @@ static const Keyword keywords[] = {
     {"while",    TOKEN_WHILE},
     
     // Type keywords
-    {"int8",     TOKEN_TYPE_INT8},
-    {"int16",    TOKEN_TYPE_INT16},
-    {"int32",    TOKEN_TYPE_INT32},
     {"int64",    TOKEN_TYPE_INT64},
-    {"uint8",    TOKEN_TYPE_UINT8},
-    {"uint16",   TOKEN_TYPE_UINT16},
-    {"uint32",   TOKEN_TYPE_UINT32},
     {"uint64",   TOKEN_TYPE_UINT64},
-    {"float32",  TOKEN_TYPE_FLOAT32},
     {"float64",  TOKEN_TYPE_FLOAT64},
 };
 

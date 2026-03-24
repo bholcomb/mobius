@@ -98,8 +98,8 @@ int game_set_player_pos(MobiusState* state, int arg_count) {
     Value y_val = ctx->pop();
     Value x_val = ctx->pop();
     
-    double x = (x_val.type == VAL_FLOAT64) ? x_val.as.float64_val : (double)x_val.as.integer.value.i64;
-    double y = (y_val.type == VAL_FLOAT64) ? y_val.as.float64_val : (double)y_val.as.integer.value.i64;
+    double x = (x_val.type == VAL_FLOAT64) ? x_val.as.double_val : (double)x_val.as.integer.value;
+    double y = (y_val.type == VAL_FLOAT64) ? y_val.as.double_val : (double)y_val.as.integer.value;
     
     g_game->player.x = (float)x;
     g_game->player.y = (float)y;
@@ -122,7 +122,7 @@ int game_get_player_health(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    ctx->push(make_integer_value(NUM_INT32, g_game->player.health));
+    ctx->push(make_integer_value(NUM_INT64, g_game->player.health));
     return 1;
 }
 
@@ -142,7 +142,7 @@ int game_set_player_health(MobiusState* state, int arg_count) {
     
     Value health_val = ctx->pop();
     int health = (health_val.type == VAL_INTEGER) ? 
-        (int)health_val.as.integer.value.i32 : (int)health_val.as.float64_val;
+        (int)health_val.as.integer.value : (int)health_val.as.double_val;
     
     if (health < 0) health = 0;
     if (health > 100) health = 100;
@@ -167,7 +167,7 @@ int game_get_score(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    ctx->push(make_integer_value(NUM_INT32, g_game->player.score));
+    ctx->push(make_integer_value(NUM_INT64, g_game->player.score));
     return 1;
 }
 
@@ -187,11 +187,11 @@ int game_add_score(MobiusState* state, int arg_count) {
     
     Value points_val = ctx->pop();
     int points = (points_val.type == VAL_INTEGER) ? 
-        (int)points_val.as.integer.value.i32 : (int)points_val.as.float64_val;
+        (int)points_val.as.integer.value : (int)points_val.as.double_val;
     
     g_game->player.score += points;
     
-    ctx->push(make_integer_value(NUM_INT32, g_game->player.score));
+    ctx->push(make_integer_value(NUM_INT64, g_game->player.score));
     return 1;
 }
 
@@ -217,9 +217,9 @@ int game_spawn_enemy(MobiusState* state, int arg_count) {
     Value y_val = ctx->pop();
     Value x_val = ctx->pop();
     
-    double x = (x_val.type == VAL_FLOAT64) ? x_val.as.float64_val : (double)x_val.as.integer.value.i64;
-    double y = (y_val.type == VAL_FLOAT64) ? y_val.as.float64_val : (double)y_val.as.integer.value.i64;
-    int type = (type_val.type == VAL_INTEGER) ? (int)type_val.as.integer.value.i32 : (int)type_val.as.float64_val;
+    double x = (x_val.type == VAL_FLOAT64) ? x_val.as.double_val : (double)x_val.as.integer.value;
+    double y = (y_val.type == VAL_FLOAT64) ? y_val.as.double_val : (double)y_val.as.integer.value;
+    int type = (type_val.type == VAL_INTEGER) ? (int)type_val.as.integer.value : (int)type_val.as.double_val;
     
     Enemy* enemy = &g_game->enemies[g_game->enemy_count];
     enemy->x = (float)x;
@@ -229,7 +229,7 @@ int game_spawn_enemy(MobiusState* state, int arg_count) {
     
     g_game->enemy_count++;
     
-    ctx->push(make_integer_value(NUM_INT32, g_game->enemy_count));
+    ctx->push(make_integer_value(NUM_INT64, g_game->enemy_count));
     return 1;
 }
 
@@ -247,7 +247,7 @@ int game_get_level(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    ctx->push(make_integer_value(NUM_INT32, g_game->level));
+    ctx->push(make_integer_value(NUM_INT64, g_game->level));
     return 1;
 }
 
