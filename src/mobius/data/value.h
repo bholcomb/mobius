@@ -13,9 +13,15 @@
 #if defined(__GNUC__) || defined(__clang__)
 #  define MOBIUS_LIKELY(x)   __builtin_expect(!!(x), 1)
 #  define MOBIUS_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#  define MOBIUS_FORCEINLINE __attribute__((always_inline)) inline
+#elif defined(_MSC_VER)
+#  define MOBIUS_LIKELY(x)   (!!(x))
+#  define MOBIUS_UNLIKELY(x) (!!(x))
+#  define MOBIUS_FORCEINLINE __forceinline
 #else
 #  define MOBIUS_LIKELY(x)   (!!(x))
 #  define MOBIUS_UNLIKELY(x) (!!(x))
+#  define MOBIUS_FORCEINLINE inline
 #endif
 
 class ArrayValue;

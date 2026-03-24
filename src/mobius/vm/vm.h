@@ -48,6 +48,8 @@ struct CallInfo {
 //   int rc = vm.execute(proto);
 // ============================================================================
 
+struct VMFrame;
+
 class MobiusVM {
 public:
     explicit MobiusVM(MobiusState* state);
@@ -55,21 +57,41 @@ public:
     // Execute a top-level prototype. Returns 0 on success, -1 on error.
     int execute(Prototype* proto);
 
-private:
+    // Refresh a VMFrame after a call/return changes the active CallInfo.
+    void refreshFrame(VMFrame& f);
+
+    // Integer extraction helpers
+    static inline int64_t  vm_extract_int64(const Value& v);
+    static inline uint64_t vm_extract_uint64(const Value& v);
+    static inline double   vm_extract_double(const Value& v);
+    static inline bool     vm_use_unsigned(const Value& l, const Value& r);
+
+    // Error reporting
+    void runtimeError(const char* fmt, ...);
+    int currentLine() const;
+
+    // Metamethod dispatch
+    int callMetamethod(const Value& table_val, MobiusString* mm_name,
+                       const Value& lhs, const Value& rhs, Value& out);
+
+    // VM state — public so MOBIUS_FORCEINLINE handler functions can access them
     MobiusState* state_;
     Environment* global_env_;
-
     std::vector<Value>    registers_;
     std::vector<CallInfo> call_stack_;
 
-    // Resolve a B or C field that may reference a register or a constant.
+    int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
+    void closeUpvalues(CallInfo& ci, int from_reg);
+
+private:
+    int callNative(MobiusCFunction func, int func_reg, int nargs, int nresults);
+
     inline const Value& RK(const CallInfo& ci, uint8_t field) const {
         if (IS_CONSTANT(field))
             return ci.proto->constants[RK_AS_CONSTANT(field)];
         return registers_[ci.base + field];
     }
 
-    // Register access relative to current frame base.
     inline Value& R(const CallInfo& ci, int idx) {
         return registers_[ci.base + idx];
     }
@@ -77,31 +99,7 @@ private:
         return registers_[ci.base + idx];
     }
 
-    // Integer extraction (mirrors the helpers in eval_arithmatic.cpp)
-    static inline int64_t  vm_extract_int64(const Value& v);
-    static inline uint64_t vm_extract_uint64(const Value& v);
-    static inline double   vm_extract_double(const Value& v);
-    static inline bool     vm_use_unsigned(const Value& l, const Value& r);
-
-    // The main dispatch loop. Returns 0 on success, -1 on error.
-    // base_depth: the call_stack_ depth at which OP_RETURN should exit.
     int run(size_t base_depth);
-
-    // Helpers
-    int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
-    int callNative(MobiusCFunction func, int func_reg, int nargs, int nresults);
-    void closeUpvalues(CallInfo& ci, int from_reg);
-    void runtimeError(const char* fmt, ...);
-
-    int currentLine() const;
-
-    // VM-native metamethod dispatch.  Looks up `mm_name` on the table,
-    // calls it with (lhs, rhs), and stores the result in `out`.
-    // Returns  1 = success (result in out),
-    //          0 = no metamethod found,
-    //         -1 = error (runtimeError already called).
-    int callMetamethod(const Value& table_val, MobiusString* mm_name,
-                       const Value& lhs, const Value& rhs, Value& out);
 };
 
 #endif // MOBIUS_VM_VM_H
