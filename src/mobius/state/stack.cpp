@@ -705,4 +705,3 @@ void* mobius_stack_getUserdata(MobiusState* state, int idx, const char** out_typ
 }
 
 } // extern "C"
-
