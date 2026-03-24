@@ -533,7 +533,7 @@ void mobius_stack_getVariable(MobiusState* state, const char* name) {
         exit(1);
     }
     
-    const char* interned = state->stringPool()->intern(name)->data;
+    MobiusString* interned = state->stringPool()->intern(name);
     bool found = false;
     Value val = state->mainContext()->current_env->get(interned, &found);
     
@@ -550,7 +550,7 @@ void mobius_stack_getGlobal(MobiusState* state, const char* name) {
         exit(1);
     }
     
-    const char* interned = state->stringPool()->intern(name)->data;
+    MobiusString* interned = state->stringPool()->intern(name);
     bool found = false;
     Value val = state->globalEnv()->get(interned, &found);
     
@@ -572,7 +572,7 @@ void mobius_stack_setVariable(MobiusState* state, const char* name) {
         exit(1);
     }
     
-    const char* interned = state->stringPool()->intern(name)->data;
+    MobiusString* interned = state->stringPool()->intern(name);
     Value val = state->mainContext()->pop();
     state->mainContext()->current_env->define(interned, val);
 }
@@ -588,7 +588,7 @@ void mobius_stack_setGlobal(MobiusState* state, const char* name) {
         exit(1);
     }
     
-    const char* interned = state->stringPool()->intern(name)->data;
+    MobiusString* interned = state->stringPool()->intern(name);
     Value val = state->mainContext()->pop();
     state->globalEnv()->define(interned, val);
 }
@@ -709,7 +709,7 @@ void mobius_stack_copy(MobiusState* state, int idx) {
 void mobius_register_function(MobiusState* state, const char* name,
                               MobiusCFunction func) {
     if (!state || !name || !func) return;
-    const char* interned = state->stringPool()->intern(name)->data;
+    MobiusString* interned = state->stringPool()->intern(name);
     state->globalEnv()->define(interned, make_native_function_value(func));
 }
 

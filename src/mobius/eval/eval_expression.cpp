@@ -27,13 +27,13 @@ static EvalResult eval_call_native_func(MobiusCFunction func, MobiusState* state
 
 // Call a user-defined function
 EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t arg_count, Environment* env) {
+    const char* fname = function->name ? function->name->data : "anonymous";
     // Check argument count
     if (arg_count != function->param_count) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), 
                 "Function '%s' expects %zu arguments but got %zu",
-                function->name ? function->name : "anonymous",
-                function->param_count, arg_count);
+                fname, function->param_count, arg_count);
                 
         return make_error_detailed(
             env,
@@ -41,13 +41,13 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
             "Check the function definition for the correct number of parameters",
             ERROR_ARGUMENT,
             0, 0,
-            function->name,
+            fname,
             NULL
         );
     }
     
     // Push function call onto stack trace
-    env->current_context->pushFrame(function->name ? function->name : "anonymous", 
+    env->current_context->pushFrame(fname,
                      NULL, // filename - TODO: add filename tracking
                      0, 0, // line, column - TODO: add call site tracking
                      FUNCTION_TYPE_SCRIPT, NULL, NULL);
@@ -70,7 +70,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
                 env->current_context->pop();
             }
             env->current_context->popFrame();
-            delete func_env;
+            func_env->release();
             return arg_result;
         }
         // Argument is now on stack
@@ -81,7 +81,6 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     for (size_t i = arg_count; i > 0; i--) {
         Value arg_value = env->current_context->pop();
         func_env->define(function->param_names[i-1], arg_value);
-        
     }
     
     // Execute function body
@@ -91,7 +90,7 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
         result = evaluate_stmt(function->body[i], func_env);
         if (is_error(result)) {
             env->current_context->popFrame();
-            delete func_env;
+            func_env->release();
             return result;
         }
         
@@ -107,11 +106,10 @@ EvalResult call_user_function(MobiusFunction* function, Expr** arguments, size_t
     // Return value is already on func_env's stack (if any)
     // Transfer it to the caller's stack
     if (!is_error(result) && result.has_returned && result.return_count > 0) {
-        // Return value is already on global stack from evaluate_expr
-        delete func_env;
+        func_env->release();
         return make_success(1);  // Indicate 1 value on stack
     } else {
-        delete func_env;
+        func_env->release();
         return make_success(0);  // No return value
     }
 }
@@ -126,6 +124,7 @@ EvalResult eval_literal_expr(LiteralExpr* expr, Environment* env) {
 // Stack-based function call evaluation
 EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     const char* full_name = nullptr;
+    MobiusString* full_name_interned = nullptr;
     int call_line = 0;
     int call_column = 0;
     
@@ -138,10 +137,8 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
             const char* table_name = dot_expr->table->as.variable.name.identifier;
             const char* func_name = dot_expr->key.identifier;
             
-            // Look up the table (module) in the environment
-            // Modules must be imported first, which creates a table with functions
             bool found = false;
-            Value table_value = env->get(table_name, &found);
+            Value table_value = env->get(dot_expr->table->as.variable.name.interned, &found);
             if (found && table_value.type == VAL_TABLE) {
                 MobiusState* state = env->current_context->state;
                 Value func_key = make_string_value_from_cstr(state, func_name);
@@ -258,6 +255,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     else if (expr->callee->type == EXPR_VARIABLE) {
     VariableExpr* var_expr = &expr->callee->as.variable;
     full_name = var_expr->name.identifier ? var_expr->name.identifier : "unknown";
+    full_name_interned = var_expr->name.interned;
         call_line = var_expr->name.line;
         call_column = var_expr->name.column;
     }
@@ -271,7 +269,10 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
     
     // Check if it's a user-defined function or native function in the environment
     bool found = false;
-    Value func_value = env->get(full_name, &found);
+    if (!full_name_interned) {
+        full_name_interned = env->current_context->state->stringPool()->intern(full_name);
+    }
+    Value func_value = env->get(full_name_interned, &found);
     if (found) {
         if (func_value.type == VAL_FUNCTION && func_value.as.function) {
             // Call user-defined function
@@ -348,8 +349,7 @@ EvalResult eval_call_expr(CallExpr* expr, Environment* env) {
 
 EvalResult eval_variable_expr(VariableExpr* expr, Environment* env) {
     const char* name = expr->name.identifier ? expr->name.identifier : "unknown";
-    
-    const Value* value = env->lookup(name);
+    const Value* value = env->lookup(expr->name.interned);
     
     if (!value) {
         char error_msg[256];
@@ -378,8 +378,7 @@ EvalResult eval_assignment_expr(AssignmentExpr* expr, Environment* env) {
     Value value = env->current_context->pop();
     
     const char* name = expr->name.identifier ? expr->name.identifier : "unknown";
-    
-    if (!env->assign(name, value)) {
+    if (!env->assign(expr->name.interned, value)) {
         return make_error_detailed(env, "Undefined variable in assignment", 
                                                "Make sure the variable is declared before use",
                                                ERROR_UNDEFINED, expr->name.line, expr->name.column, NULL, NULL);

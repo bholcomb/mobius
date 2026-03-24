@@ -75,7 +75,7 @@ static EvalResult call_metamethod(Environment* env, const Value& method,
         if (mf->param_count != 2) {
             return make_error(env, "Metamethod expects exactly 2 parameters", 0, 0);
         }
-        env->current_context->pushFrame(mf->name ? mf->name : "metamethod",
+        env->current_context->pushFrame(mf->name ? mf->name->data : "metamethod",
                                         nullptr, 0, 0,
                                         FUNCTION_TYPE_SCRIPT, nullptr, nullptr);
         if (env->current_context->isStackOverflow()) {
@@ -99,14 +99,14 @@ static EvalResult call_metamethod(Environment* env, const Value& method,
             result = evaluate_stmt(mf->body[i], func_env);
             if (is_error(result)) {
                 env->current_context->popFrame();
-                delete func_env;
+                func_env->release();
                 return result;
             }
             if (result.has_returned) break;
         }
 
         env->current_context->popFrame();
-        delete func_env;
+        func_env->release();
         return result;
     }
 
@@ -115,10 +115,11 @@ static EvalResult call_metamethod(Environment* env, const Value& method,
 
 EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env) {
     const char* var_name = expr->name.identifier ? expr->name.identifier : "unknown";
+    MobiusString* var_interned = expr->name.interned;
     
     // Get current value
     bool found;
-    Value current = env->get(var_name, &found);
+    Value current = env->get(var_interned, &found);
     
     if (!found) {
         char error_msg[256];
@@ -142,7 +143,7 @@ EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env) {
     }
     
     // Update the variable
-    if (!env->assign(var_name, new_value)) {
+    if (!env->assign(var_interned, new_value)) {
         return make_error(env, "Failed to update variable", expr->op.line, expr->op.column);
     }
     

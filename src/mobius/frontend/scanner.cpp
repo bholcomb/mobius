@@ -252,8 +252,6 @@ Token scan_number(Scanner* scanner) {
                                scanner->column - (int)(scanner->current - scanner->start),
                                value);
     } else {
-        // Use 64-bit signed integers by default (unless user specifies type suffixes)
-        // TODO: Implement type suffixes (i8, u8, i16, etc.)
         long long value = strtoll(scanner->start, NULL, 10);
         return make_integer_token(scanner->start,
                                  (int)(scanner->current - scanner->start),

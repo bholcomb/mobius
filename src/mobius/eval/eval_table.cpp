@@ -96,7 +96,7 @@ EvalResult eval_table_dot_expr(TableDotExpr* expr, Environment* env) {
             char enum_buf[256];
             snprintf(enum_buf, sizeof(enum_buf), "__enum_%s", enum_name);
             StringInternPool* pool = env->current_context->state->stringPool();
-            const char* enum_key = pool->intern(enum_buf)->data;
+            MobiusString* enum_key = pool->intern(enum_buf);
             
             bool enum_found = false;
             Value enum_value = env->get(enum_key, &enum_found);

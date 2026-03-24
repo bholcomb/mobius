@@ -85,7 +85,7 @@ private:
 
     // The main dispatch loop. Returns 0 on success, -1 on error.
     // base_depth: the call_stack_ depth at which OP_RETURN should exit.
-    int run(size_t base_depth = 1);
+    int run(size_t base_depth);
 
     // Helpers
     int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);

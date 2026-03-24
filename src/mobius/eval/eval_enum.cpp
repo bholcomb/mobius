@@ -27,7 +27,7 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
     StringInternPool* pool = env->current_context->state->stringPool();
     
     bool variable_exists = false;
-    env->get(enum_name, &variable_exists);
+    env->get(stmt->name.interned, &variable_exists);
     if (variable_exists) {
         char error_msg[256];
         snprintf(error_msg, sizeof(error_msg), "Name collision: variable '%s' already exists, cannot declare enum with the same name", enum_name);
@@ -36,7 +36,7 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
     
     char check_buf[256];
     snprintf(check_buf, sizeof(check_buf), "__enum_%s", enum_name);
-    const char* check_key = pool->intern(check_buf)->data;
+    MobiusString* check_key = pool->intern(check_buf);
     bool enum_exists = false;
     env->get(check_key, &enum_exists);
     if (enum_exists) {
@@ -97,13 +97,12 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
     
     char enum_buf[256];
     snprintf(enum_buf, sizeof(enum_buf), "__enum_%s", enum_name);
-    const char* enum_key = pool->intern(enum_buf)->data;
+    MobiusString* enum_key = pool->intern(enum_buf);
     
     Value enum_value = make_userdata_value(enum_def, enum_definition_destructor, "enum_definition", sizeof(EnumDefinition));
     env->define(enum_key, enum_value);
     
-    env->current_context->push( make_nil_value());
-    return make_success(1);
+    return make_success(0);
 }
 
 EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env) {
@@ -121,12 +120,12 @@ EvalResult eval_enum_access_expr(EnumAccessExpr* expr, Environment* env) {
     StringInternPool* pool = env->current_context->state->stringPool();
     char enum_buf[256];
     snprintf(enum_buf, sizeof(enum_buf), "__enum_%s", enum_name);
-    const char* enum_key = pool->intern(enum_buf)->data;
+    MobiusString* enum_key = pool->intern(enum_buf);
     
     bool found = false;
     Value enum_value = env->get(enum_key, &found);
     if (!found || enum_value.type == VAL_NIL) {
-        Value member_var = env->get(member_name, &found);
+        Value member_var = env->get(expr->member_name.interned, &found);
         if (found && member_var.type != VAL_NIL) {
             env->current_context->push( member_var);
             return make_success(1);

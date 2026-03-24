@@ -1,0 +1,109 @@
+// Test array destructuring patterns in switch statements
+print("=== Switch Array Destructuring Tests ===");
+
+// Test 1: Basic array destructuring with bindings
+func test_basic_array() {
+    var data = [10, 20, 30];
+    var result = "";
+
+    switch (data) {
+        case [x, y, z]:
+            result = "" + x + "," + y + "," + z;
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 2: Wrong length array doesn't match
+func test_wrong_length() {
+    var data = [1, 2];
+    var result = "";
+
+    switch (data) {
+        case [a, b, c]:
+            result = "three_elements";
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 3: Non-array value doesn't match array pattern
+func test_non_array() {
+    var data = 42;
+    var result = "";
+
+    switch (data) {
+        case [x, y]:
+            result = "matched_array";
+            break;
+        default:
+            result = "not_array";
+    }
+    return result;
+}
+
+// Test 4: Single element array
+func test_single_element() {
+    var data = [99];
+    var result = "";
+
+    switch (data) {
+        case [val]:
+            result = "" + val;
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 5: Array destructuring with rest pattern
+func test_rest_pattern() {
+    var data = [1, 2, 3, 4, 5];
+    var result = "";
+
+    switch (data) {
+        case [first, second, ...rest]:
+            result = "" + first + "," + second + ",rest_len=" + len(rest);
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+print("Basic array [10,20,30]: " + test_basic_array());
+if (test_basic_array() != "10,20,30") {
+    print("FAIL: expected 10,20,30");
+    exit(1);
+}
+
+print("Wrong length [1,2] vs [a,b,c]: " + test_wrong_length());
+if (test_wrong_length() != "no_match") {
+    print("FAIL: expected no_match");
+    exit(1);
+}
+
+print("Non-array (42) vs [x,y]: " + test_non_array());
+if (test_non_array() != "not_array") {
+    print("FAIL: expected not_array");
+    exit(1);
+}
+
+print("Single element [99]: " + test_single_element());
+if (test_single_element() != "99") {
+    print("FAIL: expected 99");
+    exit(1);
+}
+
+print("Rest pattern [1,2,...rest]: " + test_rest_pattern());
+if (test_rest_pattern() != "1,2,rest_len=3") {
+    print("FAIL: expected 1,2,rest_len=3");
+    exit(1);
+}
+
+print("=== All switch array destructuring tests passed! ===");

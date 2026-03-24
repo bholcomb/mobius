@@ -1,0 +1,109 @@
+// Test table destructuring patterns in switch statements
+print("=== Switch Table Destructuring Tests ===");
+
+// Test 1: Basic table destructuring
+func test_basic_table() {
+    var data = {name: "Alice", age: 30};
+    var result = "";
+
+    switch (data) {
+        case {name, age}:
+            result = name + "," + age;
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 2: Missing required field doesn't match
+func test_missing_field() {
+    var data = {name: "Bob"};
+    var result = "";
+
+    switch (data) {
+        case {name, age}:
+            result = "matched";
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 3: Non-table value doesn't match
+func test_non_table() {
+    var data = 42;
+    var result = "";
+
+    switch (data) {
+        case {name}:
+            result = "matched";
+            break;
+        default:
+            result = "not_table";
+    }
+    return result;
+}
+
+// Test 4: Table with binding rename (key: binding)
+func test_renamed_binding() {
+    var data = {name: "Charlie", score: 95};
+    var result = "";
+
+    switch (data) {
+        case {name: n, score: s}:
+            result = n + "," + s;
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 5: Single field
+func test_single_field() {
+    var data = {status: "active"};
+    var result = "";
+
+    switch (data) {
+        case {status}:
+            result = status;
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+print("Basic table {name, age}: " + test_basic_table());
+if (test_basic_table() != "Alice,30") {
+    print("FAIL: expected Alice,30");
+    exit(1);
+}
+
+print("Missing field {name, age} on {name}: " + test_missing_field());
+if (test_missing_field() != "no_match") {
+    print("FAIL: expected no_match");
+    exit(1);
+}
+
+print("Non-table vs {name}: " + test_non_table());
+if (test_non_table() != "not_table") {
+    print("FAIL: expected not_table");
+    exit(1);
+}
+
+print("Renamed binding {name:n, score:s}: " + test_renamed_binding());
+if (test_renamed_binding() != "Charlie,95") {
+    print("FAIL: expected Charlie,95");
+    exit(1);
+}
+
+print("Single field {status}: " + test_single_field());
+if (test_single_field() != "active") {
+    print("FAIL: expected active");
+    exit(1);
+}
+
+print("=== All switch table destructuring tests passed! ===");

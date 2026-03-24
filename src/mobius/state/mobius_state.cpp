@@ -338,9 +338,9 @@ MobiusState::MobiusState(MobiusConfig* config)
 
     registry_->scanPlugins(config_.enable_hot_reload);
 
-    global_env_->define(string_pool_->intern("nil")->data, make_nil_value());
-    global_env_->define(string_pool_->intern("true")->data, make_bool_value(true));
-    global_env_->define(string_pool_->intern("false")->data, make_bool_value(false));
+    global_env_->define(string_pool_->intern("nil"), make_nil_value());
+    global_env_->define(string_pool_->intern("true"), make_bool_value(true));
+    global_env_->define(string_pool_->intern("false"), make_bool_value(false));
 }
 
 MobiusState::~MobiusState() {
@@ -350,7 +350,7 @@ MobiusState::~MobiusState() {
     owned_protos_.clear();
 
     delete main_context_;
-    delete global_env_;
+    if (global_env_) global_env_->release();
     delete metamethods_;
 
     // Don't free module registry — it's a global singleton freed via atexit()

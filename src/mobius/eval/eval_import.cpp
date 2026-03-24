@@ -72,7 +72,7 @@ static Table* get_or_create_nested_table(Environment* env, char** path, size_t p
     if (path_len == 0) return NULL;
     
     StringInternPool* pool = env->current_context->state->stringPool();
-    const char* first_key = pool->intern(path[0])->data;
+    MobiusString* first_key = pool->intern(path[0]);
     
     bool found = false;
     Value current_value = env->get(first_key, &found);
@@ -207,7 +207,8 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     }
     
     // Determine the target name/path (alias or original module name)
-    const char* target_name = module_name;  // Default to module name
+    const char* target_name = module_name;
+    MobiusString* target_interned = nullptr;
     if (stmt->has_alias) {
         // Use alias instead
         if (stmt->alias.type == TOKEN_STRING && stmt->alias.literal.string) {
@@ -285,9 +286,9 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     } else {
         // Simple single-name import: check if table already exists, or create new one
         StringInternPool* pool = env->current_context->state->stringPool();
-        target_name = pool->intern(target_name)->data;
+        target_interned = pool->intern(target_name);
         bool found = false;
-        Value existing = env->get(target_name, &found);
+        Value existing = env->get(target_interned, &found);
         
         if (found && existing.type == VAL_TABLE) {
             // Reuse existing table
@@ -328,7 +329,7 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
         MobiusCFunction func_ptr = func->function;
         
         if (is_global) {
-            const char* interned_func = import_pool->intern(func_name)->data;
+            MobiusString* interned_func = import_pool->intern(func_name);
             bool found = false;
             env->get(interned_func, &found);
             if (found) {
@@ -366,7 +367,10 @@ EvalResult eval_import_stmt(ImportStmt* stmt, Environment* env) {
     
     if (!is_global && target_table && table_is_new) {
         Value table_value = make_table_value(target_table);
-        env->define(target_name, table_value);
+        if (!target_interned) {
+            target_interned = env->current_context->state->stringPool()->intern(target_name);
+        }
+        env->define(target_interned, table_value);
     }
     
     // Cleanup
