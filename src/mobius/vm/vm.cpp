@@ -391,7 +391,7 @@ int MobiusVM::run(size_t base_depth) {
         case OP_GETGLOBAL: {
             int slot = DECODE_Bx(inst);
             const Value& gv = state_->globalSlot(slot);
-            if (__builtin_expect(!(gv.flags & VAL_FLAG_DEFINED), 0)) {
+            if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
                 runtimeError("Undefined variable '%s'", state_->globalSlotName(slot));
                 return -1;
             }
@@ -402,7 +402,7 @@ int MobiusVM::run(size_t base_depth) {
         case OP_SETGLOBAL: {
             int slot = DECODE_Bx(inst);
             Value& gv = state_->globalSlot(slot);
-            if (__builtin_expect(!!(gv.flags & VAL_FLAG_READONLY), 0)) {
+            if (MOBIUS_UNLIKELY(gv.flags & VAL_FLAG_READONLY)) {
                 runtimeError("Cannot assign to read-only variable '%s'", state_->globalSlotName(slot));
                 return -1;
             }
@@ -509,12 +509,27 @@ int MobiusVM::run(size_t base_depth) {
         case OP_ADD: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
-                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
+            if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
+                Value& dst = RA(inst);
+                dst.as.i64 = lhs.as.i64 + rhs.as.i64;
+                dst.type = VAL_INT64;
+                dst.flags = 0;
+            } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
+                Value& dst = RA(inst);
+                dst.as.double_val = lhs.as.double_val + rhs.as.double_val;
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
+            } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                       (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs))
                     RA(inst) = make_uint64_value(vm_extract_uint64(lhs) + vm_extract_uint64(rhs));
                 else
                     RA(inst) = make_int64_value(vm_extract_int64(lhs) + vm_extract_int64(rhs));
+            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
+                Value& dst = RA(inst);
+                dst.as.double_val = vm_extract_double(lhs) + vm_extract_double(rhs);
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
             } else if (lhs.type == VAL_STRING || rhs.type == VAL_STRING) {
                 std::string result;
                 auto append_val = [&](const Value& v) {
@@ -528,8 +543,6 @@ int MobiusVM::run(size_t base_depth) {
                 append_val(lhs);
                 append_val(rhs);
                 RA(inst) = make_string_value_from_cstr(state_, result.c_str());
-            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
-                RA(inst) = make_float_value(vm_extract_double(lhs) + vm_extract_double(rhs));
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
@@ -549,14 +562,27 @@ int MobiusVM::run(size_t base_depth) {
         case OP_SUB: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
-                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
+            if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
+                Value& dst = RA(inst);
+                dst.as.i64 = lhs.as.i64 - rhs.as.i64;
+                dst.type = VAL_INT64;
+                dst.flags = 0;
+            } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
+                Value& dst = RA(inst);
+                dst.as.double_val = lhs.as.double_val - rhs.as.double_val;
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
+            } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                       (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs))
                     RA(inst) = make_uint64_value(vm_extract_uint64(lhs) - vm_extract_uint64(rhs));
                 else
                     RA(inst) = make_int64_value(vm_extract_int64(lhs) - vm_extract_int64(rhs));
             } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
-                RA(inst) = make_float_value(vm_extract_double(lhs) - vm_extract_double(rhs));
+                Value& dst = RA(inst);
+                dst.as.double_val = vm_extract_double(lhs) - vm_extract_double(rhs);
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
@@ -576,14 +602,27 @@ int MobiusVM::run(size_t base_depth) {
         case OP_MUL: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
-                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
+            if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
+                Value& dst = RA(inst);
+                dst.as.i64 = lhs.as.i64 * rhs.as.i64;
+                dst.type = VAL_INT64;
+                dst.flags = 0;
+            } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
+                Value& dst = RA(inst);
+                dst.as.double_val = lhs.as.double_val * rhs.as.double_val;
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
+            } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                       (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs))
                     RA(inst) = make_uint64_value(vm_extract_uint64(lhs) * vm_extract_uint64(rhs));
                 else
                     RA(inst) = make_int64_value(vm_extract_int64(lhs) * vm_extract_int64(rhs));
             } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
-                RA(inst) = make_float_value(vm_extract_double(lhs) * vm_extract_double(rhs));
+                Value& dst = RA(inst);
+                dst.as.double_val = vm_extract_double(lhs) * vm_extract_double(rhs);
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
@@ -624,8 +663,15 @@ int MobiusVM::run(size_t base_depth) {
         case OP_MOD: {
             const Value& lhs = RKB(inst);
             const Value& rhs = RKC(inst);
-            if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
-                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
+            if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
+                int64_t rv = rhs.as.i64;
+                if (MOBIUS_UNLIKELY(rv == 0)) { runtimeError("Modulo by zero"); return -1; }
+                Value& dst = RA(inst);
+                dst.as.i64 = lhs.as.i64 % rv;
+                dst.type = VAL_INT64;
+                dst.flags = 0;
+            } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+                       (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
                 if (vm_use_unsigned(lhs, rhs)) {
                     uint64_t lv = vm_extract_uint64(lhs);
                     uint64_t rv = vm_extract_uint64(rhs);
@@ -637,6 +683,21 @@ int MobiusVM::run(size_t base_depth) {
                     if (rv == 0) { runtimeError("Modulo by zero"); return -1; }
                     RA(inst) = make_int64_value(lv % rv);
                 }
+            } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
+                double rv = rhs.as.double_val;
+                if (rv == 0.0) { runtimeError("Modulo by zero"); return -1; }
+                Value& dst = RA(inst);
+                dst.as.double_val = fmod(lhs.as.double_val, rv);
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
+            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
+                double lv = vm_extract_double(lhs);
+                double rv = vm_extract_double(rhs);
+                if (rv == 0.0) { runtimeError("Modulo by zero"); return -1; }
+                Value& dst = RA(inst);
+                dst.as.double_val = fmod(lv, rv);
+                dst.type = VAL_FLOAT64;
+                dst.flags = 0;
             } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
                 const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
                 Value out;
@@ -646,11 +707,6 @@ int MobiusVM::run(size_t base_depth) {
                 if (rc < 0) return -1;
                 if (rc == 0) { runtimeError("Cannot modulo: no __mod metamethod on table"); return -1; }
                 RA(inst) = out;
-            } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
-                double lv = vm_extract_double(lhs);
-                double rv = vm_extract_double(rhs);
-                if (rv == 0.0) { runtimeError("Modulo by zero"); return -1; }
-                RA(inst) = make_float_value(fmod(lv, rv));
             } else {
                 runtimeError("Cannot modulo these types");
                 return -1;
@@ -924,6 +980,61 @@ int MobiusVM::run(size_t base_depth) {
         case OP_TESTJMP: {
             if (!is_truthy(regs[DECODE_A(inst)]))
                 ip += DECODE_sBx(inst);
+            break;
+        }
+
+        // ================================================================
+        // Type-specialized arithmetic — no type checks, direct field ops
+        // ================================================================
+        case OP_ADD_II: {
+            Value& dst = RA(inst);
+            dst.as.i64 = RKB(inst).as.i64 + RKC(inst).as.i64;
+            dst.type = VAL_INT64;
+            dst.flags = 0;
+            break;
+        }
+        case OP_ADD_FF: {
+            Value& dst = RA(inst);
+            dst.as.double_val = RKB(inst).as.double_val + RKC(inst).as.double_val;
+            dst.type = VAL_FLOAT64;
+            dst.flags = 0;
+            break;
+        }
+        case OP_SUB_II: {
+            Value& dst = RA(inst);
+            dst.as.i64 = RKB(inst).as.i64 - RKC(inst).as.i64;
+            dst.type = VAL_INT64;
+            dst.flags = 0;
+            break;
+        }
+        case OP_SUB_FF: {
+            Value& dst = RA(inst);
+            dst.as.double_val = RKB(inst).as.double_val - RKC(inst).as.double_val;
+            dst.type = VAL_FLOAT64;
+            dst.flags = 0;
+            break;
+        }
+        case OP_MUL_II: {
+            Value& dst = RA(inst);
+            dst.as.i64 = RKB(inst).as.i64 * RKC(inst).as.i64;
+            dst.type = VAL_INT64;
+            dst.flags = 0;
+            break;
+        }
+        case OP_MUL_FF: {
+            Value& dst = RA(inst);
+            dst.as.double_val = RKB(inst).as.double_val * RKC(inst).as.double_val;
+            dst.type = VAL_FLOAT64;
+            dst.flags = 0;
+            break;
+        }
+        case OP_MOD_II: {
+            int64_t rv = RKC(inst).as.i64;
+            if (MOBIUS_UNLIKELY(rv == 0)) { runtimeError("Modulo by zero"); return -1; }
+            Value& dst = RA(inst);
+            dst.as.i64 = RKB(inst).as.i64 % rv;
+            dst.type = VAL_INT64;
+            dst.flags = 0;
             break;
         }
 
@@ -1504,12 +1615,12 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
             Value& val = regs[a];
-            if (val.type == VAL_INT64)
-                val = make_int64_value(val.as.i64 + imm);
-            else if (val.type == VAL_UINT64)
-                val = make_uint64_value(val.as.u64 + (uint64_t)(int64_t)imm);
+            if (MOBIUS_LIKELY(val.type == VAL_INT64)) {
+                val.as.i64 += imm;
+            } else if (val.type == VAL_UINT64)
+                val.as.u64 += (uint64_t)(int64_t)imm;
             else if (val.type == VAL_FLOAT64)
-                val = make_float_value(val.as.double_val + imm);
+                val.as.double_val += imm;
             else { runtimeError("ADDI requires numeric operand"); return -1; }
             break;
         }
@@ -1518,12 +1629,12 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
             Value& val = regs[a];
-            if (val.type == VAL_INT64)
-                val = make_int64_value(val.as.i64 - imm);
-            else if (val.type == VAL_UINT64)
-                val = make_uint64_value(val.as.u64 - (uint64_t)(int64_t)imm);
+            if (MOBIUS_LIKELY(val.type == VAL_INT64)) {
+                val.as.i64 -= imm;
+            } else if (val.type == VAL_UINT64)
+                val.as.u64 -= (uint64_t)(int64_t)imm;
             else if (val.type == VAL_FLOAT64)
-                val = make_float_value(val.as.double_val - imm);
+                val.as.double_val -= imm;
             else { runtimeError("SUBI requires numeric operand"); return -1; }
             break;
         }
@@ -1532,12 +1643,12 @@ int MobiusVM::run(size_t base_depth) {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
             Value& val = regs[a];
-            if (val.type == VAL_INT64)
-                val = make_int64_value(val.as.i64 * imm);
-            else if (val.type == VAL_UINT64)
-                val = make_uint64_value(val.as.u64 * (uint64_t)(int64_t)imm);
+            if (MOBIUS_LIKELY(val.type == VAL_INT64)) {
+                val.as.i64 *= imm;
+            } else if (val.type == VAL_UINT64)
+                val.as.u64 *= (uint64_t)(int64_t)imm;
             else if (val.type == VAL_FLOAT64)
-                val = make_float_value(val.as.double_val * imm);
+                val.as.double_val *= imm;
             else { runtimeError("MULI requires numeric operand"); return -1; }
             break;
         }
@@ -1545,14 +1656,14 @@ int MobiusVM::run(size_t base_depth) {
         case OP_MODI: {
             int a = DECODE_A(inst);
             int imm = DECODE_sBx(inst);
-            if (imm == 0) { runtimeError("Modulo by zero"); return -1; }
+            if (MOBIUS_UNLIKELY(imm == 0)) { runtimeError("Modulo by zero"); return -1; }
             Value& val = regs[a];
-            if (val.type == VAL_INT64)
-                val = make_int64_value(val.as.i64 % imm);
-            else if (val.type == VAL_UINT64)
-                val = make_uint64_value(val.as.u64 % (uint64_t)(int64_t)imm);
+            if (MOBIUS_LIKELY(val.type == VAL_INT64)) {
+                val.as.i64 %= imm;
+            } else if (val.type == VAL_UINT64)
+                val.as.u64 %= (uint64_t)(int64_t)imm;
             else if (val.type == VAL_FLOAT64)
-                val = make_float_value(fmod(val.as.double_val, (double)imm));
+                val.as.double_val = fmod(val.as.double_val, (double)imm);
             else { runtimeError("MODI requires numeric operand"); return -1; }
             break;
         }
