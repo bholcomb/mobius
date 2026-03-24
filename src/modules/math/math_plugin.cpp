@@ -1,8 +1,3 @@
-#include "../../../src/mobius/plugin/plugin.h"
-#include "../../../src/mobius/frontend/ast.h"
-#include "../../../src/mobius/eval/evaluator.h"
-#include "../../../src/mobius/state/environment.h"
-#include "../../../src/mobius/state/mobius_state.h"
 #include <mobius/mobius_plugin.h>
 #include <math.h>
 #include <stdio.h>
@@ -23,11 +18,11 @@
 
 int math_sin(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("sin() expects exactly 1 argument");
+        return mobius_error(state, "sin() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("sin() expects a numeric argument");
+        return mobius_error(state, "sin() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -38,11 +33,11 @@ int math_sin(MobiusState* state, int arg_count) {
 
 int math_cos(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("cos() expects exactly 1 argument");
+        return mobius_error(state, "cos() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("cos() expects a numeric argument");
+        return mobius_error(state, "cos() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -53,11 +48,11 @@ int math_cos(MobiusState* state, int arg_count) {
 
 int math_tan(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("tan() expects exactly 1 argument");
+        return mobius_error(state, "tan() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("tan() expects a numeric argument");
+        return mobius_error(state, "tan() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -68,16 +63,16 @@ int math_tan(MobiusState* state, int arg_count) {
 
 int math_asin(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("asin() expects exactly 1 argument");
+        return mobius_error(state, "asin() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("asin() expects a numeric argument");
+        return mobius_error(state, "asin() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
     if (val < -1.0 || val > 1.0) {
-        return state->error("asin() argument must be between -1 and 1");
+        return mobius_error(state, "asin() argument must be between -1 and 1");
     }
     mobius_stack_pop(state, 1);
     mobius_stack_pushFloat64(state, asin(val));
@@ -86,16 +81,16 @@ int math_asin(MobiusState* state, int arg_count) {
 
 int math_acos(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("acos() expects exactly 1 argument");
+        return mobius_error(state, "acos() expects exactly 1 argument");
     }
 
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("acos() expects a numeric argument");
+        return mobius_error(state, "acos() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
     if (val < -1.0 || val > 1.0) {
-        return state->error("acos() argument must be between -1 and 1");
+        return mobius_error(state, "acos() argument must be between -1 and 1");
     }
     mobius_stack_pop(state, 1);
     mobius_stack_pushFloat64(state, acos(val));
@@ -104,11 +99,11 @@ int math_acos(MobiusState* state, int arg_count) {
 
 int math_atan(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("atan() expects exactly 1 argument");
+        return mobius_error(state, "atan() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("atan() expects a numeric argument");
+        return mobius_error(state, "atan() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -119,11 +114,11 @@ int math_atan(MobiusState* state, int arg_count) {
 
 int math_atan2(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return state->error("atan2() expects exactly 2 arguments");
+        return mobius_error(state, "atan2() expects exactly 2 arguments");
     }
 
     if (!mobius_stack_isNumber(state, -1) || !mobius_stack_isNumber(state, -2)) {
-        return state->error("atan2() expects numeric arguments");
+        return mobius_error(state, "atan2() expects numeric arguments");
     }
     
     double x = mobius_stack_asFloat64(state, -1);  // Second argument (x)
@@ -139,16 +134,16 @@ int math_atan2(MobiusState* state, int arg_count) {
 
 int math_log(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("log() expects exactly 1 argument");
+        return mobius_error(state, "log() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("log() expects a numeric argument");
+        return mobius_error(state, "log() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
     if (val <= 0.0) {
-        return state->error("log() argument must be positive");
+        return mobius_error(state, "log() argument must be positive");
     }
     mobius_stack_pop(state, 1);
     mobius_stack_pushFloat64(state, log(val));
@@ -157,16 +152,16 @@ int math_log(MobiusState* state, int arg_count) {
 
 int math_log10(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("log10() expects exactly 1 argument");
+        return mobius_error(state, "log10() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("log10() expects a numeric argument");
+        return mobius_error(state, "log10() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
     if (val <= 0.0) {
-        return state->error("log10() argument must be positive");
+        return mobius_error(state, "log10() argument must be positive");
     }
     mobius_stack_pop(state, 1);
     mobius_stack_pushFloat64(state, log10(val));
@@ -175,11 +170,11 @@ int math_log10(MobiusState* state, int arg_count) {
 
 int math_exp(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("exp() expects exactly 1 argument");
+        return mobius_error(state, "exp() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("exp() expects a numeric argument");
+        return mobius_error(state, "exp() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -194,11 +189,11 @@ int math_exp(MobiusState* state, int arg_count) {
 
 int math_sinh(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("sinh() expects exactly 1 argument");
+        return mobius_error(state, "sinh() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("sinh() expects a numeric argument");
+        return mobius_error(state, "sinh() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -209,11 +204,11 @@ int math_sinh(MobiusState* state, int arg_count) {
 
 int math_cosh(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("cosh() expects exactly 1 argument");
+        return mobius_error(state, "cosh() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("cosh() expects a numeric argument");
+        return mobius_error(state, "cosh() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -224,11 +219,11 @@ int math_cosh(MobiusState* state, int arg_count) {
 
 int math_tanh(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("tanh() expects exactly 1 argument");
+        return mobius_error(state, "tanh() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("tanh() expects a numeric argument");
+        return mobius_error(state, "tanh() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -243,20 +238,20 @@ int math_tanh(MobiusState* state, int arg_count) {
 
 int math_factorial(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("factorial() expects exactly 1 argument");
+        return mobius_error(state, "factorial() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isInteger(state, -1)) {
-        return state->error("factorial() expects an integer argument");
+        return mobius_error(state, "factorial() expects an integer argument");
     }
     
     int64_t value = mobius_stack_asInt64(state, -1);
 
     if (value < 0) {
-        return state->error("factorial() argument must be non-negative");
+        return mobius_error(state, "factorial() argument must be non-negative");
     }
     if (value > 20) {
-        return state->error("factorial() argument too large (max 20)");
+        return mobius_error(state, "factorial() argument too large (max 20)");
     }
     
     double result = 1.0;
@@ -271,11 +266,11 @@ int math_factorial(MobiusState* state, int arg_count) {
 
 int math_gcd(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return state->error("gcd() expects exactly 2 arguments");
+        return mobius_error(state, "gcd() expects exactly 2 arguments");
     }
     
     if (!mobius_stack_isInteger(state, -1) || !mobius_stack_isInteger(state, -2)) {
-        return state->error("gcd() expects integer arguments");
+        return mobius_error(state, "gcd() expects integer arguments");
     }
     
     int64_t b = mobius_stack_asInt64(state, -1);
@@ -294,11 +289,11 @@ int math_gcd(MobiusState* state, int arg_count) {
 
 int math_lcm(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return state->error("lcm() expects exactly 2 arguments");
+        return mobius_error(state, "lcm() expects exactly 2 arguments");
     }
 
     if (!mobius_stack_isInteger(state, -1) || !mobius_stack_isInteger(state, -2)) {
-        return state->error("lcm() expects integer arguments");
+        return mobius_error(state, "lcm() expects integer arguments");
     }
     
     int64_t b = mobius_stack_asInt64(state, -1);
@@ -331,7 +326,7 @@ int math_lcm(MobiusState* state, int arg_count) {
 
 int math_pi(MobiusState* state, int arg_count) {
     if (arg_count != 0) {
-        return state->error("pi() expects no arguments");
+        return mobius_error(state, "pi() expects no arguments");
     }
     mobius_stack_pushFloat64(state, M_PI);
     return 1;
@@ -339,7 +334,7 @@ int math_pi(MobiusState* state, int arg_count) {
 
 int math_e(MobiusState* state, int arg_count) {
     if (arg_count != 0) {
-        return state->error("e() expects no arguments");
+        return mobius_error(state, "e() expects no arguments");
     }
     mobius_stack_pushFloat64(state, M_E);
     return 1;
@@ -351,16 +346,16 @@ int math_e(MobiusState* state, int arg_count) {
 
 int math_sqrt(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("sqrt() expects exactly 1 argument");
+        return mobius_error(state, "sqrt() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("sqrt() expects a numeric argument");
+        return mobius_error(state, "sqrt() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
     if (val < 0.0) {
-        return state->error("sqrt() argument must be non-negative");
+        return mobius_error(state, "sqrt() argument must be non-negative");
     }
     mobius_stack_pop(state, 1);
     mobius_stack_pushFloat64(state, sqrt(val));
@@ -369,11 +364,11 @@ int math_sqrt(MobiusState* state, int arg_count) {
 
 int math_pow(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return state->error("pow() expects exactly 2 arguments");
+        return mobius_error(state, "pow() expects exactly 2 arguments");
     }
     
     if (!mobius_stack_isNumber(state, -1) || !mobius_stack_isNumber(state, -2)) {
-        return state->error("pow() expects numeric arguments");
+        return mobius_error(state, "pow() expects numeric arguments");
     }
     
     double exponent = mobius_stack_asFloat64(state, -1);
@@ -385,11 +380,11 @@ int math_pow(MobiusState* state, int arg_count) {
 
 int math_abs(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("abs() expects exactly 1 argument");
+        return mobius_error(state, "abs() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("abs() expects a numeric argument");
+        return mobius_error(state, "abs() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -400,11 +395,11 @@ int math_abs(MobiusState* state, int arg_count) {
 
 int math_floor(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("floor() expects exactly 1 argument");
+        return mobius_error(state, "floor() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("floor() expects a numeric argument");
+        return mobius_error(state, "floor() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -415,11 +410,11 @@ int math_floor(MobiusState* state, int arg_count) {
 
 int math_ceil(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("ceil() expects exactly 1 argument");
+        return mobius_error(state, "ceil() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("ceil() expects a numeric argument");
+        return mobius_error(state, "ceil() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -430,11 +425,11 @@ int math_ceil(MobiusState* state, int arg_count) {
 
 int math_round(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("round() expects exactly 1 argument");
+        return mobius_error(state, "round() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("round() expects a numeric argument");
+        return mobius_error(state, "round() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -445,13 +440,13 @@ int math_round(MobiusState* state, int arg_count) {
 
 int math_min(MobiusState* state, int arg_count) {
     if (arg_count < 2) {
-        return state->error("min() expects at least 2 arguments");
+        return mobius_error(state, "min() expects at least 2 arguments");
     }
     
     // Check all arguments are numeric first
     for (int i = 1; i <= arg_count; i++) {
         if (!mobius_stack_isNumber(state, -i)) {
-            return state->error("min() expects numeric arguments");
+            return mobius_error(state, "min() expects numeric arguments");
         }
     }
     
@@ -471,13 +466,13 @@ int math_min(MobiusState* state, int arg_count) {
 
 int math_max(MobiusState* state, int arg_count) {
     if (arg_count < 2) {
-        return state->error("max() expects at least 2 arguments");
+        return mobius_error(state, "max() expects at least 2 arguments");
     }
     
     // Check all arguments are numeric first
     for (int i = 1; i <= arg_count; i++) {
         if (!mobius_stack_isNumber(state, -i)) {
-            return state->error("max() expects numeric arguments");
+            return mobius_error(state, "max() expects numeric arguments");
         }
     }
     
@@ -501,7 +496,7 @@ int math_max(MobiusState* state, int arg_count) {
 
 int math_random(MobiusState* state, int arg_count) {
     if (arg_count != 0) {
-        return state->error("random() expects no arguments");
+        return mobius_error(state, "random() expects no arguments");
     }
     
     // Generate random number between 0.0 and 1.0
@@ -512,11 +507,11 @@ int math_random(MobiusState* state, int arg_count) {
 
 int math_deg2rad(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("deg2rad() expects exactly 1 argument");
+        return mobius_error(state, "deg2rad() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("deg2rad() expects a numeric argument");
+        return mobius_error(state, "deg2rad() expects a numeric argument");
     }
     
     double degrees = mobius_stack_asFloat64(state, -1);
@@ -528,11 +523,11 @@ int math_deg2rad(MobiusState* state, int arg_count) {
 
 int math_rad2deg(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("rad2deg() expects exactly 1 argument");
+        return mobius_error(state, "rad2deg() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("rad2deg() expects a numeric argument");
+        return mobius_error(state, "rad2deg() expects a numeric argument");
     }
     
     double radians = mobius_stack_asFloat64(state, -1);
@@ -544,11 +539,11 @@ int math_rad2deg(MobiusState* state, int arg_count) {
 
 int math_sign(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("sign() expects exactly 1 argument");
+        return mobius_error(state, "sign() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isNumber(state, -1)) {
-        return state->error("sign() expects a numeric argument");
+        return mobius_error(state, "sign() expects a numeric argument");
     }
     
     double val = mobius_stack_asFloat64(state, -1);
@@ -560,11 +555,11 @@ int math_sign(MobiusState* state, int arg_count) {
 
 int math_clamp(MobiusState* state, int arg_count) {
     if (arg_count != 3) {
-        return state->error("clamp() expects exactly 3 arguments");
+        return mobius_error(state, "clamp() expects exactly 3 arguments");
     }
     
     if (!mobius_stack_isNumber(state, -1) || !mobius_stack_isNumber(state, -2) || !mobius_stack_isNumber(state, -3)) {
-        return state->error("clamp() expects numeric arguments");
+        return mobius_error(state, "clamp() expects numeric arguments");
     }
     
     double max = mobius_stack_asFloat64(state, -1);
@@ -572,7 +567,7 @@ int math_clamp(MobiusState* state, int arg_count) {
     double value = mobius_stack_asFloat64(state, -3);
     
     if (min > max) {
-        return state->error("clamp() min must be less than or equal to max");
+        return mobius_error(state, "clamp() min must be less than or equal to max");
     }
     
     double result = (value < min) ? min : (value > max) ? max : value;
@@ -596,55 +591,41 @@ void cleanup_math_plugin(void) {
 }
 
 // Plugin function definitions
-static PluginFunction math_functions[] = {
-    // Math functions
-    {"sqrt", math_sqrt, 1},
-    {"pow", math_pow, 2},
-    {"abs", math_abs, 1},
-    {"floor", math_floor, 1},
-    {"ceil", math_ceil, 1},
-    {"round", math_round, 1},
-    {"min", math_min, SIZE_MAX},
-    {"max", math_max, SIZE_MAX},
-    
-    // Useful functions
-    {"random", math_random, 0},
-    {"deg2rad", math_deg2rad, 1},
-    {"rad2deg", math_rad2deg, 1},
-    {"sign", math_sign, 1},
-    {"clamp", math_clamp, 3},
-
-    // Trigonometric functions
-    {"sin", math_sin, 1},
-    {"cos", math_cos, 1},
-    {"tan", math_tan, 1},
-    {"asin", math_asin, 1},
-    {"acos", math_acos, 1},
-    {"atan", math_atan, 1},
-    {"atan2", math_atan2, 2},
-    
-    // Logarithmic and exponential functions
-    {"log", math_log, 1},
-    {"log10", math_log10, 1},
-    {"exp", math_exp, 1},
-    
-    // Hyperbolic functions
-    {"sinh", math_sinh, 1},
-    {"cosh", math_cosh, 1},
-    {"tanh", math_tanh, 1},
-
-    // Factorial and GCD/LCM functions
-    {"factorial", math_factorial, 1},
-    {"gcd", math_gcd, 2},
-    {"lcm", math_lcm, 2},
-
-    // Mathematical constants
-    {"pi", math_pi, 0},
-    {"e", math_e, 0}
+static MobiusPluginFunction math_functions[] = {
+    {"sqrt",      math_sqrt,      1,        "Square root"},
+    {"pow",       math_pow,       2,        "Raise to power"},
+    {"abs",       math_abs,       1,        "Absolute value"},
+    {"floor",     math_floor,     1,        "Round down"},
+    {"ceil",      math_ceil,      1,        "Round up"},
+    {"round",     math_round,     1,        "Round to nearest"},
+    {"min",       math_min,       SIZE_MAX, "Minimum of arguments"},
+    {"max",       math_max,       SIZE_MAX, "Maximum of arguments"},
+    {"random",    math_random,    0,        "Random number 0..1"},
+    {"deg2rad",   math_deg2rad,   1,        "Degrees to radians"},
+    {"rad2deg",   math_rad2deg,   1,        "Radians to degrees"},
+    {"sign",      math_sign,      1,        "Sign of number"},
+    {"clamp",     math_clamp,     3,        "Clamp value to range"},
+    {"sin",       math_sin,       1,        "Sine"},
+    {"cos",       math_cos,       1,        "Cosine"},
+    {"tan",       math_tan,       1,        "Tangent"},
+    {"asin",      math_asin,      1,        "Arc sine"},
+    {"acos",      math_acos,      1,        "Arc cosine"},
+    {"atan",      math_atan,      1,        "Arc tangent"},
+    {"atan2",     math_atan2,     2,        "Arc tangent of y/x"},
+    {"log",       math_log,       1,        "Natural logarithm"},
+    {"log10",     math_log10,     1,        "Base-10 logarithm"},
+    {"exp",       math_exp,       1,        "Exponential (e^x)"},
+    {"sinh",      math_sinh,      1,        "Hyperbolic sine"},
+    {"cosh",      math_cosh,      1,        "Hyperbolic cosine"},
+    {"tanh",      math_tanh,      1,        "Hyperbolic tangent"},
+    {"factorial", math_factorial, 1,        "Factorial (n!)"},
+    {"gcd",       math_gcd,       2,        "Greatest common divisor"},
+    {"lcm",       math_lcm,       2,        "Least common multiple"},
+    {"pi",        math_pi,        0,        "Pi constant"},
+    {"e",         math_e,         0,        "Euler's number"},
 };
 
-// Plugin instance
-static Plugin math_plugin = {
+static MobiusPlugin math_plugin = {
     .metadata = {
         .name = "math",
         .version = "1.0.0",
@@ -657,11 +638,8 @@ static Plugin math_plugin = {
     .function_count = sizeof(math_functions) / sizeof(math_functions[0]),
     .init_plugin = init_math_plugin,
     .cleanup_plugin = cleanup_math_plugin,
-    .get_help = NULL,
-    .validate_env = NULL
 };
 
-// Required plugin entry point
-extern "C" MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
+extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {
     return &math_plugin;
 }
