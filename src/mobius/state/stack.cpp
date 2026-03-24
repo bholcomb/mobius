@@ -654,9 +654,9 @@ bool mobius_stack_isUserdata(MobiusState* state, int idx) {
 
 void* mobius_stack_getUserdata(MobiusState* state, int idx, const char** out_type_name) {
     Value* val = get_value_at(state, idx);
-    if (!val || val->type != VAL_USERDATA) return NULL;
-    if (out_type_name) *out_type_name = val->as.userdata.type_name;
-    return val->as.userdata.ptr;
+    if (!val || val->type != VAL_USERDATA || !val->as.userdata) return NULL;
+    if (out_type_name) *out_type_name = val->as.userdata->type_name;
+    return val->as.userdata->ptr;
 }
 
 } // extern "C"

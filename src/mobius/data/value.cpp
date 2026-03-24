@@ -30,8 +30,11 @@ void Value::retainSlow() const {
         case VAL_TABLE:
             if (as.table) as.table->retain();
             break;
+        case VAL_USERDATA:
+            if (as.userdata) as.userdata->ref_count++;
+            break;
         case VAL_ENUM:
-            if (as.enum_val.definition) as.enum_val.definition->retain();
+            if (as.enum_def) as.enum_def->retain();
             break;
         default:
             break;
@@ -69,9 +72,18 @@ void Value::releaseRefSlow() {
         case VAL_TABLE:
             if (as.table) as.table->release();
             break;
+        case VAL_USERDATA:
+            if (as.userdata) {
+                if (--as.userdata->ref_count <= 0) {
+                    if (as.userdata->destructor && as.userdata->ptr)
+                        as.userdata->destructor(as.userdata->ptr);
+                    free(as.userdata);
+                }
+            }
+            break;
         case VAL_ENUM:
-            if (as.enum_val.definition) {
-                as.enum_val.definition->release();
+            if (as.enum_def) {
+                as.enum_def->release();
             }
             break;
         default:
@@ -138,12 +150,15 @@ Value make_table_value(Table* table) {
 }
 
 Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size) {
+    UserdataObject* ud = (UserdataObject*)malloc(sizeof(UserdataObject));
+    ud->ref_count  = 1;
+    ud->ptr        = ptr;
+    ud->destructor = destructor;
+    ud->type_name  = type_name;
+    ud->size       = size;
     Value value;
     value.type = VAL_USERDATA;
-    value.as.userdata.ptr = ptr;
-    value.as.userdata.destructor = destructor;
-    value.as.userdata.type_name = type_name;
-    value.as.userdata.size = size;
+    value.as.userdata = ud;
     return value;
 }
 
@@ -177,11 +192,11 @@ bool Value::operator==(const Value& other) const {
         case VAL_NATIVE_FUNCTION: return as.native_function == other.as.native_function;
         case VAL_TABLE: return as.table == other.as.table;
         case VAL_USERDATA:
-            return as.userdata.ptr == other.as.userdata.ptr &&
-                   as.userdata.type_name == other.as.userdata.type_name;
+            return as.userdata && other.as.userdata &&
+                   as.userdata->ptr == other.as.userdata->ptr &&
+                   as.userdata->type_name == other.as.userdata->type_name;
         case VAL_ENUM:
-            return as.enum_val.definition == other.as.enum_val.definition &&
-                   as.enum_val.value == other.as.enum_val.value;
+            return as.enum_def == other.as.enum_def && aux == other.aux;
         default: return false;
     }
 }
@@ -202,11 +217,11 @@ bool Value::exactlyEqual(const Value& other) const {
         case VAL_NATIVE_FUNCTION: return as.native_function == other.as.native_function;
         case VAL_TABLE:  return as.table == other.as.table;
         case VAL_USERDATA:
-            return as.userdata.ptr == other.as.userdata.ptr &&
-                   as.userdata.type_name == other.as.userdata.type_name;
+            return as.userdata && other.as.userdata &&
+                   as.userdata->ptr == other.as.userdata->ptr &&
+                   as.userdata->type_name == other.as.userdata->type_name;
         case VAL_ENUM:
-            return as.enum_val.definition == other.as.enum_val.definition &&
-                   as.enum_val.value == other.as.enum_val.value;
+            return as.enum_def == other.as.enum_def && aux == other.aux;
         default: return false;
     }
 }
@@ -268,10 +283,10 @@ void print_value(const Value& value) {
             }
             break;
         case VAL_USERDATA:
-            if (value.as.userdata.ptr) {
+            if (value.as.userdata && value.as.userdata->ptr) {
                 printf("<%s userdata %p>",
-                       value.as.userdata.type_name ? value.as.userdata.type_name : "unknown",
-                       value.as.userdata.ptr);
+                       value.as.userdata->type_name ? value.as.userdata->type_name : "unknown",
+                       value.as.userdata->ptr);
             } else {
                 printf("<userdata (null)>");
             }
@@ -279,9 +294,9 @@ void print_value(const Value& value) {
         case VAL_ENUM: {
             const char* member_name = enum_value_name(value);
             if (member_name) {
-                printf("%s.%s", value.as.enum_val.definition->name().c_str(), member_name);
+                printf("%s.%s", value.as.enum_def->name().c_str(), member_name);
             } else {
-                printf("%s(%d)", value.as.enum_val.definition->name().c_str(), value.as.enum_val.value);
+                printf("%s(%d)", value.as.enum_def->name().c_str(), value.aux);
             }
             break;
         }
@@ -357,10 +372,10 @@ char* value_to_string(const Value& value) {
             if (result) strcpy(result, buffer);
             break;
         case VAL_USERDATA:
-            if (value.as.userdata.ptr) {
+            if (value.as.userdata && value.as.userdata->ptr) {
                 snprintf(buffer, sizeof(buffer), "<%s userdata %p>",
-                         value.as.userdata.type_name ? value.as.userdata.type_name : "unknown",
-                         value.as.userdata.ptr);
+                         value.as.userdata->type_name ? value.as.userdata->type_name : "unknown",
+                         value.as.userdata->ptr);
             } else {
                 strcpy(buffer, "<userdata (null)>");
             }
@@ -370,9 +385,9 @@ char* value_to_string(const Value& value) {
         case VAL_ENUM: {
             const char* member_name = enum_value_name(value);
             if (member_name) {
-                snprintf(buffer, sizeof(buffer), "%s.%s", value.as.enum_val.definition->name().c_str(), member_name);
+                snprintf(buffer, sizeof(buffer), "%s.%s", value.as.enum_def->name().c_str(), member_name);
             } else {
-                snprintf(buffer, sizeof(buffer), "%s(%d)", value.as.enum_val.definition->name().c_str(), value.as.enum_val.value);
+                snprintf(buffer, sizeof(buffer), "%s(%d)", value.as.enum_def->name().c_str(), value.aux);
             }
             result = (char*)malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
@@ -417,8 +432,8 @@ Value make_string_value_from_cstr(MobiusState* state, const char* cstr) {
 Value Value::makeEnum(EnumDefinition* definition, int64_t val) {
     Value value;
     value.type = VAL_ENUM;
-    value.as.enum_val.definition = definition->retain();
-    value.as.enum_val.value = (int32_t)val;
+    value.as.enum_def = definition->retain();
+    value.aux = (int32_t)val;
     return value;
 }
 

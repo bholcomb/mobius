@@ -53,10 +53,10 @@ const EnumMember* EnumDefinition::findMemberByValue(int64_t value) const {
 }
 
 const char* enum_value_name(const Value& enum_val) {
-    if (enum_val.type != VAL_ENUM || !enum_val.as.enum_val.definition) return nullptr;
+    if (enum_val.type != VAL_ENUM || !enum_val.as.enum_def) return nullptr;
 
-    const EnumMember* member = enum_val.as.enum_val.definition->findMemberByValue(
-        enum_val.as.enum_val.value
+    const EnumMember* member = enum_val.as.enum_def->findMemberByValue(
+        enum_val.aux
     );
 
     return member ? member->name.c_str() : nullptr;

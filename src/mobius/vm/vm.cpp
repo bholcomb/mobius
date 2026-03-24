@@ -1116,12 +1116,12 @@ int MobiusVM::run(size_t base_depth) {
 
         case OP_ENUMVAL: {
             Value& enum_val = RA(inst);
-            if (enum_val.type != VAL_USERDATA ||
-                strcmp(enum_val.as.userdata.type_name, "enum_definition") != 0) {
+            if (enum_val.type != VAL_USERDATA || !enum_val.as.userdata ||
+                strcmp(enum_val.as.userdata->type_name, "enum_definition") != 0) {
                 runtimeError("ENUMVAL: target is not an enum definition");
                 return -1;
             }
-            EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata.ptr);
+            EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata->ptr);
             const Value& member_val = RB(inst);
             int member_idx = DECODE_C(inst);
             (void)member_idx;
@@ -1140,12 +1140,12 @@ int MobiusVM::run(size_t base_depth) {
         case OP_GETENUM: {
             // R[A] = R[B].member[C]
             const Value& enum_val = RB(inst);
-            if (enum_val.type != VAL_USERDATA ||
-                strcmp(enum_val.as.userdata.type_name, "enum_definition") != 0) {
+            if (enum_val.type != VAL_USERDATA || !enum_val.as.userdata ||
+                strcmp(enum_val.as.userdata->type_name, "enum_definition") != 0) {
                 runtimeError("GETENUM: target is not an enum definition");
                 return -1;
             }
-            EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata.ptr);
+            EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata->ptr);
             int member_idx = DECODE_C(inst);
             // Find by index (walk the members)
             const EnumMember* member = nullptr;

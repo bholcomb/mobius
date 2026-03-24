@@ -143,7 +143,7 @@ int lib_id(MobiusState* state, int arg_count) {
             addr = (uintptr_t)arg.as.function;
             break;
         case VAL_USERDATA:
-            addr = (uintptr_t)arg.as.userdata.ptr;
+            addr = arg.as.userdata ? (uintptr_t)arg.as.userdata->ptr : 0;
             break;
         default:
             // For value types, just return 0
