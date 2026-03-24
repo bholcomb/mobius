@@ -1,0 +1,106 @@
+// Test for-in iteration with iterator protocol
+print("=== For-In Tests ===")
+
+// Helper: range iterator factory
+func range(n) {
+    var i = 0
+    return func(state, control) {
+        if (i >= n) { return nil }
+        var val = i
+        i = i + 1
+        return val
+    }
+}
+
+// Basic for-in with range
+var sum = 0
+for (var x in range(5)) {
+    sum += x
+}
+if (sum != 10) { print("FAIL: range(5) sum, got", sum); exit(1) }
+
+// for-in with range(0) should not execute body
+var count = 0
+for (var x in range(0)) {
+    count += 1
+}
+if (count != 0) { print("FAIL: range(0) should be empty, got", count); exit(1) }
+
+// for-in with range(1)
+var single = -1
+for (var x in range(1)) {
+    single = x
+}
+if (single != 0) { print("FAIL: range(1), got", single); exit(1) }
+
+// Nested for-in loops
+var total = 0
+for (var i in range(3)) {
+    for (var j in range(3)) {
+        total += 1
+    }
+}
+if (total != 9) { print("FAIL: nested for-in 3x3, got", total); exit(1) }
+
+// for-in collecting values into array
+var collected = []
+for (var x in range(5)) {
+    array_push(collected, x * x)
+}
+if (len(collected) != 5) { print("FAIL: collected len, got", len(collected)); exit(1) }
+if (collected[0] != 0) { print("FAIL: collected[0]"); exit(1) }
+if (collected[1] != 1) { print("FAIL: collected[1]"); exit(1) }
+if (collected[4] != 16) { print("FAIL: collected[4]"); exit(1) }
+
+// Custom iterator: iterate over array elements
+func array_iter(arr) {
+    var idx = 0
+    var length = len(arr)
+    return func(state, control) {
+        if (idx >= length) { return nil }
+        var val = arr[idx]
+        idx = idx + 1
+        return val
+    }
+}
+
+var names = ["alice", "bob", "charlie"]
+var name_list = ""
+for (var name in array_iter(names)) {
+    if (name_list != "") {
+        name_list = name_list + ","
+    }
+    name_list = name_list + name
+}
+if (name_list != "alice,bob,charlie") { print("FAIL: array_iter, got", name_list); exit(1) }
+
+// for-in with break
+var broke_at = -1
+for (var x in range(100)) {
+    if (x == 5) {
+        broke_at = x
+        break
+    }
+}
+if (broke_at != 5) { print("FAIL: for-in break, got", broke_at); exit(1) }
+
+// Custom countdown iterator
+func countdown(from) {
+    var n = from
+    return func(state, control) {
+        if (n < 0) { return nil }
+        var val = n
+        n = n - 1
+        return val
+    }
+}
+
+var down = []
+for (var x in countdown(3)) {
+    array_push(down, x)
+}
+if (len(down) != 4) { print("FAIL: countdown len, got", len(down)); exit(1) }
+if (down[0] != 3) { print("FAIL: countdown[0]"); exit(1) }
+if (down[3] != 0) { print("FAIL: countdown[3]"); exit(1) }
+
+print("=== All for-in tests passed! ===")

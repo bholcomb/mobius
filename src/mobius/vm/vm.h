@@ -83,6 +83,16 @@ public:
     int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
     void closeUpvalues(CallInfo& ci, int from_reg);
 
+    struct TryBlock {
+        size_t call_stack_depth;  // call stack depth at time of TRY_BEGIN
+        uint32_t* catch_ip;       // instruction pointer to jump to on error
+        int catch_reg;            // register to store the error value
+        int base;                 // base register of the frame that contains the try
+    };
+    std::vector<TryBlock> try_stack_;
+
+    int run(size_t base_depth);
+
 private:
     int callNative(MobiusCFunction func, int func_reg, int nargs, int nresults);
 
@@ -98,8 +108,6 @@ private:
     inline const Value& R(const CallInfo& ci, int idx) const {
         return registers_[ci.base + idx];
     }
-
-    int run(size_t base_depth);
 };
 
 #endif // MOBIUS_VM_VM_H

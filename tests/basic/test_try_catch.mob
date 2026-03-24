@@ -1,0 +1,123 @@
+// Test try/catch/throw error handling
+print("=== Try/Catch/Throw Tests ===")
+
+// Basic try/catch with throw
+var caught = false
+try {
+    throw "test error"
+} catch err {
+    caught = true
+    if (err != "test error") { print("FAIL: catch value, got", err); exit(1) }
+}
+if (!caught) { print("FAIL: catch not reached"); exit(1) }
+
+// Try block without throw should not enter catch
+var entered_catch = false
+try {
+    var x = 42
+} catch err {
+    entered_catch = true
+}
+if (entered_catch) { print("FAIL: catch entered without throw"); exit(1) }
+
+// Throw integer value
+var caught_val = nil
+try {
+    throw 42
+} catch err {
+    caught_val = err
+}
+if (caught_val != 42) { print("FAIL: throw int, got", caught_val); exit(1) }
+
+// Throw from inside a function
+func risky() {
+    throw "function error"
+}
+var func_err = nil
+try {
+    risky()
+} catch err {
+    func_err = err
+}
+if (func_err != "function error") { print("FAIL: throw from func, got", func_err); exit(1) }
+
+// Throw from nested function calls
+func inner() {
+    throw "deep error"
+}
+func middle() {
+    inner()
+}
+func outer() {
+    middle()
+}
+var deep_err = nil
+try {
+    outer()
+} catch err {
+    deep_err = err
+}
+if (deep_err != "deep error") { print("FAIL: deep throw, got", deep_err); exit(1) }
+
+// Code after try/catch continues normally
+var after_try = false
+try {
+    throw "err"
+} catch err {
+    // handled
+}
+after_try = true
+if (!after_try) { print("FAIL: code after try/catch"); exit(1) }
+
+// Try/catch in a loop
+var errors = 0
+for (var i = 0; i < 5; i += 1) {
+    try {
+        if (i == 2 || i == 4) {
+            throw "loop error"
+        }
+    } catch err {
+        errors += 1
+    }
+}
+if (errors != 2) { print("FAIL: try/catch in loop, got", errors); exit(1) }
+
+// Nested try/catch
+var outer_caught = false
+var inner_caught = false
+try {
+    try {
+        throw "inner"
+    } catch err {
+        inner_caught = true
+        if (err != "inner") { print("FAIL: inner catch value"); exit(1) }
+        throw "outer"
+    }
+} catch err {
+    outer_caught = true
+    if (err != "outer") { print("FAIL: outer catch value"); exit(1) }
+}
+if (!inner_caught) { print("FAIL: inner catch not reached"); exit(1) }
+if (!outer_caught) { print("FAIL: outer catch not reached"); exit(1) }
+
+// Try/catch with computation before throw
+var computed = 0
+try {
+    computed = 10
+    computed = computed + 20
+    throw "after compute"
+} catch err {
+    // computed should retain its value from the try block
+}
+if (computed != 30) { print("FAIL: computation before throw, got", computed); exit(1) }
+
+// Throw with boolean value
+var bool_err = nil
+try {
+    throw false
+} catch err {
+    bool_err = err
+}
+if (bool_err != false) { print("FAIL: throw bool, got", bool_err); exit(1) }
+
+print("=== All try/catch/throw tests passed! ===")

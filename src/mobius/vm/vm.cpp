@@ -459,8 +459,11 @@ MOBIUS_FORCEINLINE static int vm_op_newarray(MobiusVM* vm, VMFrame& f, uint32_t 
 MOBIUS_FORCEINLINE static int vm_op_gettable(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& tbl = RB(inst);
     const Value& key = RKC(inst);
-    if (tbl.type == VAL_TABLE && tbl.as.table) {
-        RA(inst) = tbl.as.table->get(key);
+    if (MOBIUS_LIKELY(tbl.type == VAL_TABLE && tbl.as.table)) {
+        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+            RA(inst) = tbl.as.table->getByString(key.as.string);
+        else
+            RA(inst) = tbl.as.table->get(key);
     } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -484,8 +487,11 @@ MOBIUS_FORCEINLINE static int vm_op_settable(MobiusVM* vm, VMFrame& f, uint32_t 
     Value& tbl = RA(inst);
     const Value& key = RKB(inst);
     const Value& val = RKC(inst);
-    if (tbl.type == VAL_TABLE && tbl.as.table) {
-        tbl.as.table->set(key, val);
+    if (MOBIUS_LIKELY(tbl.type == VAL_TABLE && tbl.as.table)) {
+        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+            tbl.as.table->setByString(key.as.string, val);
+        else
+            tbl.as.table->set(key, val);
     } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -1326,7 +1332,10 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_gettable(MobiusVM* vm, VMFrame& f,
         : f.regs[c2];
     const Value& tbl = f.regs[a];
     if (MOBIUS_LIKELY(tbl.type == VAL_TABLE && tbl.as.table)) {
-        f.regs[a] = tbl.as.table->get(key);
+        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+            f.regs[a] = tbl.as.table->getByString(key.as.string);
+        else
+            f.regs[a] = tbl.as.table->get(key);
     } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -1470,9 +1479,36 @@ MOBIUS_FORCEINLINE static int vm_op_close(MobiusVM* vm, VMFrame& f, uint32_t ins
 
 // ---- TForLoop ----
 MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)f; (void)inst;
-    vm->runtimeError("Generic for-loop (TFORLOOP) not yet implemented");
-    return -1;
+    uint8_t a = DECODE_A(inst);
+
+    // R[A]=iterator, R[A+1]=state, R[A+2]=control
+    // Set up call: R[A+3]=iterator copy, R[A+4]=state, R[A+5]=control
+    int call_reg = a + 3;
+    f.regs[call_reg]     = f.regs[a];       // copy iterator to call position
+    f.regs[call_reg + 1] = f.regs[a + 1];   // arg1 = state
+    f.regs[call_reg + 2] = f.regs[a + 2];   // arg2 = control
+
+    f.ci->ip = f.ip;
+    int rc = vm->callFunction(vm->call_stack_.back(), call_reg, 2, 2);
+    if (rc < 0) return -1;
+
+    if (rc > 0) {
+        rc = vm->run(vm->call_stack_.size() - 1);
+        if (rc < 0) return -1;
+    }
+
+    vm->refreshFrame(f);
+
+    Value& result = f.regs[call_reg];
+    if (result.type == VAL_NIL) {
+        return 0;
+    }
+
+    f.regs[a + 2] = result;  // update control variable
+    f.regs[a + 3] = result;  // set loop variable
+
+    f.ip++;  // skip the JMP (body follows after it)
+    return 0;
 }
 
 // ---- Enum ----
@@ -1693,6 +1729,63 @@ MOBIUS_FORCEINLINE static int vm_op_pragma(MobiusVM* vm, VMFrame& f, uint32_t in
     return 0;
 }
 
+// ---- Error handling ----
+MOBIUS_FORCEINLINE static int vm_op_try_begin(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint8_t a = DECODE_A(inst);
+    int sbx = DECODE_sBx(inst);
+
+    MobiusVM::TryBlock tb;
+    tb.call_stack_depth = vm->call_stack_.size();
+    tb.catch_ip = f.ip + sbx;
+    tb.catch_reg = a;
+    tb.base = f.base;
+    vm->try_stack_.push_back(tb);
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_try_end(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)f; (void)inst;
+    if (!vm->try_stack_.empty()) {
+        vm->try_stack_.pop_back();
+    }
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint8_t a = DECODE_A(inst);
+    Value thrown_value = f.regs[a];
+
+    if (vm->try_stack_.empty()) {
+        if (thrown_value.type == VAL_STRING && thrown_value.as.string) {
+            vm->runtimeError("%s", thrown_value.as.string->data);
+        } else {
+            vm->runtimeError("Uncaught exception");
+        }
+        return -1;
+    }
+
+    MobiusVM::TryBlock& tb = vm->try_stack_.back();
+
+    // Unwind call stack to the try block's depth
+    while (vm->call_stack_.size() > tb.call_stack_depth) {
+        CallInfo& ci = vm->call_stack_.back();
+        vm->closeUpvalues(ci, 0);
+        vm->call_stack_.pop_back();
+    }
+
+    // Set error value into catch register
+    vm->registers_[tb.base + tb.catch_reg] = thrown_value;
+
+    // Jump to catch block
+    CallInfo& ci = vm->call_stack_.back();
+    ci.ip = tb.catch_ip;
+
+    vm->try_stack_.pop_back();
+
+    vm->refreshFrame(f);
+    return 0;
+}
+
 // ---- NOP ----
 MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm; (void)f; (void)inst;
@@ -1757,6 +1850,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_ADDK, &&L_OP_SUBK, &&L_OP_MULK, &&L_OP_DIVK, &&L_OP_MODK,
         &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_GETTABLE,
         &&L_OP_LEN,
+        &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
         &&L_OP_NOP,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
@@ -1781,7 +1875,32 @@ int MobiusVM::run(size_t base_depth) {
 #endif
 
     // Handlers that delegate to extracted functions
-    #define VM_HANDLER(op, fn) VM_CASE(op) { if (fn(this, f, inst) < 0) return -1; VM_NEXT(); }
+    #define VM_HANDLER(op, fn) VM_CASE(op) {                           \
+        int _rc = fn(this, f, inst);                                    \
+        if (MOBIUS_UNLIKELY(_rc < 0)) {                                 \
+            if (!try_stack_.empty()) {                                   \
+                TryBlock& _tb = try_stack_.back();                       \
+                while (call_stack_.size() > _tb.call_stack_depth) {      \
+                    closeUpvalues(call_stack_.back(), 0);                \
+                    call_stack_.pop_back();                               \
+                }                                                        \
+                InternalError* _ie = state_->getLastError();              \
+                const char* err = _ie ? _ie->message : nullptr;          \
+                if (err) {                                               \
+                    registers_[_tb.base + _tb.catch_reg] =               \
+                        make_string_value_from_cstr(state_, err);        \
+                } else {                                                 \
+                    registers_[_tb.base + _tb.catch_reg] = make_nil_value();  \
+                }                                                        \
+                call_stack_.back().ip = _tb.catch_ip;                    \
+                try_stack_.pop_back();                                    \
+                refreshFrame(f);                                         \
+                VM_NEXT();                                               \
+            }                                                            \
+            return -1;                                                   \
+        }                                                                \
+        VM_NEXT();                                                       \
+    }
 
     VM_HANDLER(OP_MOVE, vm_op_move)
     VM_HANDLER(OP_LOADK, vm_op_loadk)
@@ -1881,6 +2000,9 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_GETENUM, vm_op_getenum)
     VM_HANDLER(OP_IMPORT, vm_op_import)
     VM_HANDLER(OP_PRAGMA, vm_op_pragma)
+    VM_HANDLER(OP_TRY_BEGIN, vm_op_try_begin)
+    VM_HANDLER(OP_TRY_END, vm_op_try_end)
+    VM_HANDLER(OP_THROW, vm_op_throw)
     VM_HANDLER(OP_NOP, vm_op_nop)
 
     VM_DEFAULT()

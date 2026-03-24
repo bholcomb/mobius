@@ -58,6 +58,7 @@ typedef enum {
     // Literals
     TOKEN_IDENTIFIER,       // variable names, function names, etc.
     TOKEN_STRING,           // "string literals"
+    TOKEN_INTERP_STRING,    // `interpolated string with ${expr}`
     TOKEN_INTEGER,          // integer literals (8, 16, 32, 64 bit signed/unsigned)
     TOKEN_FLOAT,            // floating point literals (64-bit double)
     TOKEN_CHAR,             // 'c'
@@ -83,6 +84,10 @@ typedef enum {
     TOKEN_RETURN,           // return
     TOKEN_SWITCH,           // switch
     TOKEN_TRUE,             // true
+    TOKEN_THROW,            // throw
+    TOKEN_TRY,              // try
+    TOKEN_CATCH,            // catch
+    TOKEN_IN,               // in
     TOKEN_VAR,              // var (mutable variable)
     TOKEN_WHILE,            // while
 

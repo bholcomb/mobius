@@ -1,0 +1,90 @@
+// Test new string standard library functions
+print("=== String Stdlib Tests ===")
+
+// split
+var parts = split("hello,world,foo", ",")
+if (len(parts) != 3) { print("FAIL: split len, got", len(parts)); exit(1) }
+if (parts[0] != "hello") { print("FAIL: split[0], got", parts[0]); exit(1) }
+if (parts[1] != "world") { print("FAIL: split[1], got", parts[1]); exit(1) }
+if (parts[2] != "foo") { print("FAIL: split[2], got", parts[2]); exit(1) }
+
+// split with no delimiter match
+var no_split = split("hello", ",")
+if (len(no_split) != 1) { print("FAIL: no split len, got", len(no_split)); exit(1) }
+if (no_split[0] != "hello") { print("FAIL: no split[0], got", no_split[0]); exit(1) }
+
+// split empty delimiter (character-by-character)
+var chars = split("abc", "")
+if (len(chars) != 3) { print("FAIL: char split len, got", len(chars)); exit(1) }
+if (chars[0] != "a") { print("FAIL: char split[0]"); exit(1) }
+if (chars[1] != "b") { print("FAIL: char split[1]"); exit(1) }
+if (chars[2] != "c") { print("FAIL: char split[2]"); exit(1) }
+
+// join
+var words = ["hello", "beautiful", "world"]
+var joined = join(words, " ")
+if (joined != "hello beautiful world") { print("FAIL: join, got", joined); exit(1) }
+
+// join with empty separator
+var joined2 = join(["a", "b", "c"], "")
+if (joined2 != "abc") { print("FAIL: join empty sep, got", joined2); exit(1) }
+
+// join single element
+var joined3 = join(["solo"], ",")
+if (joined3 != "solo") { print("FAIL: join single, got", joined3); exit(1) }
+
+// trim
+var trimmed = trim("  hello  ")
+if (trimmed != "hello") { print("FAIL: trim, got", trimmed); exit(1) }
+
+var trimmed2 = trim("no_spaces")
+if (trimmed2 != "no_spaces") { print("FAIL: trim no spaces, got", trimmed2); exit(1) }
+
+var trimmed3 = trim("  ")
+if (trimmed3 != "") { print("FAIL: trim all spaces, got", trimmed3); exit(1) }
+
+// startswith
+if (!startswith("hello world", "hello")) { print("FAIL: startswith true"); exit(1) }
+if (startswith("hello world", "world")) { print("FAIL: startswith false"); exit(1) }
+if (!startswith("abc", "abc")) { print("FAIL: startswith exact"); exit(1) }
+if (!startswith("abc", "")) { print("FAIL: startswith empty"); exit(1) }
+
+// endswith
+if (!endswith("hello world", "world")) { print("FAIL: endswith true"); exit(1) }
+if (endswith("hello world", "hello")) { print("FAIL: endswith false"); exit(1) }
+if (!endswith("abc", "abc")) { print("FAIL: endswith exact"); exit(1) }
+if (!endswith("abc", "")) { print("FAIL: endswith empty"); exit(1) }
+
+// replace
+var replaced = replace("hello world", "world", "mobius")
+if (replaced != "hello mobius") { print("FAIL: replace, got", replaced); exit(1) }
+
+// replace multiple occurrences
+var replaced2 = replace("abcabc", "a", "x")
+if (replaced2 != "xbcxbc") { print("FAIL: replace multi, got", replaced2); exit(1) }
+
+// replace no match
+var replaced3 = replace("hello", "xyz", "abc")
+if (replaced3 != "hello") { print("FAIL: replace no match, got", replaced3); exit(1) }
+
+// find
+var idx = find("hello world", "world")
+if (idx != 6) { print("FAIL: find, got", idx); exit(1) }
+
+var idx2 = find("hello world", "xyz")
+if (idx2 != -1) { print("FAIL: find not found, got", idx2); exit(1) }
+
+var idx3 = find("abcabc", "abc")
+if (idx3 != 0) { print("FAIL: find first, got", idx3); exit(1) }
+
+// repeat
+var rep = repeat("ab", 3)
+if (rep != "ababab") { print("FAIL: repeat, got", rep); exit(1) }
+
+var rep2 = repeat("x", 1)
+if (rep2 != "x") { print("FAIL: repeat 1, got", rep2); exit(1) }
+
+var rep3 = repeat("x", 0)
+if (rep3 != "") { print("FAIL: repeat 0, got", rep3); exit(1) }
+
+print("=== All string stdlib tests passed! ===")

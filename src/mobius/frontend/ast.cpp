@@ -166,6 +166,33 @@ Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token o
     return expr;
 }
 
+Expr* make_ternary_expr(Expr* condition, Expr* then_expr, Expr* else_expr) {
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+
+    expr->type = EXPR_TERNARY;
+    expr->ref_count = 1;
+    expr->as.ternary.condition = condition;
+    expr->as.ternary.then_expr = then_expr;
+    expr->as.ternary.else_expr = else_expr;
+    return expr;
+}
+
+Expr* make_function_expr(Token name, Token* params, size_t param_count,
+                         Stmt** body, size_t body_count) {
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+
+    expr->type = EXPR_FUNCTION;
+    expr->ref_count = 1;
+    expr->as.function_expr.name = name;
+    expr->as.function_expr.params = params;
+    expr->as.function_expr.param_count = param_count;
+    expr->as.function_expr.body = body;
+    expr->as.function_expr.body_count = body_count;
+    return expr;
+}
+
 // Statement constructors
 Stmt* make_expression_stmt(Expr* expression) {
     Stmt* stmt = calloc(1, sizeof(Stmt));
@@ -423,6 +450,21 @@ void print_expr(Expr* expr) {
                    expr->as.increment.name.identifier ? expr->as.increment.name.identifier : "unknown");
             if (!expr->as.increment.is_prefix) printf("--");
             break;
+        case EXPR_TERNARY:
+            printf("(");
+            print_expr(expr->as.ternary.condition);
+            printf(" ? ");
+            print_expr(expr->as.ternary.then_expr);
+            printf(" : ");
+            print_expr(expr->as.ternary.else_expr);
+            printf(")");
+            break;
+        case EXPR_FUNCTION:
+            printf("(func");
+            if (expr->as.function_expr.name.identifier)
+                printf(" %s", expr->as.function_expr.name.identifier);
+            printf("(...))");
+            break;
     }
 }
 
@@ -533,6 +575,21 @@ void print_stmt(Stmt* stmt) {
             }
             printf(" { ... }");
             break;
+        case STMT_FOR_IN:
+            printf("for ");
+            printf("%s", stmt->as.for_in_stmt.var_name.identifier ? stmt->as.for_in_stmt.var_name.identifier : "?");
+            printf(" in ");
+            print_expr(stmt->as.for_in_stmt.iterable);
+            printf(" { ... }");
+            break;
+        case STMT_TRY_CATCH:
+            printf("try { ... } catch %s { ... }",
+                   stmt->as.try_catch_stmt.catch_var.identifier ? stmt->as.try_catch_stmt.catch_var.identifier : "e");
+            break;
+        case STMT_THROW:
+            printf("throw ");
+            if (stmt->as.throw_stmt.value) print_expr(stmt->as.throw_stmt.value);
+            break;
     }
 }
 
@@ -598,7 +655,18 @@ void free_expr(Expr* expr) {
             break;
         case EXPR_INCREMENT:
         case EXPR_DECREMENT:
-            // Token doesn't need freeing
+            break;
+        case EXPR_TERNARY:
+            free_expr(expr->as.ternary.condition);
+            free_expr(expr->as.ternary.then_expr);
+            free_expr(expr->as.ternary.else_expr);
+            break;
+        case EXPR_FUNCTION:
+            if (expr->as.function_expr.params) free(expr->as.function_expr.params);
+            for (size_t i = 0; i < expr->as.function_expr.body_count; i++) {
+                free_stmt(expr->as.function_expr.body[i]);
+            }
+            if (expr->as.function_expr.body) free(expr->as.function_expr.body);
             break;
     }
     free(expr);
@@ -727,6 +795,25 @@ void free_stmt(Stmt* stmt) {
             }
             break;
         }
+        case STMT_FOR_IN:
+            free_expr(stmt->as.for_in_stmt.iterable);
+            free_stmt(stmt->as.for_in_stmt.body);
+            break;
+        case STMT_TRY_CATCH:
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.try_body_count; i++) {
+                free_stmt(stmt->as.try_catch_stmt.try_body[i]);
+            }
+            if (stmt->as.try_catch_stmt.try_body) free(stmt->as.try_catch_stmt.try_body);
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.catch_body_count; i++) {
+                free_stmt(stmt->as.try_catch_stmt.catch_body[i]);
+            }
+            if (stmt->as.try_catch_stmt.catch_body) free(stmt->as.try_catch_stmt.catch_body);
+            break;
+        case STMT_THROW:
+            if (stmt->as.throw_stmt.value) {
+                free_expr(stmt->as.throw_stmt.value);
+            }
+            break;
     }
     free(stmt);
 }
@@ -809,19 +896,28 @@ void ast_release_expr(Expr* expr) {
                 break;
             case EXPR_INCREMENT:
             case EXPR_DECREMENT:
-                // Free the copied token identifier
                 free_token(&expr->as.increment.name);
                 break;
             case EXPR_LITERAL:
-                // Literal value will be freed below
                 break;
             case EXPR_VARIABLE:
-                // Free the copied token identifier
                 free_token(&expr->as.variable.name);
                 break;
+            case EXPR_TERNARY:
+                ast_release_expr(expr->as.ternary.condition);
+                ast_release_expr(expr->as.ternary.then_expr);
+                ast_release_expr(expr->as.ternary.else_expr);
+                break;
+            case EXPR_FUNCTION:
+                if (expr->as.function_expr.params) free(expr->as.function_expr.params);
+                if (expr->as.function_expr.body) {
+                    for (size_t i = 0; i < expr->as.function_expr.body_count; i++) {
+                        ast_release_stmt(expr->as.function_expr.body[i]);
+                    }
+                    free(expr->as.function_expr.body);
+                }
+                break;
         }
-        
-        // Literal values are cleaned up by Value's destructor
         
         free(expr);
     }
@@ -979,13 +1075,10 @@ void ast_release_stmt(Stmt* stmt) {
             }
             break;
             case STMT_ENUM: {
-                // Free the copied token identifier
                 free_token(&stmt->as.enum_stmt.name);
-                // Release enum members
                 EnumMemberDef* member = stmt->as.enum_stmt.members;
                 while (member) {
                     EnumMemberDef* next = member->next;
-                    // Free the member's token identifier
                     free_token(&member->name);
                     if (member->value) {
                         ast_release_expr(member->value);
@@ -995,6 +1088,31 @@ void ast_release_stmt(Stmt* stmt) {
                 }
                 break;
             }
+            case STMT_FOR_IN:
+                free_token(&stmt->as.for_in_stmt.var_name);
+                ast_release_expr(stmt->as.for_in_stmt.iterable);
+                ast_release_stmt(stmt->as.for_in_stmt.body);
+                break;
+            case STMT_TRY_CATCH:
+                if (stmt->as.try_catch_stmt.try_body) {
+                    for (size_t i = 0; i < stmt->as.try_catch_stmt.try_body_count; i++) {
+                        ast_release_stmt(stmt->as.try_catch_stmt.try_body[i]);
+                    }
+                    free(stmt->as.try_catch_stmt.try_body);
+                }
+                free_token(&stmt->as.try_catch_stmt.catch_var);
+                if (stmt->as.try_catch_stmt.catch_body) {
+                    for (size_t i = 0; i < stmt->as.try_catch_stmt.catch_body_count; i++) {
+                        ast_release_stmt(stmt->as.try_catch_stmt.catch_body[i]);
+                    }
+                    free(stmt->as.try_catch_stmt.catch_body);
+                }
+                break;
+            case STMT_THROW:
+                if (stmt->as.throw_stmt.value) {
+                    ast_release_expr(stmt->as.throw_stmt.value);
+                }
+                break;
         }
         
         free(stmt);
@@ -1120,6 +1238,44 @@ Stmt* make_pragma_stmt(Token keyword, Token name, Token value) {
         stmt->as.pragma_stmt.value.identifier = mobius_strdup(value.identifier);
     }
     
+    return stmt;
+}
+
+Stmt* make_for_in_stmt(Token var_name, Expr* iterable, Stmt* body) {
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+
+    stmt->type = STMT_FOR_IN;
+    stmt->ref_count = 1;
+    stmt->as.for_in_stmt.var_name = copy_token(&var_name);
+    stmt->as.for_in_stmt.iterable = iterable;
+    stmt->as.for_in_stmt.body = body;
+    return stmt;
+}
+
+Stmt* make_try_catch_stmt(Stmt** try_body, size_t try_body_count,
+                          Token catch_var, Stmt** catch_body, size_t catch_body_count) {
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+
+    stmt->type = STMT_TRY_CATCH;
+    stmt->ref_count = 1;
+    stmt->as.try_catch_stmt.try_body = try_body;
+    stmt->as.try_catch_stmt.try_body_count = try_body_count;
+    stmt->as.try_catch_stmt.catch_var = copy_token(&catch_var);
+    stmt->as.try_catch_stmt.catch_body = catch_body;
+    stmt->as.try_catch_stmt.catch_body_count = catch_body_count;
+    return stmt;
+}
+
+Stmt* make_throw_stmt(Token keyword, Expr* value) {
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+
+    stmt->type = STMT_THROW;
+    stmt->ref_count = 1;
+    stmt->as.throw_stmt.keyword = keyword;
+    stmt->as.throw_stmt.value = value;
     return stmt;
 }
 

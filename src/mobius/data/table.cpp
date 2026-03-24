@@ -201,6 +201,37 @@ Value Table::get(const Value& key) const {
     return make_nil_value();
 }
 
+Value Table::getByString(MobiusString* key) const {
+    if (size_ == 0 || !key) return make_nil_value();
+
+    size_t h = (size_t)key->hash;
+    size_t mask = entries_.size() - 1;
+    size_t index = h & mask;
+    uint8_t tag = tagFromHash(h);
+    size_t start = index;
+
+    do {
+        uint8_t t = tags_[index];
+        if (t == TAG_EMPTY) break;
+        if (t == tag) {
+            const Value& k = entries_[index].key;
+            if (k.type == VAL_STRING && k.as.string == key)
+                return entries_[index].value;
+        }
+        index = (index + 1) & mask;
+    } while (index != start);
+
+    if (metatable_ && state_) {
+        Value index_method = getMetamethod(state_->metamethods()->index());
+        if (index_method.type == VAL_TABLE) {
+            Value key_val = make_string_value(key);
+            return index_method.as.table->get(key_val);
+        }
+    }
+
+    return make_nil_value();
+}
+
 bool Table::set(const Value& key, const Value& value) {
     if ((double)size_ / entries_.size() >= LOAD_FACTOR_THRESHOLD) {
         resize(entries_.size() * 2);
@@ -224,6 +255,53 @@ bool Table::set(const Value& key, const Value& value) {
     }
 
     entries_[index].value = value;
+    return true;
+}
+
+bool Table::setByString(MobiusString* key, const Value& value) {
+    if (!key) return false;
+
+    if ((double)size_ / entries_.size() >= LOAD_FACTOR_THRESHOLD) {
+        resize(entries_.size() * 2);
+    }
+
+    size_t h = (size_t)key->hash;
+    size_t mask = entries_.size() - 1;
+    size_t index = h & mask;
+    uint8_t tag = tagFromHash(h);
+    size_t start = index;
+
+    do {
+        uint8_t t = tags_[index];
+        if (t == TAG_EMPTY) {
+            if (metatable_ && state_) {
+                Value newindex_method = getMetamethod(state_->metamethods()->newindex());
+                if (newindex_method.type == VAL_TABLE) {
+                    Value key_val = make_string_value(key);
+                    return newindex_method.as.table->set(key_val, value);
+                }
+            }
+
+            entries_[index].key = make_string_value(key);
+            entries_[index].value = value;
+            tags_[index] = tag;
+            size_++;
+            return true;
+        }
+        if (t == tag) {
+            const Value& k = entries_[index].key;
+            if (k.type == VAL_STRING && k.as.string == key) {
+                entries_[index].value = value;
+                return true;
+            }
+        }
+        index = (index + 1) & mask;
+    } while (index != start);
+
+    entries_[start].key = make_string_value(key);
+    entries_[start].value = value;
+    tags_[start] = tag;
+    size_++;
     return true;
 }
 
@@ -286,13 +364,13 @@ void Table::forEach(const std::function<void(const Value& key, const Value& valu
 
 bool Table::hasMetamethod(MobiusString* method_name) const {
     if (!metatable_ || !method_name) return false;
-    Value method = metatable_->get(make_string_value(method_name));
+    Value method = metatable_->getByString(method_name);
     return method.type != VAL_NIL;
 }
 
 Value Table::getMetamethod(MobiusString* method_name) const {
     if (!metatable_ || !method_name) return make_nil_value();
-    return metatable_->get(make_string_value(method_name));
+    return metatable_->getByString(method_name);
 }
 
 // ============================================================================

@@ -116,6 +116,8 @@ private:
     int compileIncrement(IncrementExpr* expr, int dest);
     int compileLogicalAnd(BinaryExpr* expr, int dest);
     int compileLogicalOr(BinaryExpr* expr, int dest);
+    int compileTernary(TernaryExpr* expr, int dest);
+    int compileFunctionExpr(FunctionExpr* expr, int dest);
 
     // --- Condition compilation (fused compare+branch) ---
     int compileConditionJump(Expr* condition);
@@ -137,6 +139,9 @@ private:
     void compileEnumStmt(EnumStmt* stmt);
     void compilePragmaStmt(PragmaStmt* stmt);
     void compilePrintStmt(PrintStmt* stmt);
+    void compileForInStmt(ForInStmt* stmt);
+    void compileTryCatchStmt(TryCatchStmt* stmt);
+    void compileThrowStmt(ThrowStmt* stmt);
 
     void compileBlock(Stmt** stmts, size_t count);
 

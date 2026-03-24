@@ -1,0 +1,77 @@
+// Test compound assignment operators (+=, -=, *=, /=)
+print("=== Compound Assignment Tests ===")
+
+// += with integers
+var a = 10
+a += 5
+if (a != 15) { print("FAIL: a += 5, got", a); exit(1) }
+
+// -= with integers
+var b = 20
+b -= 7
+if (b != 13) { print("FAIL: b -= 7, got", b); exit(1) }
+
+// *= with integers
+var c = 6
+c *= 4
+if (c != 24) { print("FAIL: c *= 4, got", c); exit(1) }
+
+// /= with integers
+var d = 100
+d /= 5
+if (d != 20) { print("FAIL: d /= 5, got", d); exit(1) }
+
+// += with floats
+var e = 1.5
+e += 2.5
+if (e != 4.0) { print("FAIL: e += 2.5, got", e); exit(1) }
+
+// -= with floats
+var f = 10.0
+f -= 3.5
+if (f != 6.5) { print("FAIL: f -= 3.5, got", f); exit(1) }
+
+// *= with floats
+var g = 2.5
+g *= 4.0
+if (g != 10.0) { print("FAIL: g *= 4.0, got", g); exit(1) }
+
+// Compound assignment with expressions
+var h = 5
+h += 2 * 3
+if (h != 11) { print("FAIL: h += 2*3, got", h); exit(1) }
+
+// Chained compound assignments
+var i = 1
+i += 1
+i += 1
+i += 1
+if (i != 4) { print("FAIL: chained +=, got", i); exit(1) }
+
+// Compound assignment on table fields
+var t = { x: 10 }
+t.x += 5
+if (t.x != 15) { print("FAIL: t.x += 5, got", t.x); exit(1) }
+
+t.x -= 3
+if (t.x != 12) { print("FAIL: t.x -= 3, got", t.x); exit(1) }
+
+t.x *= 2
+if (t.x != 24) { print("FAIL: t.x *= 2, got", t.x); exit(1) }
+
+// Compound assignment on array elements
+var arr = [10, 20, 30]
+arr[0] += 5
+if (arr[0] != 15) { print("FAIL: arr[0] += 5, got", arr[0]); exit(1) }
+
+arr[1] -= 10
+if (arr[1] != 10) { print("FAIL: arr[1] -= 10, got", arr[1]); exit(1) }
+
+// Compound assignment in a loop
+var sum = 0
+for (var j = 1; j <= 10; j += 1) {
+    sum += j
+}
+if (sum != 55) { print("FAIL: sum of 1..10, got", sum); exit(1) }
+
+print("=== All compound assignment tests passed! ===")

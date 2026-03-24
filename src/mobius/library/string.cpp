@@ -235,3 +235,253 @@ int lib_contains(MobiusState* state, int arg_count) {
     
     return 1;
 }
+
+int lib_split(MobiusState* state, int arg_count) {
+    if (arg_count != 2) return state->error("split expects 2 arguments (string, delimiter)");
+
+    Value delim_val = state->npeek(0);
+    Value str_val = state->npeek(1);
+    state->npop(); state->npop();
+
+    if (str_val.type != VAL_STRING || !str_val.as.string ||
+        delim_val.type != VAL_STRING || !delim_val.as.string)
+        return state->error("split expects string arguments");
+
+    const char* str = str_val.as.string->data;
+    const char* delim = delim_val.as.string->data;
+    size_t delim_len = delim_val.as.string->length;
+
+    ArrayValue* arr = new ArrayValue();
+
+    if (delim_len == 0) {
+        size_t slen = str_val.as.string->length;
+        for (size_t i = 0; i < slen; i++) {
+            char buf[2] = { str[i], '\0' };
+            arr->push(make_string_value_from_cstr(state, buf));
+        }
+    } else {
+        const char* p = str;
+        const char* found;
+        while ((found = strstr(p, delim)) != NULL) {
+            size_t seg_len = found - p;
+            char* seg = (char*)malloc(seg_len + 1);
+            memcpy(seg, p, seg_len); seg[seg_len] = '\0';
+            arr->push(make_string_value_from_cstr(state, seg));
+            free(seg);
+            p = found + delim_len;
+        }
+        arr->push(make_string_value_from_cstr(state, p));
+    }
+
+    state->npush(make_array_value(arr));
+    return 1;
+}
+
+int lib_join(MobiusState* state, int arg_count) {
+    if (arg_count != 2) return state->error("join expects 2 arguments (array, separator)");
+
+    Value sep_val = state->npeek(0);
+    Value arr_val = state->npeek(1);
+    state->npop(); state->npop();
+
+    if (arr_val.type != VAL_ARRAY || !arr_val.as.array)
+        return state->error("join expects first argument to be an array");
+    if (sep_val.type != VAL_STRING || !sep_val.as.string)
+        return state->error("join expects second argument to be a string");
+
+    ArrayValue* arr = arr_val.as.array;
+    const char* sep = sep_val.as.string->data;
+    size_t sep_len = sep_val.as.string->length;
+    size_t count = arr->length();
+
+    size_t total = 0;
+    for (size_t i = 0; i < count; i++) {
+        Value v = arr->get(i);
+        if (v.type == VAL_STRING && v.as.string) total += v.as.string->length;
+        if (i > 0) total += sep_len;
+    }
+
+    char* buf = (char*)malloc(total + 1);
+    size_t offset = 0;
+    for (size_t i = 0; i < count; i++) {
+        if (i > 0) { memcpy(buf + offset, sep, sep_len); offset += sep_len; }
+        Value v = arr->get(i);
+        if (v.type == VAL_STRING && v.as.string) {
+            memcpy(buf + offset, v.as.string->data, v.as.string->length);
+            offset += v.as.string->length;
+        }
+    }
+    buf[offset] = '\0';
+
+    MobiusString* result = state->stringPool()->intern(buf);
+    free(buf);
+    state->npush(make_string_value(result));
+    return 1;
+}
+
+int lib_trim(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return state->error("trim expects 1 argument");
+
+    Value arg = state->npeek(0);
+    state->npop();
+
+    if (arg.type != VAL_STRING || !arg.as.string)
+        return state->error("trim expects a string argument");
+
+    const char* s = arg.as.string->data;
+    size_t len = arg.as.string->length;
+
+    size_t start = 0;
+    while (start < len && isspace((unsigned char)s[start])) start++;
+    size_t end = len;
+    while (end > start && isspace((unsigned char)s[end - 1])) end--;
+
+    size_t new_len = end - start;
+    char* buf = (char*)malloc(new_len + 1);
+    memcpy(buf, s + start, new_len);
+    buf[new_len] = '\0';
+
+    MobiusString* result = state->stringPool()->intern(buf);
+    free(buf);
+    state->npush(make_string_value(result));
+    return 1;
+}
+
+int lib_startswith(MobiusState* state, int arg_count) {
+    if (arg_count != 2) return state->error("startswith expects 2 arguments");
+
+    Value prefix_val = state->npeek(0);
+    Value str_val = state->npeek(1);
+    state->npop(); state->npop();
+
+    if (str_val.type != VAL_STRING || !str_val.as.string ||
+        prefix_val.type != VAL_STRING || !prefix_val.as.string)
+        return state->error("startswith expects string arguments");
+
+    const char* s = str_val.as.string->data;
+    const char* prefix = prefix_val.as.string->data;
+    size_t plen = prefix_val.as.string->length;
+
+    bool result = str_val.as.string->length >= plen && memcmp(s, prefix, plen) == 0;
+    state->npush(make_bool_value(result));
+    return 1;
+}
+
+int lib_endswith(MobiusState* state, int arg_count) {
+    if (arg_count != 2) return state->error("endswith expects 2 arguments");
+
+    Value suffix_val = state->npeek(0);
+    Value str_val = state->npeek(1);
+    state->npop(); state->npop();
+
+    if (str_val.type != VAL_STRING || !str_val.as.string ||
+        suffix_val.type != VAL_STRING || !suffix_val.as.string)
+        return state->error("endswith expects string arguments");
+
+    size_t slen = str_val.as.string->length;
+    size_t suflen = suffix_val.as.string->length;
+
+    bool result = slen >= suflen &&
+        memcmp(str_val.as.string->data + slen - suflen, suffix_val.as.string->data, suflen) == 0;
+    state->npush(make_bool_value(result));
+    return 1;
+}
+
+int lib_replace(MobiusState* state, int arg_count) {
+    if (arg_count != 3) return state->error("replace expects 3 arguments (string, old, new)");
+
+    Value new_val = state->npeek(0);
+    Value old_val = state->npeek(1);
+    Value str_val = state->npeek(2);
+    state->npop(); state->npop(); state->npop();
+
+    if (str_val.type != VAL_STRING || !str_val.as.string ||
+        old_val.type != VAL_STRING || !old_val.as.string ||
+        new_val.type != VAL_STRING || !new_val.as.string)
+        return state->error("replace expects string arguments");
+
+    const char* s = str_val.as.string->data;
+    const char* old_s = old_val.as.string->data;
+    const char* new_s = new_val.as.string->data;
+    size_t old_len = old_val.as.string->length;
+    size_t new_len = new_val.as.string->length;
+
+    if (old_len == 0) {
+        state->npush(str_val);
+        return 1;
+    }
+
+    size_t count = 0;
+    const char* p = s;
+    while ((p = strstr(p, old_s)) != NULL) { count++; p += old_len; }
+
+    size_t result_len = str_val.as.string->length + count * (new_len - old_len);
+    char* buf = (char*)malloc(result_len + 1);
+    char* dst = buf;
+    p = s;
+    const char* found;
+    while ((found = strstr(p, old_s)) != NULL) {
+        size_t seg = found - p;
+        memcpy(dst, p, seg); dst += seg;
+        memcpy(dst, new_s, new_len); dst += new_len;
+        p = found + old_len;
+    }
+    strcpy(dst, p);
+
+    MobiusString* result = state->stringPool()->intern(buf);
+    free(buf);
+    state->npush(make_string_value(result));
+    return 1;
+}
+
+int lib_find(MobiusState* state, int arg_count) {
+    if (arg_count != 2) return state->error("find expects 2 arguments (string, substring)");
+
+    Value needle_val = state->npeek(0);
+    Value hay_val = state->npeek(1);
+    state->npop(); state->npop();
+
+    if (hay_val.type != VAL_STRING || !hay_val.as.string ||
+        needle_val.type != VAL_STRING || !needle_val.as.string)
+        return state->error("find expects string arguments");
+
+    const char* found = strstr(hay_val.as.string->data, needle_val.as.string->data);
+    if (found) {
+        state->npush(make_int64_value((int64_t)(found - hay_val.as.string->data)));
+    } else {
+        state->npush(make_int64_value(-1));
+    }
+    return 1;
+}
+
+int lib_repeat(MobiusState* state, int arg_count) {
+    if (arg_count != 2) return state->error("repeat expects 2 arguments (string, count)");
+
+    Value count_val = state->npeek(0);
+    Value str_val = state->npeek(1);
+    state->npop(); state->npop();
+
+    if (str_val.type != VAL_STRING || !str_val.as.string)
+        return state->error("repeat expects first argument to be a string");
+    if (count_val.type != VAL_INT64)
+        return state->error("repeat expects second argument to be an integer");
+
+    int64_t count = count_val.as.i64;
+    if (count <= 0) {
+        state->npush(make_string_value_from_cstr(state, ""));
+        return 1;
+    }
+
+    size_t slen = str_val.as.string->length;
+    size_t total = slen * (size_t)count;
+    char* buf = (char*)malloc(total + 1);
+    for (int64_t i = 0; i < count; i++) {
+        memcpy(buf + i * slen, str_val.as.string->data, slen);
+    }
+    buf[total] = '\0';
+
+    MobiusString* result = state->stringPool()->intern(buf);
+    free(buf);
+    state->npush(make_string_value(result));
+    return 1;
+}

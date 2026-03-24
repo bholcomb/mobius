@@ -1,0 +1,75 @@
+// Test lambda/function expressions (anonymous functions)
+print("=== Lambda Expression Tests ===")
+
+// Basic lambda assigned to variable
+var add = func(a, b) { return a + b }
+var result = add(3, 4)
+if (result != 7) { print("FAIL: basic lambda, got", result); exit(1) }
+
+// Lambda with no parameters
+var greet = func() { return "hello" }
+if (greet() != "hello") { print("FAIL: no-param lambda"); exit(1) }
+
+// Lambda passed as argument
+func apply(f, x) {
+    return f(x)
+}
+var doubled = apply(func(n) { return n * 2 }, 5)
+if (doubled != 10) { print("FAIL: lambda as arg, got", doubled); exit(1) }
+
+// Lambda returned from function
+func make_multiplier(factor) {
+    return func(x) { return x * factor }
+}
+var triple = make_multiplier(3)
+if (triple(7) != 21) { print("FAIL: returned lambda, got", triple(7)); exit(1) }
+
+// Lambda capturing outer variables (closure)
+var base = 100
+var add_to_base = func(n) { return base + n }
+if (add_to_base(42) != 142) { print("FAIL: closure lambda, got", add_to_base(42)); exit(1) }
+
+// Immediately invoked lambda
+var val = (func() { return 99 })()
+if (val != 99) { print("FAIL: IIFE, got", val); exit(1) }
+
+// Lambda in array
+var ops = [
+    func(a, b) { return a + b },
+    func(a, b) { return a - b },
+    func(a, b) { return a * b }
+]
+if (ops[0](10, 3) != 13) { print("FAIL: lambda in array [0]"); exit(1) }
+if (ops[1](10, 3) != 7) { print("FAIL: lambda in array [1]"); exit(1) }
+if (ops[2](10, 3) != 30) { print("FAIL: lambda in array [2]"); exit(1) }
+
+// Lambda in table
+var math_ops = {
+    square: func(x) { return x * x },
+    cube: func(x) { return x * x * x }
+}
+if (math_ops.square(5) != 25) { print("FAIL: lambda in table square"); exit(1) }
+if (math_ops.cube(3) != 27) { print("FAIL: lambda in table cube"); exit(1) }
+
+// Higher-order: map-like pattern
+func transform(arr, f) {
+    var result = []
+    for (var i = 0; i < len(arr); i += 1) {
+        array_push(result, f(arr[i]))
+    }
+    return result
+}
+var nums = [1, 2, 3, 4, 5]
+var squares = transform(nums, func(x) { return x * x })
+if (squares[0] != 1) { print("FAIL: transform[0]"); exit(1) }
+if (squares[2] != 9) { print("FAIL: transform[2]"); exit(1) }
+if (squares[4] != 25) { print("FAIL: transform[4]"); exit(1) }
+
+// Recursive pattern using variable binding
+var factorial = func(n) {
+    if (n <= 1) { return 1 }
+    return n * factorial(n - 1)
+}
+if (factorial(5) != 120) { print("FAIL: recursive lambda, got", factorial(5)); exit(1) }
+
+print("=== All lambda expression tests passed! ===")

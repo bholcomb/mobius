@@ -1,5 +1,6 @@
 #include "parser.h"
 #include "util/utility.h"
+#include "frontend/scanner.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -226,6 +227,79 @@ Expr* parse_primary(Parser* parser) {
         }
     }
     
+    if (parser_match(parser, TOKEN_INTERP_STRING)) {
+        Token token = parser_previous(parser);
+        const char* raw = token.literal.string ? token.literal.string : "";
+        size_t raw_len = raw ? strlen(raw) : 0;
+
+        Expr* result = NULL;
+        Token plus_op = token;
+        plus_op.type = TOKEN_PLUS;
+
+        const char* p = raw;
+        const char* end = raw + raw_len;
+        while (p < end) {
+            const char* ds = strstr(p, "${");
+            if (!ds) {
+                if (p < end) {
+                    Value sv = make_string_value_from_cstr(parser->state, p);
+                    Expr* seg = make_literal_expr(sv);
+                    result = result ? make_binary_expr(result, plus_op, seg) : seg;
+                }
+                break;
+            }
+            if (ds > p) {
+                size_t seg_len = ds - p;
+                char* buf = (char*)malloc(seg_len + 1);
+                memcpy(buf, p, seg_len); buf[seg_len] = '\0';
+                Value sv = make_string_value_from_cstr(parser->state, buf);
+                free(buf);
+                Expr* seg = make_literal_expr(sv);
+                result = result ? make_binary_expr(result, plus_op, seg) : seg;
+            }
+            ds += 2;
+            int depth = 1;
+            const char* expr_start = ds;
+            while (ds < end && depth > 0) {
+                if (*ds == '{') depth++;
+                else if (*ds == '}') depth--;
+                if (depth > 0) ds++;
+            }
+            if (depth != 0) {
+                parser_error(parser, token, "Unterminated ${...} in interpolated string");
+                if (result) free_expr(result);
+                return NULL;
+            }
+            size_t expr_len = ds - expr_start;
+            char* expr_src = (char*)malloc(expr_len + 1);
+            memcpy(expr_src, expr_start, expr_len); expr_src[expr_len] = '\0';
+
+            TokenArray sub_tokens = scan_source(expr_src, parser->state->stringPool());
+            free(expr_src);
+
+            if (sub_tokens.count > 0) {
+                Parser sub_parser;
+                init_parser(&sub_parser, parser->state, sub_tokens.tokens, sub_tokens.count);
+                Expr* expr_node = parse_expression(&sub_parser);
+                if (expr_node) {
+                    result = result ? make_binary_expr(result, plus_op, expr_node) : expr_node;
+                }
+            }
+
+            if (sub_tokens.tokens) {
+                for (size_t i = 0; i < sub_tokens.count; i++) free_token(&sub_tokens.tokens[i]);
+                free(sub_tokens.tokens);
+            }
+
+            p = ds + 1;
+        }
+
+        if (!result) {
+            return make_literal_expr(make_string_value_from_cstr(parser->state, ""));
+        }
+        return result;
+    }
+
     if (parser_match(parser, TOKEN_CHAR)) {
         Token token = parser_previous(parser);
         Value value = make_char_value(token.literal.character);
@@ -236,6 +310,71 @@ Expr* parse_primary(Parser* parser) {
         return make_variable_expr(parser_previous(parser));
     }
     
+    if (parser_match(parser, TOKEN_FUNC)) {
+        Token name = {};
+        name.type = TOKEN_IDENTIFIER;
+        name.identifier = NULL;
+        name.interned = NULL;
+        name.length = 0;
+        name.line = parser_previous(parser).line;
+        name.column = parser_previous(parser).column;
+
+        if (parser_check(parser, TOKEN_IDENTIFIER)) {
+            name = parser_advance(parser);
+        }
+
+        consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'func' in expression.");
+
+        Token* params = NULL;
+        size_t param_count = 0;
+        size_t param_capacity = 0;
+
+        if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
+            do {
+                if (param_count >= param_capacity) {
+                    size_t new_cap = param_capacity == 0 ? 4 : param_capacity * 2;
+                    Token* new_params = (Token*)realloc(params, new_cap * sizeof(Token));
+                    if (!new_params) { free(params); parser_error_at_current(parser, "Out of memory"); return NULL; }
+                    params = new_params;
+                    param_capacity = new_cap;
+                }
+                if (!parser_check(parser, TOKEN_IDENTIFIER)) {
+                    parser_error_at_current(parser, "Expect parameter name");
+                    free(params);
+                    return NULL;
+                }
+                params[param_count++] = parser_advance(parser);
+            } while (parser_match(parser, TOKEN_COMMA));
+        }
+        consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+        consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+
+        Stmt** body = NULL;
+        size_t body_count = 0;
+        size_t body_capacity = 0;
+
+        while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+            if (parser_match(parser, TOKEN_NEWLINE)) continue;
+            Stmt* s = parse_declaration(parser);
+            if (!s) {
+                for (size_t i = 0; i < body_count; i++) ast_release_stmt(body[i]);
+                free(body); free(params);
+                return NULL;
+            }
+            if (body_count >= body_capacity) {
+                size_t new_cap = body_capacity == 0 ? 8 : body_capacity * 2;
+                Stmt** nb = (Stmt**)realloc(body, new_cap * sizeof(Stmt*));
+                if (!nb) { ast_release_stmt(s); for (size_t i = 0; i < body_count; i++) ast_release_stmt(body[i]); free(body); free(params); return NULL; }
+                body = nb;
+                body_capacity = new_cap;
+            }
+            body[body_count++] = s;
+        }
+        consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after function body.");
+
+        return make_function_expr(name, params, param_count, body, body_count);
+    }
+
     if (parser_match(parser, TOKEN_LEFT_BRACE)) {
         return parse_table_literal(parser);
     }
@@ -250,7 +389,6 @@ Expr* parse_primary(Parser* parser) {
         return make_grouping_expr(expr);
     }
     
-    // Skip unexpected newlines and try again
     if (parser_match(parser, TOKEN_NEWLINE)) {
         return parse_primary(parser);
     }
@@ -485,7 +623,7 @@ Expr* parse_unary(Parser* parser) {
     }
     
     // Handle other unary operators
-    if (parser_match_any(parser, 4, TOKEN_BANG, TOKEN_MINUS, TOKEN_NOT, TOKEN_PLUS)) {
+    if (parser_match_any(parser, 5, TOKEN_BANG, TOKEN_MINUS, TOKEN_NOT, TOKEN_PLUS, TOKEN_TILDE)) {
         Token op = parser_previous(parser);
         Expr* right = parse_unary(parser);
         return make_unary_expr(op, right);
@@ -518,13 +656,25 @@ Expr* parse_term(Parser* parser) {
     return expr;
 }
 
-Expr* parse_comparison(Parser* parser) {
+Expr* parse_shift(Parser* parser) {
     Expr* expr = parse_term(parser);
+
+    while (parser_match_any(parser, 2, TOKEN_LEFT_SHIFT, TOKEN_RIGHT_SHIFT)) {
+        Token op = parser_previous(parser);
+        Expr* right = parse_term(parser);
+        expr = make_binary_expr(expr, op, right);
+    }
+
+    return expr;
+}
+
+Expr* parse_comparison(Parser* parser) {
+    Expr* expr = parse_shift(parser);
     
     while (parser_match_any(parser, 4, TOKEN_GREATER, TOKEN_GREATER_EQUAL, 
                            TOKEN_LESS, TOKEN_LESS_EQUAL)) {
         Token op = parser_previous(parser);
-        Expr* right = parse_term(parser);
+        Expr* right = parse_shift(parser);
         expr = make_binary_expr(expr, op, right);
     }
     
@@ -543,12 +693,48 @@ Expr* parse_equality(Parser* parser) {
     return expr;
 }
 
-Expr* parse_and(Parser* parser) {
+Expr* parse_bitwise_and(Parser* parser) {
     Expr* expr = parse_equality(parser);
+
+    while (parser_match(parser, TOKEN_AMPERSAND)) {
+        Token op = parser_previous(parser);
+        Expr* right = parse_equality(parser);
+        expr = make_binary_expr(expr, op, right);
+    }
+
+    return expr;
+}
+
+Expr* parse_bitwise_xor(Parser* parser) {
+    Expr* expr = parse_bitwise_and(parser);
+
+    while (parser_match(parser, TOKEN_CARET)) {
+        Token op = parser_previous(parser);
+        Expr* right = parse_bitwise_and(parser);
+        expr = make_binary_expr(expr, op, right);
+    }
+
+    return expr;
+}
+
+Expr* parse_bitwise_or(Parser* parser) {
+    Expr* expr = parse_bitwise_xor(parser);
+
+    while (parser_match(parser, TOKEN_PIPE)) {
+        Token op = parser_previous(parser);
+        Expr* right = parse_bitwise_xor(parser);
+        expr = make_binary_expr(expr, op, right);
+    }
+
+    return expr;
+}
+
+Expr* parse_and(Parser* parser) {
+    Expr* expr = parse_bitwise_or(parser);
     
     while (parser_match_any(parser, 2, TOKEN_AND, TOKEN_AND_AND)) {
         Token op = parser_previous(parser);
-        Expr* right = parse_equality(parser);
+        Expr* right = parse_bitwise_or(parser);
         expr = make_binary_expr(expr, op, right);
     }
     
@@ -567,8 +753,21 @@ Expr* parse_or(Parser* parser) {
     return expr;
 }
 
-Expr* parse_assignment(Parser* parser) {
+Expr* parse_ternary(Parser* parser) {
     Expr* expr = parse_or(parser);
+
+    if (parser_match(parser, TOKEN_QUESTION)) {
+        Expr* then_expr = parse_expression(parser);
+        consume(parser, TOKEN_COLON, "Expect ':' in ternary expression.");
+        Expr* else_expr = parse_ternary(parser);
+        expr = make_ternary_expr(expr, then_expr, else_expr);
+    }
+
+    return expr;
+}
+
+Expr* parse_assignment(Parser* parser) {
+    Expr* expr = parse_ternary(parser);
     
     if (parser_match(parser, TOKEN_EQUAL)) {
         Token equals = parser_previous(parser);
@@ -583,6 +782,33 @@ Expr* parse_assignment(Parser* parser) {
         
         parser_error(parser, equals, "Invalid assignment target.");
         free_expr(value);
+    }
+
+    if (parser_match_any(parser, 4, TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL,
+                         TOKEN_STAR_EQUAL, TOKEN_SLASH_EQUAL)) {
+        Token compound_op = parser_previous(parser);
+
+        if (expr->type != EXPR_VARIABLE &&
+            expr->type != EXPR_ARRAY_INDEX &&
+            expr->type != EXPR_TABLE_INDEX &&
+            expr->type != EXPR_TABLE_DOT) {
+            parser_error(parser, compound_op, "Invalid compound assignment target.");
+            return expr;
+        }
+
+        Token bin_op = compound_op;
+        switch (compound_op.type) {
+            case TOKEN_PLUS_EQUAL:  bin_op.type = TOKEN_PLUS;  break;
+            case TOKEN_MINUS_EQUAL: bin_op.type = TOKEN_MINUS; break;
+            case TOKEN_STAR_EQUAL:  bin_op.type = TOKEN_STAR;  break;
+            case TOKEN_SLASH_EQUAL: bin_op.type = TOKEN_SLASH; break;
+            default: break;
+        }
+
+        Expr* rhs = parse_assignment(parser);
+        Expr* target_copy = ast_retain_expr(expr);
+        Expr* binary = make_binary_expr(target_copy, bin_op, rhs);
+        return make_assignment_expr(expr, binary);
     }
     
     return expr;
@@ -712,8 +938,46 @@ Stmt* parse_while_statement(Parser* parser) {
     return make_while_stmt(condition, body);
 }
 
+Stmt* parse_for_in_statement(Parser* parser, Token var_name) {
+    Expr* iterable = parse_expression(parser);
+    consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after for-in expression.");
+
+    while (parser_check(parser, TOKEN_NEWLINE)) parser_advance(parser);
+
+    Stmt* body = parse_statement(parser);
+    return make_for_in_stmt(var_name, iterable, body);
+}
+
 Stmt* parse_for_statement(Parser* parser) {
     consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+
+    // Detect for-in: for (var x in expr) or for (x in expr)
+    size_t saved = parser->current;
+    bool is_for_in = false;
+    Token for_in_var = {};
+
+    if (parser_check(parser, TOKEN_VAR)) {
+        parser_advance(parser);
+        if (parser_check(parser, TOKEN_IDENTIFIER)) {
+            for_in_var = parser_advance(parser);
+            if (parser_check(parser, TOKEN_IN)) {
+                parser_advance(parser);
+                is_for_in = true;
+            }
+        }
+    } else if (parser_check(parser, TOKEN_IDENTIFIER)) {
+        for_in_var = parser_advance(parser);
+        if (parser_check(parser, TOKEN_IN)) {
+            parser_advance(parser);
+            is_for_in = true;
+        }
+    }
+
+    if (is_for_in) {
+        return parse_for_in_statement(parser, for_in_var);
+    }
+
+    parser->current = saved;
     
     Stmt* initializer = NULL;
     if (parser_match(parser, TOKEN_SEMICOLON)) {
@@ -824,6 +1088,55 @@ Stmt* parse_statement(Parser* parser) {
     
     if (parser_match(parser, TOKEN_HASH)) {
         return parse_pragma_statement(parser);
+    }
+
+    if (parser_match(parser, TOKEN_TRY)) {
+        consume(parser, TOKEN_LEFT_BRACE, "Expect '{' after 'try'.");
+
+        Stmt** try_body = NULL;
+        size_t try_count = 0;
+        size_t try_cap = 0;
+        while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+            if (parser_match(parser, TOKEN_NEWLINE)) continue;
+            Stmt* s = parse_declaration(parser);
+            if (!s) { for (size_t i = 0; i < try_count; i++) ast_release_stmt(try_body[i]); free(try_body); return NULL; }
+            if (try_count >= try_cap) { try_cap = try_cap == 0 ? 8 : try_cap * 2; try_body = (Stmt**)realloc(try_body, try_cap * sizeof(Stmt*)); }
+            try_body[try_count++] = s;
+        }
+        consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after try body.");
+        while (parser_match(parser, TOKEN_NEWLINE)) {}
+
+        consume(parser, TOKEN_CATCH, "Expect 'catch' after try block.");
+        Token catch_var = consume(parser, TOKEN_IDENTIFIER, "Expect variable name after 'catch'.");
+        consume(parser, TOKEN_LEFT_BRACE, "Expect '{' after catch variable.");
+
+        Stmt** catch_body = NULL;
+        size_t catch_count = 0;
+        size_t catch_cap = 0;
+        while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+            if (parser_match(parser, TOKEN_NEWLINE)) continue;
+            Stmt* s = parse_declaration(parser);
+            if (!s) { for (size_t i = 0; i < catch_count; i++) ast_release_stmt(catch_body[i]); free(catch_body); for (size_t i = 0; i < try_count; i++) ast_release_stmt(try_body[i]); free(try_body); return NULL; }
+            if (catch_count >= catch_cap) { catch_cap = catch_cap == 0 ? 8 : catch_cap * 2; catch_body = (Stmt**)realloc(catch_body, catch_cap * sizeof(Stmt*)); }
+            catch_body[catch_count++] = s;
+        }
+        consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after catch body.");
+
+        return make_try_catch_stmt(try_body, try_count, catch_var, catch_body, catch_count);
+    }
+
+    if (parser_match(parser, TOKEN_THROW)) {
+        Token keyword = parser_previous(parser);
+        Expr* value = NULL;
+        if (!parser_check(parser, TOKEN_SEMICOLON) && !parser_check(parser, TOKEN_NEWLINE) &&
+            !parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+            value = parse_expression(parser);
+        }
+        if (!consume_statement_terminator(parser, "Expect ';' or newline after throw")) {
+            if (value) free_expr(value);
+            return NULL;
+        }
+        return make_throw_stmt(keyword, value);
     }
     
     return parse_expression_statement(parser);

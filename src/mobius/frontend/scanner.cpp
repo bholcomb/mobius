@@ -36,6 +36,10 @@ static const Keyword keywords[] = {
     {"return",   TOKEN_RETURN},
     {"switch",   TOKEN_SWITCH},
     {"true",     TOKEN_TRUE},
+    {"throw",    TOKEN_THROW},
+    {"try",      TOKEN_TRY},
+    {"catch",    TOKEN_CATCH},
+    {"in",       TOKEN_IN},
     {"var",      TOKEN_VAR},
     {"while",    TOKEN_WHILE},
     
@@ -204,9 +208,48 @@ Token scan_char(Scanner* scanner) {
     return token;
 }
 
+static bool is_hex_digit(char c) {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+static bool is_binary_digit(char c) {
+    return c == '0' || c == '1';
+}
+
 // Scan number literal
 Token scan_number(Scanner* scanner) {
-    // Scan integer part
+    // Check for hex (0x/0X) or binary (0b/0B) prefix
+    if (peek(scanner) == '0') {
+        char next = peek_next(scanner);
+        if (next == 'x' || next == 'X') {
+            advance(scanner); // consume '0'
+            advance(scanner); // consume 'x'
+            while (is_hex_digit(peek(scanner))) {
+                advance(scanner);
+            }
+            long long value = strtoll(scanner->start, NULL, 16);
+            return make_integer_token(scanner->start,
+                                     (int)(scanner->current - scanner->start),
+                                     scanner->line,
+                                     scanner->column - (int)(scanner->current - scanner->start),
+                                     NUM_INT64, value);
+        }
+        if (next == 'b' || next == 'B') {
+            advance(scanner); // consume '0'
+            advance(scanner); // consume 'b'
+            while (is_binary_digit(peek(scanner))) {
+                advance(scanner);
+            }
+            long long value = strtoll(scanner->start + 2, NULL, 2);
+            return make_integer_token(scanner->start,
+                                     (int)(scanner->current - scanner->start),
+                                     scanner->line,
+                                     scanner->column - (int)(scanner->current - scanner->start),
+                                     NUM_INT64, value);
+        }
+    }
+
+    // Scan decimal integer part
     while (is_digit(peek(scanner))) {
         advance(scanner);
     }
@@ -383,7 +426,30 @@ Token scan_token(Scanner* scanner) {
         // String literals
         case '"':
             return scan_string(scanner);
-            
+
+        // Interpolated string literals
+        case '`': {
+            while (peek(scanner) != '`' && !is_at_end(scanner)) {
+                if (peek(scanner) == '\n') { /* allow multi-line */ }
+                advance(scanner);
+            }
+            if (is_at_end(scanner)) {
+                return make_error_token("Unterminated interpolated string", scanner->line, scanner->column);
+            }
+            advance(scanner);
+            Token token = make_simple_token(scanner, TOKEN_INTERP_STRING);
+            size_t content_length = scanner->current - scanner->start - 2;
+            char* content = (char*)malloc(content_length + 1);
+            if (content) {
+                strncpy(content, scanner->start + 1, content_length);
+                content[content_length] = '\0';
+                token.literal.string = content;
+            } else {
+                token.literal.string = NULL;
+            }
+            return token;
+        }
+
         // Character literals
         case '\'':
             return scan_char(scanner);

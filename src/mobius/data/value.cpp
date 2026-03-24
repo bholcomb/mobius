@@ -167,7 +167,9 @@ bool Value::exactlyEqual(const Value& other) const {
         case VAL_INT64: return as.i64 == other.as.i64;
         case VAL_UINT64:  return as.u64 == other.as.u64;
         case VAL_FLOAT64: return as.double_val == other.as.double_val;
-        case VAL_STRING: return as.string && other.as.string && *as.string == *other.as.string;
+        case VAL_STRING:
+            if (as.string == other.as.string) return true;
+            return as.string && other.as.string && *as.string == *other.as.string;
         case VAL_CHAR:   return as.character == other.as.character;
         case VAL_ARRAY:  return as.array == other.as.array;
         case VAL_FUNCTION: return as.function == other.as.function;

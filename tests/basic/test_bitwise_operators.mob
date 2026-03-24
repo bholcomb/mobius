@@ -1,0 +1,72 @@
+// Test bitwise operators (&, |, ^, ~, <<, >>)
+print("=== Bitwise Operator Tests ===")
+
+// Bitwise AND
+var a = 0xFF & 0x0F
+if (a != 15) { print("FAIL: 0xFF & 0x0F, got", a); exit(1) }
+
+var b = 12 & 10
+if (b != 8) { print("FAIL: 12 & 10, got", b); exit(1) }
+
+// Bitwise OR
+var c = 0xF0 | 0x0F
+if (c != 255) { print("FAIL: 0xF0 | 0x0F, got", c); exit(1) }
+
+var d = 5 | 3
+if (d != 7) { print("FAIL: 5 | 3, got", d); exit(1) }
+
+// Bitwise XOR
+var e = 0xFF ^ 0x0F
+if (e != 240) { print("FAIL: 0xFF ^ 0x0F, got", e); exit(1) }
+
+var f = 5 ^ 3
+if (f != 6) { print("FAIL: 5 ^ 3, got", f); exit(1) }
+
+// Binary literals
+var bin1 = 0b1010
+if (bin1 != 10) { print("FAIL: 0b1010, got", bin1); exit(1) }
+
+var bin2 = 0b11111111
+if (bin2 != 255) { print("FAIL: 0b11111111, got", bin2); exit(1) }
+
+// Bitwise NOT
+var g = ~0
+if (g != -1) { print("FAIL: ~0, got", g); exit(1) }
+
+var h = ~1
+if (h != -2) { print("FAIL: ~1, got", h); exit(1) }
+
+// Left shift
+var i = 1 << 4
+if (i != 16) { print("FAIL: 1 << 4, got", i); exit(1) }
+
+var j = 3 << 2
+if (j != 12) { print("FAIL: 3 << 2, got", j); exit(1) }
+
+// Right shift
+var k = 16 >> 4
+if (k != 1) { print("FAIL: 16 >> 4, got", k); exit(1) }
+
+var l = 255 >> 4
+if (l != 15) { print("FAIL: 255 >> 4, got", l); exit(1) }
+
+// Combined operations
+var m = (1 << 8) | (1 << 4) | (1 << 0)
+if (m != 273) { print("FAIL: bit pattern, got", m); exit(1) }
+
+// Precedence: & binds tighter than |
+var n = 3 | 4 & 6
+if (n != 7) { print("FAIL: 3 | (4 & 6), got", n); exit(1) }
+
+// XOR between AND and OR in precedence: 3 | ((5 ^ (6 & 7)) = 3 | (5 ^ 6) = 3 | 3 = 3
+var o = 3 | 5 ^ 6 & 7
+if (o != 3) { print("FAIL: precedence chain, got", o); exit(1) }
+
+// Shift in loop
+var bits = 0
+for (var idx = 0; idx < 4; idx += 1) {
+    bits = bits | (1 << idx)
+}
+if (bits != 15) { print("FAIL: shift loop, got", bits); exit(1) }
+
+print("=== All bitwise operator tests passed! ===")
