@@ -2,32 +2,26 @@
  * C++ Class Binding Example for Mobius
  * 
  * This example demonstrates how to bind C++ classes to the Mobius scripting
- * language using the new userdata type. It shows:
+ * language using the userdata type. It shows:
  * 
  * - Creating C++ objects accessible from Mobius
  * - Binding C++ methods as Mobius functions
  * - Automatic cleanup when objects go out of scope
  * - Type safety and error handling
- * 
- * Compile with: g++ -o bin/cpp_example examples/cpp_class_example.cpp -Lbuild -lmobius -lm -ldl
  */
 
 #include <iostream>
 #include <string>
 #include <cmath>
-#include <memory>
+#include <cstring>
 
-extern "C" {
-    #include "../src/mobius/mobius.h"
-}
+#include <mobius/mobius.h>
+#include <mobius/mobius_plugin.h>
 
 // ============================================================================
 // EXAMPLE C++ CLASSES
 // ============================================================================
 
-/**
- * Simple Vector3 class for 3D math
- */
 class Vector3 {
 private:
     double x_, y_, z_;
@@ -35,17 +29,14 @@ private:
 public:
     Vector3(double x = 0, double y = 0, double z = 0) : x_(x), y_(y), z_(z) {}
     
-    // Getters
     double x() const { return x_; }
     double y() const { return y_; }
     double z() const { return z_; }
     
-    // Setters
     void setX(double x) { x_ = x; }
     void setY(double y) { y_ = y; }
     void setZ(double z) { z_ = z; }
     
-    // Vector operations
     double length() const {
         return std::sqrt(x_ * x_ + y_ * y_ + z_ * z_);
     }
@@ -73,17 +64,14 @@ public:
     }
 };
 
-/**
- * Simple Player class for game objects
- */
-class Player {
+class PlayerObj {
 private:
     std::string name_;
     Vector3 position_;
     int health_;
     
 public:
-    Player(const std::string& name) : name_(name), position_(0, 0, 0), health_(100) {}
+    PlayerObj(const std::string& name) : name_(name), position_(0, 0, 0), health_(100) {}
     
     const std::string& name() const { return name_; }
     const Vector3& position() const { return position_; }
@@ -114,184 +102,199 @@ public:
 void vector3_destructor(void* ptr) {
     if (ptr) {
         delete static_cast<Vector3*>(ptr);
-        std::cout << "Vector3 destroyed" << std::endl;
     }
 }
 
 void player_destructor(void* ptr) {
     if (ptr) {
-        Player* player = static_cast<Player*>(ptr);
-        std::cout << "Player '" << player->name() << "' destroyed" << std::endl;
-        delete player;
+        delete static_cast<PlayerObj*>(ptr);
     }
+}
+
+// ============================================================================
+// HELPER: Extract typed userdata from the stack
+// ============================================================================
+
+static void* get_userdata_of_type(MobiusState* state, int idx, const char* expected_type) {
+    if (!mobius_stack_isUserdata(state, idx))
+        return nullptr;
+    const char* type_name = nullptr;
+    void* ptr = mobius_stack_getUserdata(state, idx, &type_name);
+    if (!type_name || std::strcmp(type_name, expected_type) != 0)
+        return nullptr;
+    return ptr;
 }
 
 // ============================================================================
 // VECTOR3 MOBIUS BINDINGS
 // ============================================================================
 
-int vector3_new(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    // vector3_new(x, y, z) -> Vector3 userdata
+int vector3_new(MobiusState* state, int arg_count) {
     double x = 0, y = 0, z = 0;
     
-    if (arg_count >= 1 && mobius_is_float(args[0])) x = mobius_to_float(args[0]);
-    if (arg_count >= 2 && mobius_is_float(args[1])) y = mobius_to_float(args[1]);
-    if (arg_count >= 3 && mobius_is_float(args[2])) z = mobius_to_float(args[2]);
+    if (arg_count >= 1 && mobius_stack_isNumber(state, -arg_count))
+        x = mobius_stack_asFloat64(state, -arg_count);
+    if (arg_count >= 2 && mobius_stack_isNumber(state, -arg_count + 1))
+        y = mobius_stack_asFloat64(state, -arg_count + 1);
+    if (arg_count >= 3 && mobius_stack_isNumber(state, -arg_count + 2))
+        z = mobius_stack_asFloat64(state, -arg_count + 2);
+    
+    if (arg_count > 0)
+        mobius_stack_pop(state, arg_count);
     
     Vector3* vec = new Vector3(x, y, z);
-    *result = mobius_create_userdata(state, vec, vector3_destructor, "Vector3", sizeof(Vector3));
-    
-    return MOBIUS_OK;
+    mobius_stack_pushUserdata(state, vec, vector3_destructor, "Vector3", sizeof(Vector3));
+    return 1;
 }
 
-int vector3_length(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
+int vector3_length_fn(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "vector3_length() expects 1 argument");
     
-    if (!mobius_is_userdata_type(args[0], "Vector3")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Vector3");
-    }
+    Vector3* vec = static_cast<Vector3*>(get_userdata_of_type(state, -1, "Vector3"));
+    if (!vec)
+        return mobius_error(state, "vector3_length() expects a Vector3");
     
-    Vector3* vec = static_cast<Vector3*>(mobius_to_userdata(args[0]));
-    *result = mobius_create_float(state, vec->length());
-    
-    return MOBIUS_OK;
+    double len = vec->length();
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushFloat64(state, len);
+    return 1;
 }
 
-int vector3_normalize(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
+int vector3_normalize_fn(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "vector3_normalize() expects 1 argument");
     
-    if (!mobius_is_userdata_type(args[0], "Vector3")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Vector3");
-    }
+    Vector3* vec = static_cast<Vector3*>(get_userdata_of_type(state, -1, "Vector3"));
+    if (!vec)
+        return mobius_error(state, "vector3_normalize() expects a Vector3");
     
-    Vector3* vec = static_cast<Vector3*>(mobius_to_userdata(args[0]));
     vec->normalize();
-    *result = mobius_create_nil(state);
-    
-    return MOBIUS_OK;
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushNil(state);
+    return 1;
 }
 
-int vector3_add(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(2);
+int vector3_add_fn(MobiusState* state, int arg_count) {
+    if (arg_count != 2)
+        return mobius_error(state, "vector3_add() expects 2 arguments");
     
-    if (!mobius_is_userdata_type(args[0], "Vector3")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Vector3");
-    }
-    if (!mobius_is_userdata_type(args[1], "Vector3")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "Second argument must be a Vector3");
-    }
+    Vector3* vec1 = static_cast<Vector3*>(get_userdata_of_type(state, -2, "Vector3"));
+    Vector3* vec2 = static_cast<Vector3*>(get_userdata_of_type(state, -1, "Vector3"));
+    if (!vec1 || !vec2)
+        return mobius_error(state, "vector3_add() expects two Vector3 arguments");
     
-    Vector3* vec1 = static_cast<Vector3*>(mobius_to_userdata(args[0]));
-    Vector3* vec2 = static_cast<Vector3*>(mobius_to_userdata(args[1]));
-    
-    Vector3* result_vec = new Vector3(vec1->add(*vec2));
-    *result = mobius_create_userdata(state, result_vec, vector3_destructor, "Vector3", sizeof(Vector3));
-    
-    return MOBIUS_OK;
+    Vector3* result = new Vector3(vec1->add(*vec2));
+    mobius_stack_pop(state, 2);
+    mobius_stack_pushUserdata(state, result, vector3_destructor, "Vector3", sizeof(Vector3));
+    return 1;
 }
 
-int vector3_dot(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(2);
+int vector3_dot_fn(MobiusState* state, int arg_count) {
+    if (arg_count != 2)
+        return mobius_error(state, "vector3_dot() expects 2 arguments");
     
-    if (!mobius_is_userdata_type(args[0], "Vector3")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Vector3");
-    }
-    if (!mobius_is_userdata_type(args[1], "Vector3")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "Second argument must be a Vector3");
-    }
+    Vector3* vec1 = static_cast<Vector3*>(get_userdata_of_type(state, -2, "Vector3"));
+    Vector3* vec2 = static_cast<Vector3*>(get_userdata_of_type(state, -1, "Vector3"));
+    if (!vec1 || !vec2)
+        return mobius_error(state, "vector3_dot() expects two Vector3 arguments");
     
-    Vector3* vec1 = static_cast<Vector3*>(mobius_to_userdata(args[0]));
-    Vector3* vec2 = static_cast<Vector3*>(mobius_to_userdata(args[1]));
-    
-    *result = mobius_create_float(state, vec1->dot(*vec2));
-    
-    return MOBIUS_OK;
+    double result = vec1->dot(*vec2);
+    mobius_stack_pop(state, 2);
+    mobius_stack_pushFloat64(state, result);
+    return 1;
 }
 
-int vector3_tostring(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
+int vector3_tostring_fn(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "vector3_tostring() expects 1 argument");
     
-    if (!mobius_is_userdata_type(args[0], "Vector3")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Vector3");
-    }
+    Vector3* vec = static_cast<Vector3*>(get_userdata_of_type(state, -1, "Vector3"));
+    if (!vec)
+        return mobius_error(state, "vector3_tostring() expects a Vector3");
     
-    Vector3* vec = static_cast<Vector3*>(mobius_to_userdata(args[0]));
-    *result = mobius_create_string(state, vec->toString().c_str());
-    
-    return MOBIUS_OK;
+    std::string s = vec->toString();
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushString(state, s.c_str());
+    return 1;
 }
 
 // ============================================================================
 // PLAYER MOBIUS BINDINGS
 // ============================================================================
 
-int player_new(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
-    MOBIUS_CHECK_ARG_TYPE(0, mobius_is_string, "string");
+int player_new(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "Player() expects 1 argument (name)");
+    if (!mobius_stack_isString(state, -1))
+        return mobius_error(state, "Player() expects a string name");
     
-    const char* name = mobius_to_string(args[0]);
-    Player* player = new Player(std::string(name));
-    *result = mobius_create_userdata(state, player, player_destructor, "Player", sizeof(Player));
+    const char* name = mobius_stack_asString(state, -1);
+    mobius_stack_pop(state, 1);
     
-    return MOBIUS_OK;
+    PlayerObj* player = new PlayerObj(std::string(name));
+    mobius_stack_pushUserdata(state, player, player_destructor, "Player", sizeof(PlayerObj));
+    return 1;
 }
 
-int player_get_health(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
+int player_get_health(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "player_get_health() expects 1 argument");
     
-    if (!mobius_is_userdata_type(args[0], "Player")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Player");
-    }
+    PlayerObj* player = static_cast<PlayerObj*>(get_userdata_of_type(state, -1, "Player"));
+    if (!player)
+        return mobius_error(state, "player_get_health() expects a Player");
     
-    Player* player = static_cast<Player*>(mobius_to_userdata(args[0]));
-    *result = mobius_create_integer(state, player->health());
-    
-    return MOBIUS_OK;
+    int hp = player->health();
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushInt64(state, hp);
+    return 1;
 }
 
-int player_take_damage(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(2);
+int player_take_damage(MobiusState* state, int arg_count) {
+    if (arg_count != 2)
+        return mobius_error(state, "player_take_damage() expects 2 arguments");
     
-    if (!mobius_is_userdata_type(args[0], "Player")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Player");
-    }
-    if (!mobius_is_integer(args[1])) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "Second argument must be an integer");
-    }
+    PlayerObj* player = static_cast<PlayerObj*>(get_userdata_of_type(state, -2, "Player"));
+    if (!player)
+        return mobius_error(state, "player_take_damage() first arg must be a Player");
+    if (!mobius_stack_isNumber(state, -1))
+        return mobius_error(state, "player_take_damage() second arg must be a number");
     
-    Player* player = static_cast<Player*>(mobius_to_userdata(args[0]));
-    int damage = (int)mobius_to_integer(args[1]);
+    int damage = (int)mobius_stack_asInt64(state, -1);
+    mobius_stack_pop(state, 2);
     
     player->takeDamage(damage);
-    *result = mobius_create_nil(state);
-    
-    return MOBIUS_OK;
+    mobius_stack_pushNil(state);
+    return 1;
 }
 
-int player_is_alive(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
+int player_is_alive(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "player_is_alive() expects 1 argument");
     
-    if (!mobius_is_userdata_type(args[0], "Player")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Player");
-    }
+    PlayerObj* player = static_cast<PlayerObj*>(get_userdata_of_type(state, -1, "Player"));
+    if (!player)
+        return mobius_error(state, "player_is_alive() expects a Player");
     
-    Player* player = static_cast<Player*>(mobius_to_userdata(args[0]));
-    *result = mobius_create_bool(state, player->isAlive());
-    
-    return MOBIUS_OK;
+    bool alive = player->isAlive();
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushBool(state, alive);
+    return 1;
 }
 
-int player_tostring(MobiusState* state, MobiusValue** args, size_t arg_count, MobiusValue** result) {
-    MOBIUS_CHECK_ARG_COUNT(1);
+int player_tostring(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "player_tostring() expects 1 argument");
     
-    if (!mobius_is_userdata_type(args[0], "Player")) {
-        return mobius_set_error(state, MOBIUS_ERROR_TYPE, "First argument must be a Player");
-    }
+    PlayerObj* player = static_cast<PlayerObj*>(get_userdata_of_type(state, -1, "Player"));
+    if (!player)
+        return mobius_error(state, "player_tostring() expects a Player");
     
-    Player* player = static_cast<Player*>(mobius_to_userdata(args[0]));
-    *result = mobius_create_string(state, player->toString().c_str());
-    
-    return MOBIUS_OK;
+    std::string s = player->toString();
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushString(state, s.c_str());
+    return 1;
 }
 
 // ============================================================================
@@ -301,36 +304,31 @@ int player_tostring(MobiusState* state, MobiusValue** args, size_t arg_count, Mo
 int main() {
     std::cout << "=== Mobius C++ Class Binding Example ===\n" << std::endl;
     
-    // Create Mobius interpreter
-    MobiusState* state = mobius_new_state();
+    MobiusState* state = mobius_new_state(NULL);
     if (!state) {
         std::cerr << "Failed to create Mobius state" << std::endl;
         return 1;
     }
     
-    // Initialize core systems
-    if (mobius_init_core(state) != MOBIUS_OK) {
-        std::cerr << "Failed to initialize Mobius core" << std::endl;
+    if (mobius_init_stdlib(state) != MOBIUS_OK) {
+        std::cerr << "Failed to initialize Mobius stdlib" << std::endl;
         mobius_free_state(state);
         return 1;
     }
     
-    // Register Vector3 functions
-    mobius_register_function(state, "Vector3", vector3_new, SIZE_MAX, "Create a new Vector3(x, y, z)");
-    mobius_register_function(state, "vector3_length", vector3_length, 1, "Get vector length");
-    mobius_register_function(state, "vector3_normalize", vector3_normalize, 1, "Normalize vector in-place");
-    mobius_register_function(state, "vector3_add", vector3_add, 2, "Add two vectors");
-    mobius_register_function(state, "vector3_dot", vector3_dot, 2, "Dot product of two vectors");
-    mobius_register_function(state, "vector3_tostring", vector3_tostring, 1, "Convert vector to string");
+    mobius_register_function(state, "Vector3", vector3_new);
+    mobius_register_function(state, "vector3_length", vector3_length_fn);
+    mobius_register_function(state, "vector3_normalize", vector3_normalize_fn);
+    mobius_register_function(state, "vector3_add", vector3_add_fn);
+    mobius_register_function(state, "vector3_dot", vector3_dot_fn);
+    mobius_register_function(state, "vector3_tostring", vector3_tostring_fn);
     
-    // Register Player functions
-    mobius_register_function(state, "Player", player_new, 1, "Create a new Player(name)");
-    mobius_register_function(state, "player_get_health", player_get_health, 1, "Get player health");
-    mobius_register_function(state, "player_take_damage", player_take_damage, 2, "Player takes damage");
-    mobius_register_function(state, "player_is_alive", player_is_alive, 1, "Check if player is alive");
-    mobius_register_function(state, "player_tostring", player_tostring, 1, "Convert player to string");
+    mobius_register_function(state, "Player", player_new);
+    mobius_register_function(state, "player_get_health", player_get_health);
+    mobius_register_function(state, "player_take_damage", player_take_damage);
+    mobius_register_function(state, "player_is_alive", player_is_alive);
+    mobius_register_function(state, "player_tostring", player_tostring);
     
-    // Test script demonstrating C++ class usage
     const char* test_script = R"(
         print("=== Vector3 Tests ===");
         var v1 = Vector3(1.0, 2.0, 3.0);
@@ -344,7 +342,7 @@ int main() {
         print("v1 + v2 =", vector3_tostring(v3));
         
         var dot_product = vector3_dot(v1, v2);
-        print("v1 · v2 =", dot_product);
+        print("v1 . v2 =", dot_product);
         
         print("\n=== Player Tests ===");
         var player = Player("Hero");
@@ -366,7 +364,6 @@ int main() {
         print("Objects will be automatically destroyed when they go out of scope...");
     )";
     
-    // Execute the test script
     std::cout << "Executing Mobius script with C++ objects:\n" << std::endl;
     
     int result = mobius_exec_string(state, test_script);
@@ -376,7 +373,6 @@ int main() {
     
     std::cout << "\nCleaning up Mobius state..." << std::endl;
     
-    // Clean up
     mobius_free_state(state);
     
     std::cout << "\nExample completed!" << std::endl;
