@@ -50,7 +50,7 @@ static size_t hash_float(double value) {
     return (size_t)(u.i ^ (u.i >> 32));
 }
 
-size_t hash_value(const Value& value, size_t capacity) {
+size_t hash_value_raw(const Value& value) {
     size_t hash = 0;
 
     switch (value.type) {
@@ -80,7 +80,7 @@ size_t hash_value(const Value& value, size_t capacity) {
             break;
     }
 
-    return hash & (capacity - 1);
+    return hash;
 }
 
 
@@ -97,6 +97,7 @@ Table::Table(MobiusState* state, size_t initial_capacity)
         initial_capacity = INITIAL_TABLE_CAPACITY;
     initial_capacity = next_power_of_2(initial_capacity);
     entries_.resize(initial_capacity);
+    tags_.resize(initial_capacity, TAG_EMPTY);
 }
 
 Table::~Table() {
@@ -117,42 +118,48 @@ void Table::setMetatable(Table* mt) {
     metatable_ = mt;
 }
 
-size_t Table::findIndex(const Value& key) const {
-    size_t index = hash_value(key, entries_.size());
+size_t Table::findIndex(const Value& key, size_t hash) const {
+    size_t mask = entries_.size() - 1;
+    size_t index = hash & mask;
+    uint8_t tag = tagFromHash(hash);
     size_t start = index;
 
     do {
-        if (!entries_[index].is_occupied)
+        uint8_t t = tags_[index];
+        if (t == TAG_EMPTY)
             return index;
-        if (entries_[index].key.exactlyEqual(key))
+        if (t == tag && entries_[index].key.exactlyEqual(key))
             return index;
-        index = (index + 1) & (entries_.size() - 1);
+        index = (index + 1) & mask;
     } while (index != start);
 
     return start;
 }
 
-void Table::insertEntry(const Value& key, const Value& value) {
-    size_t index = hash_value(key, entries_.size());
+void Table::insertEntry(const Value& key, const Value& value, size_t hash) {
+    size_t mask = entries_.size() - 1;
+    size_t index = hash & mask;
+    uint8_t tag = tagFromHash(hash);
     size_t start = index;
 
     do {
-        if (!entries_[index].is_occupied) {
+        uint8_t t = tags_[index];
+        if (t == TAG_EMPTY) {
             entries_[index].key = key;
             entries_[index].value = value;
-            entries_[index].is_occupied = true;
+            tags_[index] = tag;
             return;
         }
-        if (entries_[index].key.exactlyEqual(key)) {
+        if (t == tag && entries_[index].key.exactlyEqual(key)) {
             entries_[index].value = value;
             return;
         }
-        index = (index + 1) & (entries_.size() - 1);
+        index = (index + 1) & mask;
     } while (index != start);
 
     entries_[start].key = key;
     entries_[start].value = value;
-    entries_[start].is_occupied = true;
+    tags_[start] = tag;
 }
 
 void Table::resize(size_t new_capacity) {
@@ -160,13 +167,16 @@ void Table::resize(size_t new_capacity) {
     new_capacity = next_power_of_2(new_capacity);
 
     std::vector<TableEntry> old_entries = std::move(entries_);
+    std::vector<uint8_t> old_tags = std::move(tags_);
     entries_.clear();
     entries_.resize(new_capacity);
+    tags_.assign(new_capacity, TAG_EMPTY);
     size_ = 0;
 
-    for (auto& entry : old_entries) {
-        if (entry.is_occupied) {
-            insertEntry(entry.key, entry.value);
+    for (size_t i = 0; i < old_entries.size(); i++) {
+        if (old_tags[i] != TAG_EMPTY) {
+            size_t h = hash_value_raw(old_entries[i].key);
+            insertEntry(old_entries[i].key, old_entries[i].value, h);
             size_++;
         }
     }
@@ -175,8 +185,9 @@ void Table::resize(size_t new_capacity) {
 Value Table::get(const Value& key) const {
     if (size_ == 0) return make_nil_value();
 
-    size_t index = findIndex(key);
-    if (entries_[index].is_occupied && entries_[index].key.exactlyEqual(key)) {
+    size_t h = hash_value_raw(key);
+    size_t index = findIndex(key, h);
+    if (tags_[index] != TAG_EMPTY && entries_[index].key.exactlyEqual(key)) {
         return entries_[index].value;
     }
 
@@ -195,8 +206,9 @@ bool Table::set(const Value& key, const Value& value) {
         resize(entries_.size() * 2);
     }
 
-    size_t index = findIndex(key);
-    bool is_new = !entries_[index].is_occupied;
+    size_t h = hash_value_raw(key);
+    size_t index = findIndex(key, h);
+    bool is_new = (tags_[index] == TAG_EMPTY);
 
     if (is_new) {
         if (metatable_ && state_) {
@@ -207,7 +219,7 @@ bool Table::set(const Value& key, const Value& value) {
         }
 
         entries_[index].key = key;
-        entries_[index].is_occupied = true;
+        tags_[index] = tagFromHash(h);
         size_++;
     }
 
@@ -217,30 +229,33 @@ bool Table::set(const Value& key, const Value& value) {
 
 bool Table::hasKey(const Value& key) const {
     if (size_ == 0) return false;
-    size_t index = findIndex(key);
-    return entries_[index].is_occupied && entries_[index].key.exactlyEqual(key);
+    size_t h = hash_value_raw(key);
+    size_t index = findIndex(key, h);
+    return tags_[index] != TAG_EMPTY && entries_[index].key.exactlyEqual(key);
 }
 
 bool Table::remove(const Value& key) {
     if (size_ == 0) return false;
 
-    size_t index = findIndex(key);
-    if (!entries_[index].is_occupied || !entries_[index].key.exactlyEqual(key))
+    size_t h = hash_value_raw(key);
+    size_t index = findIndex(key, h);
+    if (tags_[index] == TAG_EMPTY || !entries_[index].key.exactlyEqual(key))
         return false;
 
-    entries_[index].is_occupied = false;
+    tags_[index] = TAG_EMPTY;
     entries_[index].key = make_nil_value();
     entries_[index].value = make_nil_value();
     size_--;
 
     // Rehash following entries to maintain probe sequence
+    size_t mask = entries_.size() - 1;
     for (;;) {
-        index = (index + 1) & (entries_.size() - 1);
-        if (!entries_[index].is_occupied) break;
+        index = (index + 1) & mask;
+        if (tags_[index] == TAG_EMPTY) break;
 
         Value k = std::move(entries_[index].key);
         Value v = std::move(entries_[index].value);
-        entries_[index].is_occupied = false;
+        tags_[index] = TAG_EMPTY;
         size_--;
         set(k, v);
     }
@@ -252,9 +267,9 @@ Table* Table::copy() const {
     Table* c = new (std::nothrow) Table(state_, entries_.size());
     if (!c) return nullptr;
 
-    for (const auto& entry : entries_) {
-        if (entry.is_occupied) {
-            c->set(entry.key, entry.value);
+    for (size_t i = 0; i < entries_.size(); i++) {
+        if (tags_[i] != TAG_EMPTY) {
+            c->set(entries_[i].key, entries_[i].value);
         }
     }
     c->setMetatable(metatable_);
@@ -262,9 +277,9 @@ Table* Table::copy() const {
 }
 
 void Table::forEach(const std::function<void(const Value& key, const Value& value)>& fn) const {
-    for (const auto& entry : entries_) {
-        if (entry.is_occupied) {
-            fn(entry.key, entry.value);
+    for (size_t i = 0; i < entries_.size(); i++) {
+        if (tags_[i] != TAG_EMPTY) {
+            fn(entries_[i].key, entries_[i].value);
         }
     }
 }
@@ -354,7 +369,7 @@ void Table::printDebug() const {
 
     for (size_t i = 0; i < entries_.size(); i++) {
         printf("[%zu] ", i);
-        if (entries_[i].is_occupied) {
+        if (tags_[i] != TAG_EMPTY) {
             printf("Key: ");
             print_value(entries_[i].key);
             printf(" => Value: ");

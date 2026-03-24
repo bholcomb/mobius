@@ -175,6 +175,8 @@ enum OpCode : uint8_t {
     // -- Numeric for-loop --
     OP_FORPREP,     // A sBx     R[A] -= R[A+2]; pc += sBx (jump to FORLOOP)
     OP_FORLOOP,     // A sBx     R[A] += R[A+2]; if R[A] <= R[A+1] then { pc += sBx; R[A+3] = R[A] }
+    OP_IFORPREP,    // A sBx     R[A].i64 -= R[A+2].i64; pc += sBx (integer-only)
+    OP_IFORLOOP,    // A sBx     R[A].i64 += R[A+2].i64; if in range then { pc += sBx; R[A+3].i64 = R[A].i64 }
                     //           R[A]=index, R[A+1]=limit, R[A+2]=step, R[A+3]=loop var
 
     // -- Generic for-loop (future, for iterator protocol) --
@@ -294,6 +296,8 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
 
         {"FORPREP",   FMT_AsBx},
         {"FORLOOP",   FMT_AsBx},
+        {"IFORPREP",  FMT_AsBx},
+        {"IFORLOOP",  FMT_AsBx},
         {"TFORLOOP",  FMT_ABC},
 
         {"NEWENUM",   FMT_ABx},

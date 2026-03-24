@@ -1,4 +1,5 @@
 #include "vm/compiler.h"
+#include "state/mobius_state.h"
 
 #include <cstdio>
 #include <cstring>
@@ -9,8 +10,8 @@
 // Constructor
 // ============================================================================
 
-Compiler::Compiler(StringInternPool* pool)
-    : current_(nullptr), pool_(pool) {}
+Compiler::Compiler(StringInternPool* pool, MobiusState* state)
+    : current_(nullptr), pool_(pool), state_(state) {}
 
 // ============================================================================
 // Public API
@@ -219,6 +220,26 @@ int Compiler::emitLoadK(int reg, int const_idx) {
     return emitABx(OP_LOADK, (uint8_t)reg, (uint16_t)const_idx);
 }
 
+void Compiler::emitGetGlobal(int reg, const char* name) {
+    if (state_) {
+        int slot = state_->assignGlobalSlot(name);
+        emitABx(OP_GETGLOBAL, (uint8_t)reg, (uint16_t)slot);
+    } else {
+        int ki = stringConstant(name);
+        emitABx(OP_GETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+    }
+}
+
+void Compiler::emitSetGlobal(int reg, const char* name) {
+    if (state_) {
+        int slot = state_->assignGlobalSlot(name);
+        emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)slot);
+    } else {
+        int ki = stringConstant(name);
+        emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+    }
+}
+
 // ============================================================================
 // Expression compilation
 // ============================================================================
@@ -332,10 +353,9 @@ int Compiler::compileVariable(VariableExpr* expr, int dest) {
         return reg;
     }
 
-    // Global
+    // Global — use flat slot index when state is available
     int reg = (dest >= 0) ? dest : allocReg();
-    int ki = stringConstant(name);
-    emitABx(OP_GETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+    emitGetGlobal(reg, name);
     return reg;
 }
 
@@ -807,8 +827,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 
             int reg = (dest >= 0) ? dest : allocReg();
             compileExpr(expr->value, reg);
-            int ki = stringConstant(name);
-            emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+            emitSetGlobal(reg, name);
             return reg;
         }
 
@@ -1012,8 +1031,7 @@ int Compiler::compileEnumAccess(EnumAccessExpr* expr, int dest) {
     const char* interned = pool_->intern(enum_var)->data;
 
     int enum_reg = allocReg();
-    int ki = stringConstant(interned);
-    emitABx(OP_GETGLOBAL, (uint8_t)enum_reg, (uint16_t)ki);
+    emitGetGlobal(enum_reg, interned);
 
     int member_ki = stringConstant(expr->member_name.identifier);
     emitABC(OP_GETTABLE, (uint8_t)reg, (uint8_t)enum_reg, makeRK(member_ki));
@@ -1052,18 +1070,17 @@ int Compiler::compileIncrement(IncrementExpr* expr, int dest) {
 
     // Global increment: load, modify, store
     int reg = (dest >= 0) ? dest : allocReg();
-    int ki = stringConstant(name);
     int tmp = allocReg();
 
-    emitABx(OP_GETGLOBAL, (uint8_t)tmp, (uint16_t)ki);
+    emitGetGlobal(tmp, name);
     if (expr->is_prefix) {
         emitABC(op, (uint8_t)tmp, (uint8_t)tmp, 0);
-        emitABx(OP_SETGLOBAL, (uint8_t)tmp, (uint16_t)ki);
+        emitSetGlobal(tmp, name);
         if (reg != tmp) emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)tmp, 0);
     } else {
         emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)tmp, 0);
         emitABC(op, (uint8_t)tmp, (uint8_t)tmp, 0);
-        emitABx(OP_SETGLOBAL, (uint8_t)tmp, (uint16_t)ki);
+        emitSetGlobal(tmp, name);
     }
 
     freeReg(); // tmp
@@ -1151,8 +1168,7 @@ void Compiler::compilePrintStmt(PrintStmt* stmt) {
     // Compile as a call to the global "print" function
     int save = current_->free_reg;
     int func_reg = allocReg();
-    int ki = stringConstant("print");
-    emitABx(OP_GETGLOBAL, (uint8_t)func_reg, (uint16_t)ki);
+    emitGetGlobal(func_reg, "print");
 
     int arg_reg = allocReg();
     compileExpr(stmt->expression, arg_reg);
@@ -1190,8 +1206,7 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
         if (stmt->is_annotated) {
             emitABC(OP_TYPECHECK, (uint8_t)reg, (uint8_t)stmt->type_hint, 0);
         }
-        int ki = stringConstant(name);
-        emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+        emitSetGlobal(reg, name);
         setFreeReg(save);
     }
 }
@@ -1505,9 +1520,10 @@ void Compiler::compileForStmt(ForStmt* stmt) {
             emitLoadK(step_reg, ki);
         }
 
-        // FORPREP: R[A] -= R[A+2]; jump to FORLOOP
+        // Use integer-specialized IFORPREP/IFORLOOP since the step
+        // is always an integer literal (guaranteed by isNumericForLoop).
         int forprep_pc = current_->proto->currentPC();
-        emitAsBx(OP_FORPREP, (uint8_t)base, 0);  // patch later
+        emitAsBx(OP_IFORPREP, (uint8_t)base, 0);  // patch later
 
         LoopContext loop;
         loop.start_pc = current_->proto->currentPC();
@@ -1518,16 +1534,15 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         // Body
         compileStmt(stmt->body);
 
-        // Patch continue jumps to FORLOOP
+        // Patch continue jumps to IFORLOOP
         for (int jmp : current_->loops.back().continue_jumps) {
             patchJump(jmp);
         }
 
-        // FORLOOP: R[A] += R[A+2]; if in range: jump back to body start, R[A+3]=R[A]
         int forloop_pc = current_->proto->currentPC();
         int body_start = loop.start_pc;
         int back_offset = body_start - (forloop_pc + 1);
-        emitAsBx(OP_FORLOOP, (uint8_t)base, back_offset);
+        emitAsBx(OP_IFORLOOP, (uint8_t)base, back_offset);
 
         // Patch FORPREP to jump to FORLOOP
         current_->proto->patchJump(forprep_pc, forloop_pc);
@@ -1646,8 +1661,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
         int save = current_->free_reg;
         int reg = allocReg();
         emitABx(OP_CLOSURE, (uint8_t)reg, (uint16_t)proto_idx);
-        int ki = stringConstant(name);
-        emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+        emitSetGlobal(reg, name);
         setFreeReg(save);
     }
 }
@@ -2079,14 +2093,12 @@ void Compiler::compileEnumStmt(EnumStmt* stmt) {
 
     // Store as both the plain name and __enum_<name> so that table dot
     // access (Color.RED) and EXPR_ENUM_ACCESS (switch patterns) both work.
-    int var_ki = stringConstant(stmt->name.identifier);
-    emitABx(OP_SETGLOBAL, (uint8_t)enum_reg, (uint16_t)var_ki);
+    emitSetGlobal(enum_reg, stmt->name.identifier);
 
     char enum_var[256];
     snprintf(enum_var, sizeof(enum_var), "__enum_%s", stmt->name.identifier);
     const char* interned = pool_->intern(enum_var)->data;
-    int enum_ki = stringConstant(interned);
-    emitABx(OP_SETGLOBAL, (uint8_t)enum_reg, (uint16_t)enum_ki);
+    emitSetGlobal(enum_reg, interned);
 
     setFreeReg(save);
 }

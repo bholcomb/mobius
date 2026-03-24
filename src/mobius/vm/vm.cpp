@@ -389,29 +389,25 @@ int MobiusVM::run(size_t base_depth) {
         // ================================================================
 
         case OP_GETGLOBAL: {
-            const Value& key = KBx(inst);
-            if (key.type != VAL_STRING || !key.as.string) {
-                runtimeError("GETGLOBAL: invalid key type");
+            int slot = DECODE_Bx(inst);
+            const Value& gv = state_->globalSlot(slot);
+            if (__builtin_expect(!(gv.flags & VAL_FLAG_DEFINED), 0)) {
+                runtimeError("Undefined variable '%s'", state_->globalSlotName(slot));
                 return -1;
             }
-            const Value* val = global_env_->lookup(key.as.string);
-            if (!val) {
-                runtimeError("Undefined variable '%s'", key.as.string->data);
-                return -1;
-            }
-            RA(inst) = *val;
+            RA(inst) = gv;
             break;
         }
 
         case OP_SETGLOBAL: {
-            const Value& key = KBx(inst);
-            if (key.type != VAL_STRING || !key.as.string) {
-                runtimeError("SETGLOBAL: invalid key type");
+            int slot = DECODE_Bx(inst);
+            Value& gv = state_->globalSlot(slot);
+            if (__builtin_expect(!!(gv.flags & VAL_FLAG_READONLY), 0)) {
+                runtimeError("Cannot assign to read-only variable '%s'", state_->globalSlotName(slot));
                 return -1;
             }
-            if (!global_env_->assign(key.as.string, RA(inst))) {
-                global_env_->define(key.as.string, RA(inst));
-            }
+            gv = RA(inst);
+            gv.flags |= VAL_FLAG_DEFINED;
             break;
         }
 
@@ -1173,6 +1169,28 @@ int MobiusVM::run(size_t base_depth) {
             break;
         }
 
+        case OP_IFORPREP: {
+            int a = DECODE_A(inst);
+            regs[a].type = VAL_INT64;
+            regs[a].as.i64 -= regs[a + 2].as.i64;
+            ip += DECODE_sBx(inst);
+            break;
+        }
+
+        case OP_IFORLOOP: {
+            int a = DECODE_A(inst);
+            int64_t sv = regs[a + 2].as.i64;
+            int64_t iv = regs[a].as.i64 + sv;
+            regs[a].as.i64 = iv;
+            if ((sv > 0) ? (iv <= regs[a + 1].as.i64)
+                         : (iv >= regs[a + 1].as.i64)) {
+                ip += DECODE_sBx(inst);
+                regs[a + 3].as.i64 = iv;
+                regs[a + 3].type = VAL_INT64;
+            }
+            break;
+        }
+
         case OP_TFORLOOP: {
             // Generic for-loop — future iterator protocol
             runtimeError("Generic for-loop (TFORLOOP) not yet implemented");
@@ -1293,6 +1311,9 @@ int MobiusVM::run(size_t base_depth) {
                     PluginFunction* func = &plugin->functions[i];
                     if (!func || !func->name || !func->function) continue;
                     Value func_val = make_native_function_value(func->function);
+                    int slot = state_->assignGlobalSlot(func->name);
+                    func_val.flags |= VAL_FLAG_DEFINED;
+                    state_->globalSlot(slot) = func_val;
                     global_env_->define(pool->intern(func->name), func_val);
                 }
             } else if (strchr(alias_name, '.') != nullptr) {
@@ -1315,7 +1336,14 @@ int MobiusVM::run(size_t base_depth) {
                 // First component: get or create in global env
                 MobiusString* first = pool->intern(components[0]);
                 bool found = false;
-                Value cur_val = global_env_->get(first, &found);
+                Value cur_val;
+                int ns_slot = state_->findGlobalSlot(components[0]);
+                if (ns_slot >= 0 && (state_->globalSlot(ns_slot).flags & VAL_FLAG_DEFINED)) {
+                    cur_val = state_->globalSlot(ns_slot);
+                    found = true;
+                } else {
+                    cur_val = global_env_->get(first, &found);
+                }
                 Table* cur_table = nullptr;
 
                 if (found && cur_val.type == VAL_TABLE) {
@@ -1327,7 +1355,11 @@ int MobiusVM::run(size_t base_depth) {
                 } else {
                     cur_table = new (std::nothrow) Table(state_, 16);
                     if (!cur_table) { runtimeError("Failed to create namespace table"); return -1; }
-                    global_env_->define(first, make_table_value(cur_table));
+                    Value tval = make_table_value(cur_table);
+                    tval.flags |= VAL_FLAG_DEFINED;
+                    int s = state_->assignGlobalSlot(components[0]);
+                    state_->globalSlot(s) = tval;
+                    global_env_->define(first, tval);
                 }
 
                 // Intermediate components
@@ -1356,7 +1388,14 @@ int MobiusVM::run(size_t base_depth) {
                 // Simple alias (e.g. "math"): create table, define as global
                 MobiusString* interned_alias = pool->intern(alias_name);
                 bool found = false;
-                Value existing = global_env_->get(interned_alias, &found);
+                Value existing;
+                int alias_slot = state_->findGlobalSlot(alias_name);
+                if (alias_slot >= 0 && (state_->globalSlot(alias_slot).flags & VAL_FLAG_DEFINED)) {
+                    existing = state_->globalSlot(alias_slot);
+                    found = true;
+                } else {
+                    existing = global_env_->get(interned_alias, &found);
+                }
                 Table* mod_table = nullptr;
 
                 if (found && existing.type == VAL_TABLE) {
@@ -1375,7 +1414,11 @@ int MobiusVM::run(size_t base_depth) {
                 }
 
                 if (!found || existing.type != VAL_TABLE) {
-                    global_env_->define(interned_alias, make_table_value(mod_table));
+                    Value tval = make_table_value(mod_table);
+                    tval.flags |= VAL_FLAG_DEFINED;
+                    int s = state_->assignGlobalSlot(alias_name);
+                    state_->globalSlot(s) = tval;
+                    global_env_->define(interned_alias, tval);
                 }
             }
             break;

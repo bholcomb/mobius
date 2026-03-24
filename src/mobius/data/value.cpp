@@ -13,33 +13,8 @@
 #include <string.h>
 
 // ============================================================================
-// Value refcount slow paths (called only for heap-allocated types)
+// Value refcount slow path — release (called only for heap-allocated types)
 // ============================================================================
-
-void Value::retainSlow() const {
-    switch (type) {
-        case VAL_STRING:
-            if (as.string) as.string->retain();
-            break;
-        case VAL_ARRAY:
-            if (as.array) as.array->retain();
-            break;
-        case VAL_FUNCTION:
-            if (as.function) as.function->ref_count++;
-            break;
-        case VAL_TABLE:
-            if (as.table) as.table->retain();
-            break;
-        case VAL_USERDATA:
-            if (as.userdata) as.userdata->ref_count++;
-            break;
-        case VAL_ENUM:
-            if (as.enum_def) as.enum_def->retain();
-            break;
-        default:
-            break;
-    }
-}
 
 void Value::releaseRefSlow() {
     switch (type) {

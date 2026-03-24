@@ -521,6 +521,9 @@ void mobius_stack_setGlobal(MobiusState* state, const char* name) {
 
     MobiusString* interned = state->stringPool()->intern(name);
     Value val = nctx->registers[--nctx->top];
+    int slot = state->assignGlobalSlot(name);
+    val.flags |= VAL_FLAG_DEFINED;
+    state->globalSlot(slot) = val;
     state->globalEnv()->define(interned, val);
 }
 
@@ -633,8 +636,12 @@ void mobius_stack_copy(MobiusState* state, int idx) {
 void mobius_register_function(MobiusState* state, const char* name,
                               MobiusCFunction func) {
     if (!state || !name || !func) return;
+    Value fval = make_native_function_value(func);
+    int slot = state->assignGlobalSlot(name);
+    fval.flags |= VAL_FLAG_DEFINED;
+    state->globalSlot(slot) = fval;
     MobiusString* interned = state->stringPool()->intern(name);
-    state->globalEnv()->define(interned, make_native_function_value(func));
+    state->globalEnv()->define(interned, fval);
 }
 
 // ============================================================================

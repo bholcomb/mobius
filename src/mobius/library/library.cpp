@@ -92,6 +92,9 @@ void register_stdlib_functions(MobiusState* state) {
         
         Value func_value = make_native_function_value(func->function);
         
+        int slot = state->assignGlobalSlot(func->name);
+        func_value.flags |= VAL_FLAG_DEFINED;
+        state->globalSlot(slot) = func_value;
         state->globalEnv()->define(pool->intern(func->name), func_value);
     }
 }

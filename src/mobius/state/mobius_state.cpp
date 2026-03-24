@@ -281,9 +281,16 @@ MobiusState::MobiusState(MobiusConfig* config)
 
     registry_->scanPlugins(config_.enable_hot_reload);
 
-    global_env_->define(string_pool_->intern("nil"), make_nil_value());
-    global_env_->define(string_pool_->intern("true"), make_bool_value(true));
-    global_env_->define(string_pool_->intern("false"), make_bool_value(false));
+    auto defineGlobal = [&](const char* name, Value val, bool readonly = false) {
+        int slot = assignGlobalSlot(name);
+        val.flags |= VAL_FLAG_DEFINED;
+        if (readonly) val.flags |= VAL_FLAG_READONLY;
+        globals_[slot] = val;
+        global_env_->define(string_pool_->intern(name), val);
+    };
+    defineGlobal("nil", make_nil_value(), true);
+    defineGlobal("true", make_bool_value(true), true);
+    defineGlobal("false", make_bool_value(false), true);
 }
 
 MobiusState::~MobiusState() {
@@ -311,6 +318,28 @@ void MobiusState::clearErrorInternal() {
         free_internal_error(last_error_);
         last_error_ = nullptr;
     }
+}
+
+int MobiusState::assignGlobalSlot(const char* name) {
+    auto it = global_slot_map_.find(name);
+    if (it != global_slot_map_.end()) return it->second;
+    int slot = (int)globals_.size();
+    globals_.push_back(Value());
+    global_slot_map_[name] = slot;
+    return slot;
+}
+
+int MobiusState::findGlobalSlot(const char* name) const {
+    auto it = global_slot_map_.find(name);
+    if (it != global_slot_map_.end()) return it->second;
+    return -1;
+}
+
+const char* MobiusState::globalSlotName(int idx) const {
+    for (auto& kv : global_slot_map_) {
+        if (kv.second == idx) return kv.first.c_str();
+    }
+    return "<unknown>";
 }
 
 int MobiusState::initStdlib() {
@@ -341,7 +370,7 @@ int MobiusState::execString(const char* code) {
         return MOBIUS_ERROR_SYNTAX;
     }
 
-    Compiler compiler(string_pool_);
+    Compiler compiler(string_pool_, this);
     Prototype* proto = compiler.compile(parse_result.statements,
                                         parse_result.count,
                                         source_code_ ? source_code_ : "<string>");
