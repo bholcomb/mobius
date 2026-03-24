@@ -1,19 +1,18 @@
 # Text Processing Plugin Example
 
-This example shows how to create a custom plugin that extends Mobius with specialized functionality.
+This example shows how to create a plugin that extends Mobius with additional
+native functions.
 
 ## Files
 
-- `text_processing_plugin.c` - Complete plugin implementation with 9 text processing functions
+- `text_processing_plugin.cpp` - Plugin implementation with 9 text processing
+  functions
 
-## Features Demonstrated
+## Header Used
 
-- **Plugin Structure**: Complete plugin implementation
-- **Function Categories**: Organized function groups
-- **String Manipulation**: Advanced C string operations
-- **Memory Management**: Safe allocation and cleanup
-- **Error Handling**: Comprehensive validation
-- **Documentation**: Function descriptions and examples
+```cpp
+#include <mobius/mobius_plugin.h>   // stack API, plugin structs, export macros
+```
 
 ## Plugin Architecture
 
@@ -21,21 +20,18 @@ This example shows how to create a custom plugin that extends Mobius with specia
 ┌─────────────────────────────────────────────────────────┐
 │                 Text Processing Plugin                  │
 ├─────────────────────────────────────────────────────────┤
-│  Plugin Metadata                                        │
+│  Metadata                                               │
 │  - Name: "text_processing"                              │
 │  - Version: "1.0.0"                                     │
-│  - Description: "Advanced Text Processing Functions"    │
 │  - Functions: 9                                         │
 ├─────────────────────────────────────────────────────────┤
-│  Function Categories                                     │
+│  Text Analysis          String Manipulation             │
+│  - word_count()         - reverse()                     │
+│  - line_count()         - title_case()                  │
+│  - char_count()         - trim()                        │
+│                         - replace_all()                 │
 │                                                         │
-│  📊 Text Analysis          🔧 String Manipulation       │
-│  - word_count()           - reverse()                   │
-│  - line_count()           - title_case()                │
-│  - char_count()           - trim()                      │
-│                           - replace_all()               │
-│                                                         │
-│  📝 Text Formatting                                     │
+│  Text Formatting                                        │
 │  - pad_left()                                           │
 │  - split()                                              │
 └─────────────────────────────────────────────────────────┘
@@ -43,201 +39,84 @@ This example shows how to create a custom plugin that extends Mobius with specia
 
 ## Available Functions
 
-### Text Analysis Functions
+| Function | Parameters | Returns | Description |
+|----------|------------|---------|-------------|
+| `word_count(text)` | string | integer | Count words |
+| `line_count(text)` | string | integer | Count lines |
+| `char_count(text, ch)` | string, string | integer | Count character occurrences |
+| `reverse(text)` | string | string | Reverse a string |
+| `title_case(text)` | string | string | Convert to title case |
+| `trim(text)` | string | string | Strip leading/trailing whitespace |
+| `replace_all(text, old, new)` | 3 strings | string | Replace all occurrences |
+| `pad_left(text, width, ch)` | string, int, string | string | Left-pad to width |
+| `split(text, delim)` | string, string | string | Split by delimiter |
 
-| Function | Parameters | Returns | Description | Example |
-|----------|------------|---------|-------------|---------|
-| `word_count(text)` | string | integer | Count words in text | `word_count("hello world")` → `2` |
-| `line_count(text)` | string | integer | Count lines in text | `line_count("line1\nline2")` → `2` |
-| `char_count(text, char)` | string, string | integer | Count character occurrences | `char_count("hello", "l")` → `2` |
+## Plugin Function Pattern
 
-### String Manipulation Functions
+Every plugin function uses the public stack API and `mobius_error`:
 
-| Function | Parameters | Returns | Description | Example |
-|----------|------------|---------|-------------|---------|
-| `reverse(text)` | string | string | Reverse a string | `reverse("hello")` → `"olleh"` |
-| `title_case(text)` | string | string | Convert to title case | `title_case("hello world")` → `"Hello World"` |
-| `trim(text)` | string | string | Remove leading/trailing whitespace | `trim(" hello ")` → `"hello"` |
-| `replace_all(text, old, new)` | string, string, string | string | Replace all occurrences | `replace_all("hello", "l", "x")` → `"hexxo"` |
+```cpp
+int text_word_count(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "word_count() expects 1 argument");
+    if (!mobius_stack_isString(state, -1))
+        return mobius_error(state, "word_count() expects a string");
 
-### Text Formatting Functions
-
-| Function | Parameters | Returns | Description | Example |
-|----------|------------|---------|-------------|---------|
-| `pad_left(text, width, char)` | string, integer, string | string | Pad string to width on left | `pad_left("hi", 5, "0")` → `"000hi"` |
-| `split(text, delimiter)` | string, string | string | Split string by delimiter | `split("a,b,c", ",")` → `"a | b | c"` |
-
-## Plugin Implementation Details
-
-### 1. Plugin Structure
-
-```c
-static Plugin text_processing_plugin = {
-    .metadata = {
-        .name = "text_processing",
-        .version = "1.0.0",
-        .description = "Advanced Text Processing Functions",
-        .author = "Mobius Examples",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
-    },
-    .functions = text_processing_functions,
-    .function_count = sizeof(text_processing_functions) / sizeof(text_processing_functions[0]),
-    .init_plugin = init_text_processing_plugin,
-    .cleanup_plugin = cleanup_text_processing_plugin,
-    .get_help = get_text_processing_help,
-    .validate_env = validate_text_processing_env
-};
-```
-
-### 2. Function Implementation Pattern
-
-```c
-EvalResult text_word_count(Value* args, size_t arg_count) {
-    // 1. Validate arguments
-    if (arg_count != 1) {
-        return make_error("word_count() expects exactly 1 argument", 0, 0);
-    }
-    
-    if (args[0].type != VAL_STRING) {
-        return make_error("word_count() expects a string argument", 0, 0);
-    }
-    
-    // 2. Extract input
-    const char* text = args[0].as.string;
-    
-    // 3. Perform operation
-    int word_count = 0;
-    int in_word = 0;
-    
+    const char* text = mobius_stack_asString(state, -1);
+    int words = 0, in_word = 0;
     while (*text) {
-        if (isspace(*text)) {
-            in_word = 0;
-        } else if (!in_word) {
-            in_word = 1;
-            word_count++;
-        }
+        if (isspace(*text)) in_word = 0;
+        else if (!in_word) { in_word = 1; words++; }
         text++;
     }
-    
-    // 4. Return result
-    return make_success(make_integer_value(NUM_INT32, word_count));
+
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushInt64(state, words);
+    return 1;
 }
 ```
 
-### 3. Memory Management
+## Plugin Registration
 
-```c
-static char* safe_strdup(const char* str) {
-    if (!str) return NULL;
-    size_t len = strlen(str);
-    char* copy = malloc(len + 1);
-    if (copy) {
-        strcpy(copy, str);
-    }
-    return copy;
-}
+```cpp
+static MobiusPluginFunction functions[] = {
+    {"word_count", text_word_count, 1, "Count words in a string"},
+    {"to_upper",   text_upper,     1, "Convert string to uppercase"},
+};
 
-EvalResult text_reverse(Value* args, size_t arg_count) {
-    // ... validation ...
-    
-    char* reversed = safe_strdup(args[0].as.string);
-    if (!reversed) {
-        return make_error("Memory allocation failed", 0, 0);
-    }
-    
-    reverse_string(reversed);
-    
-    // Mobius will take ownership of the allocated string
-    Value result = make_string_value(reversed);
-    return make_success(result);
-}
-```
+static MobiusPlugin plugin = {
+    .metadata = {
+        .name        = "text_processing",
+        .version     = "1.0.0",
+        .description = "Advanced Text Processing Functions",
+        .author      = "Mobius Examples",
+        .api_version = MOBIUS_PLUGIN_API_VERSION,
+        .license     = "MIT",
+    },
+    .functions      = functions,
+    .function_count = sizeof(functions) / sizeof(functions[0]),
+    .init_plugin    = NULL,
+    .cleanup_plugin = NULL,
+};
 
-### 4. Entry Point
-
-```c
-MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
-    return &text_processing_plugin;
+extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {
+    return &plugin;
 }
 ```
 
-## Usage Example
+## Building
 
-```javascript
-// Load the plugin (done automatically or via load_plugin())
-print("Text Processing Demo");
-
-var text = "  Hello, wonderful world!  ";
-
-// Analysis
-print("Original:", text);
-print("Word count:", word_count(text));
-print("Line count:", line_count(text));
-print("'l' count:", char_count(text, "l"));
-
-// Manipulation  
-print("Reversed:", reverse(text));
-print("Title case:", title_case(text));
-print("Trimmed:", trim(text));
-print("Replace 'l' with 'X':", replace_all(text, "l", "X"));
-
-// Formatting
-print("Padded:", pad_left("42", 6, "0"));
-print("Split:", split("apple,banana,cherry", ","));
-```
-
-**Expected Output:**
-```
-Text Processing Demo
-Original:   Hello, wonderful world!  
-Word count: 3
-Line count: 1
-'l' count: 3
-Reversed: !dlrow lufrednow ,olleH  
-Title case: Hello, Wonderful World!
-Trimmed: Hello, wonderful world!
-Replace 'l' with 'X': HeXXo, wonderfuX worXd!
-Padded: 000042
-Split: apple | banana | cherry
-```
-
-## Building and Running
-
-### Prerequisites
-- GCC with C99 support
-- Mobius library (built with `make`)
-
-### Building
 ```bash
-make examples
+g++ -shared -fPIC -o text_processing.so text_processing_plugin.cpp \
+    -I/path/to/mobius/include
 ```
 
-### Running
-```bash
-# Load plugin and test in REPL
-LD_LIBRARY_PATH=./bin/modules ./bin/mobius
+## Usage in Scripts
 
-# Or test directly
-echo 'print("Words:", word_count("hello beautiful world"));' | LD_LIBRARY_PATH=./bin/modules ./bin/mobius
+```mobius
+import "text_processing"
+
+print(text_processing.word_count("The quick brown fox"))   // 4
+print(text_processing.reverse("hello"))                    // "olleh"
+print(text_processing.trim("  hello  "))                   // "hello"
 ```
-
-## Development Tips
-
-### Creating Your Own Plugin
-
-1. **Copy the template**: Use `text_processing_plugin.c` as a starting point
-2. **Define your functions**: Create functions with the `EvalResult func_name(Value* args, size_t arg_count)` signature
-3. **Register functions**: Add them to the function array
-4. **Update metadata**: Change plugin name, version, description
-5. **Build and test**: Compile as shared library and load in Mobius
-
-### Best Practices
-
-- **Always validate arguments**: Check count and types
-- **Handle memory carefully**: Use safe allocation and cleanup
-- **Provide good error messages**: Help users understand what went wrong
-- **Document thoroughly**: Include examples and parameter descriptions
-- **Test extensively**: Try edge cases and invalid inputs
-
-This plugin demonstrates the full capabilities of the Mobius plugin system and serves as an excellent template for creating domain-specific extensions.

@@ -581,19 +581,20 @@ bool mobius_stack_isUserdata(state, idx);
 
 ### Value Types Enum
 
-The `MobiusValueType` enum includes tags for multiple numeric widths so the C
-API can distinguish how a value was pushed; integer **payloads** in the VM are
-still wide **`int64`** storage.
-
 ```c
 typedef enum {
     MOBIUS_VAL_NIL,
     MOBIUS_VAL_BOOL,
-    MOBIUS_VAL_INT8, MOBIUS_VAL_INT16, MOBIUS_VAL_INT32, MOBIUS_VAL_INT64,
-    MOBIUS_VAL_UINT8, MOBIUS_VAL_UINT16, MOBIUS_VAL_UINT32, MOBIUS_VAL_UINT64,
-    MOBIUS_VAL_FLOAT32, MOBIUS_VAL_FLOAT64,
-    MOBIUS_VAL_STRING, MOBIUS_VAL_CHAR,
-    MOBIUS_VAL_ARRAY, MOBIUS_VAL_FUNCTION, MOBIUS_VAL_NATIVE_FUNCTION,
-    MOBIUS_VAL_TABLE, MOBIUS_VAL_USERDATA, MOBIUS_VAL_ENUM,
+    MOBIUS_VAL_INT64,
+    MOBIUS_VAL_UINT64,
+    MOBIUS_VAL_FLOAT64,
+    MOBIUS_VAL_STRING,
+    MOBIUS_VAL_CHAR,
+    MOBIUS_VAL_ARRAY,
+    MOBIUS_VAL_FUNCTION,
+    MOBIUS_VAL_NATIVE_FUNCTION,
+    MOBIUS_VAL_TABLE,
+    MOBIUS_VAL_USERDATA,
+    MOBIUS_VAL_ENUM,
 } MobiusValueType;
 ```
