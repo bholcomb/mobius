@@ -17,7 +17,7 @@ static const char* token_names[] = {
     "BANG", "BANG_EQUAL", "EQUAL", "EQUAL_EQUAL", "GREATER", "GREATER_EQUAL",
     "LESS", "LESS_EQUAL", "PLUS_PLUS", "MINUS_MINUS", "PLUS_EQUAL",
     "MINUS_EQUAL", "STAR_EQUAL", "SLASH_EQUAL", "AND_AND", "OR_OR",
-    "LEFT_SHIFT", "RIGHT_SHIFT", "ARROW", "DOT_DOT", "DOT_DOT_DOT",
+    "LEFT_SHIFT", "RIGHT_SHIFT", "DOT_DOT", "DOT_DOT_DOT",
     
     // Literals
     "IDENTIFIER", "STRING", "INTEGER", "FLOAT", "CHAR",
