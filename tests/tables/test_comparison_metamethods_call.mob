@@ -1,0 +1,103 @@
+// Test that comparison metamethods are actually called and produce correct results
+print("=== Comparison Metamethod Call Tests ===");
+
+// Define comparison metamethod handlers
+func eq_handler(a, b) {
+    return a.value == b.value;
+}
+
+func lt_handler(a, b) {
+    return a.value < b.value;
+}
+
+func le_handler(a, b) {
+    return a.value <= b.value;
+}
+
+// Create metatable with comparison metamethods
+var meta = {
+    ["__eq"] = eq_handler,
+    ["__lt"] = lt_handler,
+    ["__le"] = le_handler
+};
+
+// Create test tables
+var t1 = {value: 10};
+var t2 = {value: 20};
+var t3 = {value: 10};
+setmetatable(t1, meta);
+setmetatable(t2, meta);
+setmetatable(t3, meta);
+
+// Test __eq: equal values
+var result = (t1 == t3);
+print("__eq: 10 == 10 ->", result);
+if (result != true) {
+    print("FAIL: __eq expected true for equal values");
+    exit(1);
+}
+
+// Test __eq: unequal values
+result = (t1 == t2);
+print("__eq: 10 == 20 ->", result);
+if (result != false) {
+    print("FAIL: __eq expected false for unequal values");
+    exit(1);
+}
+
+// Test != (negation of __eq)
+result = (t1 != t2);
+print("__eq negated: 10 != 20 ->", result);
+if (result != true) {
+    print("FAIL: != expected true for unequal values");
+    exit(1);
+}
+
+result = (t1 != t3);
+print("__eq negated: 10 != 10 ->", result);
+if (result != false) {
+    print("FAIL: != expected false for equal values");
+    exit(1);
+}
+
+// Test __lt: less than
+result = (t1 < t2);
+print("__lt: 10 < 20 ->", result);
+if (result != true) {
+    print("FAIL: __lt expected true");
+    exit(1);
+}
+
+// Test __lt: not less than
+result = (t2 < t1);
+print("__lt: 20 < 10 ->", result);
+if (result != false) {
+    print("FAIL: __lt expected false");
+    exit(1);
+}
+
+// Test __le: less than or equal (equal case)
+result = (t1 <= t3);
+print("__le: 10 <= 10 ->", result);
+if (result != true) {
+    print("FAIL: __le expected true for equal values");
+    exit(1);
+}
+
+// Test __le: less than or equal (less case)
+result = (t1 <= t2);
+print("__le: 10 <= 20 ->", result);
+if (result != true) {
+    print("FAIL: __le expected true for lesser value");
+    exit(1);
+}
+
+// Test __le: not less than or equal
+result = (t2 <= t1);
+print("__le: 20 <= 10 ->", result);
+if (result != false) {
+    print("FAIL: __le expected false");
+    exit(1);
+}
+
+print("=== All comparison metamethod call tests passed! ===");

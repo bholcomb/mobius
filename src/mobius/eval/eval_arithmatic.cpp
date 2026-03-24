@@ -51,55 +51,66 @@ static inline bool use_unsigned(const Value& l, const Value& r) {
            (r.type == VAL_INTEGER && r.as.integer.num_type == NUM_UINT64);
 }
 
-// Helper function to increment/decrement an integer value
-Value increment_integer(Value val, bool is_increment, bool* success) {
-    *success = false;
-    
-    if (val.type != VAL_INTEGER) {
-        return make_nil_value();
+static EvalResult call_metamethod(Environment* env, const Value& method,
+                                  const Value& lhs, const Value& rhs) {
+    MobiusState* state = env->current_context->state;
+
+    if (method.type == VAL_NATIVE_FUNCTION) {
+        env->current_context->push(lhs);
+        env->current_context->push(rhs);
+        env->current_context->pushFrame("metamethod", nullptr, 0, 0,
+                                        FUNCTION_TYPE_NATIVE, nullptr, nullptr);
+        int rc = method.as.native_function(state, 2);
+        env->current_context->popFrame();
+        if (rc < 0) {
+            if (state->lastError())
+                return make_error(env, state->lastError()->message, 0, 0);
+            return make_error(env, "Metamethod call failed", 0, 0);
+        }
+        return make_success(rc);
     }
-    
-    int64_t delta = is_increment ? 1 : -1;
-    *success = true;
-    
-    // Preserve the numeric type and update the value
-    switch (val.as.integer.num_type) {
-        case NUM_INT8: {
-            int64_t new_val = val.as.integer.value.i8 + delta;
-            return make_integer_value(NUM_INT8, new_val);
+
+    if (method.type == VAL_FUNCTION && method.as.function) {
+        MobiusFunction* mf = method.as.function;
+        if (mf->param_count != 2) {
+            return make_error(env, "Metamethod expects exactly 2 parameters", 0, 0);
         }
-        case NUM_UINT8: {
-            int64_t new_val = val.as.integer.value.u8 + delta;
-            return make_integer_value(NUM_UINT8, new_val);
+        env->current_context->pushFrame(mf->name ? mf->name : "metamethod",
+                                        nullptr, 0, 0,
+                                        FUNCTION_TYPE_SCRIPT, nullptr, nullptr);
+        if (env->current_context->isStackOverflow()) {
+            env->current_context->popFrame();
+            return make_error(env, "Stack overflow in metamethod call", 0, 0);
         }
-        case NUM_INT16: {
-            int64_t new_val = val.as.integer.value.i16 + delta;
-            return make_integer_value(NUM_INT16, new_val);
+
+        ExecutionContext* ctx = mf->closure ? mf->closure->current_context
+                                            : env->current_context;
+        Environment* func_env = new (std::nothrow) Environment(mf->closure, ctx);
+        if (!func_env) {
+            env->current_context->popFrame();
+            return make_error(env, "Failed to allocate metamethod environment", 0, 0);
         }
-        case NUM_UINT16: {
-            int64_t new_val = val.as.integer.value.u16 + delta;
-            return make_integer_value(NUM_UINT16, new_val);
+
+        func_env->define(mf->param_names[0], lhs);
+        func_env->define(mf->param_names[1], rhs);
+
+        EvalResult result = make_success(0);
+        for (size_t i = 0; i < mf->body_count; i++) {
+            result = evaluate_stmt(mf->body[i], func_env);
+            if (is_error(result)) {
+                env->current_context->popFrame();
+                delete func_env;
+                return result;
+            }
+            if (result.has_returned) break;
         }
-        case NUM_INT32: {
-            int64_t new_val = val.as.integer.value.i32 + delta;
-            return make_integer_value(NUM_INT32, new_val);
-        }
-        case NUM_UINT32: {
-            int64_t new_val = val.as.integer.value.u32 + delta;
-            return make_integer_value(NUM_UINT32, new_val);
-        }
-        case NUM_INT64: {
-            int64_t new_val = val.as.integer.value.i64 + delta;
-            return make_integer_value(NUM_INT64, new_val);
-        }
-        case NUM_UINT64: {
-            uint64_t new_val = val.as.integer.value.u64 + (uint64_t)delta;
-            return make_integer_value(NUM_UINT64, new_val);
-        }
-        default:
-            *success = false;
-            return make_nil_value();
+
+        env->current_context->popFrame();
+        delete func_env;
+        return result;
     }
+
+    return make_error(env, "Metamethod must be a function", 0, 0);
 }
 
 EvalResult eval_increment_expr(IncrementExpr* expr, Environment* env) {
@@ -153,14 +164,11 @@ EvalResult add_values(Environment* env, const Value& left, const Value& right) {
         MobiusState* state = env->current_context->state;
         Value add_method = table->getMetamethod(state->metamethods()->add());
         
-        if (add_method.type == VAL_FUNCTION) {
-            // TODO: Call function metamethod
-            // For now, fall through to default behavior
+        if (add_method.type == VAL_FUNCTION || add_method.type == VAL_NATIVE_FUNCTION) {
+            return call_metamethod(env, add_method, left, right);
         } else if (add_method.type != VAL_NIL) {
-            // Non-function metamethod - treat as error for arithmetic
             return make_error(env, "__add metamethod must be a function", 0, 0);
         }
-        // If no metamethod found, continue to default error
     }
     // String concatenation
     if (left.type == VAL_STRING || right.type == VAL_STRING) {
@@ -255,9 +263,8 @@ EvalResult subtract_values(Environment* env, const Value& left, const Value& rig
         MobiusState* state = env->current_context->state;
         Value sub_method = table->getMetamethod(state->metamethods()->sub());
         
-        if (sub_method.type == VAL_FUNCTION) {
-            // TODO: Call function metamethod
-            // For now, fall through to default behavior
+        if (sub_method.type == VAL_FUNCTION || sub_method.type == VAL_NATIVE_FUNCTION) {
+            return call_metamethod(env, sub_method, left, right);
         } else if (sub_method.type != VAL_NIL) {
             return make_error(env, "__sub metamethod must be a function", 0, 0);
         }
@@ -304,9 +311,8 @@ EvalResult multiply_values(Environment* env, const Value& left, const Value& rig
         MobiusState* state = env->current_context->state;
         Value mul_method = table->getMetamethod(state->metamethods()->mul());
         
-        if (mul_method.type == VAL_FUNCTION) {
-            // TODO: Call function metamethod
-            // For now, fall through to default behavior
+        if (mul_method.type == VAL_FUNCTION || mul_method.type == VAL_NATIVE_FUNCTION) {
+            return call_metamethod(env, mul_method, left, right);
         } else if (mul_method.type != VAL_NIL) {
             return make_error(env, "__mul metamethod must be a function", 0, 0);
         }
@@ -353,14 +359,11 @@ EvalResult divide_values(Environment* env, const Value& left, const Value& right
         MobiusState* state = env->current_context->state;
         Value div_method = table->getMetamethod(state->metamethods()->div());
         
-        if (div_method.type == VAL_FUNCTION) {
-            // TODO: Call function metamethod
-            // For now, fall through to default behavior
+        if (div_method.type == VAL_FUNCTION || div_method.type == VAL_NATIVE_FUNCTION) {
+            return call_metamethod(env, div_method, left, right);
         } else if (div_method.type != VAL_NIL) {
             return make_error(env, "__div metamethod must be a function", 0, 0);
         }
-        
-        // If tables without metamethods, return error
         return make_error(env, "Cannot perform arithmetic on tables without __div metamethod", 0, 0);
     }
     
@@ -392,14 +395,11 @@ EvalResult modulo_values(Environment* env, const Value& left, const Value& right
         MobiusState* state = env->current_context->state;
         Value mod_method = table->getMetamethod(state->metamethods()->mod());
         
-        if (mod_method.type == VAL_FUNCTION) {
-            // TODO: Call function metamethod
-            // For now, fall through to default behavior
+        if (mod_method.type == VAL_FUNCTION || mod_method.type == VAL_NATIVE_FUNCTION) {
+            return call_metamethod(env, mod_method, left, right);
         } else if (mod_method.type != VAL_NIL) {
             return make_error(env, "__mod metamethod must be a function", 0, 0);
         }
-        
-        // If tables without metamethods, return error
         return make_error(env, "Cannot perform modulo on tables without __mod metamethod", 0, 0);
     }
     
@@ -480,20 +480,25 @@ EvalResult compare_values(Environment* env, const Value& left, const Value& righ
         
         if (metamethod_name) {
             Value compare_method = table->getMetamethod(metamethod_name);
-            
-            if (compare_method.type == VAL_FUNCTION) {
-                // TODO: Call function metamethod
-                // For now, fall through to default behavior
+
+            if (compare_method.type == VAL_FUNCTION || compare_method.type == VAL_NATIVE_FUNCTION) {
+                const Value& mm_left  = (op == TOKEN_GREATER || op == TOKEN_GREATER_EQUAL) ? right : left;
+                const Value& mm_right = (op == TOKEN_GREATER || op == TOKEN_GREATER_EQUAL) ? left  : right;
+                EvalResult r = call_metamethod(env, compare_method, mm_left, mm_right);
+                if (is_error(r)) return r;
+                Value mm_result = env->current_context->pop();
+                bool mm_bool = is_truthy(mm_result);
+                if (op == TOKEN_BANG_EQUAL) mm_bool = !mm_bool;
+                env->current_context->push(make_bool_value(mm_bool));
+                return make_success(1);
             } else if (compare_method.type != VAL_NIL) {
                 return make_error(env, "Comparison metamethod must be a function", 0, 0);
             }
         }
-        
-        // If no metamethod found and tables are involved, handle equality specially
+
         if (op == TOKEN_EQUAL_EQUAL || op == TOKEN_BANG_EQUAL) {
-            // Use default equality for tables
+            // Fall through to default equality
         } else {
-            // Other comparisons require metamethods for tables
             return make_error(env, "Cannot compare tables without appropriate metamethod", 0, 0);
         }
     }
