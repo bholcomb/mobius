@@ -607,24 +607,10 @@ void parse_NUM_annotation(Parser* parser, NumberType* type_hint, bool* is_annota
     if (parser_match(parser, TOKEN_COLON)) {
         *is_annotated = true;
         
-        if (parser_match(parser, TOKEN_TYPE_INT8)) {
-            *type_hint = NUM_INT8;
-        } else if (parser_match(parser, TOKEN_TYPE_INT16)) {
-            *type_hint = NUM_INT16;
-        } else if (parser_match(parser, TOKEN_TYPE_INT32)) {
-            *type_hint = NUM_INT32;
-        } else if (parser_match(parser, TOKEN_TYPE_INT64)) {
+        if (parser_match(parser, TOKEN_TYPE_INT64)) {
             *type_hint = NUM_INT64;
-        } else if (parser_match(parser, TOKEN_TYPE_UINT8)) {
-            *type_hint = NUM_UINT8;
-        } else if (parser_match(parser, TOKEN_TYPE_UINT16)) {
-            *type_hint = NUM_UINT16;
-        } else if (parser_match(parser, TOKEN_TYPE_UINT32)) {
-            *type_hint = NUM_UINT32;
         } else if (parser_match(parser, TOKEN_TYPE_UINT64)) {
             *type_hint = NUM_UINT64;
-        } else if (parser_match(parser, TOKEN_TYPE_FLOAT32)) {
-            *type_hint = NUM_FLOAT32;
         } else if (parser_match(parser, TOKEN_TYPE_FLOAT64)) {
             *type_hint = NUM_FLOAT64;
         } else {
@@ -1469,31 +1455,18 @@ Stmt* parse_enum_declaration(Parser* parser) {
     }
     Token name = parser_advance(parser);
     
-    // Parse optional underlying type
-    NumberType underlying_type = NUM_INT32;  // Default to int32
+    NumberType underlying_type = NUM_INT64;
     bool has_explicit_type = false;
     
     if (parser_match(parser, TOKEN_COLON)) {
         has_explicit_type = true;
         
-        if (parser_match(parser, TOKEN_TYPE_INT8)) {
-            underlying_type = NUM_INT8;
-        } else if (parser_match(parser, TOKEN_TYPE_UINT8)) {
-            underlying_type = NUM_UINT8;
-        } else if (parser_match(parser, TOKEN_TYPE_INT16)) {
-            underlying_type = NUM_INT16;
-        } else if (parser_match(parser, TOKEN_TYPE_UINT16)) {
-            underlying_type = NUM_UINT16;
-        } else if (parser_match(parser, TOKEN_TYPE_INT32)) {
-            underlying_type = NUM_INT32;
-        } else if (parser_match(parser, TOKEN_TYPE_UINT32)) {
-            underlying_type = NUM_UINT32;
-        } else if (parser_match(parser, TOKEN_TYPE_INT64)) {
+        if (parser_match(parser, TOKEN_TYPE_INT64)) {
             underlying_type = NUM_INT64;
         } else if (parser_match(parser, TOKEN_TYPE_UINT64)) {
             underlying_type = NUM_UINT64;
         } else {
-            parser_error_at_current(parser, "Expect integer type after ':'");
+            parser_error_at_current(parser, "Expect integer type (int64 or uint64) after ':'");
             return NULL;
         }
     }

@@ -13,10 +13,10 @@ This directory contains comprehensive tests for the enum functionality in Mobius
    - Tests: Color enum with RED, GREEN, BLUE
 
 2. **`test_enum_types.mob`** - Type-specific enums  
-   - Enums with explicit underlying types (uint8, int16, uint32)
+   - Enums with explicit underlying types (int64, uint64)
    - Explicit value assignment
    - Auto-increment behavior with mixed explicit values
-   - Tests: Status (uint8), Direction (int16), FileMode (uint32)
+   - Tests: Status (uint64), Direction (int64), FileMode (uint64)
 
 3. **`test_enum_expressions.mob`** - Enum value expressions
    - Enums with explicit numeric values
@@ -58,8 +58,8 @@ This directory contains comprehensive tests for the enum functionality in Mobius
 - [x] Enum comparison (`==`, `!=`)
 
 ### ✅ Type System
-- [x] Underlying type specifications (`: uint8`, `: int16`, etc.)
-- [x] Support for all integer types (int8, uint8, int16, uint16, int32, uint32, int64, uint64)
+- [x] Underlying type specifications (`: int64`, `: uint64`)
+- [x] Support for integer types (int64, uint64)
 - [x] Type safety and validation
 - [x] Value range validation for underlying types
 
@@ -123,7 +123,7 @@ var color = Color.RED;
 
 ### Typed Enum with Values
 ```mobius
-enum Status : uint8 {
+enum Status : uint64 {
     SUCCESS = 0,
     ERROR = 1,
     PENDING = 2

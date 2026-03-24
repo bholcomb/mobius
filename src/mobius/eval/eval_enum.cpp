@@ -72,20 +72,7 @@ EvalResult eval_enum_stmt(EnumStmt* stmt, Environment* env) {
                 return make_error(env, "Enum member value must be an integer", member->name.line, member->name.column);
             }
             
-            int64_t int_value = 0;
-            switch (enum_value.as.integer.num_type) {
-                case NUM_INT8:  int_value = (int64_t)enum_value.as.integer.value.i8; break;
-                case NUM_UINT8: int_value = (int64_t)enum_value.as.integer.value.u8; break;
-                case NUM_INT16: int_value = (int64_t)enum_value.as.integer.value.i16; break;
-                case NUM_UINT16: int_value = (int64_t)enum_value.as.integer.value.u16; break;
-                case NUM_INT32: int_value = (int64_t)enum_value.as.integer.value.i32; break;
-                case NUM_UINT32: int_value = (int64_t)enum_value.as.integer.value.u32; break;
-                case NUM_INT64: int_value = enum_value.as.integer.value.i64; break;
-                case NUM_UINT64: int_value = (int64_t)enum_value.as.integer.value.u64; break;
-                default: 
-                    enum_def->release();
-                    return make_error(env, "Unsupported integer type for enum", member->name.line, member->name.column);
-            }
+            int64_t int_value = enum_value.as.integer.value;
             
             enum_def->addMember(member_name, int_value);
         } else {

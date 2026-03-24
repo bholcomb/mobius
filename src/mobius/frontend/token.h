@@ -88,15 +88,8 @@ typedef enum {
     TOKEN_WHILE,            // while
 
     // Type annotation tokens
-    TOKEN_TYPE_INT8,        // int8
-    TOKEN_TYPE_INT16,       // int16
-    TOKEN_TYPE_INT32,       // int32
     TOKEN_TYPE_INT64,       // int64
-    TOKEN_TYPE_UINT8,       // uint8
-    TOKEN_TYPE_UINT16,      // uint16
-    TOKEN_TYPE_UINT32,      // uint32
     TOKEN_TYPE_UINT64,      // uint64
-    TOKEN_TYPE_FLOAT32,     // float32
     TOKEN_TYPE_FLOAT64,     // float64
 
     // Special tokens

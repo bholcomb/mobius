@@ -2,10 +2,8 @@
 # These tests are used to verify error handling works correctly
 
 tests/types/test_strict_simple.mob
-tests/types/test_type_errors.mob
 tests/types/test_strict_mode.mob
 tests/errors/test_simple_error.mob
-tests/types/test_float32_strict.mob
 
 # Individual error tests (broken out from test_errors.mob)
 tests/errors/test_undefined_variable.mob

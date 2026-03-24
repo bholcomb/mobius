@@ -1,6 +1,12 @@
-// Test type checking errors
-print("=== Type Error Tests ===");
+// Test type annotations with uint64
+print("=== Type Annotation Tests ===");
 
-// This should cause a range error - 300 is too big for uint8 (max 255)
-var overflow: uint8 = 300;
-print("This shouldn't print");
+// uint64 storing -1 is UINT64_MAX (C semantics)
+var x: uint64 = -1;
+print(x);
+
+// int64 annotation
+var y: int64 = 42;
+print(y);
+
+print("Type annotation tests passed");

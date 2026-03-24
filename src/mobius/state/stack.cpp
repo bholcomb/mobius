@@ -108,7 +108,6 @@ static MobiusValueType internal_to_public_type(ValueType t) {
         case VAL_NIL:             return MOBIUS_VAL_NIL;
         case VAL_BOOL:            return MOBIUS_VAL_BOOL;
         case VAL_INTEGER:         return MOBIUS_VAL_INT64;
-        case VAL_FLOAT32:         return MOBIUS_VAL_FLOAT32;
         case VAL_FLOAT64:         return MOBIUS_VAL_FLOAT64;
         case VAL_CHAR:            return MOBIUS_VAL_CHAR;
         case VAL_NATIVE_FUNCTION: return MOBIUS_VAL_NATIVE_FUNCTION;
@@ -130,7 +129,7 @@ MobiusValueType mobius_stack_type(MobiusState* state, int idx) {
 
 bool mobius_stack_isNumber(MobiusState* state, int idx) {
     ValueType type = stack_get_internal_type(state, idx);
-    return type == VAL_INTEGER || type == VAL_FLOAT32 || type == VAL_FLOAT64;
+    return type == VAL_INTEGER || type == VAL_FLOAT64;
 }
 
 bool mobius_stack_isInteger(MobiusState* state, int idx) {
@@ -139,7 +138,7 @@ bool mobius_stack_isInteger(MobiusState* state, int idx) {
 
 bool mobius_stack_isFloat(MobiusState* state, int idx) {
     ValueType type = stack_get_internal_type(state, idx);
-    return type == VAL_FLOAT32 || type == VAL_FLOAT64;
+    return type == VAL_FLOAT64;
 }
 
 bool mobius_stack_isString(MobiusState* state, int idx) {
@@ -174,22 +173,9 @@ bool mobius_stack_isFunction(MobiusState* state, int idx) {
 static int64_t value_to_int64(Value* val) {
     switch (val->type) {
         case VAL_INTEGER:
-            // Extract based on number type
-            switch (val->as.integer.num_type) {
-                case NUM_INT8:   return (int64_t)val->as.integer.value.i8;
-                case NUM_UINT8:  return (int64_t)val->as.integer.value.u8;
-                case NUM_INT16:  return (int64_t)val->as.integer.value.i16;
-                case NUM_UINT16: return (int64_t)val->as.integer.value.u16;
-                case NUM_INT32:  return (int64_t)val->as.integer.value.i32;
-                case NUM_UINT32: return (int64_t)val->as.integer.value.u32;
-                case NUM_INT64:  return (int64_t)val->as.integer.value.i64;
-                case NUM_UINT64: return (int64_t)val->as.integer.value.u64;
-                default: return 0;
-            }
-        case VAL_FLOAT32:
-            return (int64_t)val->as.float32_val;
+            return val->as.integer.value;
         case VAL_FLOAT64:
-            return (int64_t)val->as.float64_val;
+            return (int64_t)val->as.double_val;
         case VAL_BOOL:
             return val->as.boolean ? 1 : 0;
         case VAL_STRING:
@@ -206,22 +192,9 @@ static int64_t value_to_int64(Value* val) {
 static double value_to_double(Value* val) {
     switch (val->type) {
         case VAL_INTEGER:
-            // Extract based on number type
-            switch (val->as.integer.num_type) {
-                case NUM_INT8:   return (double)val->as.integer.value.i8;
-                case NUM_UINT8:  return (double)val->as.integer.value.u8;
-                case NUM_INT16:  return (double)val->as.integer.value.i16;
-                case NUM_UINT16: return (double)val->as.integer.value.u16;
-                case NUM_INT32:  return (double)val->as.integer.value.i32;
-                case NUM_UINT32: return (double)val->as.integer.value.u32;
-                case NUM_INT64:  return (double)val->as.integer.value.i64;
-                case NUM_UINT64: return (double)val->as.integer.value.u64;
-                default: return 0.0;
-            }
-        case VAL_FLOAT32:
-            return (double)val->as.float32_val;
+            return (double)val->as.integer.value;
         case VAL_FLOAT64:
-            return val->as.float64_val;
+            return val->as.double_val;
         case VAL_STRING:
             if (val->as.string && val->as.string->data) {
                 return strtod(val->as.string->data, NULL);
@@ -240,16 +213,14 @@ static bool value_to_bool(Value* val) {
         case VAL_BOOL:
             return val->as.boolean;
         case VAL_INTEGER:
-            return value_to_int64(val) != 0;
-        case VAL_FLOAT32:
-            return val->as.float32_val != 0.0f;
+            return val->as.integer.value != 0;
         case VAL_FLOAT64:
-            return val->as.float64_val != 0.0;
+            return val->as.double_val != 0.0;
         case VAL_STRING:
             return val->as.string && val->as.string->data && 
                    val->as.string->data[0] != '\0';
         default:
-            return true;  // All other types are truthy
+            return true;
     }
 }
 
@@ -265,11 +236,8 @@ static const char* stack_value_to_string(Value* val) {
         case VAL_INTEGER:
             snprintf(buffer, sizeof(buffer), "%" PRId64, value_to_int64(val));
             return buffer;
-        case VAL_FLOAT32:
-            snprintf(buffer, sizeof(buffer), "%g", (double)val->as.float32_val);
-            return buffer;
         case VAL_FLOAT64:
-            snprintf(buffer, sizeof(buffer), "%g", val->as.float64_val);
+            snprintf(buffer, sizeof(buffer), "%g", val->as.double_val);
             return buffer;
         case VAL_BOOL:
             return val->as.boolean ? "true" : "false";
@@ -415,15 +383,15 @@ uint64_t mobius_stack_getUInt64(MobiusState* state, int idx) {
 
 float mobius_stack_getFloat32(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
-    if (val->type != VAL_FLOAT32 && val->type != VAL_FLOAT64) {
-        check_strict_conversion(state, val->type, VAL_FLOAT32);
+    if (val->type != VAL_FLOAT64) {
+        check_strict_conversion(state, val->type, VAL_FLOAT64);
     }
     return (float)value_to_double(val);
 }
 
 double mobius_stack_getFloat64(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
-    if (val->type != VAL_FLOAT32 && val->type != VAL_FLOAT64) {
+    if (val->type != VAL_FLOAT64) {
         check_strict_conversion(state, val->type, VAL_FLOAT64);
     }
     return value_to_double(val);
@@ -450,27 +418,27 @@ const char* mobius_stack_getString(MobiusState* state, int idx) {
 // ============================================================================
 
 void mobius_stack_pushInt8(MobiusState* state, int8_t value) {
-    state->mainContext()->push(make_integer_value(NUM_INT8, value));
+    state->mainContext()->push(make_integer_value(NUM_INT64, (int64_t)value));
 }
 
 void mobius_stack_pushUInt8(MobiusState* state, uint8_t value) {
-    state->mainContext()->push(make_integer_value(NUM_UINT8, value));
+    state->mainContext()->push(make_integer_value(NUM_INT64, (int64_t)value));
 }
 
 void mobius_stack_pushInt16(MobiusState* state, int16_t value) {
-    state->mainContext()->push(make_integer_value(NUM_INT16, value));
+    state->mainContext()->push(make_integer_value(NUM_INT64, (int64_t)value));
 }
 
 void mobius_stack_pushUInt16(MobiusState* state, uint16_t value) {
-    state->mainContext()->push(make_integer_value(NUM_UINT16, value));
+    state->mainContext()->push(make_integer_value(NUM_INT64, (int64_t)value));
 }
 
 void mobius_stack_pushInt32(MobiusState* state, int32_t value) {
-    state->mainContext()->push(make_integer_value(NUM_INT32, value));
+    state->mainContext()->push(make_integer_value(NUM_INT64, (int64_t)value));
 }
 
 void mobius_stack_pushUInt32(MobiusState* state, uint32_t value) {
-    state->mainContext()->push(make_integer_value(NUM_UINT32, value));
+    state->mainContext()->push(make_integer_value(NUM_INT64, (int64_t)value));
 }
 
 void mobius_stack_pushInt64(MobiusState* state, int64_t value) {
@@ -478,11 +446,11 @@ void mobius_stack_pushInt64(MobiusState* state, int64_t value) {
 }
 
 void mobius_stack_pushUInt64(MobiusState* state, uint64_t value) {
-    state->mainContext()->push(make_integer_value(NUM_UINT64, value));
+    state->mainContext()->push(make_integer_value(NUM_UINT64, (int64_t)value));
 }
 
 void mobius_stack_pushFloat32(MobiusState* state, float value) {
-    state->mainContext()->push(make_float32_value(value));
+    state->mainContext()->push(make_float_value((double)value));
 }
 
 void mobius_stack_pushFloat64(MobiusState* state, double value) {

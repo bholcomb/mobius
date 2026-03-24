@@ -66,7 +66,7 @@ EvalResult eval_array_index_expr(ArrayIndexExpr* expr, Environment* env) {
         }
         
         // Get the index value
-        int64_t index = index_value.as.integer.value.i64;
+        int64_t index = index_value.as.integer.value;
         ArrayValue* array = target_value.as.array;
         
         // Check bounds

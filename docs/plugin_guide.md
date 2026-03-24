@@ -4,6 +4,14 @@ Plugins are shared libraries (`.so` on Linux, `.dll` on Windows) that extend
 Mobius with additional native functions. This guide walks through the plugin
 API, the structure of a plugin, and how to build and load one.
 
+The Mobius language only exposes **`int64`**, **`uint64`**, and **`float64`** as
+numeric type annotations; integers are stored as 64-bit values in the VM. The C
+stack API still includes **`pushInt8`**, **`pushInt32`**, **`asInt32`**, and
+other narrow-width helpers for backward compatibility: they widen when pushing
+and narrow when reading at the C boundary, while the runtime keeps integers as
+**`int64`**. Prefer **`mobius_stack_pushInt64`** / **`mobius_stack_pushUInt64`**
+and **`mobius_stack_asInt64`** / **`mobius_stack_asUInt64`** in new code.
+
 **Header you need:**
 
 - `<mobius/mobius_plugin.h>` — plugin structs, stack API, export macros
@@ -191,7 +199,7 @@ int log_message(MobiusState* state, int arg_count) {
 |-----------------------------------|-----------------------|
 | `mobius_stack_isNumber(state, i)`  | Any numeric type      |
 | `mobius_stack_isInteger(state, i)` | Any integer width     |
-| `mobius_stack_isFloat(state, i)`   | float32 or float64    |
+| `mobius_stack_isFloat(state, i)`   | Floating-point values |
 | `mobius_stack_isString(state, i)`  | String                |
 | `mobius_stack_isBool(state, i)`    | Boolean               |
 | `mobius_stack_isNil(state, i)`     | Nil                   |
@@ -214,12 +222,14 @@ bool        mobius_stack_asBool(state, idx);
 **Strict** (`get` prefix) — respect strict_types pragma:
 
 ```c
-int32_t     mobius_stack_getInt32(state, idx);
+int64_t     mobius_stack_getInt64(state, idx);
 const char* mobius_stack_getString(state, idx);
 ```
 
-Full set of widths available: `Int8`, `UInt8`, `Int16`, `UInt16`, `Int32`,
-`UInt32`, `Int64`, `UInt64`, `Float32`, `Float64`.
+Primary numeric getters/setters: **`Int64`**, **`UInt64`**, **`Float64`**. The
+same headers also declare **`Int8`** … **`Int32`**, **`UInt8`** … **`UInt32`**,
+and **`Float32`** for compatibility; those convert at the boundary while
+integer values remain **`int64`** in the interpreter.
 
 ---
 
@@ -408,7 +418,7 @@ int text_word_count(MobiusState* state, int arg_count) {
     }
 
     mobius_stack_pop(state, 1);
-    mobius_stack_pushInt32(state, words);
+    mobius_stack_pushInt64(state, words);
     return 1;
 }
 
@@ -524,8 +534,9 @@ int mobius_error(MobiusState* state, const char* message);
 ```c
 void mobius_stack_pushNil(state);
 void mobius_stack_pushBool(state, value);
-void mobius_stack_pushInt32(state, value);     // + all width variants
-void mobius_stack_pushFloat64(state, value);   // + Float32
+void mobius_stack_pushInt64(state, value);    // primary; Int8…Int32, UInt* also exist
+void mobius_stack_pushUInt64(state, value);
+void mobius_stack_pushFloat64(state, value);  // Float32 also exists
 void mobius_stack_pushString(state, str);
 void mobius_stack_pushNewTable(state, capacity);
 void mobius_stack_pushNewArray(state, capacity);
@@ -540,7 +551,7 @@ int64_t     mobius_stack_asInt64(state, idx);      // permissive
 const char* mobius_stack_asString(state, idx);     // permissive
 bool        mobius_stack_asBool(state, idx);       // permissive
 
-int32_t     mobius_stack_getInt32(state, idx);     // strict
+int64_t     mobius_stack_getInt64(state, idx);     // strict (narrow get* still declared)
 const char* mobius_stack_getString(state, idx);    // strict
 ```
 
@@ -569,6 +580,10 @@ bool mobius_stack_isUserdata(state, idx);
 ```
 
 ### Value Types Enum
+
+The `MobiusValueType` enum includes tags for multiple numeric widths so the C
+API can distinguish how a value was pushed; integer **payloads** in the VM are
+still wide **`int64`** storage.
 
 ```c
 typedef enum {

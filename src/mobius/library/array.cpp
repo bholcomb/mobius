@@ -24,7 +24,7 @@ int lib_array_create(MobiusState* state, int arg_count) {
         if (arg.type != VAL_INTEGER) {
             return state->error("array_create capacity must be an integer");
         }
-        capacity = (size_t)arg.as.integer.value.i64;
+        capacity = (size_t)arg.as.integer.value;
         if (capacity == 0) capacity = 8; // Minimum capacity
     }
 
@@ -104,7 +104,7 @@ int lib_array_get(MobiusState* state, int arg_count) {
     }
 
     ArrayValue* array = array_val.as.array;
-    int64_t index = index_val.as.integer.value.i64;
+    int64_t index = index_val.as.integer.value;
 
     if (index < 0 || index >= (int64_t)array->length()) {
         state->mainContext()->push( make_nil_value());
@@ -138,7 +138,7 @@ int lib_array_set(MobiusState* state, int arg_count) {
     }
 
     ArrayValue* array = array_val.as.array;
-    int64_t index = index_val.as.integer.value.i64;
+    int64_t index = index_val.as.integer.value;
 
     if (index < 0 || index >= (int64_t)array->length()) {
         return state->error("array_set index out of bounds");
@@ -189,8 +189,8 @@ int lib_array_slice(MobiusState* state, int arg_count) {
     }
 
     ArrayValue* array = array_val.as.array;
-    int64_t start = start_val.as.integer.value.i64;
-    int64_t end = end_val.as.integer.value.i64;
+    int64_t start = start_val.as.integer.value;
+    int64_t end = end_val.as.integer.value;
 
     // Handle negative indices
     if (start < 0) start = 0;

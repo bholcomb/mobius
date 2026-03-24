@@ -56,9 +56,8 @@ size_t hash_value(const Value& value, size_t capacity) {
     switch (value.type) {
         case VAL_NIL:    hash = 0; break;
         case VAL_BOOL:   hash = value.as.boolean ? 1 : 0; break;
-        case VAL_INTEGER: hash = hash_integer(value.as.integer.value.i64); break;
-        case VAL_FLOAT32: hash = hash_float((double)value.as.float32_val); break;
-        case VAL_FLOAT64: hash = hash_float(value.as.float64_val); break;
+        case VAL_INTEGER: hash = hash_integer(value.as.integer.value); break;
+        case VAL_FLOAT64: hash = hash_float(value.as.double_val); break;
         case VAL_STRING:
             hash = value.as.string ? value.as.string->hash : 0;
             break;

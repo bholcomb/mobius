@@ -52,8 +52,8 @@ int custom_add(MobiusState* state, int arg_count) {
     }
     
     // Convert to double for calculation
-    double num_a = (a.type == VAL_FLOAT64) ? a.as.float64_val : (double)a.as.integer.value.i64;
-    double num_b = (b.type == VAL_FLOAT64) ? b.as.float64_val : (double)b.as.integer.value.i64;
+    double num_a = (a.type == VAL_FLOAT64) ? a.as.double_val : (double)a.as.integer.value;
+    double num_b = (b.type == VAL_FLOAT64) ? b.as.double_val : (double)b.as.integer.value;
     
     // Push result
     ctx->push(make_float_value(num_a + num_b));
@@ -93,7 +93,7 @@ int custom_double(MobiusState* state, int arg_count) {
         return mobius_error(state, "Argument must be a number");
     }
     
-    double num = (val.type == VAL_FLOAT64) ? val.as.float64_val : (double)val.as.integer.value.i64;
+    double num = (val.type == VAL_FLOAT64) ? val.as.double_val : (double)val.as.integer.value;
     
     ctx->push(make_float_value(num * 2.0));
     return 1;

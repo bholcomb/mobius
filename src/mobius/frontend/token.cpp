@@ -11,7 +11,7 @@ static const char* token_names[] = {
     "LEFT_PAREN", "RIGHT_PAREN", "LEFT_BRACKET", "RIGHT_BRACKET",
     "LEFT_BRACE", "RIGHT_BRACE", "COMMA", "DOT", "MINUS", "PLUS",
     "SEMICOLON", "COLON", "SLASH", "STAR", "PERCENT", "QUESTION",
-    "AMPERSAND", "PIPE", "CARET", "TILDE",
+    "AMPERSAND", "PIPE", "CARET", "TILDE", "HASH",
     
     // One or two character tokens
     "BANG", "BANG_EQUAL", "EQUAL", "EQUAL_EQUAL", "GREATER", "GREATER_EQUAL",
@@ -28,9 +28,7 @@ static const char* token_names[] = {
     "NOT", "OR", "RETURN", "SWITCH", "TRUE", "VAR", "WHILE",
     
     // Type annotation tokens
-    "TYPE_INT8", "TYPE_INT16", "TYPE_INT32", "TYPE_INT64",
-    "TYPE_UINT8", "TYPE_UINT16", "TYPE_UINT32", "TYPE_UINT64",
-    "TYPE_FLOAT32", "TYPE_FLOAT64",
+    "TYPE_INT64", "TYPE_UINT64", "TYPE_FLOAT64",
     
     // Special tokens
     "NEWLINE", "EOF", "ERROR"
@@ -44,15 +42,7 @@ const char* token_type_name(TokenType type) {
 }
 
 const char* numeric_type_name(NumberType type) {
-    static const char* numeric_names[] = {
-        "int8", "uint8", "int16", "uint16", 
-        "int32", "uint32", "int64", "uint64", "float64"
-    };
-    
-    if (type >= 0 && type < sizeof(numeric_names) / sizeof(numeric_names[0])) {
-        return numeric_names[type];
-    }
-    return "UNKNOWN_NUMERIC";
+    return number_type_name(type);
 }
 
 void print_token(const Token* token) {
@@ -65,19 +55,10 @@ void print_token(const Token* token) {
     // Print literal value if applicable
     if (token->type == TOKEN_INTEGER) {
         printf(" (%s: ", numeric_type_name(token->literal.integer.num_type));
-        // Print the value with appropriate format based on type
-        int64_t value = token->literal.integer.value;
-        switch (token->literal.integer.num_type) {
-            case NUM_INT8:   printf("%d", (int8_t)value); break;
-            case NUM_UINT8:  printf("%u", (uint8_t)value); break;
-            case NUM_INT16:  printf("%d", (int16_t)value); break;
-            case NUM_UINT16: printf("%u", (uint16_t)value); break;
-            case NUM_INT32:  printf("%d", (int32_t)value); break;
-            case NUM_UINT32: printf("%u", (uint32_t)value); break;
-            case NUM_INT64:  printf("%ld", value); break;
-            case NUM_UINT64: printf("%lu", (uint64_t)value); break;
-            default: printf("unknown"); break;
-        }
+        if (token->literal.integer.num_type == NUM_UINT64)
+            printf("%lu", (uint64_t)token->literal.integer.value);
+        else
+            printf("%ld", token->literal.integer.value);
         printf(")");
     } else if (token->type == TOKEN_FLOAT) {
         printf(" (float64: %g)", token->literal.float_val);

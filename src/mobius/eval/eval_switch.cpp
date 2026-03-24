@@ -22,23 +22,15 @@ static const int COMPARE_INCOMPATIBLE = INT_MIN;
 // Returns -1 / 0 / +1 for numeric and string operands of the same family,
 // or COMPARE_INCOMPATIBLE when the types cannot be ordered.
 static int simple_compare_values(Value left, Value right) {
-    bool l_num = (left.type == VAL_INTEGER || left.type == VAL_FLOAT32 || left.type == VAL_FLOAT64);
-    bool r_num = (right.type == VAL_INTEGER || right.type == VAL_FLOAT32 || right.type == VAL_FLOAT64);
+    bool l_num = (left.type == VAL_INTEGER || left.type == VAL_FLOAT64);
+    bool r_num = (right.type == VAL_INTEGER || right.type == VAL_FLOAT64);
 
     if (l_num && r_num) {
         double lv = 0.0, rv = 0.0;
-        switch (left.type) {
-            case VAL_INTEGER:  lv = (double)left.as.integer.value.i64;  break;
-            case VAL_FLOAT32:  lv = (double)left.as.float32_val;        break;
-            case VAL_FLOAT64:  lv = left.as.float64_val;                break;
-            default: break;
-        }
-        switch (right.type) {
-            case VAL_INTEGER:  rv = (double)right.as.integer.value.i64; break;
-            case VAL_FLOAT32:  rv = (double)right.as.float32_val;       break;
-            case VAL_FLOAT64:  rv = right.as.float64_val;               break;
-            default: break;
-        }
+        if (left.type == VAL_FLOAT64)  lv = left.as.double_val;
+        else                           lv = (double)left.as.integer.value;
+        if (right.type == VAL_FLOAT64) rv = right.as.double_val;
+        else                           rv = (double)right.as.integer.value;
         if (lv < rv) return -1;
         if (lv > rv) return  1;
         return 0;

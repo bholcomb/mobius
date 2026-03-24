@@ -127,8 +127,8 @@ int lib_substr(MobiusState* state, int arg_count) {
     
     const char* input = string_val.as.string->data;
     size_t input_len = string_val.as.string->length;
-    int64_t start = start_val.as.integer.value.i64;
-    int64_t length = length_val.as.integer.value.i64;
+    int64_t start = start_val.as.integer.value;
+    int64_t length = length_val.as.integer.value;
     
     // Handle negative start (from end)
     if (start < 0) {

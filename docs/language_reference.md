@@ -121,24 +121,26 @@ var uninitialized       // nil
 
 ### Optional Type Annotations
 
-You can annotate a variable with a type. When `#pragma strict_types` is
-enabled, the interpreter enforces these at runtime.
+You can annotate a variable with **`int64`**, **`uint64`**, or **`float64`**.
+When `#pragma strict_types` is enabled, the interpreter enforces these at
+runtime.
 
 ```mobius
-var age: int32 = 25
+var age: int64 = 25
+var count: uint64 = 0
 var pi: float64 = 3.14159
-var label: string = "hello"
-var flag: bool = true
 ```
 
 ### Available Types
 
-| Category  | Types                                                        |
-|-----------|--------------------------------------------------------------|
-| Integers  | `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64` |
-| Floats    | `float32`, `float64`                                         |
-| Other     | `string`, `bool`, `char`, `nil`                              |
-| Compound  | `array`, `table`, `function`                                 |
+Optional `: type` annotations on variables accept only **`int64`**, **`uint64`**, and **`float64`**. Integer literals and values are stored as 64-bit integers internally.
+
+| Category  | In annotations (`var x: …`) | Runtime values (`typeof`, etc.) |
+|-----------|-----------------------------|----------------------------------|
+| Integers  | `int64`, `uint64`           | Reported as `int64` (and similar) for whole numbers |
+| Floats    | `float64`                   | Floating-point values            |
+| Other     | —                           | `string`, `bool`, `char`, `nil`  |
+| Compound  | —                           | `array`, `table`, `function`     |
 
 ### Type Conversions
 
@@ -462,9 +464,10 @@ switch (value) {
 }
 ```
 
-Supported type names: `nil`, `bool`, `int`, `float`, `int8`, `int16`, `int32`,
-`int64`, `uint8`, `uint16`, `uint32`, `uint64`, `float32`, `float64`,
-`string`, `char`, `array`, `table`, `function`, `enum`.
+Supported names after `is`: `nil`, `bool` or `boolean`, `int` or `integer` (any
+integer value), `float` (any floating-point value), `string`, `array`, `table`,
+`function`. These describe runtime categories, not the narrow numeric annotation
+keywords (`int64`, `uint64`, `float64` are not used here).
 
 #### Enum Patterns
 
@@ -856,7 +859,7 @@ enum HttpStatus {
 Values after an explicit value auto-increment from that value:
 
 ```mobius
-enum Direction : int16 {
+enum Direction : int64 {
     NORTH = -100,
     EAST,           // -99
     SOUTH = 50,
@@ -866,10 +869,10 @@ enum Direction : int16 {
 
 ### Typed Enums
 
-Specify the underlying integer type after a colon:
+Specify the underlying integer type after a colon (`int64` or `uint64`):
 
 ```mobius
-enum Flags : uint8 {
+enum Flags : uint64 {
     NONE = 0,
     READ = 1,
     WRITE = 2,
@@ -883,8 +886,7 @@ enum BigId : uint64 {
 }
 ```
 
-Allowed underlying types: `int8`, `int16`, `int32`, `int64`, `uint8`,
-`uint16`, `uint32`, `uint64`.
+Allowed underlying types: **`int64`** and **`uint64`** only.
 
 ### Enums in Switch
 
@@ -971,8 +973,8 @@ match the declared type:
 ```mobius
 #pragma strict_types true
 
-var x: int32 = 42       // ok
-var y: int32 = "hello"  // runtime error: type mismatch
+var x: int64 = 42       // ok
+var y: int64 = "hello"  // runtime error: type mismatch
 ```
 
 ### override_behavior

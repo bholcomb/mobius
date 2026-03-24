@@ -396,17 +396,7 @@ EvalResult eval_grouping_expr(GroupingExpr* expr, Environment* env) {
 }
 
 static inline int64_t integer_extract(const Value& v) {
-    switch (v.as.integer.num_type) {
-        case NUM_INT8:   return v.as.integer.value.i8;
-        case NUM_UINT8:  return v.as.integer.value.u8;
-        case NUM_INT16:  return v.as.integer.value.i16;
-        case NUM_UINT16: return v.as.integer.value.u16;
-        case NUM_INT32:  return v.as.integer.value.i32;
-        case NUM_UINT32: return v.as.integer.value.u32;
-        case NUM_INT64:  return v.as.integer.value.i64;
-        case NUM_UINT64: return (int64_t)v.as.integer.value.u64;
-        default:         return 0;
-    }
+    return v.as.integer.value;
 }
 
 EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
@@ -435,17 +425,17 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
         switch (op) {
             case TOKEN_PLUS:
                 left.as.integer.num_type = NUM_INT64;
-                left.as.integer.value.i64 = lv + rv;
+                left.as.integer.value = lv + rv;
                 stk.pop_back();
                 return make_success(1);
             case TOKEN_MINUS:
                 left.as.integer.num_type = NUM_INT64;
-                left.as.integer.value.i64 = lv - rv;
+                left.as.integer.value = lv - rv;
                 stk.pop_back();
                 return make_success(1);
             case TOKEN_STAR:
                 left.as.integer.num_type = NUM_INT64;
-                left.as.integer.value.i64 = lv * rv;
+                left.as.integer.value = lv * rv;
                 stk.pop_back();
                 return make_success(1);
             case TOKEN_PERCENT:
@@ -457,7 +447,7 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
                         ERROR_DIVISION, expr->op.line, expr->op.column, NULL, NULL);
                 }
                 left.as.integer.num_type = NUM_INT64;
-                left.as.integer.value.i64 = lv % rv;
+                left.as.integer.value = lv % rv;
                 stk.pop_back();
                 return make_success(1);
             case TOKEN_SLASH: {
@@ -469,7 +459,7 @@ EvalResult eval_binary_expr(BinaryExpr* expr, Environment* env) {
                         ERROR_DIVISION, expr->op.line, expr->op.column, NULL, NULL);
                 }
                 left.type = VAL_FLOAT64;
-                left.as.float64_val = (double)lv / (double)rv;
+                left.as.double_val = (double)lv / (double)rv;
                 stk.pop_back();
                 return make_success(1);
             }
@@ -563,23 +553,10 @@ EvalResult eval_unary_expr(UnaryExpr* expr, Environment* env) {
     switch (expr->op.type) {
         case TOKEN_MINUS:
             if (operand.type == VAL_FLOAT64) {
-                env->current_context->push( make_float_value(-operand.as.float64_val));
+                env->current_context->push(make_float_value(-operand.as.double_val));
                 return make_success(1);
             } else if (operand.type == VAL_INTEGER) {
-                // Extract value properly based on the actual type, but result should be int64_t
-                int64_t value = 0;
-                switch (operand.as.integer.num_type) {
-                    case NUM_INT8:   value = operand.as.integer.value.i8; break;
-                    case NUM_UINT8:  value = operand.as.integer.value.u8; break;
-                    case NUM_INT16:  value = operand.as.integer.value.i16; break;
-                    case NUM_UINT16: value = operand.as.integer.value.u16; break;
-                    case NUM_INT32:  value = operand.as.integer.value.i32; break;
-                    case NUM_UINT32: value = operand.as.integer.value.u32; break;
-                    case NUM_INT64:  value = operand.as.integer.value.i64; break;
-                    case NUM_UINT64: value = operand.as.integer.value.u64; break;
-                    default: value = operand.as.integer.value.i32; break;
-                }
-                env->current_context->push( make_integer_value(NUM_INT64, -value));
+                env->current_context->push(make_integer_value(NUM_INT64, -operand.as.integer.value));
                 return make_success(1);
             } else {
                 return make_error(env, "Cannot negate non-numeric value", expr->op.line, expr->op.column);

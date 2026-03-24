@@ -61,7 +61,6 @@ make test-legacy                    # Run old single-file test
 - **test_type_annotations.mob**: Type annotation syntax
 - **test_type_checking.mob**: Type validation and conversion
 - **test_simplified_integers.mob**: Integer parsing with simplified token structure
-- **test_float32*.mob**: Single precision float support
 - **test_float64_keyword.mob**: Double precision float keyword
 - **test_strict_*.mob**: Strict type checking modes
 
