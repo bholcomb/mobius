@@ -16,9 +16,11 @@ environment:
     release:
       optimization: speed
       defines: ["NDEBUG"]
-      remove_flags: ["-O2"]
-      flags: ["-O3", "-march=native", "-funroll-loops", "-flto"]
-      link_flags: ["-flto", "-Wl,-O1"]
+      compile:
+        remove_flags: ["-O2"]
+        flags: ["-O3", "-march=native", "-funroll-loops", "-flto"]
+      link:
+        flags: ["-flto", "-Wl,-O1"]
 
 workspace:
   modules:
