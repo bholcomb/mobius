@@ -202,10 +202,13 @@ bool Table::set(const Value& key, const Value& value) {
                 return newindex_method.as.table->set(key, value);
             }
         }
+
+        entries_[index].key = key;
+        entries_[index].is_occupied = true;
         size_++;
     }
 
-    insertEntry(key, value);
+    entries_[index].value = value;
     return true;
 }
 

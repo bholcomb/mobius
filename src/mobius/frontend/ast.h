@@ -68,7 +68,7 @@ typedef struct {
 } VariableExpr;
 
 typedef struct {
-    Token name;
+    Expr* target;
     Expr* value;
 } AssignmentExpr;
 
@@ -354,7 +354,7 @@ Expr* make_binary_expr(Expr* left, Token op, Expr* right);
 Expr* make_unary_expr(Token op, Expr* right);
 Expr* make_literal_expr(Value value);
 Expr* make_variable_expr(Token name);
-Expr* make_assignment_expr(Token name, Expr* value);
+Expr* make_assignment_expr(Expr* target, Expr* value);
 Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_count);
 Expr* make_grouping_expr(Expr* expression);
 Expr* make_array_literal_expr(Expr** elements, size_t element_count);

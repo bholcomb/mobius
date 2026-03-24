@@ -36,7 +36,7 @@ print("Bob age:", bob.age);            // From bob directly
 print("\n2. Shared Default Values");
 
 // Add a default property to the Person "class"
-table_insert(Person, "species", "Human");
+Person.species = "Human";
 
 print("Alice species:", alice.species); // Should get "Human" from Person via __index
 print("Bob species:", bob.species);     // Should get "Human" from Person via __index
@@ -55,10 +55,10 @@ print("Counter value:", counter.value);
 print("Counter step:", counter.step);
 
 // Simulate method calls by manually updating the object
-table_insert(counter, "value", counter.value + counter.step);
+counter.value = counter.value + counter.step;
 print("After increment:", counter);
 
-table_insert(counter, "value", counter.value + counter.step);
+counter.value = counter.value + counter.step;
 print("After another increment:", counter);
 
 // Example 4: Multiple inheritance simulation

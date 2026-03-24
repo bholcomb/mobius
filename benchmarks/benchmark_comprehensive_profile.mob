@@ -1,16 +1,15 @@
-// Comprehensive Mobius Performance Benchmark
-// Arrays benchmark dense numeric storage.
-// Tables benchmark hash-map usage with string keys.
+// Profiling-oriented Mobius benchmark.
+// Mirrors tests/benchmark_comprehensive.mob, but loops inside the script so
+// perf samples execution rather than process startup, parsing, and compilation.
 
-print("=== Mobius Comprehensive Performance Benchmark ===\n");
-print("Benchmark model: arrays = dense integer storage, tables = string-key hash maps\n");
+print("=== Mobius Comprehensive Profiling Benchmark ===\n");
+
+var PROFILE_ITERATIONS = 100;
 
 // ============================================================================
 // 1. Arithmetic Operations
 // ============================================================================
 func benchmark_arithmetic() {
-    print("1. Arithmetic Operations...");
-    var start = clock();
     var result = 0;
     var i = 0;
     while (i < 1000000) {
@@ -19,9 +18,6 @@ func benchmark_arithmetic() {
         result = result % 1000;
         i = i + 1;
     }
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Ops/sec: ", int(1000000 / duration));
     return result;
 }
 
@@ -36,17 +32,12 @@ func fibonacci(n) {
 }
 
 func benchmark_function_calls() {
-    print("\n2. Function Calls (Fibonacci)...");
-    var start = clock();
     var result = 0;
     var i = 0;
     while (i < 10) {
         result = fibonacci(20);
         i = i + 1;
     }
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Result: ", result);
     return result;
 }
 
@@ -54,28 +45,20 @@ func benchmark_function_calls() {
 // 3. Array Operations (dense numeric storage)
 // ============================================================================
 func benchmark_arrays() {
-    print("\n3. Array Operations (Dense Numeric Storage)...");
-    var start = clock();
-    
-    // Create and populate array
     var arr = array_create(10000);
     var i = 0;
     while (i < 10000) {
         array_push(arr, i * 2);
         i = i + 1;
     }
-    
-    // Read and sum
+
     var sum = 0;
     i = 0;
     while (i < 10000) {
         sum = sum + array_get(arr, i);
         i = i + 1;
     }
-    
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Sum: ", sum);
+
     return sum;
 }
 
@@ -93,10 +76,7 @@ func build_table_keys(count) {
 }
 
 func benchmark_tables() {
-    print("\n4. Table Operations (String-Key Hash Map)...");
     var keys = build_table_keys(5000);
-    var start = clock();
-
     var tbl = {};
     var i = 0;
     while (i < 5000) {
@@ -113,9 +93,6 @@ func benchmark_tables() {
         i = i + 1;
     }
 
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Sum: ", sum);
     return sum;
 }
 
@@ -123,9 +100,6 @@ func benchmark_tables() {
 // 5. String Operations
 // ============================================================================
 func benchmark_strings() {
-    print("\n5. String Operations...");
-    var start = clock();
-    
     var base = "Hello";
     var result = "";
     var i = 0;
@@ -135,20 +109,13 @@ func benchmark_strings() {
         var upper_result = upper(result);
         i = i + 1;
     }
-    
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Final length: ", len(result));
-    return result;
+    return len(result);
 }
 
 // ============================================================================
 // 6. Nested Loops
 // ============================================================================
 func benchmark_nested_loops() {
-    print("\n6. Nested Loops...");
-    var start = clock();
-    
     var sum = 0;
     var i = 0;
     while (i < 500) {
@@ -159,10 +126,6 @@ func benchmark_nested_loops() {
         }
         i = i + 1;
     }
-    
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Sum: ", sum);
     return sum;
 }
 
@@ -170,9 +133,6 @@ func benchmark_nested_loops() {
 // 7. Object Creation/Destruction
 // ============================================================================
 func benchmark_object_lifecycle() {
-    print("\n7. Object Creation/Destruction...");
-    var start = clock();
-    
     var i = 0;
     while (i < 10000) {
         var temp_array = [1, 2, 3, 4, 5];
@@ -180,10 +140,6 @@ func benchmark_object_lifecycle() {
         var temp_str = concat("temp", str(i));
         i = i + 1;
     }
-    
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Objects created: 30000");
     return i;
 }
 
@@ -191,9 +147,6 @@ func benchmark_object_lifecycle() {
 // 8. Mixed Workload
 // ============================================================================
 func benchmark_mixed() {
-    print("\n8. Mixed Workload...");
-    var start = clock();
-    
     var data = array_create(1000);
     var i = 0;
     while (i < 1000) {
@@ -205,8 +158,7 @@ func benchmark_mixed() {
         array_push(data, record);
         i = i + 1;
     }
-    
-    // Process the data
+
     var total = 0;
     i = 0;
     while (i < 1000) {
@@ -214,30 +166,39 @@ func benchmark_mixed() {
         total = total + record.value;
         i = i + 1;
     }
-    
-    var duration = clock() - start;
-    print("   Time: ", duration, "s");
-    print("   Total: ", total);
+
     return total;
 }
 
-// ============================================================================
-// Run All Benchmarks
-// ============================================================================
-print("Starting benchmarks...\n");
-var overall_start = clock();
+func run_suite() {
+    var checksum = 0;
+    checksum = checksum + benchmark_arithmetic();
+    checksum = checksum + benchmark_function_calls();
+    checksum = checksum + benchmark_arrays();
+    checksum = checksum + benchmark_tables();
+    checksum = checksum + benchmark_strings();
+    checksum = checksum + benchmark_nested_loops();
+    checksum = checksum + benchmark_object_lifecycle();
+    checksum = checksum + benchmark_mixed();
+    return checksum;
+}
 
-benchmark_arithmetic();
-benchmark_function_calls();
-benchmark_arrays();
-benchmark_tables();
-benchmark_strings();
-benchmark_nested_loops();
-benchmark_object_lifecycle();
-benchmark_mixed();
+print("Iterations: ", PROFILE_ITERATIONS);
+print("Starting profiling workload...\n");
+
+var overall_start = clock();
+var iteration = 0;
+var checksum = 0;
+
+while (iteration < PROFILE_ITERATIONS) {
+    checksum = checksum + run_suite();
+    iteration = iteration + 1;
+}
 
 var overall_duration = clock() - overall_start;
 
-print("\n=== Overall Results ===");
+print("=== Profiling Results ===");
 print("Total time: ", overall_duration, "s");
-print("Benchmark complete!");
+print("Average iteration time: ", overall_duration / PROFILE_ITERATIONS, "s");
+print("Iterations per second: ", int(PROFILE_ITERATIONS / overall_duration));
+print("Checksum: ", checksum);

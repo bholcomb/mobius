@@ -635,34 +635,115 @@ int Compiler::compileUnary(UnaryExpr* expr, int dest) {
 
 // --- Assignment ---
 
+static int assignment_target_line(Expr* target) {
+    if (!target) return 0;
+
+    switch (target->type) {
+        case EXPR_VARIABLE:
+            return target->as.variable.name.line;
+        case EXPR_TABLE_DOT:
+            return target->as.table_dot.key.line;
+        case EXPR_ARRAY_INDEX:
+            return assignment_target_line(target->as.array_index.array);
+        case EXPR_TABLE_INDEX:
+            return assignment_target_line(target->as.table_index.table);
+        default:
+            return 0;
+    }
+}
+
 int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
-    currentLine_ = expr->name.line;
-    const char* name = expr->name.identifier;
+    currentLine_ = assignment_target_line(expr->target);
 
-    int local = resolveLocal(name);
-    if (local >= 0) {
-        compileExpr(expr->value, local);
-        if (dest >= 0 && dest != local) {
-            emitABC(OP_MOVE, (uint8_t)dest, (uint8_t)local, 0);
-            return dest;
+    auto finish_assignment = [&](int save_reg, int value_reg) -> int {
+        setFreeReg(save_reg);
+
+        int result_reg;
+        if (dest >= 0) {
+            if (dest != value_reg) {
+                emitABC(OP_MOVE, (uint8_t)dest, (uint8_t)value_reg, 0);
+            }
+            result_reg = dest;
+        } else {
+            result_reg = allocReg();
+            if (result_reg != value_reg) {
+                emitABC(OP_MOVE, (uint8_t)result_reg, (uint8_t)value_reg, 0);
+            }
         }
-        return local;
-    }
 
-    int upvalue = resolveUpvalue(current_, name);
-    if (upvalue >= 0) {
-        int reg = (dest >= 0) ? dest : allocReg();
-        compileExpr(expr->value, reg);
-        emitABC(OP_SETUPVAL, (uint8_t)reg, (uint8_t)upvalue, 0);
-        return reg;
-    }
+        return result_reg;
+    };
 
-    // Global assignment
-    int reg = (dest >= 0) ? dest : allocReg();
-    compileExpr(expr->value, reg);
-    int ki = stringConstant(name);
-    emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
-    return reg;
+    auto compile_index_assignment = [&](Expr* container_expr, Expr* index_expr) -> int {
+        int save_reg = current_->free_reg;
+        int container_reg = compileExpr(container_expr);
+
+        uint8_t rk_key;
+        if (index_expr->type == EXPR_LITERAL) {
+            int ki = current_->proto->addConstant(index_expr->as.literal.value);
+            rk_key = makeRK(ki);
+        } else {
+            int key_reg = compileExpr(index_expr);
+            rk_key = (uint8_t)key_reg;
+        }
+
+        int value_reg = compileExpr(expr->value);
+        emitABC(OP_SETTABLE, (uint8_t)container_reg, rk_key, (uint8_t)value_reg);
+
+        return finish_assignment(save_reg, value_reg);
+    };
+
+    switch (expr->target->type) {
+        case EXPR_VARIABLE: {
+            const char* name = expr->target->as.variable.name.identifier;
+
+            int local = resolveLocal(name);
+            if (local >= 0) {
+                compileExpr(expr->value, local);
+                if (dest >= 0 && dest != local) {
+                    emitABC(OP_MOVE, (uint8_t)dest, (uint8_t)local, 0);
+                    return dest;
+                }
+                return local;
+            }
+
+            int upvalue = resolveUpvalue(current_, name);
+            if (upvalue >= 0) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                compileExpr(expr->value, reg);
+                emitABC(OP_SETUPVAL, (uint8_t)reg, (uint8_t)upvalue, 0);
+                return reg;
+            }
+
+            int reg = (dest >= 0) ? dest : allocReg();
+            compileExpr(expr->value, reg);
+            int ki = stringConstant(name);
+            emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+            return reg;
+        }
+
+        case EXPR_ARRAY_INDEX:
+            return compile_index_assignment(expr->target->as.array_index.array,
+                                            expr->target->as.array_index.index);
+
+        case EXPR_TABLE_INDEX:
+            return compile_index_assignment(expr->target->as.table_index.table,
+                                            expr->target->as.table_index.index);
+
+        case EXPR_TABLE_DOT: {
+            int save_reg = current_->free_reg;
+            int table_reg = compileExpr(expr->target->as.table_dot.table);
+            int ki = stringConstant(expr->target->as.table_dot.key.identifier);
+            uint8_t rk_key = makeRK(ki);
+            int value_reg = compileExpr(expr->value);
+            emitABC(OP_SETTABLE, (uint8_t)table_reg, rk_key, (uint8_t)value_reg);
+            return finish_assignment(save_reg, value_reg);
+        }
+
+        default:
+            fprintf(stderr, "Compiler: invalid assignment target %d\n", expr->target->type);
+            return -1;
+    }
 }
 
 // --- Call ---

@@ -5,9 +5,9 @@ print("=== Testing Table Built-in Functions ===");
 var data = {name: "Alice", age: 30};
 print("Initial table:", data);
 
-// Test table_insert
-table_insert(data, "city", "New York");
-print("After table_insert:", data);
+// Test direct assignment
+data["city"] = "New York";
+print("After assignment:", data);
 
 // Test table_has_key
 print("Has 'name':", table_has_key(data, "name"));

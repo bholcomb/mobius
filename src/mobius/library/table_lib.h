@@ -8,7 +8,6 @@
 // =============================================================================
 
 // Table functions using unified library interface
-int lib_table_insert(MobiusState* state, int arg_count);
 int lib_table_remove(MobiusState* state, int arg_count);
 int lib_table_has_key(MobiusState* state, int arg_count);
 int lib_table_size(MobiusState* state, int arg_count);

@@ -572,13 +572,15 @@ Expr* parse_assignment(Parser* parser) {
         Token equals = parser_previous(parser);
         Expr* value = parse_assignment(parser);
         
-        if (expr->type == EXPR_VARIABLE) {
-            Token name = expr->as.variable.name;
-            free_expr(expr);  // Free the variable expression
-            return make_assignment_expr(name, value);
+        if (expr->type == EXPR_VARIABLE ||
+            expr->type == EXPR_ARRAY_INDEX ||
+            expr->type == EXPR_TABLE_INDEX ||
+            expr->type == EXPR_TABLE_DOT) {
+            return make_assignment_expr(expr, value);
         }
         
         parser_error(parser, equals, "Invalid assignment target.");
+        free_expr(value);
     }
     
     return expr;
