@@ -17,10 +17,6 @@
  * Usage: Load this plugin in Mobius with load_plugin("text_processing.so")
  */
 
-#include "../src/mobius/plugin/plugin.h"
-#include "../src/mobius/frontend/ast.h"
-#include "../src/mobius/eval/evaluator.h"
-#include "../src/mobius/state/mobius_state.h"
 #include <mobius/mobius_plugin.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,11 +76,11 @@ static void reverse_string(char* str) {
  */
 int text_word_count(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("word_count() expects exactly 1 argument");
+        return mobius_error(state, "word_count() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isString(state, -1)) {
-        return state->error("word_count() expects a string argument");
+        return mobius_error(state, "word_count() expects a string argument");
     }
     
     const char* text = mobius_stack_asString(state, -1);
@@ -112,11 +108,11 @@ int text_word_count(MobiusState* state, int arg_count) {
  */
 int text_line_count(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("line_count() expects exactly 1 argument");
+        return mobius_error(state, "line_count() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isString(state, -1)) {
-        return state->error("line_count() expects a string argument");
+        return mobius_error(state, "line_count() expects a string argument");
     }
     
     const char* text = mobius_stack_asString(state, -1);
@@ -144,18 +140,18 @@ int text_line_count(MobiusState* state, int arg_count) {
  */
 int text_char_count(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return state->error("char_count() expects exactly 2 arguments");
+        return mobius_error(state, "char_count() expects exactly 2 arguments");
     }
     
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2)) {
-        return state->error("char_count() expects string arguments");
+        return mobius_error(state, "char_count() expects string arguments");
     }
     
     const char* char_str = mobius_stack_asString(state, -1);
     const char* text = mobius_stack_asString(state, -2);
     
     if (strlen(char_str) != 1) {
-        return state->error("char_count() second argument must be a single character");
+        return mobius_error(state, "char_count() second argument must be a single character");
     }
     
     char target = char_str[0];
@@ -176,17 +172,17 @@ int text_char_count(MobiusState* state, int arg_count) {
  */
 int text_reverse(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("reverse() expects exactly 1 argument");
+        return mobius_error(state, "reverse() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isString(state, -1)) {
-        return state->error("reverse() expects a string argument");
+        return mobius_error(state, "reverse() expects a string argument");
     }
 
     const char* text = mobius_stack_asString(state, -1);
     char* reversed = safe_strdup(text);
     if (!reversed) {
-        return state->error("Memory allocation failed");
+        return mobius_error(state, "Memory allocation failed");
     }
     
     reverse_string(reversed);
@@ -203,17 +199,17 @@ int text_reverse(MobiusState* state, int arg_count) {
  */
 int text_title_case(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("title_case() expects exactly 1 argument");
+        return mobius_error(state, "title_case() expects exactly 1 argument");
     }
     
     if (!mobius_stack_isString(state, -1)) {
-        return state->error("title_case() expects a string argument");
+        return mobius_error(state, "title_case() expects a string argument");
     }
     
     const char* input = mobius_stack_asString(state, -1);
     char* result = safe_strdup(input);
     if (!result) {
-        return state->error("Memory allocation failed");
+        return mobius_error(state, "Memory allocation failed");
     }
     
     int capitalize_next = 1;
@@ -242,11 +238,11 @@ int text_title_case(MobiusState* state, int arg_count) {
  */
 int text_trim(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("trim() expects exactly 1 argument");
+        return mobius_error(state, "trim() expects exactly 1 argument");
     }
 
     if (!mobius_stack_isString(state, -1)) {
-        return state->error("trim() expects a string argument");
+        return mobius_error(state, "trim() expects a string argument");
     }
     
     const char* input = mobius_stack_asString(state, -1);
@@ -266,7 +262,7 @@ int text_trim(MobiusState* state, int arg_count) {
     size_t len = end - input + 1;
     char* result = malloc(len + 1);
     if (!result) {
-        return state->error("Memory allocation failed");
+        return mobius_error(state, "Memory allocation failed");
     }
     
     strncpy(result, input, len);
@@ -284,11 +280,11 @@ int text_trim(MobiusState* state, int arg_count) {
  */
 int text_replace_all(MobiusState* state, int arg_count) {
     if (arg_count != 3) {
-        return state->error("replace_all() expects exactly 3 arguments");
+        return mobius_error(state, "replace_all() expects exactly 3 arguments");
     }
 
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2) || !mobius_stack_isString(state, -3)) {
-        return state->error("replace_all() expects string arguments");
+        return mobius_error(state, "replace_all() expects string arguments");
     }
     
     const char* new_substr = mobius_stack_asString(state, -1);
@@ -296,7 +292,7 @@ int text_replace_all(MobiusState* state, int arg_count) {
     const char* text = mobius_stack_asString(state, -3);
     
     if (strlen(old_substr) == 0) {
-        return state->error("replace_all() old substring cannot be empty");
+        return mobius_error(state, "replace_all() old substring cannot be empty");
     }
     
     // Count occurrences to determine result size
@@ -321,7 +317,7 @@ int text_replace_all(MobiusState* state, int arg_count) {
     
     char* result = malloc(result_len + 1);
     if (!result) {
-        return state->error("Memory allocation failed");
+        return mobius_error(state, "Memory allocation failed");
     }
     
     // Perform replacements
@@ -357,11 +353,11 @@ int text_replace_all(MobiusState* state, int arg_count) {
  */
 int text_pad_left(MobiusState* state, int arg_count) {
     if (arg_count != 3) {
-        return state->error("pad_left() expects exactly 3 arguments");
+        return mobius_error(state, "pad_left() expects exactly 3 arguments");
     }
 
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isInteger(state, -2) || !mobius_stack_isString(state, -3)) {
-        return state->error("pad_left() expects (string, integer, string) arguments");
+        return mobius_error(state, "pad_left() expects (string, integer, string) arguments");
     }
     
     const char* pad_char_str = mobius_stack_asString(state, -1);
@@ -369,7 +365,7 @@ int text_pad_left(MobiusState* state, int arg_count) {
     const char* text = mobius_stack_asString(state, -3);
     
     if (strlen(pad_char_str) != 1) {
-        return state->error("pad_left() pad character must be a single character");
+        return mobius_error(state, "pad_left() pad character must be a single character");
     }
     
     char pad_char = pad_char_str[0];
@@ -384,7 +380,7 @@ int text_pad_left(MobiusState* state, int arg_count) {
     
     char* result = malloc(width + 1);
     if (!result) {
-        return state->error("Memory allocation failed");
+        return mobius_error(state, "Memory allocation failed");
     }
     
     int pad_count = width - text_len;
@@ -405,25 +401,25 @@ int text_pad_left(MobiusState* state, int arg_count) {
  */
 int text_split(MobiusState* state, int arg_count) {
     if (arg_count != 2) {
-        return state->error("split() expects exactly 2 arguments");
+        return mobius_error(state, "split() expects exactly 2 arguments");
     }
 
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2)) {
-        return state->error("split() expects string arguments");
+        return mobius_error(state, "split() expects string arguments");
     }
     
     const char* delimiter = mobius_stack_asString(state, -1);
     const char* text = mobius_stack_asString(state, -2);
     
     if (strlen(delimiter) == 0) {
-        return state->error("split() delimiter cannot be empty");
+        return mobius_error(state, "split() delimiter cannot be empty");
     }
     
     // For simplicity, return parts joined with " | " 
     // In a real implementation, you'd return an array
     char* result = malloc(strlen(text) * 2 + 100); // Rough estimate
     if (!result) {
-        return state->error("Memory allocation failed");
+        return mobius_error(state, "Memory allocation failed");
     }
     
     result[0] = '\0';
@@ -468,58 +464,27 @@ void cleanup_text_processing_plugin(void) {
     // For this example, no special cleanup is needed
 }
 
-/**
- * Plugin help function
- */
-const char* get_text_processing_help(const char* function_name) {
-    (void)function_name; // Suppress unused parameter warning
-    return "Text Processing Plugin provides advanced string manipulation functions:\n"
-           "- word_count(text): Count words in text\n"
-           "- line_count(text): Count lines in text\n"
-           "- char_count(text, char): Count character occurrences\n"
-           "- reverse(text): Reverse string\n"
-           "- title_case(text): Convert to title case\n"
-           "- trim(text): Remove leading/trailing whitespace\n"
-           "- replace_all(text, old, new): Replace all occurrences\n"
-           "- pad_left(text, width, char): Pad string to width\n"
-           "- split(text, delimiter): Split string by delimiter\n";
-}
-
-/**
- * Environment validation function
- */
-int validate_text_processing_env(void) {
-    // Check if the environment is suitable for this plugin
-    // For this example, always return success
-    return 1; // Environment is valid
-}
-
 // ============================================================================
 // PLUGIN FUNCTION DEFINITIONS
 // ============================================================================
 
-static PluginFunction text_processing_functions[] = {
-    // Text analysis functions
-    {"word_count", text_word_count, 1},
-    {"line_count", text_line_count, 1},
-    {"char_count", text_char_count, 2},
-    
-    // String manipulation functions
-    {"reverse", text_reverse, 1},
-    {"title_case", text_title_case, 1},
-    {"trim", text_trim, 1},
-    {"replace_all", text_replace_all, 3},
-    
-    // Text formatting functions
-    {"pad_left", text_pad_left, 3},
-    {"split", text_split, 2}
+static MobiusPluginFunction text_processing_functions[] = {
+    {"word_count", text_word_count, 1, "Count words in a string"},
+    {"line_count", text_line_count, 1, "Count lines in a string"},
+    {"char_count", text_char_count, 2, "Count character occurrences"},
+    {"reverse", text_reverse, 1, "Reverse a string"},
+    {"title_case", text_title_case, 1, "Convert to title case"},
+    {"trim", text_trim, 1, "Remove leading/trailing whitespace"},
+    {"replace_all", text_replace_all, 3, "Replace all occurrences of a substring"},
+    {"pad_left", text_pad_left, 3, "Pad string to width on the left"},
+    {"split", text_split, 2, "Split string by delimiter"}
 };
 
 // ============================================================================
 // PLUGIN INSTANCE
 // ============================================================================
 
-static Plugin text_processing_plugin = {
+static MobiusPlugin text_processing_plugin = {
     .metadata = {
         .name = "text_processing",
         .version = "1.0.0",
@@ -532,8 +497,6 @@ static Plugin text_processing_plugin = {
     .function_count = sizeof(text_processing_functions) / sizeof(text_processing_functions[0]),
     .init_plugin = init_text_processing_plugin,
     .cleanup_plugin = cleanup_text_processing_plugin,
-    .get_help = get_text_processing_help,
-    .validate_env = validate_text_processing_env
 };
 
 // ============================================================================
@@ -544,6 +507,6 @@ static Plugin text_processing_plugin = {
  * Required plugin entry point
  * This function must be exported and named exactly "mobius_plugin_info"
  */
-extern "C" MOBIUS_PLUGIN_EXPORT Plugin* mobius_plugin_info(void) {
+extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {
     return &text_processing_plugin;
 }

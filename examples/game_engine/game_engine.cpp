@@ -20,12 +20,8 @@
 #include <time.h>
 #include <unistd.h>
 
-// Include Mobius headers
-#include "../../src/mobius/state/mobius_state.h"
-#include "../../include/mobius/mobius_plugin.h"
-#include "../../src/mobius/data/value.h"
-#include "../../src/mobius/library/library.h"
-#include "../../src/mobius/eval/evaluator.h"
+#include <mobius/mobius.h>
+#include <mobius/mobius_plugin.h>
 
 // ============================================================================
 // GAME STATE STRUCTURES
@@ -64,8 +60,6 @@ static GameEngine* g_game = NULL;
  * Get player position: get_player_pos() -> string "x,y"
  */
 int game_get_player_pos(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 0) {
         return mobius_error(state, "get_player_pos takes no arguments");
     }
@@ -77,7 +71,7 @@ int game_get_player_pos(MobiusState* state, int arg_count) {
     char pos_str[64];
     snprintf(pos_str, sizeof(pos_str), "%.1f,%.1f", g_game->player.x, g_game->player.y);
     
-    ctx->push(make_string_value_from_cstr(state, pos_str));
+    mobius_stack_pushString(state, pos_str);
     return 1;
 }
 
@@ -85,8 +79,6 @@ int game_get_player_pos(MobiusState* state, int arg_count) {
  * Set player position: set_player_pos(x, y)
  */
 int game_set_player_pos(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 2) {
         return mobius_error(state, "set_player_pos requires 2 arguments");
     }
@@ -95,16 +87,19 @@ int game_set_player_pos(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    Value y_val = ctx->pop();
-    Value x_val = ctx->pop();
+    if (!mobius_stack_isNumber(state, -2) || !mobius_stack_isNumber(state, -1)) {
+        return mobius_error(state, "set_player_pos requires numeric arguments");
+    }
     
-    double x = (x_val.type == VAL_FLOAT64) ? x_val.as.double_val : (double)x_val.as.integer.value;
-    double y = (y_val.type == VAL_FLOAT64) ? y_val.as.double_val : (double)y_val.as.integer.value;
+    double x = mobius_stack_asFloat64(state, -2);
+    double y = mobius_stack_asFloat64(state, -1);
+    
+    mobius_stack_pop(state, 2);
     
     g_game->player.x = (float)x;
     g_game->player.y = (float)y;
     
-    ctx->push(make_nil_value());
+    mobius_stack_pushNil(state);
     return 1;
 }
 
@@ -112,8 +107,6 @@ int game_set_player_pos(MobiusState* state, int arg_count) {
  * Get player health: get_player_health() -> integer
  */
 int game_get_player_health(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 0) {
         return mobius_error(state, "get_player_health takes no arguments");
     }
@@ -122,7 +115,7 @@ int game_get_player_health(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    ctx->push(make_integer_value(NUM_INT64, g_game->player.health));
+    mobius_stack_pushInt64(state, (int64_t)g_game->player.health);
     return 1;
 }
 
@@ -130,8 +123,6 @@ int game_get_player_health(MobiusState* state, int arg_count) {
  * Set player health: set_player_health(health)
  */
 int game_set_player_health(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 1) {
         return mobius_error(state, "set_player_health requires 1 argument");
     }
@@ -140,16 +131,19 @@ int game_set_player_health(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    Value health_val = ctx->pop();
-    int health = (health_val.type == VAL_INTEGER) ? 
-        (int)health_val.as.integer.value : (int)health_val.as.double_val;
+    if (!mobius_stack_isNumber(state, -1)) {
+        return mobius_error(state, "set_player_health requires a numeric argument");
+    }
+    
+    int health = (int)mobius_stack_asFloat64(state, -1);
+    mobius_stack_pop(state, 1);
     
     if (health < 0) health = 0;
     if (health > 100) health = 100;
     
     g_game->player.health = health;
     
-    ctx->push(make_nil_value());
+    mobius_stack_pushNil(state);
     return 1;
 }
 
@@ -157,8 +151,6 @@ int game_set_player_health(MobiusState* state, int arg_count) {
  * Get player score: get_score() -> integer
  */
 int game_get_score(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 0) {
         return mobius_error(state, "get_score takes no arguments");
     }
@@ -167,7 +159,7 @@ int game_get_score(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    ctx->push(make_integer_value(NUM_INT64, g_game->player.score));
+    mobius_stack_pushInt64(state, (int64_t)g_game->player.score);
     return 1;
 }
 
@@ -175,8 +167,6 @@ int game_get_score(MobiusState* state, int arg_count) {
  * Add to score: add_score(points)
  */
 int game_add_score(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 1) {
         return mobius_error(state, "add_score requires 1 argument");
     }
@@ -185,13 +175,16 @@ int game_add_score(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    Value points_val = ctx->pop();
-    int points = (points_val.type == VAL_INTEGER) ? 
-        (int)points_val.as.integer.value : (int)points_val.as.double_val;
+    if (!mobius_stack_isNumber(state, -1)) {
+        return mobius_error(state, "add_score requires a numeric argument");
+    }
+    
+    int points = (int)mobius_stack_asFloat64(state, -1);
+    mobius_stack_pop(state, 1);
     
     g_game->player.score += points;
     
-    ctx->push(make_integer_value(NUM_INT64, g_game->player.score));
+    mobius_stack_pushInt64(state, (int64_t)g_game->player.score);
     return 1;
 }
 
@@ -199,8 +192,6 @@ int game_add_score(MobiusState* state, int arg_count) {
  * Spawn enemy: spawn_enemy(x, y, type)
  */
 int game_spawn_enemy(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 3) {
         return mobius_error(state, "spawn_enemy requires 3 arguments");
     }
@@ -213,13 +204,16 @@ int game_spawn_enemy(MobiusState* state, int arg_count) {
         return mobius_error(state, "Too many enemies");
     }
     
-    Value type_val = ctx->pop();
-    Value y_val = ctx->pop();
-    Value x_val = ctx->pop();
+    if (!mobius_stack_isNumber(state, -3) || !mobius_stack_isNumber(state, -2) ||
+        !mobius_stack_isNumber(state, -1)) {
+        return mobius_error(state, "spawn_enemy requires numeric arguments");
+    }
     
-    double x = (x_val.type == VAL_FLOAT64) ? x_val.as.double_val : (double)x_val.as.integer.value;
-    double y = (y_val.type == VAL_FLOAT64) ? y_val.as.double_val : (double)y_val.as.integer.value;
-    int type = (type_val.type == VAL_INTEGER) ? (int)type_val.as.integer.value : (int)type_val.as.double_val;
+    double x = mobius_stack_asFloat64(state, -3);
+    double y = mobius_stack_asFloat64(state, -2);
+    int type = (int)mobius_stack_asFloat64(state, -1);
+    
+    mobius_stack_pop(state, 3);
     
     Enemy* enemy = &g_game->enemies[g_game->enemy_count];
     enemy->x = (float)x;
@@ -229,7 +223,7 @@ int game_spawn_enemy(MobiusState* state, int arg_count) {
     
     g_game->enemy_count++;
     
-    ctx->push(make_integer_value(NUM_INT64, g_game->enemy_count));
+    mobius_stack_pushInt64(state, (int64_t)g_game->enemy_count);
     return 1;
 }
 
@@ -237,8 +231,6 @@ int game_spawn_enemy(MobiusState* state, int arg_count) {
  * Get current level: get_level() -> integer
  */
 int game_get_level(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 0) {
         return mobius_error(state, "get_level takes no arguments");
     }
@@ -247,7 +239,7 @@ int game_get_level(MobiusState* state, int arg_count) {
         return mobius_error(state, "Game not initialized");
     }
     
-    ctx->push(make_integer_value(NUM_INT64, g_game->level));
+    mobius_stack_pushInt64(state, (int64_t)g_game->level);
     return 1;
 }
 
@@ -255,21 +247,20 @@ int game_get_level(MobiusState* state, int arg_count) {
  * Game log function: game_log(message)
  */
 int game_log(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 1) {
         return mobius_error(state, "game_log requires 1 argument");
     }
     
-    Value msg_val = ctx->pop();
-    
-    if (msg_val.type != VAL_STRING) {
+    if (!mobius_stack_isString(state, -1)) {
         return mobius_error(state, "game_log requires a string argument");
     }
     
-    printf("[GAME LOG] %s\n", msg_val.as.string->data);
+    const char* msg = mobius_stack_asString(state, -1);
+    printf("[GAME LOG] %s\n", msg);
     
-    ctx->push(make_nil_value());
+    mobius_stack_pop(state, 1);
+    
+    mobius_stack_pushNil(state);
     return 1;
 }
 
@@ -313,8 +304,7 @@ void init_game_engine(GameEngine* game) {
     mobius_register_function(game->script_state, "get_level", game_get_level);
     mobius_register_function(game->script_state, "game_log", game_log);
     
-    printf("🎮 Game engine initialized with %zu total functions available\n", 
-           get_library_function_count() + 9); // stdlib + 9 game functions
+    printf("🎮 Game engine initialized (Mobius stdlib plus 9 game API functions)\n");
 }
 
 void cleanup_game_engine(GameEngine* game) {

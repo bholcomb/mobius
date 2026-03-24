@@ -15,13 +15,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// Include the Mobius library headers
-#include "../../src/mobius/state/mobius_state.h"
-#include "../../include/mobius/mobius_plugin.h"
-#include "../../src/mobius/data/value.h"
-#include "../../src/mobius/library/library.h"
-#include "../../src/mobius/eval/evaluator.h"
+#include <mobius/mobius.h>
+#include <mobius/mobius_plugin.h>
 
 // ============================================================================
 // CUSTOM C FUNCTIONS FOR MOBIUS
@@ -32,31 +27,18 @@
  * Demonstrates basic value exchange and error handling
  */
 int custom_add(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
-    // Validate argument count
     if (arg_count != 2) {
         return mobius_error(state, "custom_add requires exactly 2 arguments");
     }
-    
-    // Pop arguments from stack (in reverse order)
-    Value b = ctx->pop();
-    Value a = ctx->pop();
-    
-    // Validate argument types
-    if (a.type != VAL_FLOAT64 && a.type != VAL_INTEGER) {
-        return mobius_error(state, "First argument must be a number");
+
+    if (!mobius_stack_isNumber(state, -1) || !mobius_stack_isNumber(state, -2)) {
+        return mobius_error(state, "custom_add arguments must be numbers");
     }
-    if (b.type != VAL_FLOAT64 && b.type != VAL_INTEGER) {
-        return mobius_error(state, "Second argument must be a number");
-    }
-    
-    // Convert to double for calculation
-    double num_a = (a.type == VAL_FLOAT64) ? a.as.double_val : (double)a.as.integer.value;
-    double num_b = (b.type == VAL_FLOAT64) ? b.as.double_val : (double)b.as.integer.value;
-    
-    // Push result
-    ctx->push(make_float_value(num_a + num_b));
+
+    double num_a = mobius_stack_asFloat64(state, -2);
+    double num_b = mobius_stack_asFloat64(state, -1);
+    mobius_stack_pop(state, 2);
+    mobius_stack_pushFloat64(state, num_a + num_b);
     return 1;
 }
 
@@ -65,14 +47,12 @@ int custom_add(MobiusState* state, int arg_count) {
  * Demonstrates string return values
  */
 int custom_system_info(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 0) {
         return mobius_error(state, "system_info takes no arguments");
     }
-    
+
     const char* info = "System: Linux x86_64, Mobius v0.1.0";
-    ctx->push(make_string_value_from_cstr(state, info));
+    mobius_stack_pushString(state, info);
     return 1;
 }
 
@@ -81,21 +61,17 @@ int custom_system_info(MobiusState* state, int arg_count) {
  * Demonstrates simple numeric operations
  */
 int custom_double(MobiusState* state, int arg_count) {
-    ExecutionContext* ctx = state->mainContext();
-    
     if (arg_count != 1) {
         return mobius_error(state, "double requires exactly 1 argument");
     }
-    
-    Value val = ctx->pop();
-    
-    if (val.type != VAL_FLOAT64 && val.type != VAL_INTEGER) {
+
+    if (!mobius_stack_isNumber(state, -1)) {
         return mobius_error(state, "Argument must be a number");
     }
-    
-    double num = (val.type == VAL_FLOAT64) ? val.as.double_val : (double)val.as.integer.value;
-    
-    ctx->push(make_float_value(num * 2.0));
+
+    double num = mobius_stack_asFloat64(state, -1);
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushFloat64(state, num * 2.0);
     return 1;
 }
 
