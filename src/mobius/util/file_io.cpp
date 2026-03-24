@@ -1,11 +1,5 @@
 #include "util/file_io.h"
-#include "frontend/scanner.h"
-#include "frontend/parser.h"
-#include "eval/evaluator.h"
-#include "state/environment.h"
 #include "state/mobius_state.h"
-#include "library/library.h"
-#include "plugin/module_registry.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,83 +87,3 @@ const char* get_file_extension(const char* path) {
     return last_dot + 1;
 }
 
-int execute_script_string(const char* source, const char* filename) {
-    if (!source) {
-        fprintf(stderr, "Error: No source code provided\n");
-        return 1;
-    }
-    
-    printf("Executing %s...\n", filename ? filename : "script");
-    
-    MobiusState* state = mobius_new_state(NULL);
-    register_stdlib_functions(state);
-    state->setSourceContext(source);
-    
-    TokenArray tokens = scan_source(source, state->stringPool());
-    if (tokens.count == 0) {
-        fprintf(stderr, "Error: No tokens found\n");
-        mobius_free_state(state);
-        return 1;
-    }
-    
-    // Parse AST
-    ParseResult parse_result = parse(state, tokens);
-    if (parse_result.had_error) {
-        fprintf(stderr, "Parse errors occurred\n");
-        free_parse_result(&parse_result);  // Then free parse result
-        free_token_array(&tokens);
-        return 1;
-    }
-
-    // Execute the program
-    EvalResult eval_result = evaluate_program(parse_result.statements, 
-                                            parse_result.count, state->globalEnv());
-    
-    int exit_code = 0;
-    if (is_error(eval_result)) {
-        print_runtime_error(eval_result.error);
-        exit_code = 1;
-    }
-    
-    // Cleanup
-    state->setSourceContext(NULL);
-    free_parse_result(&parse_result);  // Then free parse result
-    free_token_array(&tokens);
-    mobius_free_state(state);
-    return exit_code;
-}
-
-// Execute a script file
-int execute_script_file(const char* path) {
-    if (!path) {
-        fprintf(stderr, "Error: No file path provided\n");
-        return 1;
-    }
-    
-    // Check if file exists
-    if (!file_exists(path)) {
-        fprintf(stderr, "Error: File '%s' does not exist\n", path);
-        return 1;
-    }
-    
-    // Check file extension (optional warning for non-.mob files)
-    const char* ext = get_file_extension(path);
-    if (ext && strcmp(ext, "mob") != 0) {
-        printf("Warning: File '%s' does not have .mob extension\n", path);
-    }
-    
-    // Read file content
-    FileResult file_result = read_file(path);
-    if (!file_result.success) {
-        fprintf(stderr, "Error reading file '%s': %s\n", path, file_result.error);
-        return 1;
-    }
-    
-    // Execute the script
-    int exit_code = execute_script_string(file_result.content, path);
-    
-    // Cleanup
-    free_file_result(&file_result);
-    
-    return exit_code;
-}

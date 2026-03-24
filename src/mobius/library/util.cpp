@@ -20,37 +20,37 @@ int lib_random(MobiusState* state, int arg_count) {
     
     if (arg_count == 0) {
         // Return random float between 0 and 1
-        state->mainContext()->push( make_float_value((double)rand() / RAND_MAX));
+        state->npush(make_float_value((double)rand() / RAND_MAX));
         return 1;
     } else if (arg_count == 1) {
         // Return random integer between 0 and n-1
-        Value arg = state->mainContext()->peek( 0);
-        state->mainContext()->pop(); // Remove argument
+        Value arg = state->npeek(0);
+        state->npop(); // Remove argument
         
-        if (arg.type != VAL_INTEGER) {
+        if (arg.type != VAL_INT64) {
             return state->error("random expects an integer argument");
         }
-        int64_t max_val = arg.as.integer.value;
+        int64_t max_val = arg.as.i64;
         if (max_val <= 0) {
             return state->error("random expects a positive integer");
         }
-        state->mainContext()->push( make_integer_value(NUM_INT64, rand() % max_val));
+        state->npush(make_int64_value(rand() % max_val));
         return 1;
     } else if (arg_count == 2) {
         // Return random integer between min and max (inclusive)
-        Value max_arg = state->mainContext()->peek( 0);
-        Value min_arg = state->mainContext()->peek( 1);
+        Value max_arg = state->npeek(0);
+        Value min_arg = state->npeek(1);
         
         // Remove arguments
-        state->mainContext()->pop();
-        state->mainContext()->pop();
+        state->npop();
+        state->npop();
         
-        if (min_arg.type != VAL_INTEGER || max_arg.type != VAL_INTEGER) {
+        if (min_arg.type != VAL_INT64 || max_arg.type != VAL_INT64) {
             return state->error("random expects integer arguments");
         }
         
-        int64_t min_val = min_arg.as.integer.value;
-        int64_t max_val = max_arg.as.integer.value;
+        int64_t min_val = min_arg.as.i64;
+        int64_t max_val = max_arg.as.i64;
         
         if (min_val > max_val) {
             return state->error("random min value must be <= max value");
@@ -58,7 +58,7 @@ int lib_random(MobiusState* state, int arg_count) {
         
         int64_t range = max_val - min_val + 1;
         int64_t result = min_val + (rand() % range);
-        state->mainContext()->push( make_integer_value(NUM_INT64, result));
+        state->npush(make_int64_value(result));
         return 1;
     }
     
@@ -70,7 +70,7 @@ int lib_time(MobiusState* state, int arg_count) {
         return state->error("time expects no arguments");
     }
     
-    state->mainContext()->push( make_integer_value(NUM_INT64, (int64_t)time(NULL)));
+    state->npush(make_int64_value((int64_t)time(NULL)));
     return 1;
 }
 
@@ -79,7 +79,7 @@ int lib_clock(MobiusState* state, int arg_count) {
         return state->error("clock expects no arguments");
     }
     
-    state->mainContext()->push( make_float_value((double)clock() / CLOCKS_PER_SEC));
+    state->npush(make_float_value((double)clock() / CLOCKS_PER_SEC));
     return 1;
 }
 
@@ -88,8 +88,8 @@ int lib_load(MobiusState* state, int arg_count) {
         return state->error("load expects exactly 1 argument (filename)");
     }
     
-    Value filename_val = state->mainContext()->peek( 0);
-    state->mainContext()->pop(); // Remove argument
+    Value filename_val = state->npeek(0);
+    state->npop(); // Remove argument
     
     if (filename_val.type != VAL_STRING) {
         return state->error("load argument must be a string");
@@ -118,7 +118,7 @@ int lib_load(MobiusState* state, int arg_count) {
         return state->error("error in loaded script");
     }
 
-    state->mainContext()->push( make_bool_value(true));
+    state->npush(make_bool_value(true));
     return 1;
 }
 
@@ -128,8 +128,8 @@ int lib_id(MobiusState* state, int arg_count) {
         return state->error("id() expects exactly 1 argument");
     }
     
-    Value arg = state->mainContext()->peek( 0);
-    state->mainContext()->pop();
+    Value arg = state->npeek(0);
+    state->npop();
     
     uintptr_t addr = 0;
     switch (arg.type) {
@@ -151,6 +151,6 @@ int lib_id(MobiusState* state, int arg_count) {
             break;
     }
     
-    state->mainContext()->push( make_integer_value(NUM_INT64, (int64_t)addr));
+    state->npush(make_int64_value((int64_t)addr));
     return 1;
 }

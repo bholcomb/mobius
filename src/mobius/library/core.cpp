@@ -1,7 +1,6 @@
 #include "library/core.h"
 #include "data/value.h"
 #include "state/environment.h"
-#include "eval/evaluator.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,7 +36,7 @@ static void print_with_escapes(const char* str) {
 
 int lib_print(MobiusState* state, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
-        Value arg = state->mainContext()->peek( arg_count - 1 - i);  // Get args in correct order
+        Value arg = state->npeek(arg_count - 1 - i);  // Get args in correct order
         
         // Handle strings specially to process escape sequences
         if (arg.type == VAL_STRING && arg.as.string) {
@@ -56,7 +55,7 @@ int lib_print(MobiusState* state, int arg_count) {
     
     // Pop arguments from stack
     for (int i = 0; i < arg_count; i++) {
-        state->mainContext()->pop();
+        state->npop();
     }
     
     return 0;
@@ -67,15 +66,15 @@ int lib_typeof(MobiusState* state, int arg_count) {
         return state->error("typeof expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     const char* type_name = value_type_name(arg.type);
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
     Value result = make_string_value_from_cstr(state, type_name);
-    state->mainContext()->push( result);
+    state->npush(result);
     
     return 1;
 }
@@ -85,15 +84,15 @@ int lib_int(MobiusState* state, int arg_count) {
         return state->error("int expects 1 argument");
     }
 
-    Value arg = state->mainContext()->pop();
+    Value arg = state->npop();
     Value result;
     
     switch (arg.type) {
-        case VAL_INTEGER:
+        case VAL_INT64:
             result = arg;  // Already an integer
             break;
         case VAL_FLOAT64:
-            result = make_integer_value(NUM_INT64, (int64_t)arg.as.double_val);
+            result = make_int64_value((int64_t)arg.as.double_val);
             break;
         case VAL_STRING: {
             if (arg.as.string) {
@@ -101,7 +100,7 @@ int lib_int(MobiusState* state, int arg_count) {
                 char* endptr;
                 long long val = strtoll(str, &endptr, 10);
                 if (*endptr == '\0') {
-                    result = make_integer_value(NUM_INT64, (int64_t)val);
+                    result = make_int64_value((int64_t)val);
                 } else {
                     return state->error("Cannot convert string to integer");
                 }
@@ -111,14 +110,14 @@ int lib_int(MobiusState* state, int arg_count) {
             break;
         }
         case VAL_BOOL:
-            result = make_integer_value(NUM_INT64, arg.as.boolean ? 1 : 0);
+            result = make_int64_value(arg.as.boolean ? 1 : 0);
             break;
         default:
             return state->error("Cannot convert value to integer");
     }
        
     // Push result onto stack
-    state->mainContext()->push( result);
+    state->npush(result);
     
     return 1;
 }
@@ -128,16 +127,15 @@ int lib_float(MobiusState* state, int arg_count) {
         return state->error("float expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     Value result;
     
     switch (arg.type) {
         case VAL_FLOAT64:
             result = arg;  // Already a float
             break;
-        case VAL_INTEGER: {
-            int64_t val = arg.as.integer.value;
-            result = make_float_value((double)val);
+        case VAL_INT64: {
+            result = make_float_value((double)arg.as.i64);
             break;
         }
         case VAL_STRING: {
@@ -160,10 +158,10 @@ int lib_float(MobiusState* state, int arg_count) {
     }
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( result);
+    state->npush(result);
     
     return 1;
 }
@@ -173,7 +171,7 @@ int lib_str(MobiusState* state, int arg_count) {
         return state->error("str expects 1 argument");
     }
 
-    Value arg = state->mainContext()->peek( 0);
+    Value arg = state->npeek(0);
     char* temp_str = value_to_string(arg);
     Value result;
     
@@ -185,10 +183,10 @@ int lib_str(MobiusState* state, int arg_count) {
     }
     
     // Pop argument from stack
-    state->mainContext()->pop();
+    state->npop();
     
     // Push result onto stack
-    state->mainContext()->push( result);
+    state->npush(result);
     
     return 1;
 }

@@ -15,7 +15,6 @@
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
 #include "state/environment.h"
-#include "eval/evaluator.h"
 
 // Extended functionality
 #include "util/file_io.h"

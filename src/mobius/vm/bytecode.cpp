@@ -15,8 +15,8 @@ static void print_constant(const Prototype* proto, int idx) {
         case VAL_BOOL:
             printf("%s", v.as.boolean ? "true" : "false");
             break;
-        case VAL_INTEGER:
-            printf("%ld", (long)v.as.integer.value);
+        case VAL_INT64:
+            printf("%ld", (long)v.as.i64);
             break;
         case VAL_FLOAT64:
             printf("%g", v.as.double_val);

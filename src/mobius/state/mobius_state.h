@@ -34,6 +34,46 @@ typedef struct InternalError {
 #define MAX_CALL_DEPTH 1000
 
 // ============================================================================
+// NATIVE CALL CONTEXT
+//
+// Set by MobiusVM::callNative() before invoking a MobiusCFunction.
+// The C-API stack functions (mobius_stack_push*, mobius_stack_pop, etc.)
+// operate on this window into the VM's flat register array instead of a
+// separate vector, eliminating all argument/result copying.
+// ============================================================================
+
+struct NativeCallContext {
+    Value*  registers;   // pointer into MobiusVM::registers_.data()
+    int     base;        // absolute index of first argument slot
+    int     top;         // exclusive end — incremented by push, decremented by pop
+    int     capacity;    // total registers_.size(), for bounds checks
+};
+
+// ============================================================================
+// STACK TRACE TYPES
+// ============================================================================
+
+typedef enum {
+    TRACE_FUNCTION_NATIVE,
+    TRACE_FUNCTION_SCRIPT,
+    TRACE_FUNCTION_PLUGIN,
+    TRACE_FUNCTION_CLOSURE
+} TraceFunctionType;
+
+struct TraceFrame {
+    const char*     function_name;
+    const char*     filename;
+    int             line;
+    int             column;
+    TraceFunctionType type;
+};
+
+struct StackTrace {
+    TraceFrame* frames;
+    size_t      frame_count;
+};
+
+// ============================================================================
 // CALL FRAME (for stack tracing with profiling)
 // ============================================================================
 
@@ -66,16 +106,8 @@ struct CallFrame {
 
 class MOBIUS_API ExecutionContext {
 public:
-    ExecutionContext(MobiusState* owner, size_t initial_stack, size_t max_depth);
+    ExecutionContext(MobiusState* owner, size_t max_depth);
     ~ExecutionContext();
-
-    // Value stack operations
-    void push(const Value& value);
-    void push(Value&& value);
-    Value pop();
-    const Value& peek(size_t offset = 0) const;
-    size_t stackSize() const;
-    void stackClear();
 
     // Call stack / stack trace operations
     void pushFrame(const char* function_name, const char* filename,
@@ -90,7 +122,6 @@ public:
     StackTrace* captureStackTrace() const;
 
     MobiusState* state;
-    std::vector<Value> stack;
     Environment* current_env;
 
 private:
@@ -148,6 +179,31 @@ public:
     InternalError* lastError() const { return last_error_; }
     Metamethods* metamethods() const { return metamethods_; }
 
+    // Native call context — set by MobiusVM before calling a MobiusCFunction.
+    NativeCallContext* nativeContext() const { return native_ctx_; }
+    void setNativeContext(NativeCallContext* ctx) { native_ctx_ = ctx; }
+
+    // Convenience wrappers for native functions operating on the NativeCallContext.
+    // offset=0 is the top of the native stack (last argument), offset=1 is second, etc.
+    inline const Value& npeek(int offset = 0) const {
+        return native_ctx_->registers[native_ctx_->top - 1 - offset];
+    }
+    inline Value& npeek(int offset = 0) {
+        return native_ctx_->registers[native_ctx_->top - 1 - offset];
+    }
+    inline Value npop() {
+        return native_ctx_->registers[--native_ctx_->top];
+    }
+    inline void npush(const Value& v) {
+        native_ctx_->registers[native_ctx_->top++] = v;
+    }
+    inline void npush(Value&& v) {
+        native_ctx_->registers[native_ctx_->top++] = std::move(v);
+    }
+    inline int nsize() const {
+        return native_ctx_->top - native_ctx_->base;
+    }
+
 private:
     Environment* global_env_;
     ModuleRegistry* registry_;
@@ -155,6 +211,7 @@ private:
     Metamethods* metamethods_;
 
     ExecutionContext* main_context_;
+    NativeCallContext* native_ctx_;   // non-null only during a native call
 
     InternalError* last_error_;
     MobiusErrorHandler error_handler_;

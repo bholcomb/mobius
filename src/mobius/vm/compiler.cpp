@@ -275,8 +275,8 @@ int Compiler::compileLiteral(LiteralExpr* expr, int dest) {
         case VAL_BOOL:
             emitABC(OP_LOADBOOL, (uint8_t)reg, v.as.boolean ? 1 : 0, 0);
             break;
-        case VAL_INTEGER: {
-            int64_t iv = v.as.integer.value;
+        case VAL_INT64: {
+            int64_t iv = v.as.i64;
             if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                 emitAsBx(OP_LOADINT, (uint8_t)reg, (int)iv);
             } else {
@@ -356,15 +356,16 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     if (expr->left->type == EXPR_LITERAL && expr->right->type == EXPR_LITERAL) {
         const Value& lv = expr->left->as.literal.value;
         const Value& rv = expr->right->as.literal.value;
-        bool l_int = (lv.type == VAL_INTEGER);
-        bool r_int = (rv.type == VAL_INTEGER);
+        bool l_int = (lv.type == VAL_INT64 || lv.type == VAL_UINT64);
+        bool r_int = (rv.type == VAL_INT64 || rv.type == VAL_UINT64);
         bool l_flt = (lv.type == VAL_FLOAT64);
         bool r_flt = (rv.type == VAL_FLOAT64);
         bool both_num = (l_int || l_flt) && (r_int || r_flt);
 
         if (both_num) {
             auto to_double = [](const Value& v) -> double {
-                if (v.type == VAL_INTEGER) return (double)v.as.integer.value;
+                if (v.type == VAL_UINT64)  return (double)v.as.u64;
+                if (v.type == VAL_INT64) return (double)v.as.i64;
                 return v.as.double_val;
             };
 
@@ -376,13 +377,13 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 case TOKEN_MINUS:
                 case TOKEN_STAR: {
                     if (l_int && r_int) {
-                        int64_t a = lv.as.integer.value;
-                        int64_t b = rv.as.integer.value;
+                        int64_t a = lv.as.i64;
+                        int64_t b = rv.as.i64;
                         int64_t r;
                         if (expr->op.type == TOKEN_PLUS)       r = a + b;
                         else if (expr->op.type == TOKEN_MINUS)  r = a - b;
                         else                                    r = a * b;
-                        result = make_integer_value(NUM_INT64, r);
+                        result = make_int64_value(r);
                     } else {
                         double a = to_double(lv), b = to_double(rv), r;
                         if (expr->op.type == TOKEN_PLUS)       r = a + b;
@@ -403,9 +404,9 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 }
                 case TOKEN_PERCENT: {
                     if (l_int && r_int) {
-                        int64_t b = rv.as.integer.value;
+                        int64_t b = rv.as.i64;
                         if (b != 0) {
-                            result = make_integer_value(NUM_INT64, lv.as.integer.value % b);
+                            result = make_int64_value(lv.as.i64 % b);
                             folded = true;
                         }
                     } else {
@@ -422,8 +423,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
 
             if (folded) {
                 int reg = (dest >= 0) ? dest : allocReg();
-                if (result.type == VAL_INTEGER) {
-                    int64_t iv = result.as.integer.value;
+                if (result.type == VAL_INT64) {
+                    int64_t iv = result.as.i64;
                     if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                         emitAsBx(OP_LOADINT, (uint8_t)reg, (int)iv);
                     } else {
@@ -1431,7 +1432,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                     int len_reg = allocReg();
                     emitABC(OP_LEN, (uint8_t)len_reg, (uint8_t)disc_reg, 0);
                     int expected_ki = current_->proto->addConstant(
-                        make_integer_value(NUM_INT64, (int64_t)elem_count));
+                        make_int64_value((int64_t)elem_count));
 
                     if (has_rest) {
                         // length >= elem_count
@@ -1518,7 +1519,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                         const char* interned_name = pool_->intern(name)->data;
                         int local_reg = addLocal(interned_name);
                         int idx_ki = current_->proto->addConstant(
-                            make_integer_value(NUM_INT64, (int64_t)k));
+                            make_int64_value((int64_t)k));
                         emitABC(OP_GETTABLE, (uint8_t)local_reg,
                                 (uint8_t)disc_reg, makeRK(idx_ki));
                     }
@@ -1537,7 +1538,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                     int idx_reg = allocReg();
                     int elem_reg = allocReg();
                     int start_ki = current_->proto->addConstant(
-                        make_integer_value(NUM_INT64, (int64_t)elem_count));
+                        make_int64_value((int64_t)elem_count));
                     emitLoadK(idx_reg, start_ki);
 
                     // Simple loop: while idx_reg < len_reg
@@ -1552,7 +1553,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                     // Push to rest array via native call
                     // Use SETTABLE with integer key: rest[idx - elem_count] = elem
                     int offset_ki = current_->proto->addConstant(
-                        make_integer_value(NUM_INT64, (int64_t)elem_count));
+                        make_int64_value((int64_t)elem_count));
                     int offset_reg = allocReg();
                     emitABC(OP_SUB, (uint8_t)offset_reg,
                             (uint8_t)idx_reg, makeRK(offset_ki));
