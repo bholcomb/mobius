@@ -3,44 +3,13 @@
 
 #include "eval/evaluator.h"
 #include "data/value.h"
+#include <mobius/mobius_plugin.h>
 #include <stddef.h>
 
-// Plugin API version for compatibility checking
-#define MOBIUS_PLUGIN_API_VERSION 1
-
-// Plugin metadata structure
-typedef struct {
-    const char* name;           // Plugin name (e.g., "mathlib")
-    const char* version;        // Plugin version (e.g., "1.0.0")
-    const char* description;    // Brief description
-    const char* author;         // Plugin author
-    size_t api_version;         // Plugin API version
-    const char* license;        // Plugin license (optional)
-} PluginMetadata;
-
-// Plugin function definition
-typedef struct {
-    const char* name;           // Function name
-    MobiusCFunction function;   // Function pointer
-    size_t arg_count;           // Expected arguments (SIZE_MAX for variadic)
-} PluginFunction;
-
-// Plugin structure - main interface
-typedef struct {
-    PluginMetadata metadata;    // Plugin information
-    PluginFunction* functions;  // Array of functions provided
-    size_t function_count;      // Number of functions
-    
-    // Plugin lifecycle hooks
-    int (*init_plugin)(void);                    // Initialize plugin (return 0 on success)
-    void (*cleanup_plugin)(void);               // Cleanup plugin resources
-    const char* (*get_help)(const char* name);  // Get help for specific function
-    int (*validate_env)(void);                  // Validate runtime environment
-} Plugin;
-
-// Plugin entry point - every plugin must export this symbol
-// Plugins should implement: Plugin* mobius_plugin_info(void);
-typedef Plugin* (*PluginInfoFunc)(void);
+typedef MobiusPluginMetadata PluginMetadata;
+typedef MobiusPluginFunction PluginFunction;
+typedef MobiusPlugin         Plugin;
+typedef MobiusPlugin*      (*PluginInfoFunc)(void);
 
 // Plugin loading status
 typedef enum {
