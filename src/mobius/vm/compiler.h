@@ -96,6 +96,7 @@ private:
     int compileLiteral(LiteralExpr* expr, int dest);
     int compileVariable(VariableExpr* expr, int dest);
     int compileBinary(BinaryExpr* expr, int dest);
+    bool tryExprAsRK(Expr* e, uint8_t* rk);
     int compileUnary(UnaryExpr* expr, int dest);
     int compileAssignment(AssignmentExpr* expr, int dest);
     int compileCall(CallExpr* expr, int dest);
@@ -109,6 +110,9 @@ private:
     int compileIncrement(IncrementExpr* expr, int dest);
     int compileLogicalAnd(BinaryExpr* expr, int dest);
     int compileLogicalOr(BinaryExpr* expr, int dest);
+
+    // --- Condition compilation (fused compare+branch) ---
+    int compileConditionJump(Expr* condition);
 
     // --- Statement compilation ---
     void compileStmt(Stmt* stmt);

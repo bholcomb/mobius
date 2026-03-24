@@ -199,6 +199,23 @@ enum OpCode : uint8_t {
     OP_TYPECOMPAT,  // A B C     if (comparable(RK(B), RK(C)) != A) then skip next
     OP_TYPEIS,      // A B C     if (R[B].type == C) != A then skip next
 
+    // -- Comparison with immediate (AsBx: A=register, sBx=signed 16-bit immediate) --
+    OP_LTI,         // A sBx     if R[A] <  sBx then skip next
+    OP_LEI,         // A sBx     if R[A] <= sBx then skip next
+    OP_EQI,         // A sBx     if R[A] == sBx then skip next
+    OP_NEI,         // A sBx     if R[A] != sBx then skip next
+    OP_GTI,         // A sBx     if R[A] >  sBx then skip next
+    OP_GEI,         // A sBx     if R[A] >= sBx then skip next
+
+    // -- Arithmetic with immediate --
+    OP_ADDI,        // A sBx     R[A] = R[A] + sBx
+    OP_SUBI,        // A sBx     R[A] = R[A] - sBx
+    OP_MULI,        // A sBx     R[A] = R[A] * sBx
+    OP_MODI,        // A sBx     R[A] = R[A] % sBx
+
+    // -- Fused test-and-jump --
+    OP_TESTJMP,     // A sBx     if !is_truthy(R[A]) then pc += sBx
+
     // -- Miscellaneous --
     OP_LEN,         // A B       R[A] = length(R[B])  (array length or table size)
 
@@ -293,6 +310,20 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"ISNUM",     FMT_ABC},
         {"TYPECOMPAT",FMT_ABC},
         {"TYPEIS",    FMT_ABC},
+
+        {"LTI",       FMT_AsBx},
+        {"LEI",       FMT_AsBx},
+        {"EQI",       FMT_AsBx},
+        {"NEI",       FMT_AsBx},
+        {"GTI",       FMT_AsBx},
+        {"GEI",       FMT_AsBx},
+
+        {"ADDI",      FMT_AsBx},
+        {"SUBI",      FMT_AsBx},
+        {"MULI",      FMT_AsBx},
+        {"MODI",      FMT_AsBx},
+
+        {"TESTJMP",   FMT_AsBx},
 
         {"LEN",       FMT_ABC},
 

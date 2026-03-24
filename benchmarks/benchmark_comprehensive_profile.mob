@@ -11,12 +11,10 @@ var PROFILE_ITERATIONS = 100;
 // ============================================================================
 func benchmark_arithmetic() {
     var result = 0;
-    var i = 0;
-    while (i < 1000000) {
+    for (var i = 0; i < 1000000; i = i + 1) {
         result = result + i * 2 - 1;
         result = result / 2;
         result = result % 1000;
-        i = i + 1;
     }
     return result;
 }
@@ -33,10 +31,8 @@ func fibonacci(n) {
 
 func benchmark_function_calls() {
     var result = 0;
-    var i = 0;
-    while (i < 10) {
+    for (var i = 0; i < 10; i = i + 1) {
         result = fibonacci(20);
-        i = i + 1;
     }
     return result;
 }
@@ -46,17 +42,13 @@ func benchmark_function_calls() {
 // ============================================================================
 func benchmark_arrays() {
     var arr = array_create(10000);
-    var i = 0;
-    while (i < 10000) {
+    for (var i = 0; i < 10000; i = i + 1) {
         array_push(arr, i * 2);
-        i = i + 1;
     }
 
     var sum = 0;
-    i = 0;
-    while (i < 10000) {
+    for (var i = 0; i < 10000; i = i + 1) {
         sum = sum + array_get(arr, i);
-        i = i + 1;
     }
 
     return sum;
@@ -67,10 +59,8 @@ func benchmark_arrays() {
 // ============================================================================
 func build_table_keys(count) {
     var keys = array_create(count);
-    var i = 0;
-    while (i < count) {
+    for (var i = 0; i < count; i = i + 1) {
         array_push(keys, concat("key_", str(i)));
-        i = i + 1;
     }
     return keys;
 }
@@ -78,19 +68,15 @@ func build_table_keys(count) {
 func benchmark_tables() {
     var keys = build_table_keys(5000);
     var tbl = {};
-    var i = 0;
-    while (i < 5000) {
+    for (var i = 0; i < 5000; i = i + 1) {
         var key = array_get(keys, i);
         tbl[key] = i * 3;
-        i = i + 1;
     }
 
     var sum = 0;
-    i = 0;
-    while (i < 5000) {
+    for (var i = 0; i < 5000; i = i + 1) {
         var key = array_get(keys, i);
         sum = sum + tbl[key];
-        i = i + 1;
     }
 
     return sum;
@@ -102,12 +88,10 @@ func benchmark_tables() {
 func benchmark_strings() {
     var base = "Hello";
     var result = "";
-    var i = 0;
-    while (i < 1000) {
+    for (var i = 0; i < 1000; i = i + 1) {
         result = concat(base, " World ", str(i));
         var len_result = len(result);
         var upper_result = upper(result);
-        i = i + 1;
     }
     return len(result);
 }
@@ -117,14 +101,10 @@ func benchmark_strings() {
 // ============================================================================
 func benchmark_nested_loops() {
     var sum = 0;
-    var i = 0;
-    while (i < 500) {
-        var j = 0;
-        while (j < 500) {
+    for (var i = 0; i < 500; i = i + 1) {
+        for (var j = 0; j < 500; j = j + 1) {
             sum = sum + i * j;
-            j = j + 1;
         }
-        i = i + 1;
     }
     return sum;
 }
@@ -133,14 +113,14 @@ func benchmark_nested_loops() {
 // 7. Object Creation/Destruction
 // ============================================================================
 func benchmark_object_lifecycle() {
-    var i = 0;
-    while (i < 10000) {
+    var last = 0;
+    for (var i = 0; i < 10000; i = i + 1) {
         var temp_array = [1, 2, 3, 4, 5];
         var temp_table = {a: 1, b: 2, c: 3};
         var temp_str = concat("temp", str(i));
-        i = i + 1;
+        last = i;
     }
-    return i;
+    return last;
 }
 
 // ============================================================================
@@ -148,23 +128,19 @@ func benchmark_object_lifecycle() {
 // ============================================================================
 func benchmark_mixed() {
     var data = array_create(1000);
-    var i = 0;
-    while (i < 1000) {
+    for (var i = 0; i < 1000; i = i + 1) {
         var record = {
             id: i,
             value: i * 2,
             name: concat("item_", str(i))
         };
         array_push(data, record);
-        i = i + 1;
     }
 
     var total = 0;
-    i = 0;
-    while (i < 1000) {
+    for (var i = 0; i < 1000; i = i + 1) {
         var record = array_get(data, i);
         total = total + record.value;
-        i = i + 1;
     }
 
     return total;
@@ -187,12 +163,10 @@ print("Iterations: ", PROFILE_ITERATIONS);
 print("Starting profiling workload...\n");
 
 var overall_start = clock();
-var iteration = 0;
 var checksum = 0;
 
-while (iteration < PROFILE_ITERATIONS) {
+for (var iteration = 0; iteration < PROFILE_ITERATIONS; iteration = iteration + 1) {
     checksum = checksum + run_suite();
-    iteration = iteration + 1;
 }
 
 var overall_duration = clock() - overall_start;
