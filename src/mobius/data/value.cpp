@@ -96,28 +96,10 @@ void Value::releaseRefSlow() {
 // Value creation functions
 // ============================================================================
 
-Value make_nil_value() {
-    return Value();
-}
-
-Value make_bool_value(bool val) {
-    Value value;
-    value.type = VAL_BOOL;
-    value.as.boolean = val;
-    return value;
-}
-
 Value make_string_value(MobiusString* string) {
     Value value;
     value.type = VAL_STRING;
     value.as.string = string;
-    return value;
-}
-
-Value make_char_value(char val) {
-    Value value;
-    value.type = VAL_CHAR;
-    value.as.character = val;
     return value;
 }
 
