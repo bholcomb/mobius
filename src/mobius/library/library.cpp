@@ -94,8 +94,7 @@ void register_stdlib_functions(MobiusState* state) {
         
         Value func_value = make_native_function_value(func->function);
         
-        const char* interned_name = pool->intern(func->name)->data;
-        state->globalEnv()->define(interned_name, func_value);
+        state->globalEnv()->define(pool->intern(func->name), func_value);
     }
 }
 

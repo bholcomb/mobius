@@ -14,7 +14,17 @@ Environment::~Environment()
 {
 }
 
-void Environment::define(const char* name, const Value& value) {
+void Environment::retain() {
+    ref_count_++;
+}
+
+void Environment::release() {
+    if (--ref_count_ <= 0) {
+        delete this;
+    }
+}
+
+void Environment::define(MobiusString* name, const Value& value) {
     auto it = myVariables.find(name);
     if (it != myVariables.end()) {
         it->second = value;
@@ -23,7 +33,7 @@ void Environment::define(const char* name, const Value& value) {
     }
 }
 
-Value Environment::get(const char* name, bool* found) const {
+Value Environment::get(MobiusString* name, bool* found) const {
     const Environment* current = this;
     while (current) {
         auto it = current->myVariables.find(name);
@@ -37,7 +47,7 @@ Value Environment::get(const char* name, bool* found) const {
     return make_nil_value();
 }
 
-const Value* Environment::lookup(const char* name) const {
+const Value* Environment::lookup(MobiusString* name) const {
     const Environment* current = this;
     while (current) {
         auto it = current->myVariables.find(name);
@@ -49,7 +59,7 @@ const Value* Environment::lookup(const char* name) const {
     return nullptr;
 }
 
-bool Environment::assign(const char* name, const Value& value) {
+bool Environment::assign(MobiusString* name, const Value& value) {
     Environment* current = this;
     while (current) {
         auto it = current->myVariables.find(name);
@@ -62,7 +72,7 @@ bool Environment::assign(const char* name, const Value& value) {
     return false;
 }
 
-bool Environment::isDefined(const char* name) const {
+bool Environment::isDefined(MobiusString* name) const {
     return lookup(name) != nullptr;
 }
 
@@ -74,7 +84,7 @@ void Environment::print() const {
     printf("Environment (variables: %zu):\n", myVariables.size());
     for (const auto& [name, val] : myVariables) {
         char* str = value_to_string(val);
-        printf("  %s = %s\n", name ? name : "(null)", str ? str : "(null)");
+        printf("  %s = %s\n", name ? name->data : "(null)", str ? str : "(null)");
         free(str);
     }
     if (enclosing) {

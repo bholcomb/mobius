@@ -1,5 +1,7 @@
 #include "eval/evaluator.h"
 #include "state/mobius_state.h"
+#include "data/array.h"
+#include "data/table.h"
 
 #include <new>
 #include <string.h>
@@ -52,10 +54,7 @@ static int simple_compare_values(Value left, Value right) {
 
 // Range matching (e.g., 1..10)
 static bool value_in_range(Value value, CasePattern* pattern, Environment* env) {
-    // Note: These evaluations need a temporary environment
-    // For now, we'll assume range patterns use literals
-    // TODO: Support complex expressions in range patterns with proper environment
-    Environment* temp_env = new (std::nothrow) Environment(nullptr, env->current_context);
+    Environment* temp_env = new (std::nothrow) Environment(env, env->current_context);
     if (!temp_env) {
         return false;
     }
@@ -63,19 +62,19 @@ static bool value_in_range(Value value, CasePattern* pattern, Environment* env) 
     // Evaluate start and end expressions
     EvalResult start_result = evaluate_expr(pattern->as.range_pattern.start, temp_env);
     if (start_result.has_error) {
-        delete temp_env;
+        temp_env->release();
         return false;
     }
     Value start_val = env->current_context->pop();
     
     EvalResult end_result = evaluate_expr(pattern->as.range_pattern.end, temp_env);
     if (end_result.has_error) {
-        delete temp_env;
+        temp_env->release();
         return false;
     }
     Value end_val = env->current_context->pop();
     
-    delete temp_env;
+    temp_env->release();
     bool inclusive = pattern->as.range_pattern.inclusive;
     bool in_range = false;
     
@@ -155,15 +154,75 @@ static PatternMatchResult match_pattern(CasePattern* pattern, Value value, Envir
             result.matches = (value.type == pattern->as.type_pattern.value_type);
             break;
             
-        case PATTERN_ARRAY:
-            // TODO: Implement array destructuring
-            result.matches = false;
+        case PATTERN_ARRAY: {
+            if (value.type != VAL_ARRAY || !value.as.array) {
+                result.matches = false;
+                break;
+            }
+            ArrayValue* arr = value.as.array;
+            size_t elem_count = pattern->as.array_pattern.element_count;
+            bool has_rest = pattern->as.array_pattern.has_rest;
+
+            if (!has_rest && arr->length() != elem_count) {
+                result.matches = false;
+                break;
+            }
+            if (has_rest && arr->length() < elem_count) {
+                result.matches = false;
+                break;
+            }
+
+            result.matches = true;
+            result.bindings = new (std::nothrow) Environment(env, env->current_context);
+            StringInternPool* pool = env->current_context->state->stringPool();
+            for (size_t k = 0; k < elem_count; k++) {
+                const char* name = pattern->as.array_pattern.elements[k].name;
+                if (name) {
+                    result.bindings->define(pool->intern(name), arr->get(k));
+                }
+            }
+            if (has_rest && pattern->as.array_pattern.rest_name) {
+                ArrayValue* rest = new (std::nothrow) ArrayValue(arr->length() - elem_count);
+                for (size_t k = elem_count; k < arr->length(); k++) {
+                    rest->push(arr->get(k));
+                }
+                result.bindings->define(pool->intern(pattern->as.array_pattern.rest_name),
+                                        make_array_value(rest));
+            }
             break;
-            
-        case PATTERN_TABLE:
-            // TODO: Implement table destructuring
-            result.matches = false;
+        }
+
+        case PATTERN_TABLE: {
+            if (value.type != VAL_TABLE || !value.as.table) {
+                result.matches = false;
+                break;
+            }
+            Table* tbl = value.as.table;
+            size_t field_count = pattern->as.table_pattern.field_count;
+
+            result.matches = true;
+            result.bindings = new (std::nothrow) Environment(env, env->current_context);
+            StringInternPool* tpool = env->current_context->state->stringPool();
+            for (size_t k = 0; k < field_count; k++) {
+                const char* key = pattern->as.table_pattern.fields[k].key;
+                const char* bind = pattern->as.table_pattern.fields[k].bind_name;
+                bool optional = pattern->as.table_pattern.fields[k].is_optional;
+
+                Value key_val = make_string_value_from_cstr(
+                    env->current_context->state, key);
+                Value field_val = tbl->get(key_val);
+
+                if (field_val.type == VAL_NIL && !optional) {
+                    result.matches = false;
+                    result.bindings->release();
+                    result.bindings = NULL;
+                    break;
+                }
+                const char* var_name = bind ? bind : key;
+                result.bindings->define(tpool->intern(var_name), field_val);
+            }
             break;
+        }
             
         case PATTERN_WILDCARD:
             result.matches = true;  // Always matches
@@ -187,74 +246,75 @@ EvalResult eval_switch_stmt(SwitchStmt* stmt, Environment* env) {
     for (size_t i = 0; i < stmt->case_count; i++) {
         SwitchCase* case_clause = stmt->cases[i];
         
-        // Check if any pattern in this case matches
         bool case_matches = false;
+        Environment* bindings_env = nullptr;
         Environment* case_env = new (std::nothrow) Environment(env, env->current_context);
         if (!case_env) {
             return make_error(env, "Memory allocation failed", 0, 0);
         }
-        
+
         for (size_t j = 0; j < case_clause->pattern_count; j++) {
             PatternMatchResult match_result = match_pattern(
                 case_clause->patterns[j], switch_value, env);
-            
+
             if (match_result.matches) {
-                // Check guard clause if present
                 if (case_clause->guard) {
                     EvalResult guard_result = evaluate_expr(case_clause->guard, case_env);
-                        if (guard_result.has_error) {
-                            delete case_env;
-                            return guard_result;
-                        }
+                    if (guard_result.has_error) {
+                        if (match_result.bindings) match_result.bindings->release();
+                        case_env->release();
+                        return guard_result;
+                    }
                     Value guard_val = env->current_context->pop();
-                    bool guard_passed = is_truthy(guard_val);
-                    if (!guard_passed) {
-                        continue;  // Guard failed, try next pattern
+                    if (!is_truthy(guard_val)) {
+                        if (match_result.bindings) match_result.bindings->release();
+                        continue;
                     }
                 }
-                
-                // Pattern and guard matched
+
                 case_matches = true;
                 if (match_result.bindings) {
-                    // TODO: Merge bindings into case_env
-                    delete match_result.bindings;
+                    bindings_env = match_result.bindings;
+                    case_env->release();
+                    case_env = new (std::nothrow) Environment(bindings_env,
+                                                              env->current_context);
                 }
                 break;
             }
         }
         
         if (case_matches) {
-            // Execute case body
             EvalResult case_result = make_success(0);
-            
+
             for (size_t j = 0; j < case_clause->body_count; j++) {
                 case_result = evaluate_stmt(case_clause->body[j], case_env);
-                
+
                 if (case_result.has_error || case_result.has_returned) {
-                    delete case_env;
+                    case_env->release();
+                    if (bindings_env) bindings_env->release();
                     return case_result;
                 }
-                
-                // Check for break
+
                 if (case_result.has_break) {
-                    delete case_env;
-                    // Convert break to normal success
+                    case_env->release();
+                    if (bindings_env) bindings_env->release();
                     case_result.has_break = false;
                     return case_result;
                 }
             }
-            
-            delete case_env;
-            
-            // If no explicit break, fall through to next case
+
+            case_env->release();
+            if (bindings_env) bindings_env->release();
+
             if (!case_clause->has_break) {
-                continue;  // Fall through
+                continue;
             } else {
                 return case_result;
             }
         }
-        
-        delete case_env;
+
+        case_env->release();
+        if (bindings_env) bindings_env->release();
     }
     
     // No case matched, try default

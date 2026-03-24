@@ -170,6 +170,7 @@ enum OpCode : uint8_t {
     // -- Closures --
     OP_CLOSURE,     // A Bx      R[A] = closure(proto[Bx])
                     //           followed by pseudo-instructions for upvalue binding
+    OP_CLOSE,       // A         close all upvalues >= R[A]
 
     // -- Numeric for-loop --
     OP_FORPREP,     // A sBx     R[A] -= R[A+2]; pc += sBx (jump to FORLOOP)
@@ -196,6 +197,10 @@ enum OpCode : uint8_t {
     OP_TYPECHECK,   // A B       validate/convert R[A] to NumberType B; errors in strict mode
     OP_ISNUM,       // A B       R[A] = (R[B] is integer or float)
     OP_TYPECOMPAT,  // A B C     if (comparable(RK(B), RK(C)) != A) then skip next
+    OP_TYPEIS,      // A B C     if (R[B].type == C) != A then skip next
+
+    // -- Miscellaneous --
+    OP_LEN,         // A B       R[A] = length(R[B])  (array length or table size)
 
     // -- Debug / sentinel --
     OP_NOP,         //           no operation (padding / breakpoint target)
@@ -268,6 +273,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"RETURN",    FMT_ABC},
 
         {"CLOSURE",   FMT_ABx},
+        {"CLOSE",     FMT_ABC},
 
         {"FORPREP",   FMT_AsBx},
         {"FORLOOP",   FMT_AsBx},
@@ -286,6 +292,9 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"TYPECHECK", FMT_ABC},
         {"ISNUM",     FMT_ABC},
         {"TYPECOMPAT",FMT_ABC},
+        {"TYPEIS",    FMT_ABC},
+
+        {"LEN",       FMT_ABC},
 
         {"NOP",       FMT_ABC},
     };

@@ -66,26 +66,26 @@ EvalResult eval_var_stmt(VarStmt* stmt, Environment* env) {
         free(conversion.error_message);
     }
     
-    const char* name = stmt->name.identifier ? stmt->name.identifier : "unknown";
+    StringInternPool* pool = env->current_context->state->stringPool();
+    MobiusString* interned_name = stmt->name.interned;
+    if (!interned_name) interned_name = pool->intern("unknown");
     
     // Check for namespace collision: an enum with the same name shouldn't exist
     char enum_var_buf[256];
-    snprintf(enum_var_buf, sizeof(enum_var_buf), "__enum_%s", name);
-    StringInternPool* pool = env->current_context->state->stringPool();
-    const char* enum_key = pool->intern(enum_var_buf)->data;
+    snprintf(enum_var_buf, sizeof(enum_var_buf), "__enum_%s", interned_name->data);
+    MobiusString* enum_key = pool->intern(enum_var_buf);
     bool enum_exists = false;
     env->get(enum_key, &enum_exists);
     
     if (enum_exists) {
         char error_msg[256];
-        snprintf(error_msg, sizeof(error_msg), "Name collision: enum '%s' already exists, cannot declare variable with the same name", name);
+        snprintf(error_msg, sizeof(error_msg), "Name collision: enum '%s' already exists, cannot declare variable with the same name", interned_name->data);
         return make_error(env, error_msg, stmt->name.line, stmt->name.column);
     }
     
-    env->define(name, value);
+    env->define(interned_name, value);
     
-    env->current_context->push( make_nil_value());
-    return make_success(1);
+    return make_success(0);
 }
 
 EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
@@ -113,7 +113,7 @@ EvalResult eval_block_stmt(BlockStmt* stmt, Environment* env) {
         }
     }
     
-    delete block_env;
+    block_env->release();
     return result;  // Preserve has_returned, has_break, has_continue flags
 }
 
@@ -186,7 +186,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
     if (stmt->initializer) {
         EvalResult result = evaluate_stmt(stmt->initializer, for_env);
         if (is_error(result)) {
-            delete for_env;
+            for_env->release();
             return result;
         }
     }
@@ -197,7 +197,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
         if (stmt->condition) {
             EvalResult condition_result = evaluate_expr(stmt->condition, for_env);
             if (is_error(condition_result)) {
-                delete for_env;
+                for_env->release();
                 return condition_result;
             }
             
@@ -212,7 +212,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
         // Execute body
         EvalResult result = evaluate_stmt(stmt->body, for_env);
         if (is_error(result)) {
-            delete for_env;
+            for_env->release();
             return result;
         }
         
@@ -224,7 +224,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
         
         // Handle return statement
         if (result.has_returned) {
-            delete for_env;
+            for_env->release();
             return result;  // Propagate return
         }
         
@@ -232,7 +232,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
         if (stmt->increment) {
             EvalResult increment_result = evaluate_expr(stmt->increment, for_env);
             if (is_error(increment_result)) {
-                delete for_env;
+                for_env->release();
                 return increment_result;
             }
         }
@@ -244,7 +244,7 @@ EvalResult eval_for_stmt(ForStmt* stmt, Environment* env) {
         }
     }
     
-    delete for_env;
+    for_env->release();
     return make_success(0);
 }
 
@@ -255,8 +255,7 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         return make_error(env, "Memory allocation failed", 0, 0);
     }
     
-    // Use the interned identifier pointer directly (owned by the intern pool)
-    function->name = stmt->name.identifier;
+    function->name = stmt->name.interned;
     if (!function->name) {
         free(function);
         return make_error(env, "Failed to extract function name", 0, 0);
@@ -264,14 +263,14 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
     
     function->param_count = stmt->param_count;
     if (stmt->param_count > 0) {
-        function->param_names = (const char**)malloc(stmt->param_count * sizeof(const char*));
+        function->param_names = (MobiusString**)malloc(stmt->param_count * sizeof(MobiusString*));
         if (!function->param_names) {
             free(function);
             return make_error(env, "Memory allocation failed", 0, 0);
         }
         
         for (size_t i = 0; i < stmt->param_count; i++) {
-            function->param_names[i] = stmt->params[i].identifier;
+            function->param_names[i] = stmt->params[i].interned;
             if (!function->param_names[i]) {
                 free(function->param_names);
                 free(function);
@@ -299,7 +298,10 @@ EvalResult eval_function_stmt(FunctionStmt* stmt, Environment* env) {
         function->body = NULL;
     }
     function->closure = env;
+    env->retain();
     function->ref_count = 1;
+    function->upvalues = nullptr;
+    function->upvalue_count = 0;
     
     Value func_value = make_function_value(function);
     

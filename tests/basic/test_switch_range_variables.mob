@@ -1,0 +1,114 @@
+// Test range patterns with variable endpoints in switch statements
+print("=== Switch Range Variable Endpoint Tests ===");
+
+// Test 1: Variable endpoints
+func test_variable_range() {
+    var low = 1;
+    var high = 10;
+    var result = "";
+
+    switch (5) {
+        case low..high:
+            result = "in_range";
+            break;
+        default:
+            result = "out_of_range";
+    }
+    return result;
+}
+
+// Test 2: Value at lower boundary
+func test_lower_boundary() {
+    var low = 10;
+    var high = 20;
+    var result = "";
+
+    switch (10) {
+        case low..high:
+            result = "matched";
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 3: Value at upper boundary (inclusive)
+func test_upper_boundary() {
+    var low = 10;
+    var high = 20;
+    var result = "";
+
+    switch (20) {
+        case low..high:
+            result = "matched";
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+// Test 4: Value outside range
+func test_outside_range() {
+    var low = 10;
+    var high = 20;
+    var result = "";
+
+    switch (25) {
+        case low..high:
+            result = "in_range";
+            break;
+        default:
+            result = "out_of_range";
+    }
+    return result;
+}
+
+// Test 5: Range with non-numeric discriminant (should not match)
+func test_type_mismatch() {
+    var low = 1;
+    var high = 10;
+    var result = "";
+
+    switch ("hello") {
+        case low..high:
+            result = "matched";
+            break;
+        default:
+            result = "no_match";
+    }
+    return result;
+}
+
+print("Variable range (5 in 1..10): " + test_variable_range());
+if (test_variable_range() != "in_range") {
+    print("FAIL: expected in_range");
+    exit(1);
+}
+
+print("Lower boundary (10 in 10..20): " + test_lower_boundary());
+if (test_lower_boundary() != "matched") {
+    print("FAIL: expected matched");
+    exit(1);
+}
+
+print("Upper boundary (20 in 10..20): " + test_upper_boundary());
+if (test_upper_boundary() != "matched") {
+    print("FAIL: expected matched");
+    exit(1);
+}
+
+print("Outside range (25 in 10..20): " + test_outside_range());
+if (test_outside_range() != "out_of_range") {
+    print("FAIL: expected out_of_range");
+    exit(1);
+}
+
+print("Type mismatch (string vs int range): " + test_type_mismatch());
+if (test_type_mismatch() != "no_match") {
+    print("FAIL: expected no_match");
+    exit(1);
+}
+
+print("=== All switch range variable tests passed! ===");

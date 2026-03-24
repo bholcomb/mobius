@@ -1,0 +1,110 @@
+// Test lexical closures — inner functions capturing outer variables
+print("=== Closure Tests ===");
+
+// Test 1: Basic closure — capture a parameter
+func test_capture_param() {
+    func make_adder(x) {
+        func add(y) {
+            return x + y;
+        }
+        return add;
+    }
+    var add5 = make_adder(5);
+    var add10 = make_adder(10);
+    if (add5(3) != 8) { return "FAIL: add5(3) != 8"; }
+    if (add10(3) != 13) { return "FAIL: add10(3) != 13"; }
+    return "ok";
+}
+
+// Test 2: Mutable closure — captured variable is modified across calls
+func test_counter() {
+    func make_counter() {
+        var count = 0;
+        func increment() {
+            count = count + 1;
+            return count;
+        }
+        return increment;
+    }
+    var c = make_counter();
+    if (c() != 1) { return "FAIL: c() != 1"; }
+    if (c() != 2) { return "FAIL: c() != 2"; }
+    if (c() != 3) { return "FAIL: c() != 3"; }
+    return "ok";
+}
+
+// Test 3: Independent closures don't share state
+func test_independent_closures() {
+    func make_counter() {
+        var count = 0;
+        func increment() {
+            count = count + 1;
+            return count;
+        }
+        return increment;
+    }
+    var a = make_counter();
+    var b = make_counter();
+    a();
+    a();
+    b();
+    if (a() != 3) { return "FAIL: a() should be 3"; }
+    if (b() != 2) { return "FAIL: b() should be 2"; }
+    return "ok";
+}
+
+// Test 4: Closure captures value at definition time, not reference time
+func test_closure_snapshot() {
+    func make_getter(val) {
+        func getter() {
+            return val;
+        }
+        return getter;
+    }
+    var g1 = make_getter(100);
+    var g2 = make_getter(200);
+    if (g1() != 100) { return "FAIL: g1() != 100"; }
+    if (g2() != 200) { return "FAIL: g2() != 200"; }
+    // g1 should still return 100 even after g2 was created
+    if (g1() != 100) { return "FAIL: g1() still != 100"; }
+    return "ok";
+}
+
+// Test 5: Nested closures — two levels deep
+func test_nested_closures() {
+    func outer(x) {
+        func middle(y) {
+            func inner(z) {
+                return x + y + z;
+            }
+            return inner;
+        }
+        return middle;
+    }
+    var f = outer(1);
+    var g = f(2);
+    if (g(3) != 6) { return "FAIL: g(3) != 6"; }
+    return "ok";
+}
+
+var r1 = test_capture_param();
+print("Capture param: " + r1);
+if (r1 != "ok") { exit(1); }
+
+var r2 = test_counter();
+print("Counter: " + r2);
+if (r2 != "ok") { exit(1); }
+
+var r3 = test_independent_closures();
+print("Independent: " + r3);
+if (r3 != "ok") { exit(1); }
+
+var r4 = test_closure_snapshot();
+print("Snapshot: " + r4);
+if (r4 != "ok") { exit(1); }
+
+var r5 = test_nested_closures();
+print("Nested: " + r5);
+if (r5 != "ok") { exit(1); }
+
+print("=== All closure tests passed! ===");

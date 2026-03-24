@@ -1,0 +1,130 @@
+// Test comma-separated multiple patterns per case in switch statements
+print("=== Switch Multi-Pattern Tests ===");
+
+// Test 1: Multiple integer values
+func test_multi_int() {
+    var result = "";
+    switch (2) {
+        case 1, 2, 3:
+            result = "small";
+            break;
+        case 4, 5, 6:
+            result = "medium";
+            break;
+        default:
+            result = "other";
+    }
+    return result;
+}
+
+// Test 2: Multiple string values
+func test_multi_string() {
+    var result = "";
+    switch ("banana") {
+        case "apple", "banana", "cherry":
+            result = "fruit";
+            break;
+        case "carrot", "potato":
+            result = "vegetable";
+            break;
+        default:
+            result = "unknown";
+    }
+    return result;
+}
+
+// Test 3: First pattern matches
+func test_first_match() {
+    var result = "";
+    switch (10) {
+        case 10, 20, 30:
+            result = "found";
+            break;
+        default:
+            result = "not_found";
+    }
+    return result;
+}
+
+// Test 4: Last pattern matches
+func test_last_match() {
+    var result = "";
+    switch (30) {
+        case 10, 20, 30:
+            result = "found";
+            break;
+        default:
+            result = "not_found";
+    }
+    return result;
+}
+
+// Test 5: No pattern matches, falls to default
+func test_no_match() {
+    var result = "";
+    switch (99) {
+        case 1, 2, 3:
+            result = "small";
+            break;
+        default:
+            result = "default";
+    }
+    return result;
+}
+
+// Test 6: Mixed with single-pattern cases
+func test_mixed() {
+    var result = "";
+    switch (5) {
+        case 1:
+            result = "one";
+            break;
+        case 2, 3, 4:
+            result = "two_three_four";
+            break;
+        case 5:
+            result = "five";
+            break;
+        default:
+            result = "other";
+    }
+    return result;
+}
+
+print("Multi int (2 in 1,2,3): " + test_multi_int());
+if (test_multi_int() != "small") {
+    print("FAIL: expected small");
+    exit(1);
+}
+
+print("Multi string (banana): " + test_multi_string());
+if (test_multi_string() != "fruit") {
+    print("FAIL: expected fruit");
+    exit(1);
+}
+
+print("First match (10 in 10,20,30): " + test_first_match());
+if (test_first_match() != "found") {
+    print("FAIL: expected found");
+    exit(1);
+}
+
+print("Last match (30 in 10,20,30): " + test_last_match());
+if (test_last_match() != "found") {
+    print("FAIL: expected found");
+    exit(1);
+}
+
+print("No match (99 in 1,2,3): " + test_no_match());
+if (test_no_match() != "default") {
+    print("FAIL: expected default");
+    exit(1);
+}
+
+print("Mixed cases (5): " + test_mixed());
+if (test_mixed() != "five") {
+    print("FAIL: expected five");
+    exit(1);
+}
+
+print("=== All switch multi-pattern tests passed! ===");

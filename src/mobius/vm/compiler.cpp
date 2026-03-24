@@ -105,7 +105,8 @@ void Compiler::endScope() {
            current_->locals.back().depth > current_->scope_depth) {
 
         if (current_->locals.back().is_captured) {
-            // TODO: emit OP_CLOSE for upvalues when we implement closures
+            int reg = (int)current_->locals.size() - 1;
+            emitABC(OP_CLOSE, (uint8_t)reg, 0, 0);
         }
         current_->locals.pop_back();
         freeReg();
@@ -1136,16 +1137,23 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
     for (size_t i = 0; i < stmt->case_count; i++) {
         SwitchCase* sc = stmt->cases[i];
 
-        std::vector<int> no_match_jumps;
+        // Multi-pattern OR-chain: if ANY pattern matches, jump to body.
+        // For each pattern, emit a match check; on match, jump to body.
+        // After all patterns, emit unconditional jump to no-match.
+        std::vector<int> match_jumps;
+        int final_no_match_jump = -1;
+        bool has_destructure = false;
+        CasePattern* destructure_pat = nullptr;
 
-        if (sc->pattern_count > 0 && sc->patterns[0]) {
-            CasePattern* pat = sc->patterns[0];
+        for (size_t p = 0; p < sc->pattern_count; p++) {
+            CasePattern* pat = sc->patterns[p];
+            if (!pat) continue;
 
             switch (pat->type) {
                 case PATTERN_VALUE: {
                     int ki = current_->proto->addConstant(pat->as.literal);
-                    emitABC(OP_EQ, 0, (uint8_t)disc_reg, makeRK(ki));
-                    no_match_jumps.push_back(emitJump());
+                    emitABC(OP_EQ, 1, (uint8_t)disc_reg, makeRK(ki));
+                    match_jumps.push_back(emitJump());
                     break;
                 }
                 case PATTERN_EXPRESSION: {
@@ -1157,47 +1165,237 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                                           op == TOKEN_GREATER || op == TOKEN_GREATER_EQUAL);
 
                     if (is_relational) {
-                        emitABC(OP_TYPECOMPAT, 0, (uint8_t)disc_reg, (uint8_t)expr_reg);
-                        no_match_jumps.push_back(emitJump());
-                    }
+                        // If types are incompatible, skip this pattern (not an error in multi-pattern)
+                        emitABC(OP_TYPECOMPAT, 1, (uint8_t)disc_reg, (uint8_t)expr_reg);
+                        int compat_jump = emitJump();
 
-                    switch (op) {
-                        case TOKEN_EQUAL_EQUAL:
-                            emitABC(OP_EQ, 0, (uint8_t)disc_reg, (uint8_t)expr_reg);
-                            break;
-                        case TOKEN_LESS:
-                            emitABC(OP_LT, 0, (uint8_t)disc_reg, (uint8_t)expr_reg);
-                            break;
-                        case TOKEN_LESS_EQUAL:
-                            emitABC(OP_LE, 0, (uint8_t)disc_reg, (uint8_t)expr_reg);
-                            break;
-                        case TOKEN_GREATER:
-                            emitABC(OP_LT, 0, (uint8_t)expr_reg, (uint8_t)disc_reg);
-                            break;
-                        case TOKEN_GREATER_EQUAL:
-                            emitABC(OP_LE, 0, (uint8_t)expr_reg, (uint8_t)disc_reg);
-                            break;
-                        case TOKEN_BANG_EQUAL:
-                            emitABC(OP_EQ, 1, (uint8_t)disc_reg, (uint8_t)expr_reg);
-                            break;
-                        default:
-                            emitABC(OP_EQ, 0, (uint8_t)disc_reg, (uint8_t)expr_reg);
-                            break;
+                        // Types not compatible — skip to next pattern
+                        int skip_pattern = emitJump();
+
+                        patchJump(compat_jump);
+
+                        switch (op) {
+                            case TOKEN_LESS:
+                                emitABC(OP_LT, 1, (uint8_t)disc_reg, (uint8_t)expr_reg); break;
+                            case TOKEN_LESS_EQUAL:
+                                emitABC(OP_LE, 1, (uint8_t)disc_reg, (uint8_t)expr_reg); break;
+                            case TOKEN_GREATER:
+                                emitABC(OP_LT, 1, (uint8_t)expr_reg, (uint8_t)disc_reg); break;
+                            case TOKEN_GREATER_EQUAL:
+                                emitABC(OP_LE, 1, (uint8_t)expr_reg, (uint8_t)disc_reg); break;
+                            default: break;
+                        }
+                        match_jumps.push_back(emitJump());
+                        patchJump(skip_pattern);
+                    } else {
+                        switch (op) {
+                            case TOKEN_EQUAL_EQUAL:
+                                emitABC(OP_EQ, 1, (uint8_t)disc_reg, (uint8_t)expr_reg); break;
+                            case TOKEN_BANG_EQUAL:
+                                emitABC(OP_EQ, 0, (uint8_t)disc_reg, (uint8_t)expr_reg); break;
+                            default:
+                                emitABC(OP_EQ, 1, (uint8_t)disc_reg, (uint8_t)expr_reg); break;
+                        }
+                        match_jumps.push_back(emitJump());
                     }
-                    no_match_jumps.push_back(emitJump());
                     setFreeReg(save2);
                     break;
                 }
+                case PATTERN_RANGE: {
+                    int save2 = current_->free_reg;
+                    int start_reg = compileExpr(pat->as.range_pattern.start);
+                    int end_reg = compileExpr(pat->as.range_pattern.end);
+
+                    // Guard: types must be compatible
+                    emitABC(OP_TYPECOMPAT, 1, (uint8_t)disc_reg, (uint8_t)start_reg);
+                    int compat_jump = emitJump();
+                    int skip_range = emitJump();
+                    patchJump(compat_jump);
+
+                    // start <= disc
+                    emitABC(OP_LE, 1, (uint8_t)start_reg, (uint8_t)disc_reg);
+                    int lower_ok = emitJump();
+                    int lower_fail = emitJump();
+                    patchJump(lower_ok);
+
+                    // disc <= end (inclusive) or disc < end (exclusive)
+                    if (pat->as.range_pattern.inclusive) {
+                        emitABC(OP_LE, 1, (uint8_t)disc_reg, (uint8_t)end_reg);
+                    } else {
+                        emitABC(OP_LT, 1, (uint8_t)disc_reg, (uint8_t)end_reg);
+                    }
+                    match_jumps.push_back(emitJump());
+
+                    patchJump(skip_range);
+                    patchJump(lower_fail);
+                    setFreeReg(save2);
+                    break;
+                }
+                case PATTERN_ARRAY: {
+                    int save2 = current_->free_reg;
+
+                    // Type check: disc must be VAL_ARRAY
+                    emitABC(OP_TYPEIS, 1, (uint8_t)disc_reg, (uint8_t)VAL_ARRAY);
+                    int type_ok = emitJump();
+                    int type_fail = emitJump();
+                    patchJump(type_ok);
+
+                    size_t elem_count = pat->as.array_pattern.element_count;
+                    bool has_rest = pat->as.array_pattern.has_rest;
+
+                    // Length check
+                    int len_reg = allocReg();
+                    emitABC(OP_LEN, (uint8_t)len_reg, (uint8_t)disc_reg, 0);
+                    int expected_ki = current_->proto->addConstant(
+                        make_integer_value(NUM_INT64, (int64_t)elem_count));
+
+                    if (has_rest) {
+                        // length >= elem_count
+                        emitABC(OP_LE, 1, makeRK(expected_ki), (uint8_t)len_reg);
+                    } else {
+                        // length == elem_count
+                        emitABC(OP_EQ, 1, (uint8_t)len_reg, makeRK(expected_ki));
+                    }
+                    match_jumps.push_back(emitJump());
+                    patchJump(type_fail);
+
+                    setFreeReg(save2);
+                    has_destructure = true;
+                    destructure_pat = pat;
+                    break;
+                }
+
+                case PATTERN_TABLE: {
+                    // Type check: disc must be VAL_TABLE
+                    emitABC(OP_TYPEIS, 1, (uint8_t)disc_reg, (uint8_t)VAL_TABLE);
+                    int ttype_ok = emitJump();
+                    int ttype_fail = emitJump();
+                    patchJump(ttype_ok);
+
+                    size_t field_count = pat->as.table_pattern.field_count;
+
+                    // For required fields, check each is non-nil
+                    int save2 = current_->free_reg;
+                    std::vector<int> field_fail_jumps;
+                    for (size_t f = 0; f < field_count; f++) {
+                        if (pat->as.table_pattern.fields[f].is_optional) continue;
+                        const char* key = pat->as.table_pattern.fields[f].key;
+                        int field_reg = allocReg();
+                        int key_ki = stringConstant(key);
+                        emitABC(OP_GETTABLE, (uint8_t)field_reg,
+                                (uint8_t)disc_reg, makeRK(key_ki));
+                        // Check field_reg is not nil (VAL_NIL == 0)
+                        emitABC(OP_TYPEIS, 0, (uint8_t)field_reg, (uint8_t)VAL_NIL);
+                        int not_nil = emitJump();
+                        field_fail_jumps.push_back(emitJump());
+                        patchJump(not_nil);
+                    }
+                    match_jumps.push_back(emitJump());
+
+                    patchJump(ttype_fail);
+                    for (int fj : field_fail_jumps) {
+                        patchJump(fj);
+                    }
+                    setFreeReg(save2);
+                    has_destructure = true;
+                    destructure_pat = pat;
+                    break;
+                }
+
                 case PATTERN_WILDCARD:
+                    match_jumps.push_back(emitJump());
                     break;
                 default:
-                    no_match_jumps.push_back(emitJump());
                     break;
             }
         }
 
+        // After all patterns: if we fall through, no pattern matched
+        if (sc->pattern_count > 0 && !(sc->pattern_count == 1 &&
+            sc->patterns[0] && sc->patterns[0]->type == PATTERN_WILDCARD)) {
+            final_no_match_jump = emitJump();
+        }
+
+        // All match jumps land here (at the body)
+        for (int jmp : match_jumps) {
+            patchJump(jmp);
+        }
+
         // Case body
         beginScope();
+
+        // Emit destructuring bindings inside the body scope
+        if (has_destructure && destructure_pat) {
+            if (destructure_pat->type == PATTERN_ARRAY) {
+                size_t elem_count = destructure_pat->as.array_pattern.element_count;
+                for (size_t k = 0; k < elem_count; k++) {
+                    const char* name = destructure_pat->as.array_pattern.elements[k].name;
+                    if (name) {
+                        const char* interned_name = pool_->intern(name)->data;
+                        int local_reg = addLocal(interned_name);
+                        int idx_ki = current_->proto->addConstant(
+                            make_integer_value(NUM_INT64, (int64_t)k));
+                        emitABC(OP_GETTABLE, (uint8_t)local_reg,
+                                (uint8_t)disc_reg, makeRK(idx_ki));
+                    }
+                }
+                if (destructure_pat->as.array_pattern.has_rest &&
+                    destructure_pat->as.array_pattern.rest_name) {
+                    const char* rest_interned = pool_->intern(destructure_pat->as.array_pattern.rest_name)->data;
+                    int rest_reg = addLocal(rest_interned);
+                    int len_reg = allocReg();
+                    emitABC(OP_LEN, (uint8_t)len_reg, (uint8_t)disc_reg, 0);
+
+                    int capacity = (int)elem_count > 0 ? 8 : 0;
+                    emitABC(OP_NEWARRAY, (uint8_t)rest_reg, (uint8_t)capacity, 0);
+
+                    // Build rest array: for i = elem_count .. len-1
+                    int idx_reg = allocReg();
+                    int elem_reg = allocReg();
+                    int start_ki = current_->proto->addConstant(
+                        make_integer_value(NUM_INT64, (int64_t)elem_count));
+                    emitLoadK(idx_reg, start_ki);
+
+                    // Simple loop: while idx_reg < len_reg
+                    int loop_start = current_->proto->currentPC();
+                    emitABC(OP_LT, 1, (uint8_t)idx_reg, (uint8_t)len_reg);
+                    int loop_body = emitJump();
+                    int loop_exit = emitJump();
+                    patchJump(loop_body);
+
+                    emitABC(OP_GETTABLE, (uint8_t)elem_reg,
+                            (uint8_t)disc_reg, (uint8_t)idx_reg);
+                    // Push to rest array via native call
+                    // Use SETTABLE with integer key: rest[idx - elem_count] = elem
+                    int offset_ki = current_->proto->addConstant(
+                        make_integer_value(NUM_INT64, (int64_t)elem_count));
+                    int offset_reg = allocReg();
+                    emitABC(OP_SUB, (uint8_t)offset_reg,
+                            (uint8_t)idx_reg, makeRK(offset_ki));
+                    emitABC(OP_SETTABLE, (uint8_t)rest_reg,
+                            (uint8_t)offset_reg, (uint8_t)elem_reg);
+                    emitABC(OP_INC, (uint8_t)idx_reg, (uint8_t)idx_reg, 0);
+                    int back_offset = loop_start - (current_->proto->currentPC() + 1);
+                    current_->proto->emitJump(back_offset, currentLine_);
+                    patchJump(loop_exit);
+
+                    setFreeReg(rest_reg + 1);
+                }
+            } else if (destructure_pat->type == PATTERN_TABLE) {
+                size_t field_count = destructure_pat->as.table_pattern.field_count;
+                for (size_t k = 0; k < field_count; k++) {
+                    const char* key = destructure_pat->as.table_pattern.fields[k].key;
+                    const char* bind = destructure_pat->as.table_pattern.fields[k].bind_name;
+                    const char* var_name = bind ? bind : key;
+                    const char* interned_var = pool_->intern(var_name)->data;
+                    int local_reg = addLocal(interned_var);
+                    int key_ki = stringConstant(key);
+                    emitABC(OP_GETTABLE, (uint8_t)local_reg,
+                            (uint8_t)disc_reg, makeRK(key_ki));
+                }
+            }
+        }
+
         compileBlock(sc->body, sc->body_count);
         endScope();
 
@@ -1205,8 +1403,8 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
             break_jumps.push_back(emitJump());
         }
 
-        for (int jmp : no_match_jumps) {
-            patchJump(jmp);
+        if (final_no_match_jump >= 0) {
+            patchJump(final_no_match_jump);
         }
     }
 

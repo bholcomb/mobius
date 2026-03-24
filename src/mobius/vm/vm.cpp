@@ -99,6 +99,8 @@ int MobiusVM::currentLine() const {
 int MobiusVM::execute(Prototype* proto) {
     registers_.resize(proto->num_registers + 256, Value());
 
+    size_t depth_before = call_stack_.size();
+
     CallInfo ci;
     ci.proto = proto;
     ci.ip = proto->code.data();
@@ -106,9 +108,11 @@ int MobiusVM::execute(Prototype* proto) {
     ci.nresults = 0;
     call_stack_.push_back(ci);
 
-    int rc = run();
+    int rc = run(depth_before);
 
-    call_stack_.pop_back();
+    if (!call_stack_.empty() && call_stack_.size() > depth_before) {
+        call_stack_.pop_back();
+    }
     return rc;
 }
 
@@ -166,13 +170,13 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
 
     if (!mf->proto) {
         runtimeError("Function '%s' has no bytecode prototype",
-                     mf->name ? mf->name : "anonymous");
+                     mf->name ? mf->name->data : "anonymous");
         return -1;
     }
 
     if ((int)mf->param_count != nargs) {
         runtimeError("Function '%s' expects %zu arguments but got %d",
-                     mf->name ? mf->name : "anonymous", mf->param_count, nargs);
+                     mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
         return -1;
     }
 
@@ -193,6 +197,15 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
     child_ci.ip = child->code.data();
     child_ci.base = child_base;
     child_ci.nresults = nresults;
+
+    // Propagate captured upvalues from the closure
+    if (mf->upvalues && mf->upvalue_count > 0) {
+        child_ci.open_upvalues.resize(mf->upvalue_count);
+        for (int u = 0; u < mf->upvalue_count; u++) {
+            child_ci.open_upvalues[u] = mf->upvalues[u];
+        }
+    }
+
     call_stack_.push_back(child_ci);
 
     return 1;  // signal: switched frame, caller updates dispatch locals
@@ -365,7 +378,7 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("GETGLOBAL: invalid key type");
                 return -1;
             }
-            const Value* val = global_env_->lookup(key.as.string->data);
+            const Value* val = global_env_->lookup(key.as.string);
             if (!val) {
                 runtimeError("Undefined variable '%s'", key.as.string->data);
                 return -1;
@@ -380,9 +393,8 @@ int MobiusVM::run(size_t base_depth) {
                 runtimeError("SETGLOBAL: invalid key type");
                 return -1;
             }
-            const char* name = key.as.string->data;
-            if (!global_env_->assign(name, RA(inst))) {
-                global_env_->define(name, RA(inst));
+            if (!global_env_->assign(key.as.string, RA(inst))) {
+                global_env_->define(key.as.string, RA(inst));
             }
             break;
         }
@@ -955,32 +967,75 @@ int MobiusVM::run(size_t base_depth) {
             }
             Prototype* child_proto = proto->protos[bx];
 
-            // Create a MobiusFunction that wraps the child prototype.
-            // For now, closures compiled by the bytecode compiler will need
-            // to be bridged to the tree-walker's MobiusFunction format.
-            // Full bytecode closure support comes in Phase 4.
             MobiusFunction* mf = (MobiusFunction*)calloc(1, sizeof(MobiusFunction));
             mf->name = child_proto->name.empty() ? nullptr :
-                       state_->stringPool()->intern(child_proto->name.c_str())->data;
+                       state_->stringPool()->intern(child_proto->name.c_str());
             mf->param_count = child_proto->num_params;
             mf->body = nullptr;
             mf->body_count = 0;
             mf->closure = global_env_;
+            if (mf->closure) mf->closure->retain();
             mf->ref_count = 1;
             mf->proto = child_proto;
 
-            // Allocate param names array
             if (child_proto->num_params > 0 && !child_proto->local_vars.empty()) {
-                mf->param_names = (const char**)calloc(child_proto->num_params, sizeof(const char*));
+                mf->param_names = (MobiusString**)calloc(child_proto->num_params, sizeof(MobiusString*));
                 for (int i = 0; i < child_proto->num_params && i < (int)child_proto->local_vars.size(); i++) {
                     mf->param_names[i] = state_->stringPool()->intern(
-                        child_proto->local_vars[i].name.c_str())->data;
+                        child_proto->local_vars[i].name.c_str());
                 }
             } else {
                 mf->param_names = nullptr;
             }
 
+            // Wire upvalues from the child prototype's upvalue descriptors
+            int nupvals = (int)child_proto->upvalues.size();
+            if (nupvals > 0) {
+                mf->upvalues = (Upvalue**)calloc(nupvals, sizeof(Upvalue*));
+                mf->upvalue_count = nupvals;
+                for (int u = 0; u < nupvals; u++) {
+                    const UpvalueDesc& desc = child_proto->upvalues[u];
+                    if (desc.in_stack) {
+                        // Capture from current frame's registers
+                        Value* reg_ptr = &registers_[base + desc.index];
+                        // Check if we already have an open upvalue for this register
+                        Upvalue* existing = nullptr;
+                        for (auto* ouv : ci->open_upvalues) {
+                            if (ouv->is_open && ouv->location == reg_ptr) {
+                                existing = ouv;
+                                break;
+                            }
+                        }
+                        if (existing) {
+                            mf->upvalues[u] = existing;
+                        } else {
+                            Upvalue* uv = new Upvalue();
+                            uv->location = reg_ptr;
+                            uv->is_open = true;
+                            ci->open_upvalues.push_back(uv);
+                            mf->upvalues[u] = uv;
+                        }
+                    } else {
+                        // Capture from enclosing function's upvalues
+                        if (desc.index < (int)ci->open_upvalues.size()) {
+                            mf->upvalues[u] = ci->open_upvalues[desc.index];
+                        } else {
+                            mf->upvalues[u] = new Upvalue();
+                        }
+                    }
+                }
+            } else {
+                mf->upvalues = nullptr;
+                mf->upvalue_count = 0;
+            }
+
             RA(inst) = make_function_value(mf);
+            break;
+        }
+
+        case OP_CLOSE: {
+            int a = DECODE_A(inst);
+            closeUpvalues(*ci, a);
             break;
         }
 
@@ -1160,9 +1215,8 @@ int MobiusVM::run(size_t base_depth) {
                 for (size_t i = 0; i < plugin->function_count; i++) {
                     PluginFunction* func = &plugin->functions[i];
                     if (!func || !func->name || !func->function) continue;
-                    const char* fn = pool->intern(func->name)->data;
                     Value func_val = make_native_function_value(func->function);
-                    global_env_->define(fn, func_val);
+                    global_env_->define(pool->intern(func->name), func_val);
                 }
             } else if (strchr(alias_name, '.') != nullptr) {
                 // Dotted path (e.g. "math.trig"): create/reuse nested tables
@@ -1182,7 +1236,7 @@ int MobiusVM::run(size_t base_depth) {
 
                 // Walk/create the nested table chain
                 // First component: get or create in global env
-                const char* first = pool->intern(components[0])->data;
+                MobiusString* first = pool->intern(components[0]);
                 bool found = false;
                 Value cur_val = global_env_->get(first, &found);
                 Table* cur_table = nullptr;
@@ -1223,7 +1277,7 @@ int MobiusVM::run(size_t base_depth) {
                 }
             } else {
                 // Simple alias (e.g. "math"): create table, define as global
-                const char* interned_alias = pool->intern(alias_name)->data;
+                MobiusString* interned_alias = pool->intern(alias_name);
                 bool found = false;
                 Value existing = global_env_->get(interned_alias, &found);
                 Table* mod_table = nullptr;
@@ -1365,6 +1419,34 @@ int MobiusVM::run(size_t base_depth) {
             bool r_num = (rhs.type == VAL_INTEGER || rhs.type == VAL_FLOAT32 || rhs.type == VAL_FLOAT64);
             bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
             if (compat != (a != 0)) ip++;
+            break;
+        }
+
+        case OP_TYPEIS: {
+            int a = DECODE_A(inst);
+            const Value& val = RB(inst);
+            uint8_t expected_type = DECODE_C(inst);
+            bool match = ((uint8_t)val.type == expected_type);
+            if (match != (a != 0)) ip++;
+            break;
+        }
+
+        // ================================================================
+        // Length
+        // ================================================================
+
+        case OP_LEN: {
+            const Value& val = RB(inst);
+            if (val.type == VAL_ARRAY && val.as.array) {
+                RA(inst) = make_integer_value(NUM_INT64, (int64_t)val.as.array->length());
+            } else if (val.type == VAL_TABLE && val.as.table) {
+                RA(inst) = make_integer_value(NUM_INT64, (int64_t)val.as.table->size());
+            } else if (val.type == VAL_STRING && val.as.string) {
+                RA(inst) = make_integer_value(NUM_INT64, (int64_t)val.as.string->length);
+            } else {
+                runtimeError("Attempt to get length of a %s value", value_type_name(val.type));
+                return -1;
+            }
             break;
         }
 

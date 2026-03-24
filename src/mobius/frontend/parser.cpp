@@ -1202,14 +1202,20 @@ Stmt* parse_switch_statement(Parser* parser) {
 }
 
 SwitchCase* parse_switch_case(Parser* parser) {
-    // For now, only implement simple value patterns
-    CasePattern** patterns = malloc(sizeof(CasePattern*));
-    size_t pattern_count = 1;
-    
-    patterns[0] = parse_case_pattern(parser);
-    
-    // TODO: Handle multiple patterns per case (comma-separated)
-    
+    size_t pattern_capacity = 4;
+    CasePattern** patterns = (CasePattern**)malloc(sizeof(CasePattern*) * pattern_capacity);
+    size_t pattern_count = 0;
+
+    patterns[pattern_count++] = parse_case_pattern(parser);
+
+    while (parser_match(parser, TOKEN_COMMA)) {
+        if (pattern_count >= pattern_capacity) {
+            pattern_capacity *= 2;
+            patterns = (CasePattern**)realloc(patterns, sizeof(CasePattern*) * pattern_capacity);
+        }
+        patterns[pattern_count++] = parse_case_pattern(parser);
+    }
+
     consume(parser, TOKEN_COLON, "Expect ':' after case pattern");
     
     // Parse case body statements
@@ -1262,10 +1268,10 @@ CasePattern* parse_case_pattern(Parser* parser) {
         return make_expression_pattern(op, expr);
     }
     
-    // Range patterns (e.g., 1..10, 'a'..'z')
-    // We need to look ahead to see if this is a range
+    // Range patterns (e.g., 1..10, 'a'..'z', low..high)
     if ((parser_check(parser, TOKEN_INTEGER) || parser_check(parser, TOKEN_FLOAT) || 
-         parser_check(parser, TOKEN_CHAR) || parser_check(parser, TOKEN_STRING)) &&
+         parser_check(parser, TOKEN_CHAR) || parser_check(parser, TOKEN_STRING) ||
+         parser_check(parser, TOKEN_IDENTIFIER)) &&
         parser->current + 1 < parser->token_count && 
         parser->tokens[parser->current + 1].type == TOKEN_DOT_DOT) {
         
@@ -1308,21 +1314,86 @@ CasePattern* parse_case_pattern(Parser* parser) {
         Value value = make_nil_value();
         return make_value_pattern(value);
     } else if (parser_check(parser, TOKEN_IDENTIFIER)) {
-        // Check if this is an enum access pattern (EnumName.MEMBER)
         if (parser->current + 1 < parser->token_count && 
             parser->tokens[parser->current + 1].type == TOKEN_DOT) {
-            
-            Token enum_name = parser_advance(parser);  // consume enum name
-            parser_advance(parser);  // consume '.'
+            Token enum_name = parser_advance(parser);
+            parser_advance(parser);
             Token member_name = consume(parser, TOKEN_IDENTIFIER, "Expect member name after '.'");
-            
-            // Create an enum access expression and wrap it in an expression pattern
             Expr* enum_expr = make_enum_access_expr(enum_name, member_name);
             return make_expression_pattern(TOKEN_EQUAL_EQUAL, enum_expr);
         } else {
-            parser_error_at_current(parser, "Expect literal value in case pattern");
-            return make_wildcard_pattern();
+            Expr* expr = parse_primary(parser);
+            return make_expression_pattern(TOKEN_EQUAL_EQUAL, expr);
         }
+    } else if (parser_check(parser, TOKEN_LEFT_BRACKET)) {
+        parser_advance(parser);
+        size_t capacity = 4;
+        ArrayPattern* elements = (ArrayPattern*)malloc(sizeof(ArrayPattern) * capacity);
+        size_t count = 0;
+        bool has_rest = false;
+        char* rest_name = NULL;
+
+        while (!parser_check(parser, TOKEN_RIGHT_BRACKET) && !parser_at_end(parser)) {
+            if (count > 0) {
+                consume(parser, TOKEN_COMMA, "Expect ',' between array pattern elements");
+            }
+            if (parser_check(parser, TOKEN_DOT_DOT_DOT)) {
+                parser_advance(parser);
+                has_rest = true;
+                if (parser_check(parser, TOKEN_IDENTIFIER)) {
+                    Token name_tok = parser_advance(parser);
+                    rest_name = mobius_strdup(name_tok.identifier);
+                }
+                break;
+            }
+            if (count >= capacity) {
+                capacity *= 2;
+                elements = (ArrayPattern*)realloc(elements, sizeof(ArrayPattern) * capacity);
+            }
+            if (parser_check(parser, TOKEN_IDENTIFIER)) {
+                Token name_tok = parser_advance(parser);
+                elements[count].name = mobius_strdup(name_tok.identifier);
+                elements[count].pattern = NULL;
+                elements[count].is_rest = false;
+            } else {
+                parser_error_at_current(parser, "Expect identifier in array destructuring pattern");
+                elements[count].name = mobius_strdup("_");
+                elements[count].pattern = NULL;
+                elements[count].is_rest = false;
+            }
+            count++;
+        }
+        consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after array pattern");
+        return make_array_pattern(elements, count, has_rest, rest_name);
+    } else if (parser_check(parser, TOKEN_LEFT_BRACE)) {
+        parser_advance(parser);
+        size_t capacity = 4;
+        TablePattern* fields = (TablePattern*)malloc(sizeof(TablePattern) * capacity);
+        size_t count = 0;
+
+        while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+            if (count > 0) {
+                consume(parser, TOKEN_COMMA, "Expect ',' between table pattern fields");
+            }
+            if (count >= capacity) {
+                capacity *= 2;
+                fields = (TablePattern*)realloc(fields, sizeof(TablePattern) * capacity);
+            }
+            Token key_tok = consume(parser, TOKEN_IDENTIFIER, "Expect field name in table pattern");
+            fields[count].key = mobius_strdup(key_tok.identifier);
+            fields[count].pattern = NULL;
+            fields[count].is_optional = false;
+
+            if (parser_match(parser, TOKEN_COLON)) {
+                Token bind_tok = consume(parser, TOKEN_IDENTIFIER, "Expect binding name after ':'");
+                fields[count].bind_name = mobius_strdup(bind_tok.identifier);
+            } else {
+                fields[count].bind_name = NULL;
+            }
+            count++;
+        }
+        consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after table pattern");
+        return make_table_pattern(fields, count, false);
     } else if (parser_check(parser, TOKEN_IS)) {
         // Type matching pattern: is string, is array, etc.
         parser_advance(parser); // consume 'is'
