@@ -1,0 +1,53 @@
+// Test string interpolation with backtick syntax
+print("=== String Interpolation Tests ===")
+
+// Basic variable interpolation
+var name = "world"
+var greeting = `hello ${name}`
+if (greeting != "hello world") { print("FAIL: basic interp, got", greeting); exit(1) }
+
+// Interpolation with integer
+var x = 42
+var msg = `the answer is ${x}`
+if (msg != "the answer is 42") { print("FAIL: int interp, got", msg); exit(1) }
+
+// Multiple interpolations
+var first = "Jane"
+var last = "Doe"
+var full = `${first} ${last}`
+if (full != "Jane Doe") { print("FAIL: multi interp, got", full); exit(1) }
+
+// Expression in interpolation
+var a = 3
+var b = 4
+var expr_str = `${a} + ${b} = ${a + b}`
+if (expr_str != "3 + 4 = 7") { print("FAIL: expr interp, got", expr_str); exit(1) }
+
+// No interpolation (plain backtick string)
+var plain = `just a string`
+if (plain != "just a string") { print("FAIL: plain backtick, got", plain); exit(1) }
+
+// Interpolation at start
+var val = "start"
+var s1 = `${val} of string`
+if (s1 != "start of string") { print("FAIL: interp at start, got", s1); exit(1) }
+
+// Interpolation at end
+var s2 = `end is ${val}`
+if (s2 != "end is start") { print("FAIL: interp at end, got", s2); exit(1) }
+
+// Only interpolation
+var s3 = `${val}`
+if (s3 != "start") { print("FAIL: only interp, got", s3); exit(1) }
+
+// Interpolation with function call
+func double(n) { return n * 2 }
+var s4 = `doubled: ${double(5)}`
+if (s4 != "doubled: 10") { print("FAIL: func call interp, got", s4); exit(1) }
+
+// Nested string in interpolation
+var inner = "inside"
+var s5 = `outer ${inner} outer`
+if (s5 != "outer inside outer") { print("FAIL: nested str interp, got", s5); exit(1) }
+
+print("=== All string interpolation tests passed! ===")

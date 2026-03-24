@@ -26,7 +26,9 @@ public:
     Table* retain();
 
     Value get(const Value& key) const;
+    Value getByString(MobiusString* key) const;
     bool set(const Value& key, const Value& value);
+    bool setByString(MobiusString* key, const Value& value);
     bool hasKey(const Value& key) const;
     bool remove(const Value& key);
     size_t size() const { return size_; }

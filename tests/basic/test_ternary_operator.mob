@@ -1,0 +1,57 @@
+// Test ternary operator (? :)
+print("=== Ternary Operator Tests ===")
+
+// Basic true case
+var a = true ? 1 : 2
+if (a != 1) { print("FAIL: true ? 1 : 2, got", a); exit(1) }
+
+// Basic false case
+var b = false ? 1 : 2
+if (b != 2) { print("FAIL: false ? 1 : 2, got", b); exit(1) }
+
+// With comparison condition
+var c = (5 > 3) ? "yes" : "no"
+if (c != "yes") { print("FAIL: (5>3) ? yes : no, got", c); exit(1) }
+
+var d = (5 < 3) ? "yes" : "no"
+if (d != "no") { print("FAIL: (5<3) ? yes : no, got", d); exit(1) }
+
+// Nested ternary
+var e = true ? (false ? 1 : 2) : 3
+if (e != 2) { print("FAIL: nested ternary, got", e); exit(1) }
+
+// Ternary with expressions
+var x = 10
+var f = (x > 5) ? x * 2 : x / 2
+if (f != 20) { print("FAIL: expression ternary, got", f); exit(1) }
+
+// Ternary in assignment
+var g = 0
+g = (g == 0) ? 42 : 0
+if (g != 42) { print("FAIL: ternary assign, got", g); exit(1) }
+
+// Ternary with nil check
+var h = nil
+var i = (h == nil) ? "default" : h
+if (i != "default") { print("FAIL: nil ternary, got", i); exit(1) }
+
+// Ternary as function argument
+func double(n) { return n * 2 }
+var j = double((3 > 2) ? 5 : 10)
+if (j != 10) { print("FAIL: ternary in func arg, got", j); exit(1) }
+
+// Ternary with equality
+var k = (1 == 1) ? "equal" : "not equal"
+if (k != "equal") { print("FAIL: equality ternary, got", k); exit(1) }
+
+// Chained ternary (right-associative)
+var l = true ? 1 : true ? 2 : 3
+if (l != 1) { print("FAIL: chained ternary, got", l); exit(1) }
+
+var m = false ? 1 : true ? 2 : 3
+if (m != 2) { print("FAIL: chained ternary 2, got", m); exit(1) }
+
+var n = false ? 1 : false ? 2 : 3
+if (n != 3) { print("FAIL: chained ternary 3, got", n); exit(1) }
+
+print("=== All ternary operator tests passed! ===")

@@ -19,6 +19,7 @@ Compiler::Compiler(StringInternPool* pool, MobiusState* state)
 
 Prototype* Compiler::compile(Stmt** statements, size_t count,
                              const char* source_name) {
+
     FunctionState fs;
     initCompiler(nullptr, source_name);
 
@@ -283,6 +284,10 @@ int Compiler::compileExpr(Expr* expr, int dest) {
         case EXPR_INCREMENT:
         case EXPR_DECREMENT:
             return compileIncrement(&expr->as.increment, dest);
+        case EXPR_TERNARY:
+            return compileTernary(&expr->as.ternary, dest);
+        case EXPR_FUNCTION:
+            return compileFunctionExpr(&expr->as.function_expr, dest);
         default:
             fprintf(stderr, "Compiler: unknown expression type %d\n", expr->type);
             return -1;
@@ -470,7 +475,9 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
 
             if (folded) {
                 int reg = (dest >= 0) ? dest : allocReg();
-                if (result.type == VAL_INT64) {
+                if (result.type == VAL_BOOL) {
+                    emitABC(OP_LOADBOOL, (uint8_t)reg, result.as.boolean ? 1 : 0, 0);
+                } else if (result.type == VAL_INT64) {
                     int64_t iv = result.as.i64;
                     if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                         emitAsBx(OP_LOADINT, (uint8_t)reg, (int)iv);
@@ -482,6 +489,61 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                     int ki = current_->proto->addFloatConstant(result.as.double_val);
                     emitLoadK(reg, ki);
                 }
+                return reg;
+            }
+        }
+
+        // Comparison folding on numeric literals
+        if (both_num) {
+            auto to_double = [](const Value& v) -> double {
+                if (v.type == VAL_UINT64)  return (double)v.as.u64;
+                if (v.type == VAL_INT64) return (double)v.as.i64;
+                return v.as.double_val;
+            };
+            bool folded = false;
+            bool cmp_result = false;
+
+            double a = to_double(lv), b = to_double(rv);
+
+            switch (expr->op.type) {
+                case TOKEN_LESS:          cmp_result = a < b;  folded = true; break;
+                case TOKEN_LESS_EQUAL:    cmp_result = a <= b; folded = true; break;
+                case TOKEN_GREATER:       cmp_result = a > b;  folded = true; break;
+                case TOKEN_GREATER_EQUAL: cmp_result = a >= b; folded = true; break;
+                case TOKEN_EQUAL_EQUAL:   cmp_result = a == b; folded = true; break;
+                case TOKEN_BANG_EQUAL:    cmp_result = a != b; folded = true; break;
+                default: break;
+            }
+
+            if (folded) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                emitABC(OP_LOADBOOL, (uint8_t)reg, cmp_result ? 1 : 0, 0);
+                return reg;
+            }
+        }
+
+        // Boolean logic folding
+        if (lv.type == VAL_BOOL && rv.type == VAL_BOOL) {
+            bool folded = false;
+            bool logic_result = false;
+
+            switch (expr->op.type) {
+                case TOKEN_AND:
+                case TOKEN_AND_AND:
+                    logic_result = lv.as.boolean && rv.as.boolean;
+                    folded = true;
+                    break;
+                case TOKEN_OR:
+                case TOKEN_OR_OR:
+                    logic_result = lv.as.boolean || rv.as.boolean;
+                    folded = true;
+                    break;
+                default: break;
+            }
+
+            if (folded) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                emitABC(OP_LOADBOOL, (uint8_t)reg, logic_result ? 1 : 0, 0);
                 return reg;
             }
         }
@@ -799,6 +861,55 @@ int Compiler::compileLogicalOr(BinaryExpr* expr, int dest) {
 
 int Compiler::compileUnary(UnaryExpr* expr, int dest) {
     currentLine_ = expr->op.line;
+
+    // Unary constant folding
+    if (expr->right->type == EXPR_LITERAL) {
+        const Value& v = expr->right->as.literal.value;
+        bool folded = false;
+        Value result;
+
+        switch (expr->op.type) {
+            case TOKEN_MINUS:
+                if (v.type == VAL_INT64) {
+                    result = make_int64_value(-v.as.i64);
+                    folded = true;
+                } else if (v.type == VAL_FLOAT64) {
+                    result = make_float_value(-v.as.double_val);
+                    folded = true;
+                }
+                break;
+            case TOKEN_BANG:
+            case TOKEN_NOT:
+                if (v.type == VAL_BOOL) {
+                    result = make_bool_value(!v.as.boolean);
+                    folded = true;
+                } else if (v.type == VAL_NIL) {
+                    result = make_bool_value(true);
+                    folded = true;
+                }
+                break;
+            case TOKEN_TILDE:
+                if (v.type == VAL_INT64) {
+                    result = make_int64_value(~v.as.i64);
+                    folded = true;
+                }
+                break;
+            case TOKEN_PLUS:
+                if (v.type == VAL_INT64 || v.type == VAL_FLOAT64) {
+                    result = v;
+                    folded = true;
+                }
+                break;
+            default: break;
+        }
+
+        if (folded) {
+            LiteralExpr lit;
+            lit.value = result;
+            return compileLiteral(&lit, dest);
+        }
+    }
+
     int reg = (dest >= 0) ? dest : allocReg();
 
     int save_reg = current_->free_reg;
@@ -1231,6 +1342,15 @@ void Compiler::compileStmt(Stmt* stmt) {
         case STMT_PRAGMA:
             compilePragmaStmt(&stmt->as.pragma_stmt);
             break;
+        case STMT_FOR_IN:
+            compileForInStmt(&stmt->as.for_in_stmt);
+            break;
+        case STMT_TRY_CATCH:
+            compileTryCatchStmt(&stmt->as.try_catch_stmt);
+            break;
+        case STMT_THROW:
+            compileThrowStmt(&stmt->as.throw_stmt);
+            break;
         default:
             fprintf(stderr, "Compiler: unknown statement type %d\n", stmt->type);
             break;
@@ -1585,7 +1705,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         addLocal("(for index)");
         addLocal("(for limit)");
         addLocal("(for step)");
-        int var_reg = addLocal(var_name);
+        addLocal(var_name);
         int idx_reg = base;
         int limit_reg = base + 1;
         int step_reg = base + 2;
@@ -2408,5 +2528,151 @@ void Compiler::compilePragmaStmt(PragmaStmt* stmt) {
     int name_ki = stringConstant(stmt->name.identifier);
     emitABx(OP_PRAGMA, (uint8_t)reg, (uint16_t)name_ki);
 
+    setFreeReg(save);
+}
+
+// --- Ternary expression ---
+
+int Compiler::compileTernary(TernaryExpr* expr, int dest) {
+    int result_reg = (dest >= 0) ? dest : allocReg();
+
+    int jmp_else = compileConditionJump(expr->condition);
+
+    compileExpr(expr->then_expr, result_reg);
+    int jmp_end = emitJump();
+
+    patchJump(jmp_else);
+    compileExpr(expr->else_expr, result_reg);
+    patchJump(jmp_end);
+
+    return result_reg;
+}
+
+// --- Function expression (lambda) ---
+
+int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
+    currentLine_ = expr->name.line;
+    const char* name = expr->name.identifier ? expr->name.identifier : "<lambda>";
+
+    FunctionState* enclosing = current_;
+    FunctionState child_fs;
+    child_fs.proto = new Prototype();
+    child_fs.proto->name = name;
+    child_fs.enclosing = enclosing;
+    child_fs.scope_depth = 0;
+    child_fs.free_reg = 0;
+    child_fs.max_reg = 0;
+    current_ = &child_fs;
+
+    beginScope();
+
+    child_fs.proto->num_params = (int)expr->param_count;
+    for (size_t i = 0; i < expr->param_count; i++) {
+        addLocal(expr->params[i].identifier);
+    }
+
+    compileBlock(expr->body, expr->body_count);
+    emitReturn(0, 0);
+    endScope();
+
+    Prototype* child_proto = child_fs.proto;
+    child_proto->num_registers = child_fs.max_reg;
+
+    current_ = enclosing;
+
+    int proto_idx = (int)current_->proto->protos.size();
+    current_->proto->protos.push_back(child_proto);
+
+    int result_reg = (dest >= 0) ? dest : allocReg();
+    emitABx(OP_CLOSURE, (uint8_t)result_reg, (uint16_t)proto_idx);
+
+    return result_reg;
+}
+
+// --- For-in statement ---
+
+void Compiler::compileForInStmt(ForInStmt* stmt) {
+    currentLine_ = stmt->var_name.line;
+    beginScope();
+
+    int save = current_->free_reg;
+
+    int iter_reg = addLocal("(for iterator)");
+    int state_reg = addLocal("(for state)");
+    addLocal("(for control)");
+    addLocal(stmt->var_name.identifier);
+
+    compileExpr(stmt->iterable, iter_reg);
+    emitABC(OP_LOADNIL, (uint8_t)state_reg, 1, 0);
+
+    LoopContext loop;
+    loop.start_pc = (int)current_->proto->code.size();
+    loop.scope_depth = current_->scope_depth;
+    current_->loops.push_back(loop);
+
+    emitABC(OP_TFORLOOP, (uint8_t)iter_reg, 0, 1);
+
+    int jmp_exit = emitJump();
+
+    compileStmt(stmt->body);
+
+    int loop_offset = loop.start_pc - ((int)current_->proto->code.size() + 1);
+    current_->proto->code.push_back(ENCODE_sBx(OP_JMP, loop_offset));
+    current_->proto->line_info.push_back(currentLine_);
+
+    patchJump(jmp_exit);
+
+    for (int jmp : current_->loops.back().break_jumps) {
+        patchJump(jmp);
+    }
+    current_->loops.pop_back();
+
+    endScope();
+    setFreeReg(save);
+}
+
+// --- Try-catch ---
+
+void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
+    currentLine_ = stmt->catch_var.line;
+    beginScope();
+
+    int save = current_->free_reg;
+    int catch_var_reg = addLocal(stmt->catch_var.identifier);
+
+    int try_begin_pc = emitAsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, 0);
+
+    compileBlock(stmt->try_body, stmt->try_body_count);
+
+    emitABC(OP_TRY_END, 0, 0, 0);
+    int jmp_past_catch = emitJump();
+
+    int catch_target = (int)current_->proto->code.size();
+    int offset = catch_target - (try_begin_pc + 1);
+    current_->proto->code[try_begin_pc] = ENCODE_AsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, offset);
+
+    compileBlock(stmt->catch_body, stmt->catch_body_count);
+
+    patchJump(jmp_past_catch);
+
+    endScope();
+    setFreeReg(save);
+}
+
+// --- Throw ---
+
+void Compiler::compileThrowStmt(ThrowStmt* stmt) {
+    currentLine_ = stmt->keyword.line;
+
+    int save = current_->free_reg;
+    int reg = allocReg();
+
+    if (stmt->value) {
+        compileExpr(stmt->value, reg);
+    } else {
+        emitABC(OP_LOADNIL, (uint8_t)reg, 0, 0);
+    }
+
+    emitABC(OP_THROW, (uint8_t)reg, 0, 0);
     setFreeReg(save);
 }

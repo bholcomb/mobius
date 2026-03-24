@@ -40,6 +40,14 @@ static const PluginFunction library_registry[] = {
     {"substr",   lib_substr,   3,        "Extract a substring (string, start, length)"},
     {"concat",   lib_concat,   2,        "Concatenate two or more strings"},
     {"contains", lib_contains, 2,        "Return true if string contains a substring"},
+    {"split",    lib_split,    2,        "Split string by delimiter into array"},
+    {"join",     lib_join,     2,        "Join array elements with separator"},
+    {"trim",     lib_trim,     1,        "Trim whitespace from both ends of string"},
+    {"startswith", lib_startswith, 2,    "Return true if string starts with prefix"},
+    {"endswith", lib_endswith, 2,        "Return true if string ends with suffix"},
+    {"replace",  lib_replace,  3,        "Replace all occurrences of old with new"},
+    {"find",     lib_find,     2,        "Find index of substring (-1 if not found)"},
+    {"repeat",   lib_repeat,   2,        "Repeat string N times"},
 
     // Table functions
     {"table_remove",  lib_table_remove,  2, "Remove a key from a table"},

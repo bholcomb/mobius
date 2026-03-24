@@ -242,6 +242,11 @@ enum OpCode : uint8_t {
     // -- Miscellaneous --
     OP_LEN,         // A B       R[A] = length(R[B])  (array length or table size)
 
+    // -- Error handling --
+    OP_TRY_BEGIN,   // A sBx     push recovery point: catch at pc+sBx, error into R[A]
+    OP_TRY_END,     //           pop recovery point (try body completed successfully)
+    OP_THROW,       // A         throw R[A] as error
+
     // -- Debug / sentinel --
     OP_NOP,         //           no operation (padding / breakpoint target)
 
@@ -371,6 +376,10 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"GETGLOBAL_GETTABLE", FMT_FUSED2},
 
         {"LEN",       FMT_ABC},
+
+        {"TRY_BEGIN", FMT_AsBx},
+        {"TRY_END",   FMT_ABC},
+        {"THROW",     FMT_ABC},
 
         {"NOP",       FMT_ABC},
     };

@@ -25,7 +25,9 @@ typedef enum {
     EXPR_TABLE_DOT,
     EXPR_ENUM_ACCESS,
     EXPR_INCREMENT,
-    EXPR_DECREMENT
+    EXPR_DECREMENT,
+    EXPR_TERNARY,
+    EXPR_FUNCTION
 } ExprType;
 
 // Statement types
@@ -44,7 +46,10 @@ typedef enum {
     STMT_CONTINUE,
     STMT_IMPORT,
     STMT_ENUM,
-    STMT_PRAGMA
+    STMT_PRAGMA,
+    STMT_FOR_IN,
+    STMT_TRY_CATCH,
+    STMT_THROW
 } StmtType;
 
 // Expression structures
@@ -131,6 +136,22 @@ typedef struct {
     Token op;           // The ++ or -- token (for error reporting)
 } IncrementExpr;
 
+// Ternary expression (condition ? then_expr : else_expr)
+typedef struct {
+    Expr* condition;
+    Expr* then_expr;
+    Expr* else_expr;
+} TernaryExpr;
+
+// Function expression (lambda): func(params) { body }
+typedef struct {
+    Token name;             // Optional name (identifier field may be NULL for anonymous)
+    Token* params;
+    size_t param_count;
+    Stmt** body;
+    size_t body_count;
+} FunctionExpr;
+
 // Main expression structure
 struct Expr {
     ExprType type;
@@ -150,6 +171,8 @@ struct Expr {
         TableDotExpr table_dot;
         EnumAccessExpr enum_access;
         IncrementExpr increment;
+        TernaryExpr ternary;
+        FunctionExpr function_expr;
     } as;
 };
 
@@ -326,6 +349,28 @@ typedef struct {
     EnumMemberDef* members;        // Linked list of enum members
 } EnumStmt;
 
+// For-in statement: for var x in expr { body }
+typedef struct {
+    Token var_name;         // Loop variable
+    Expr* iterable;         // Expression being iterated
+    Stmt* body;
+} ForInStmt;
+
+// Try-catch statement
+typedef struct {
+    Stmt** try_body;
+    size_t try_body_count;
+    Token catch_var;        // Variable name for caught error
+    Stmt** catch_body;
+    size_t catch_body_count;
+} TryCatchStmt;
+
+// Throw statement
+typedef struct {
+    Token keyword;
+    Expr* value;
+} ThrowStmt;
+
 // Main statement structure
 struct Stmt {
     StmtType type;
@@ -346,6 +391,9 @@ struct Stmt {
         ImportStmt import_stmt;
         EnumStmt enum_stmt;
         PragmaStmt pragma_stmt;
+        ForInStmt for_in_stmt;
+        TryCatchStmt try_catch_stmt;
+        ThrowStmt throw_stmt;
     } as;
 };
 
@@ -364,6 +412,9 @@ Expr* make_table_index_expr(Expr* table, Expr* index);
 Expr* make_table_dot_expr(Expr* table, Token key);
 Expr* make_enum_access_expr(Token enum_name, Token member_name);
 Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token op);
+Expr* make_ternary_expr(Expr* condition, Expr* then_expr, Expr* else_expr);
+Expr* make_function_expr(Token name, Token* params, size_t param_count,
+                         Stmt** body, size_t body_count);
 
 Stmt* make_expression_stmt(Expr* expression);
 Stmt* make_print_stmt(Expr* expression);
@@ -383,6 +434,10 @@ Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_a
 Stmt* make_enum_stmt(Token keyword, Token name, NumberType underlying_type, 
                      bool has_explicit_type, EnumMemberDef* members);
 Stmt* make_pragma_stmt(Token keyword, Token name, Token value);
+Stmt* make_for_in_stmt(Token var_name, Expr* iterable, Stmt* body);
+Stmt* make_try_catch_stmt(Stmt** try_body, size_t try_body_count,
+                          Token catch_var, Stmt** catch_body, size_t catch_body_count);
+Stmt* make_throw_stmt(Token keyword, Expr* value);
 
 // Enum helper functions
 EnumMemberDef* make_enum_member(Token name, Expr* value);
