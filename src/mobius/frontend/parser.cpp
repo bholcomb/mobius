@@ -1751,6 +1751,15 @@ CasePattern* parse_case_pattern(Parser* parser) {
         if (parser_check(parser, TOKEN_IDENTIFIER)) {
             Token type_token = parser_advance(parser);
             type_name = type_token.identifier;
+        } else if (parser_check(parser, TOKEN_TYPE_INT64)) {
+            parser_advance(parser);
+            type_name = "int64";
+        } else if (parser_check(parser, TOKEN_TYPE_UINT64)) {
+            parser_advance(parser);
+            type_name = "uint64";
+        } else if (parser_check(parser, TOKEN_TYPE_FLOAT64)) {
+            parser_advance(parser);
+            type_name = "float64";
         } else if (parser_check(parser, TOKEN_NIL)) {
             parser_advance(parser);
             type_name = "nil";
@@ -1767,7 +1776,7 @@ CasePattern* parse_case_pattern(Parser* parser) {
             value_type = VAL_INT64;
         } else if (strcmp(type_name, "uint64") == 0) {
             value_type = VAL_UINT64;
-        } else if (strcmp(type_name, "float") == 0) {
+        } else if (strcmp(type_name, "float") == 0 || strcmp(type_name, "float64") == 0) {
             value_type = VAL_FLOAT64;
         } else if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0) {
             value_type = VAL_BOOL;

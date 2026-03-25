@@ -1,0 +1,3 @@
+// Test exit() with non-zero exit code
+// This should fail with exit code 42
+exit(42)

@@ -1,0 +1,5 @@
+// Test exit() stdlib function
+// This test verifies exit(0) works for clean termination
+// A separate expected_failure test verifies non-zero exit codes
+
+exit(0)

@@ -1,0 +1,64 @@
+// Test automatic iterators for arrays and tables
+
+// Array iteration: for (var x in array) yields each value
+var arr = [10, 20, 30, 40, 50]
+var sum = 0
+for (var x in arr) {
+    sum += x
+}
+if (sum != 150) { exit(1) }
+
+// Array iteration with index: for (var i, v in array)
+var arr2 = ["a", "b", "c"]
+var indices = ""
+var values = ""
+for (var i, v in arr2) {
+    indices = indices + str(i)
+    values = values + v
+}
+if (indices != "012") { exit(1) }
+if (values != "abc") { exit(1) }
+
+// Table iteration with key,value: for (var k, v in table)
+var t = { x: 1, y: 2, z: 3 }
+var total = 0
+var keys = ""
+for (var k, v in t) {
+    total += v
+    keys = keys + k
+}
+if (total != 6) { exit(1) }
+
+// Table iteration single variable yields keys
+var t2 = { a: 10, b: 20 }
+var key_count = 0
+for (var k in t2) {
+    key_count += 1
+}
+if (key_count != 2) { exit(1) }
+
+// Empty array
+var empty_arr = []
+var ran = false
+for (var x in empty_arr) {
+    ran = true
+}
+if (ran) { exit(1) }
+
+// Empty table
+var empty_tbl = {}
+var ran2 = false
+for (var k, v in empty_tbl) {
+    ran2 = true
+}
+if (ran2) { exit(1) }
+
+// Single element array
+var single = [42]
+var got = 0
+for (var x in single) {
+    got = x
+}
+if (got != 42) { exit(1) }
+
+exit(0)
