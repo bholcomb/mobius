@@ -227,6 +227,7 @@ static void free_internal_error(InternalError* error) {
     if (!error) return;
     free(error->message);
     free(error->suggestion);
+    free(error->filename);
     free(error->function_name);
     free(error);
 }
@@ -240,7 +241,7 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
 MobiusState::MobiusState(MobiusConfig* config)
     : registry_(nullptr), string_pool_(nullptr),
       metamethods_(nullptr),
-      main_context_(nullptr), native_ctx_(nullptr), last_error_(nullptr),
+      main_context_(nullptr), active_vm_(nullptr), native_ctx_(nullptr), last_error_(nullptr),
       error_handler_(default_error_handler), error_handler_userdata_(nullptr),
       initialized_(false), source_code_(nullptr) {
     
@@ -259,8 +260,6 @@ MobiusState::MobiusState(MobiusConfig* config)
     registry_ = getGlobalRegistry();
     if (!registry_) return;
 
-    registry_->scanPlugins(config_.enable_hot_reload);
-
     auto defineGlobal = [&](const char* name, Value val, bool readonly = false) {
         int slot = assignGlobalSlot(name);
         val.flags |= VAL_FLAG_DEFINED;
@@ -270,6 +269,8 @@ MobiusState::MobiusState(MobiusConfig* config)
     defineGlobal("nil", make_nil_value(), true);
     defineGlobal("true", make_bool_value(true), true);
     defineGlobal("false", make_bool_value(false), true);
+    defineGlobal("inf", make_float_value(1.0 / 0.0), true);
+    defineGlobal("nan", make_float_value(0.0 / 0.0), true);
 }
 
 MobiusState::~MobiusState() {
@@ -320,6 +321,25 @@ const char* MobiusState::globalSlotName(int idx) const {
     return "<unknown>";
 }
 
+void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
+    int slot = findGlobalSlot(name);
+    if (slot < 0) return;
+    if (readonly)
+        globals_[slot].flags |= VAL_FLAG_READONLY;
+    else
+        globals_[slot].flags &= ~VAL_FLAG_READONLY;
+}
+
+bool MobiusState::removeGlobal(const char* name) {
+    auto it = global_slot_map_.find(name);
+    if (it == global_slot_map_.end()) return false;
+    int slot = it->second;
+    globals_[slot] = Value();
+    globals_[slot].flags = 0;
+    global_slot_map_.erase(it);
+    return true;
+}
+
 void MobiusState::removeGlobalSlots(int from_slot) {
     if (from_slot < 0 || from_slot >= (int)globals_.size()) return;
 
@@ -359,7 +379,7 @@ int MobiusState::execString(const char* code) {
 
     if (parse_result.had_error) {
         setError(MOBIUS_ERROR_SYNTAX, "Parse error", 
-                 "Check syntax and structure", 0, 0, NULL);
+                 "Check syntax and structure", 0, 0, NULL, source_code_);
         free_parse_result(&parse_result);
         return MOBIUS_ERROR_SYNTAX;
     }
@@ -433,6 +453,7 @@ InternalError* MobiusState::getLastError() const {
     copy->code = last_error_->code;
     copy->message = last_error_->message ? mobius_strdup(last_error_->message) : NULL;
     copy->suggestion = last_error_->suggestion ? mobius_strdup(last_error_->suggestion) : NULL;
+    copy->filename = last_error_->filename ? mobius_strdup(last_error_->filename) : NULL;
     copy->line = last_error_->line;
     copy->column = last_error_->column;
     copy->function_name = last_error_->function_name ? mobius_strdup(last_error_->function_name) : NULL;
@@ -445,7 +466,8 @@ void MobiusState::clearError() {
 }
 
 int MobiusState::setError(int code, const char* message, const char* suggestion,
-                          int line, int column, const char* function_name) {
+                          int line, int column, const char* function_name,
+                          const char* filename) {
     clearErrorInternal();
 
     last_error_ = (InternalError*)malloc(sizeof(InternalError));
@@ -454,6 +476,7 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     last_error_->code = code;
     last_error_->message = message ? mobius_strdup(message) : NULL;
     last_error_->suggestion = suggestion ? mobius_strdup(suggestion) : NULL;
+    last_error_->filename = filename ? mobius_strdup(filename) : NULL;
     last_error_->line = line;
     last_error_->column = column;
     last_error_->function_name = function_name ? mobius_strdup(function_name) : NULL;
@@ -463,6 +486,7 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
         pub_err.code = code;
         pub_err.message = message;
         pub_err.suggestion = suggestion;
+        pub_err.filename = filename;
         pub_err.line = line;
         pub_err.column = column;
         pub_err.function_name = function_name;
@@ -493,7 +517,11 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
     (void)state;
     (void)userdata;
     fprintf(stderr, "Error");
-    if (error->line > 0) {
+    if (error->filename && error->line > 0) {
+        fprintf(stderr, " [%s:%d:%d]", error->filename, error->line, error->column);
+    } else if (error->filename) {
+        fprintf(stderr, " [%s]", error->filename);
+    } else if (error->line > 0) {
         fprintf(stderr, " [line %d:%d]", error->line, error->column);
     }
     if (error->function_name) {
@@ -515,23 +543,6 @@ void MobiusState::setSourceContext(const char* source) {
 
 const char* MobiusState::getSourceContext() const {
     return source_code_;
-}
-
-// ============================================================================
-// MODULE HELPERS
-// ============================================================================
-
-size_t MobiusState::getModuleCount() const {
-    if (!registry_) return 0;
-    return registry_->moduleCount();
-}
-
-void MobiusState::printModules() const {
-    if (!registry_) {
-        printf("No modules loaded.\n");
-        return;
-    }
-    registry_->printLoadedModules();
 }
 
 // ============================================================================
@@ -583,16 +594,6 @@ MobiusErrorHandler mobius_set_error_handler(MobiusState* state,
                                            void* userdata) {
     if (!state) return NULL;
     return state->setErrorHandler(handler, userdata);
-}
-
-size_t mobius_get_module_count(MobiusState* state) {
-    if (!state) return 0;
-    return state->getModuleCount();
-}
-
-void mobius_print_modules(MobiusState* state) {
-    if (!state) return;
-    state->printModules();
 }
 
 void mobius_start_repl(MobiusState* state) {

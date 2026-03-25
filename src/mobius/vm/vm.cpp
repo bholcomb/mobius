@@ -44,7 +44,7 @@ inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
 // ============================================================================
 
 MobiusVM::MobiusVM(MobiusState* state)
-    : state_(state) {}
+    : state_(state), current_ip_(nullptr) {}
 
 // ============================================================================
 // Error handling
@@ -58,13 +58,21 @@ void MobiusVM::runtimeError(const char* fmt, ...) {
     va_end(args);
 
     int line = currentLine();
-    state_->setError(1, buf, nullptr, line, 0, nullptr);
+    const char* source = nullptr;
+    if (!call_stack_.empty()) {
+        const std::string& src = call_stack_.back().proto->source;
+        if (!src.empty()) source = src.c_str();
+    }
+    state_->setError(MOBIUS_ERROR_RUNTIME, buf, nullptr, line, 0, nullptr, source);
 }
 
 int MobiusVM::currentLine() const {
     if (call_stack_.empty()) return 0;
     const CallInfo& ci = call_stack_.back();
-    int pc = (int)(ci.ip - ci.proto->code.data()) - 1;
+    // current_ip_ tracks the dispatch loop's ip (past the just-decoded instruction).
+    // Use it when available for accurate line info; fall back to ci.ip.
+    const uint32_t* ip = current_ip_ ? current_ip_ : ci.ip;
+    int pc = (int)(ip - ci.proto->code.data()) - 1;
     if (pc >= 0 && pc < (int)ci.proto->line_info.size())
         return ci.proto->line_info[pc];
     return 0;
@@ -86,7 +94,12 @@ int MobiusVM::execute(Prototype* proto) {
     ci.nresults = 0;
     call_stack_.push_back(ci);
 
+    MobiusVM* prev_vm = state_->activeVM();
+    state_->setActiveVM(this);
+
     int rc = run(depth_before);
+
+    state_->setActiveVM(prev_vm);
 
     if (!call_stack_.empty() && call_stack_.size() > depth_before) {
         call_stack_.pop_back();
@@ -100,9 +113,8 @@ int MobiusVM::execute(Prototype* proto) {
 
 int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nresults) {
     ExecutionContext* ctx = state_->mainContext();
-    CallInfo& caller = call_stack_.back();
-
-    int args_base = caller.base + func_reg + 1;
+    int caller_base = call_stack_.back().base;
+    int args_base = caller_base + func_reg + 1;
 
     int needed = args_base + nargs + 16;
     if (needed > (int)registers_.size()) {
@@ -125,7 +137,7 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
 
     if (rc < 0) return -1;
 
-    int dest = caller.base + func_reg;
+    int dest = caller_base + func_reg;
     int n = (nresults == 0) ? rc : (nresults - 1);
     for (int i = 0; i < n; i++) {
         if (args_base + i < nctx.top) {
@@ -414,6 +426,9 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
     }
     gv = RA(inst);
     gv.flags |= VAL_FLAG_DEFINED;
+    if (gv.type == VAL_ENUM && gv.aux == -1) {
+        gv.flags |= VAL_FLAG_READONLY;
+    }
     return 0;
 }
 
@@ -799,25 +814,6 @@ MOBIUS_FORCEINLINE static int vm_op_bnot(MobiusVM* vm, VMFrame& f, uint32_t inst
         vm->runtimeError("Bitwise NOT requires an integer operand");
         return -1;
     }
-    return 0;
-}
-
-// ---- String concat ----
-
-MOBIUS_FORCEINLINE static int vm_op_concat(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    int b_reg = DECODE_B(inst);
-    int c_reg = DECODE_C(inst);
-    std::string result;
-    for (int i = b_reg; i <= c_reg; i++) {
-        const Value& v = f.regs[i];
-        if (v.type == VAL_STRING && v.as.string) {
-            result.append(v.as.string->data, v.as.string->length);
-        } else {
-            char* s = value_to_string(v);
-            if (s) { result.append(s); free(s); }
-        }
-    }
-    RA(inst) = make_string_value_from_cstr(vm->state_, result.c_str());
     return 0;
 }
 
@@ -1245,52 +1241,6 @@ MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 // ---- For loops ----
 
-MOBIUS_FORCEINLINE static int vm_op_forprep(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm;
-    int a = DECODE_A(inst);
-    int sbx = DECODE_sBx(inst);
-    Value& idx  = f.regs[a];
-    Value& step = f.regs[a + 2];
-    if (idx.type == VAL_INT64 && step.type == VAL_INT64) {
-        idx = make_int64_value(MobiusVM::vm_extract_int64(idx) - MobiusVM::vm_extract_int64(step));
-    } else {
-        idx = make_float_value(MobiusVM::vm_extract_double(idx) - MobiusVM::vm_extract_double(step));
-    }
-    f.ip += sbx;
-    return 0;
-}
-
-MOBIUS_FORCEINLINE static int vm_op_forloop(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm;
-    int a = DECODE_A(inst);
-    int sbx = DECODE_sBx(inst);
-    Value& idx   = f.regs[a];
-    Value& limit = f.regs[a + 1];
-    Value& step  = f.regs[a + 2];
-    if (idx.type == VAL_INT64 && limit.type == VAL_INT64 && step.type == VAL_INT64) {
-        int64_t iv = MobiusVM::vm_extract_int64(idx);
-        int64_t sv = MobiusVM::vm_extract_int64(step);
-        int64_t lv = MobiusVM::vm_extract_int64(limit);
-        iv += sv;
-        idx = make_int64_value(iv);
-        if ((sv > 0) ? (iv <= lv) : (iv >= lv)) {
-            f.ip += sbx;
-            f.regs[a + 3] = idx;
-        }
-    } else {
-        double iv = MobiusVM::vm_extract_double(idx);
-        double sv = MobiusVM::vm_extract_double(step);
-        double lv = MobiusVM::vm_extract_double(limit);
-        iv += sv;
-        idx = make_float_value(iv);
-        if ((sv > 0) ? (iv <= lv) : (iv >= lv)) {
-            f.ip += sbx;
-            f.regs[a + 3] = idx;
-        }
-    }
-    return 0;
-}
-
 MOBIUS_FORCEINLINE static int vm_op_iforprep(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
     int a = DECODE_A(inst);
@@ -1391,7 +1341,12 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
     f.ci->ip = f.ip;
     int rc = vm->callFunction(*f.ci, a, nargs, c);
     if (rc < 0) return -1;
-    if (rc == 1) { vm->refreshFrame(f); return 0; }
+    if (rc == 1) {
+        vm->refreshFrame(f);
+    } else {
+        f.regs = vm->registers_.data() + f.base;
+        f.ci = &vm->call_stack_.back();
+    }
     return 0;
 }
 
@@ -1399,10 +1354,87 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
     int nargs = b - 1;
-    f.ci->ip = f.ip;
-    int rc = vm->callFunction(*f.ci, a, nargs, 0);
-    if (rc < 0) return -1;
-    if (rc == 1) { vm->refreshFrame(f); return 0; }
+
+    // Snapshot the callee before any register shuffling
+    Value func_val = f.regs[a];
+
+    // Native functions can't reuse the frame — fall back to regular call + return
+    if (func_val.type == VAL_NATIVE_FUNCTION) {
+        f.ci->ip = f.ip;
+        int rc = vm->callFunction(*f.ci, a, nargs, f.ci->nresults);
+        if (rc < 0) return -1;
+        if (rc == 1) {
+            vm->refreshFrame(f);
+        } else {
+            f.regs = vm->registers_.data() + f.base;
+            f.ci = &vm->call_stack_.back();
+        }
+        return 0;
+    }
+
+    if (func_val.type != VAL_FUNCTION || !func_val.as.function) {
+        vm->runtimeError("Attempt to call a non-function value (type: %s)",
+                         value_type_name(func_val.type));
+        return -1;
+    }
+
+    MobiusFunction* mf = func_val.as.function;
+    if (!mf->proto) {
+        vm->runtimeError("Function '%s' has no bytecode prototype",
+                         mf->name ? mf->name->data : "anonymous");
+        return -1;
+    }
+    if ((int)mf->param_count != nargs) {
+        vm->runtimeError("Function '%s' expects %zu arguments but got %d",
+                         mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
+        return -1;
+    }
+
+    Prototype* child = mf->proto;
+
+    // Snapshot arguments before closing upvalues or overwriting registers.
+    // The argument source registers may overlap with the destination.
+    Value arg_buf[256];
+    Value* args = (nargs <= 256) ? arg_buf : new Value[nargs];
+    int src_base = f.ci->base + a + 1;
+    for (int i = 0; i < nargs; i++) {
+        args[i] = vm->registers_[src_base + i];
+    }
+
+    // Close upvalues captured from the current frame before reusing it
+    vm->closeUpvalues(*f.ci, 0);
+
+    // Copy arguments to the base of the current frame (R[0]..R[nargs-1])
+    for (int i = 0; i < nargs; i++) {
+        vm->registers_[f.ci->base + i] = args[i];
+    }
+    if (args != arg_buf) delete[] args;
+
+    // Ensure enough register space for the new prototype
+    int needed = f.ci->base + child->num_registers + 16;
+    if (needed > (int)vm->registers_.size()) {
+        vm->registers_.resize(needed, Value());
+    }
+    for (int i = nargs; i < child->num_registers; i++) {
+        vm->registers_[f.ci->base + i] = Value();
+    }
+
+    // Reuse the current CallInfo — update proto, ip, upvalues; keep base and nresults
+    f.ci->proto = child;
+    f.ci->ip = child->code.data();
+    f.ci->open_upvalues.clear();
+    if (mf->upvalues && mf->upvalue_count > 0) {
+        f.ci->open_upvalues.resize(mf->upvalue_count);
+        for (int u = 0; u < mf->upvalue_count; u++) {
+            f.ci->open_upvalues[u] = mf->upvalues[u];
+        }
+    }
+
+    // Refresh the VMFrame to point at the rewritten CallInfo
+    f.proto = child;
+    f.ip = f.ci->ip;
+    f.regs = vm->registers_.data() + f.base;
+
     return 0;
 }
 
@@ -1586,45 +1618,67 @@ MOBIUS_FORCEINLINE static int vm_op_newenum(MobiusVM* vm, VMFrame& f, uint32_t i
                             ? name_val.as.string->data : "unknown";
     EnumDefinition* edef = new (std::nothrow) EnumDefinition(enum_name, NUM_INT64);
     if (!edef) { vm->runtimeError("Failed to allocate enum"); return -1; }
-    RA(inst) = make_userdata_value(edef,
-        [](void* p) { if (p) static_cast<EnumDefinition*>(p)->release(); },
-        "enum_definition", sizeof(EnumDefinition));
+    RA(inst) = Value::makeEnum(edef, -1);
+    edef->release();
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_enumval(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& enum_val = RA(inst);
-    if (enum_val.type != VAL_USERDATA || !enum_val.as.userdata ||
-        strcmp(enum_val.as.userdata->type_name, "enum_definition") != 0) {
+    if (enum_val.type != VAL_ENUM || !enum_val.as.enum_def) {
         vm->runtimeError("ENUMVAL: target is not an enum definition");
         return -1;
     }
-    EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata->ptr);
-    const Value& member_val = RB(inst);
-    int member_idx = DECODE_C(inst);
-    (void)member_idx;
+    EnumDefinition* edef = enum_val.as.enum_def;
+
+    uint8_t b = DECODE_B(inst);
+    const Value& member_val = IS_CONSTANT(b)
+        ? f.proto->constants[RK_AS_CONSTANT(b)]
+        : f.regs[b];
+
+    uint8_t c = DECODE_C(inst);
+    const Value& name_const = IS_CONSTANT(c)
+        ? f.proto->constants[RK_AS_CONSTANT(c)]
+        : f.regs[c];
+    if (name_const.type != VAL_STRING || !name_const.as.string) {
+        vm->runtimeError("ENUMVAL: member name must be a string");
+        return -1;
+    }
+    const char* member_name = name_const.as.string->data;
+
     if (member_val.type == VAL_INT64) {
-        int64_t iv = MobiusVM::vm_extract_int64(member_val);
-        char name_buf[32];
-        snprintf(name_buf, sizeof(name_buf), "member_%d", member_idx);
-        edef->addMember(name_buf, iv);
+        edef->addMember(member_name, MobiusVM::vm_extract_int64(member_val));
     } else {
-        edef->addAutoMember("member");
+        edef->addAutoMember(member_name);
     }
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_getenum(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& enum_val = RB(inst);
-    if (enum_val.type != VAL_USERDATA || !enum_val.as.userdata ||
-        strcmp(enum_val.as.userdata->type_name, "enum_definition") != 0) {
+    if (enum_val.type != VAL_ENUM || !enum_val.as.enum_def) {
         vm->runtimeError("GETENUM: target is not an enum definition");
         return -1;
     }
-    EnumDefinition* edef = static_cast<EnumDefinition*>(enum_val.as.userdata->ptr);
-    int member_idx = DECODE_C(inst);
-    (void)member_idx; (void)edef;
-    RA(inst) = Value();
+    EnumDefinition* edef = enum_val.as.enum_def;
+
+    uint8_t c = DECODE_C(inst);
+    const Value& name_const = IS_CONSTANT(c)
+        ? f.proto->constants[RK_AS_CONSTANT(c)]
+        : f.regs[c];
+    if (name_const.type != VAL_STRING || !name_const.as.string) {
+        vm->runtimeError("GETENUM: member name must be a string");
+        return -1;
+    }
+    const char* member_name = name_const.as.string->data;
+
+    const EnumMember* member = edef->findMember(member_name);
+    if (!member) {
+        vm->runtimeError("Invalid enum member '%s' on enum '%s'",
+                         member_name, edef->name().c_str());
+        return -1;
+    }
+    RA(inst) = Value::makeEnum(edef, member->value);
     return 0;
 }
 
@@ -1647,17 +1701,6 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
 
     bool is_global = (strcmp(alias_name, "_GLOBAL") == 0);
 
-    // Cache check: if alias already exists as a table global, short-circuit
-    if (!is_global) {
-        int alias_slot = vm->state_->findGlobalSlot(alias_name);
-        if (alias_slot >= 0) {
-            const Value& existing = vm->state_->globalSlot(alias_slot);
-            if ((existing.flags & VAL_FLAG_DEFINED) && existing.type == VAL_TABLE) {
-                return 0;
-            }
-        }
-    }
-
     ModuleRegistry* registry = getGlobalRegistry();
     if (!registry) { vm->runtimeError("Module registry not initialized"); return -1; }
 
@@ -1667,6 +1710,10 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         vm->runtimeError("Import failed - module '%s' not found", module_name);
         return -1;
     }
+
+    // The registry owns mod_table (cached). Retain so the Values we create
+    // below can safely release() when they go out of scope.
+    mod_table->retain();
 
     StringInternPool* pool = vm->state_->stringPool();
 
@@ -1881,13 +1928,12 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_ADD, &&L_OP_SUB, &&L_OP_MUL, &&L_OP_DIV, &&L_OP_MOD,
         &&L_OP_UNM, &&L_OP_NOT,
         &&L_OP_BAND, &&L_OP_BOR, &&L_OP_BXOR, &&L_OP_BNOT, &&L_OP_SHL, &&L_OP_SHR,
-        &&L_OP_CONCAT,
         &&L_OP_EQ, &&L_OP_LT, &&L_OP_LE,
         &&L_OP_TEST, &&L_OP_TESTSET,
         &&L_OP_JMP,
         &&L_OP_CALL, &&L_OP_TAILCALL, &&L_OP_RETURN,
         &&L_OP_CLOSURE, &&L_OP_CLOSE,
-        &&L_OP_FORPREP, &&L_OP_FORLOOP, &&L_OP_IFORPREP, &&L_OP_IFORLOOP,
+        &&L_OP_IFORPREP, &&L_OP_IFORLOOP,
         &&L_OP_TFORLOOP,
         &&L_OP_NEWENUM, &&L_OP_ENUMVAL, &&L_OP_GETENUM,
         &&L_OP_IMPORT, &&L_OP_PRAGMA,
@@ -1907,7 +1953,7 @@ int MobiusVM::run(size_t base_depth) {
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
                   "dispatch_table must match OpCode enum");
 
-    #define VM_DISPATCH() do { inst = *f.ip++; goto *dispatch_table[DECODE_OP(inst)]; } while(0)
+    #define VM_DISPATCH() do { inst = *f.ip++; current_ip_ = f.ip; goto *dispatch_table[DECODE_OP(inst)]; } while(0)
     #define VM_CASE(op) L_##op:
     #define VM_NEXT() VM_DISPATCH()
     #define VM_DEFAULT() L_VM_DEFAULT:
@@ -1915,7 +1961,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_DISPATCH();
 
 #else
-    #define VM_DISPATCH() for(;;) { inst = *f.ip++; switch(DECODE_OP(inst)) {
+    #define VM_DISPATCH() for(;;) { inst = *f.ip++; current_ip_ = f.ip; switch(DECODE_OP(inst)) {
     #define VM_CASE(op) case op:
     #define VM_NEXT() break
     #define VM_DEFAULT() default:
@@ -1981,7 +2027,6 @@ int MobiusVM::run(size_t base_depth) {
     VM_CASE(OP_SHR)  { if (vm_op_bitwise(this, f, inst, '>') < 0) return -1; VM_NEXT(); }
     VM_HANDLER(OP_BNOT, vm_op_bnot)
 
-    VM_HANDLER(OP_CONCAT, vm_op_concat)
     VM_HANDLER(OP_EQ, vm_op_eq)
     VM_HANDLER(OP_LT, vm_op_lt)
     VM_HANDLER(OP_LE, vm_op_le)
@@ -2025,8 +2070,6 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_TYPEIS, vm_op_typeis)
     VM_HANDLER(OP_LEN, vm_op_len)
 
-    VM_HANDLER(OP_FORPREP, vm_op_forprep)
-    VM_HANDLER(OP_FORLOOP, vm_op_forloop)
     VM_HANDLER(OP_IFORPREP, vm_op_iforprep)
     VM_HANDLER(OP_IFORLOOP, vm_op_iforloop)
 

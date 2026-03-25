@@ -145,9 +145,6 @@ void disassemble_instruction(const Prototype* proto, int offset) {
                     else if (b == 0) printf("return R[%d]..top", a);
                     else printf("return R[%d]..R[%d]", a, a + b - 2);
                     break;
-                case OP_CONCAT:
-                    printf("R[%d] = R[%d]..R[%d]", a, b, c);
-                    break;
                 case OP_GETTABLE:
                     printf("R[%d] = R[%d][", a, b);
                     print_rk(proto, c);
@@ -257,13 +254,6 @@ void disassemble_instruction(const Prototype* proto, int offset) {
             switch (op) {
                 case OP_LOADINT:
                     printf("R[%d] = %d", a, sbx);
-                    break;
-                case OP_FORPREP:
-                    printf("R[%d] -= R[%d]; pc += %d (-> %04d)", a, a + 2, sbx, offset + 1 + sbx);
-                    break;
-                case OP_FORLOOP:
-                    printf("R[%d] += R[%d]; if R[%d] <= R[%d] then pc += %d (-> %04d)",
-                           a, a + 2, a, a + 1, sbx, offset + 1 + sbx);
                     break;
                 default:
                     printf("A=%d sBx=%d", a, sbx);

@@ -145,9 +145,6 @@ enum OpCode : uint8_t {
     OP_SHL,         // A B C     R[A] = RK(B) << RK(C)
     OP_SHR,         // A B C     R[A] = RK(B) >> RK(C)
 
-    // -- String --
-    OP_CONCAT,      // A B C     R[A] = R[B] .. R[B+1] .. ... .. R[C]
-
     // -- Comparison (result: skip next instruction if test fails) --
     OP_EQ,          // A B C     if (RK(B) == RK(C)) != A then skip next
     OP_LT,          // A B C     if (RK(B) <  RK(C)) != A then skip next
@@ -172,9 +169,7 @@ enum OpCode : uint8_t {
                     //           followed by pseudo-instructions for upvalue binding
     OP_CLOSE,       // A         close all upvalues >= R[A]
 
-    // -- Numeric for-loop --
-    OP_FORPREP,     // A sBx     R[A] -= R[A+2]; pc += sBx (jump to FORLOOP)
-    OP_FORLOOP,     // A sBx     R[A] += R[A+2]; if R[A] <= R[A+1] then { pc += sBx; R[A+3] = R[A] }
+    // -- Numeric for-loop (integer-only fast path) --
     OP_IFORPREP,    // A sBx     R[A].i64 -= R[A+2].i64; pc += sBx (integer-only)
     OP_IFORLOOP,    // A sBx     R[A].i64 += R[A+2].i64; if in range then { pc += sBx; R[A+3].i64 = R[A].i64 }
                     //           R[A]=index, R[A+1]=limit, R[A+2]=step, R[A+3]=loop var
@@ -183,9 +178,9 @@ enum OpCode : uint8_t {
     OP_TFORLOOP,    // A C       call R[A](R[A+1], R[A+2]); if R[A+3] != nil then R[A+2] = R[A+3]
 
     // -- Enum --
-    OP_NEWENUM,     // A B Bx    R[A] = new EnumDefinition with B members, name at K[Bx]
-    OP_ENUMVAL,     // A B C     set member C of enum R[A] to value R[B]
-    OP_GETENUM,     // A B C     R[A] = R[B].member[C]
+    OP_NEWENUM,     // A Bx      R[A] = new EnumDefinition, name at K[Bx]
+    OP_ENUMVAL,     // A B C     add member RK(C) to enum R[A] with value RK(B)
+    OP_GETENUM,     // A B C     R[A] = enum R[B], member named RK(C)
 
     // -- Import / pragma --
     OP_IMPORT,      // A B C     import module K/R[B] as alias K/R[C]
@@ -304,8 +299,6 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"SHL",       FMT_ABC},
         {"SHR",       FMT_ABC},
 
-        {"CONCAT",    FMT_ABC},
-
         {"EQ",        FMT_ABC},
         {"LT",        FMT_ABC},
         {"LE",        FMT_ABC},
@@ -322,8 +315,6 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"CLOSURE",   FMT_ABx},
         {"CLOSE",     FMT_ABC},
 
-        {"FORPREP",   FMT_AsBx},
-        {"FORLOOP",   FMT_AsBx},
         {"IFORPREP",  FMT_AsBx},
         {"IFORLOOP",  FMT_AsBx},
         {"TFORLOOP",  FMT_ABC},

@@ -27,3 +27,17 @@ workspace:
     - src
     - src/modules
     - examples
+
+
+staging:
+  name: "mobius"
+  destination: "${workspace}"
+  contents:
+    - folder: "bin"
+      files:
+        - "${out_dir}/bin/mobius"
+        - "${out_dir}/bin/libmobius-core.so"
+    - folder: "bin/modules"
+      files:
+        - "${out_dir}/bin/math.so"
+        - "${out_dir}/bin/text_processing.so"

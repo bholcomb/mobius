@@ -17,6 +17,12 @@ int lib_array_slice(MobiusState* state, int arg_count);
 int lib_array_concat(MobiusState* state, int arg_count);
 int lib_array_reverse(MobiusState* state, int arg_count);
 int lib_array_find(MobiusState* state, int arg_count);
-
+int lib_array_sort(MobiusState* state, int arg_count);
+int lib_array_map(MobiusState* state, int arg_count);
+int lib_array_filter(MobiusState* state, int arg_count);
+int lib_array_reduce(MobiusState* state, int arg_count);
+int lib_array_foreach(MobiusState* state, int arg_count);
+int lib_array_any(MobiusState* state, int arg_count);
+int lib_array_all(MobiusState* state, int arg_count);
 
 #endif // MOBIUS_LIBRARY_ARRAY_H

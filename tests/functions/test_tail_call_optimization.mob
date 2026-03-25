@@ -1,0 +1,120 @@
+// Test tail call optimization
+// These tests would stack overflow without TCO
+
+print("=== Testing Tail Call Optimization ===");
+
+// Test 1: Deep self-recursion in tail position
+func count_down(n) {
+    if (n <= 0) {
+        return 0;
+    }
+    return count_down(n - 1);
+}
+
+print("Testing deep tail recursion (200000 levels)...");
+var result = count_down(200000);
+if (result == 0) {
+    print("PASS: deep tail recursion completed");
+} else {
+    print("FAIL: expected 0, got " + str(result));
+}
+
+// Test 2: Tail-recursive accumulator pattern
+func sum_acc(n, acc) {
+    if (n <= 0) {
+        return acc;
+    }
+    return sum_acc(n - 1, acc + n);
+}
+
+print("Testing tail-recursive accumulator (100000)...");
+var s = sum_acc(100000, 0);
+if (s == 5000050000) {
+    print("PASS: tail-recursive accumulator = " + str(s));
+} else {
+    print("FAIL: expected 5000050000, got " + str(s));
+}
+
+// Test 3: Mutual tail recursion (is_even / is_odd)
+func tco_even(n) {
+    if (n == 0) {
+        return true;
+    }
+    return tco_odd(n - 1);
+}
+
+func tco_odd(n) {
+    if (n == 0) {
+        return false;
+    }
+    return tco_even(n - 1);
+}
+
+print("Testing mutual tail recursion (100000)...");
+var e = tco_even(100000);
+if (e == true) {
+    print("PASS: mutual tail recursion (even 100000 = true)");
+} else {
+    print("FAIL: expected true, got " + str(e));
+}
+
+var o = tco_odd(99999);
+if (o == true) {
+    print("PASS: mutual tail recursion (odd 99999 = true)");
+} else {
+    print("FAIL: expected true, got " + str(o));
+}
+
+// Test 4: Tail call with multiple arguments
+func gcd(a, b) {
+    if (b == 0) {
+        return a;
+    }
+    return gcd(b, a % b);
+}
+
+print("Testing tail-recursive GCD...");
+var g = gcd(1071, 462);
+if (g == 21) {
+    print("PASS: gcd(1071, 462) = " + str(g));
+} else {
+    print("FAIL: expected 21, got " + str(g));
+}
+
+// Test 5: Non-tail recursion still works (factorial — the multiply
+// happens after the call, so it's not in tail position)
+func factorial(n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+print("Testing non-tail recursion still works...");
+var f = factorial(10);
+if (f == 3628800) {
+    print("PASS: factorial(10) = " + str(f));
+} else {
+    print("FAIL: expected 3628800, got " + str(f));
+}
+
+// Test 6: Tail call with conditional tail positions
+func collatz_steps(n, steps) {
+    if (n == 1) {
+        return steps;
+    }
+    if (n % 2 == 0) {
+        return collatz_steps(n / 2, steps + 1);
+    }
+    return collatz_steps(3 * n + 1, steps + 1);
+}
+
+print("Testing Collatz with tail calls...");
+var cs = collatz_steps(27, 0);
+if (cs == 111) {
+    print("PASS: collatz_steps(27) = " + str(cs));
+} else {
+    print("FAIL: expected 111, got " + str(cs));
+}
+
+print("=== Tail Call Optimization Tests Complete ===");

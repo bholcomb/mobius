@@ -172,6 +172,34 @@ MOBIUS_API void mobius_stack_getGlobal(MobiusState* state, const char* name);
  */
 MOBIUS_API void mobius_stack_setGlobal(MobiusState* state, const char* name);
 
+/**
+ * Set or clear the read-only flag on a global variable.
+ * When read-only, scripts cannot reassign the variable (OP_SETGLOBAL
+ * will raise a runtime error).  The C API can still modify the value
+ * after clearing the flag.
+ */
+MOBIUS_API void mobius_set_global_readonly(MobiusState* state, const char* name,
+                                          bool readonly);
+
+/**
+ * Remove a global variable entirely.  After removal, scripts will see it
+ * as undefined (not nil — truly absent from the global table).
+ */
+MOBIUS_API void mobius_remove_global(MobiusState* state, const char* name);
+
+/**
+ * Call a Mobius function from native code.
+ *
+ * The function value and its arguments must already be on the native stack
+ * (push function first, then arguments in order).  On success, the
+ * function's return values replace those stack slots.
+ *
+ * @param nargs   Number of arguments (not counting the function itself).
+ * @param nresults Number of expected results (placed on stack after call).
+ * @return Number of results on success (>= 0), or negative on error.
+ */
+MOBIUS_API int mobius_pcall(MobiusState* state, int nargs, int nresults);
+
 /* ====================================================================== */
 /*  Table operations (on values already on the stack)                      */
 /* ====================================================================== */
@@ -232,8 +260,16 @@ typedef struct {
     size_t                function_count;
 
     /* Optional lifecycle hooks (may be NULL) */
-    int  (*init_plugin)(void);
+    int  (*init_plugin)(MobiusState* state);
     void (*cleanup_plugin)(void);
+
+    /**
+     * Called after functions are registered into the module table.
+     * The module table is at stack index 0.  Use the stack API
+     * (mobius_stack_push*, mobius_stack_setTableField) to add
+     * constants or other values to the module.
+     */
+    int  (*post_init)(MobiusState* state);
 } MobiusPlugin;
 
 /**

@@ -1,6 +1,7 @@
 #include <mobius/mobius_plugin.h>
 #include "state/stack.h"
 #include "state/mobius_state.h"
+#include "vm/vm.h"
 #include "data/value.h"
 #include "data/table.h"
 #include "data/array.h"
@@ -642,6 +643,114 @@ void mobius_register_function(MobiusState* state, const char* name,
     int slot = state->assignGlobalSlot(name);
     fval.flags |= VAL_FLAG_DEFINED;
     state->globalSlot(slot) = fval;
+}
+
+// ============================================================================
+// PUBLIC API — Global variable control (sandboxing)
+// ============================================================================
+
+void mobius_set_global_readonly(MobiusState* state, const char* name,
+                                bool readonly) {
+    if (!state || !name) return;
+    state->setGlobalReadonly(name, readonly);
+}
+
+void mobius_remove_global(MobiusState* state, const char* name) {
+    if (!state || !name) return;
+    state->removeGlobal(name);
+}
+
+// ============================================================================
+// PUBLIC API — Protected call (call a Mobius function from native code)
+// ============================================================================
+
+int mobius_pcall(MobiusState* state, int nargs, int nresults) {
+    if (!state) return -1;
+    MobiusVM* vm = state->activeVM();
+    NativeCallContext* nctx = state->nativeContext();
+    if (!vm || !nctx) return -1;
+
+    int func_slot = nctx->top - nargs - 1;
+    if (func_slot < nctx->base) return -1;
+
+    Value func_val = nctx->registers[func_slot];
+    Value args[16];
+    int safe_nargs = (nargs > 16) ? 16 : nargs;
+    for (int i = 0; i < safe_nargs; i++) {
+        args[i] = nctx->registers[func_slot + 1 + i];
+    }
+
+    nctx->top = func_slot;
+
+    if (func_val.type == VAL_NATIVE_FUNCTION) {
+        for (int i = 0; i < safe_nargs; i++) {
+            nctx->registers[nctx->top++] = args[i];
+        }
+        int rc = func_val.as.native_function(state, safe_nargs);
+        if (rc < 0) return -1;
+        return rc;
+    }
+
+    if (func_val.type != VAL_FUNCTION || !func_val.as.function) {
+        return state->error("pcall: value is not a function");
+    }
+
+    MobiusFunction* mf = func_val.as.function;
+    if (!mf->proto || (int)mf->param_count != safe_nargs) {
+        return state->error("pcall: argument count mismatch");
+    }
+
+    Prototype* child_proto = mf->proto;
+
+    int caller_top = vm->call_stack_.back().base +
+                     vm->call_stack_.back().proto->num_registers;
+    int pcall_base = caller_top;
+    int child_base = pcall_base + 1;
+    int needed = child_base + child_proto->num_registers + 16;
+    if (needed > (int)vm->registers_.size())
+        vm->registers_.resize(needed, Value());
+
+    vm->registers_[pcall_base] = func_val;
+    for (int i = 0; i < safe_nargs; i++) {
+        vm->registers_[child_base + i] = args[i];
+    }
+
+    nctx->registers = vm->registers_.data();
+    nctx->capacity = (int)vm->registers_.size();
+
+    CallInfo child_ci;
+    child_ci.proto = child_proto;
+    child_ci.ip = child_proto->code.data();
+    child_ci.base = child_base;
+    child_ci.nresults = nresults + 1;
+
+    if (mf->upvalues && mf->upvalue_count > 0) {
+        child_ci.open_upvalues.resize(mf->upvalue_count);
+        for (int u = 0; u < mf->upvalue_count; u++) {
+            child_ci.open_upvalues[u] = mf->upvalues[u];
+        }
+    }
+
+    vm->call_stack_.push_back(child_ci);
+
+    NativeCallContext* saved_nctx = state->nativeContext();
+    state->setNativeContext(nullptr);
+
+    size_t depth = vm->call_stack_.size() - 1;
+    int rc = vm->run(depth);
+
+    state->setNativeContext(saved_nctx);
+    nctx->registers = vm->registers_.data();
+    nctx->capacity = (int)vm->registers_.size();
+
+    if (rc < 0) return -1;
+
+    int actual_results = (nresults > 0) ? nresults : 1;
+    for (int i = 0; i < actual_results; i++) {
+        nctx->registers[nctx->top++] = vm->registers_[pcall_base + i];
+    }
+
+    return actual_results;
 }
 
 // ============================================================================

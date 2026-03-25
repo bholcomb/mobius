@@ -6,6 +6,7 @@
 #include <mobius/mobius.h>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 class MobiusState;
 class Table;
@@ -17,7 +18,6 @@ struct LoadedModule {
     Plugin* plugin = nullptr;
     PluginStatus status = PLUGIN_STATUS_UNLOADED;
     std::string error_message;
-    int ref_count = 0;
 };
 
 class MOBIUS_API ModuleRegistry {
@@ -28,34 +28,22 @@ public:
     ModuleRegistry(const ModuleRegistry&) = delete;
     ModuleRegistry& operator=(const ModuleRegistry&) = delete;
 
-    LoadedModule* findModule(const char* name);
-    bool isModuleLoaded(const char* name);
-    PluginLoadResult loadModuleByName(const char* name);
     Table* resolveModule(const char* name, const char* caller_source, MobiusState* state);
-    void printLoadedModules() const;
 
     void addPluginDirectory(const char* directory);
     void clearPluginDirectories();
-    int scanPlugins(bool force_rescan);
 
-    void incrementRefCount(const char* module_name);
-    void decrementRefCount(const char* module_name);
-
-    size_t moduleCount() const { return modules_.size(); }
     bool debugMode() const { return debug_mode_; }
     void setDebugMode(bool mode) { debug_mode_ = mode; }
 
-    const std::vector<LoadedModule>& modules() const { return modules_; }
-
 private:
-    PluginLoadResult loadModule(const char* path);
-    int scanPluginDirectory(const char* directory);
-    static bool isPluginFile(const char* filename);
+    LoadedModule* findModule(const char* name);
+    PluginLoadResult loadPlugin(const char* path, MobiusState* state);
 
     std::vector<LoadedModule> modules_;
     std::vector<std::string> plugin_directories_;
+    std::unordered_map<std::string, Table*> module_tables_;
     bool debug_mode_ = false;
-    bool already_scanned_ = false;
     std::string last_error_;
 };
 

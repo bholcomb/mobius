@@ -24,6 +24,7 @@ typedef struct InternalError {
     int code;
     char* message;
     char* suggestion;
+    char* filename;
     int line;
     int column;
     char* function_name;
@@ -149,7 +150,8 @@ public:
     InternalError* getLastError() const;
     void clearError();
     int setError(int code, const char* message, const char* suggestion,
-                 int line, int column, const char* function_name);
+                 int line, int column, const char* function_name,
+                 const char* filename = nullptr);
     int error(const char* message);
 
     MobiusErrorHandler setErrorHandler(MobiusErrorHandler handler, void* userdata);
@@ -158,9 +160,7 @@ public:
     void setSourceContext(const char* source);
     const char* getSourceContext() const;
 
-    // Module helpers
-    size_t getModuleCount() const;
-    void printModules() const;
+
 
     // REPL
     void startRepl();
@@ -183,6 +183,12 @@ public:
     int findGlobalSlot(const char* name) const;
     const char* globalSlotName(int idx) const;
     void removeGlobalSlots(int from_slot);
+    void setGlobalReadonly(const char* name, bool readonly);
+    bool removeGlobal(const char* name);
+
+    // Active VM — set by MobiusVM during execution for callback support.
+    class MobiusVM* activeVM() const { return active_vm_; }
+    void setActiveVM(class MobiusVM* vm) { active_vm_ = vm; }
 
     // Native call context — set by MobiusVM before calling a MobiusCFunction.
     NativeCallContext* nativeContext() const { return native_ctx_; }
@@ -215,6 +221,7 @@ private:
     Metamethods* metamethods_;
 
     ExecutionContext* main_context_;
+    class MobiusVM* active_vm_;       // non-null during VM execution
     NativeCallContext* native_ctx_;   // non-null only during a native call
 
     InternalError* last_error_;

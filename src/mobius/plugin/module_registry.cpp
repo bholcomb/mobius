@@ -2,6 +2,7 @@
 #include <mobius/mobius.h>
 #include "plugin/module_registry.h"
 #include "state/mobius_state.h"
+#include "vm/vm.h"
 #include "data/table.h"
 #include "data/value.h"
 #include "internal/string_intern.h"
@@ -13,7 +14,6 @@
 #include <cstdlib>
 #include <libgen.h>
 #include <dlfcn.h>
-#include <dirent.h>
 #include <sys/stat.h>
 
 // ============================================================================
@@ -54,10 +54,6 @@ void mobius_clear_plugin_directories() {
     getGlobalRegistry()->clearPluginDirectories();
 }
 
-int mobius_scan_plugins(bool force_rescan) {
-    return getGlobalRegistry()->scanPlugins(force_rescan);
-}
-
 } // extern "C"
 
 // ============================================================================
@@ -85,22 +81,6 @@ LoadedModule* ModuleRegistry::findModule(const char* name) {
     return nullptr;
 }
 
-bool ModuleRegistry::isModuleLoaded(const char* name) {
-    return findModule(name) != nullptr;
-}
-
-void ModuleRegistry::printLoadedModules() const {
-    printf("Loaded Modules (%zu):\n", modules_.size());
-    printf("====================================\n");
-    for (const auto& mod : modules_) {
-        printf("  %s v%s\n", mod.name.c_str(), mod.plugin->metadata.version);
-        printf("   Description: %s\n", mod.plugin->metadata.description);
-        printf("   Functions: %zu\n", mod.plugin->function_count);
-        printf("   Path: %s\n", mod.path.c_str());
-        printf("\n");
-    }
-}
-
 void ModuleRegistry::addPluginDirectory(const char* directory) {
     if (!directory) return;
     plugin_directories_.emplace_back(directory);
@@ -110,47 +90,11 @@ void ModuleRegistry::clearPluginDirectories() {
     plugin_directories_.clear();
 }
 
-int ModuleRegistry::scanPlugins(bool force_rescan) {
-    if (!force_rescan && already_scanned_) {
-        return 0;
-    }
-
-    int total_discovered = 0;
-    for (const auto& dir : plugin_directories_) {
-        int count = scanPluginDirectory(dir.c_str());
-        if (count > 0) total_discovered += count;
-    }
-
-    already_scanned_ = true;
-    return total_discovered;
-}
-
-void ModuleRegistry::incrementRefCount(const char* module_name) {
-    LoadedModule* mod = findModule(module_name);
-    if (mod) {
-        mod->ref_count++;
-    }
-}
-
-void ModuleRegistry::decrementRefCount(const char* module_name) {
-    LoadedModule* mod = findModule(module_name);
-    if (mod && mod->ref_count > 0) {
-        mod->ref_count--;
-    }
-}
-
 // ============================================================================
-// Private helpers
+// Plugin loading (dlopen + init_plugin)
 // ============================================================================
 
-bool ModuleRegistry::isPluginFile(const char* filename) {
-    if (!filename) return false;
-    size_t len = strlen(filename);
-    if (len < 4) return false;
-    return strcmp(filename + len - 3, ".so") == 0;
-}
-
-PluginLoadResult ModuleRegistry::loadModule(const char* path) {
+PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state) {
     PluginLoadResult result = {PLUGIN_STATUS_ERROR, nullptr, nullptr};
 
     if (!path) {
@@ -206,7 +150,7 @@ PluginLoadResult ModuleRegistry::loadModule(const char* path) {
         return result;
     }
 
-    if (plugin->init_plugin && plugin->init_plugin() != 0) {
+    if (plugin->init_plugin && plugin->init_plugin(state) != 0) {
         dlclose(handle);
         last_error_ = "Plugin initialization failed";
         result.error_message = last_error_.c_str();
@@ -219,7 +163,6 @@ PluginLoadResult ModuleRegistry::loadModule(const char* path) {
     mod.handle = handle;
     mod.plugin = plugin;
     mod.status = PLUGIN_STATUS_LOADED;
-    mod.ref_count = 0;
     modules_.push_back(std::move(mod));
 
     if (debug_mode_) {
@@ -234,70 +177,17 @@ PluginLoadResult ModuleRegistry::loadModule(const char* path) {
     return result;
 }
 
-int ModuleRegistry::scanPluginDirectory(const char* directory) {
-    if (!directory) return -1;
-
-    DIR* dir = opendir(directory);
-    if (!dir) {
-        last_error_ = std::string("Failed to open directory: ") + directory;
-        return -1;
-    }
-
-    int loaded_count = 0;
-    struct dirent* entry;
-
-    if (debug_mode_) {
-        printf("Scanning plugin directory: %s\n", directory);
-    }
-
-    while ((entry = readdir(dir)) != nullptr) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
-            continue;
-        }
-
-        if (!isPluginFile(entry->d_name)) {
-            continue;
-        }
-
-        char full_path[1024];
-        snprintf(full_path, sizeof(full_path), "%s/%s", directory, entry->d_name);
-
-        struct stat file_stat;
-        if (stat(full_path, &file_stat) != 0 || !S_ISREG(file_stat.st_mode)) {
-            continue;
-        }
-
-        if (debug_mode_) {
-            printf("Found plugin file: %s\n", entry->d_name);
-        }
-
-        PluginLoadResult result = loadModule(full_path);
-        if (result.status == PLUGIN_STATUS_LOADED) {
-            loaded_count++;
-            if (debug_mode_) {
-                printf("Loaded plugin: %s v%s\n",
-                       result.plugin->metadata.name,
-                       result.plugin->metadata.version);
-            }
-        } else if (debug_mode_) {
-            printf("Failed to load %s: %s\n",
-                   entry->d_name,
-                   result.error_message ? result.error_message : "unknown error");
-        }
-    }
-
-    closedir(dir);
-
-    if (debug_mode_) {
-        printf("Loaded %d plugins from %s\n", loaded_count, directory);
-    }
-
-    return loaded_count;
-}
+// ============================================================================
+// Module resolution — lazy load, cache by name
+// ============================================================================
 
 Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source, MobiusState* state) {
     if (!name || !state) return nullptr;
 
+    auto it = module_tables_.find(name);
+    if (it != module_tables_.end()) {
+        return it->second;
+    }
 
     const char* default_dirs[] = {
         "./modules",
@@ -309,10 +199,8 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
     std::string mob_filename = std::string(name) + ".mob";
     std::string so_filename  = std::string(name) + ".so";
 
-    // Build ordered list of directories to search
     std::vector<std::string> search_dirs;
 
-    // 1. Caller's directory
     if (caller_source && caller_source[0] != '\0'
         && strcmp(caller_source, "<string>") != 0) {
         char* buf = strdup(caller_source);
@@ -325,17 +213,14 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         }
     }
 
-    // 2. User-configured plugin directories
     for (const auto& d : plugin_directories_) {
         search_dirs.push_back(d);
     }
 
-    // 3. Default directories
     for (int i = 0; default_dirs[i]; i++) {
         search_dirs.emplace_back(default_dirs[i]);
     }
 
-    // Search each directory for .mob and/or .so
     for (const auto& dir : search_dirs) {
         char mob_path[1024], so_path[1024];
         snprintf(mob_path, sizeof(mob_path), "%s/%s", dir.c_str(), mob_filename.c_str());
@@ -350,12 +235,10 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         Table* mod_table = new (std::nothrow) Table(state, 16);
         if (!mod_table) return nullptr;
 
-        // Load .so first if present
         if (has_so) {
-            // Check if already loaded by scanPlugins or a prior import
             LoadedModule* lm = findModule(name);
             if (!lm) {
-                PluginLoadResult result = loadModule(so_path);
+                PluginLoadResult result = loadPlugin(so_path, state);
                 if (result.status == PLUGIN_STATUS_LOADED && result.plugin) {
                     lm = findModule(result.plugin->metadata.name);
                 }
@@ -368,10 +251,30 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
                     Value func_val = make_native_function_value(func->function);
                     mod_table->set(func_key, func_val);
                 }
+
+                if (lm->plugin->post_init) {
+                    // Prevent the scratch Value from dropping the last
+                    // reference when it goes out of scope.
+                    mod_table->retain();
+
+                    Value scratch[32];
+                    scratch[0] = make_table_value(mod_table);
+                    NativeCallContext nctx;
+                    nctx.registers = scratch;
+                    nctx.base      = 0;
+                    nctx.top       = 1;
+                    nctx.capacity  = 32;
+
+                    NativeCallContext* prev_nctx = state->nativeContext();
+                    state->setNativeContext(&nctx);
+
+                    lm->plugin->post_init(state);
+
+                    state->setNativeContext(prev_nctx);
+                }
             }
         }
 
-        // Load .mob overlay/standalone
         if (has_mob) {
             int snapshot = state->globalSlotCount();
             int rc = state->execFile(mob_path);
@@ -395,59 +298,9 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
             }
         }
 
+        module_tables_[name] = mod_table;
         return mod_table;
     }
 
     return nullptr;
-}
-
-PluginLoadResult ModuleRegistry::loadModuleByName(const char* name) {
-    PluginLoadResult result;
-    result.status = PLUGIN_STATUS_ERROR;
-    result.plugin = nullptr;
-    result.error_message = "Invalid arguments";
-
-    if (!name) return result;
-
-    const char* default_dirs[] = {
-        "./bin/modules",
-        "./modules",
-        "/usr/local/lib/mobius/modules",
-        nullptr
-    };
-
-    char full_path[1024];
-
-    std::string module_filename;
-    if (strstr(name, ".so")) {
-        module_filename = name;
-    } else {
-        module_filename = std::string(name) + ".so";
-    }
-
-    for (const auto& dir : plugin_directories_) {
-        snprintf(full_path, sizeof(full_path), "%s/%s", dir.c_str(), module_filename.c_str());
-        struct stat file_stat;
-        if (stat(full_path, &file_stat) == 0 && S_ISREG(file_stat.st_mode)) {
-            result = loadModule(full_path);
-            if (result.status == PLUGIN_STATUS_LOADED) {
-                return result;
-            }
-        }
-    }
-
-    for (int i = 0; default_dirs[i]; i++) {
-        snprintf(full_path, sizeof(full_path), "%s/%s", default_dirs[i], module_filename.c_str());
-        struct stat file_stat;
-        if (stat(full_path, &file_stat) == 0 && S_ISREG(file_stat.st_mode)) {
-            result = loadModule(full_path);
-            if (result.status == PLUGIN_STATUS_LOADED) {
-                return result;
-            }
-        }
-    }
-
-    result.status = PLUGIN_STATUS_ERROR;
-    result.error_message = "Module not found in any configured directory";
-    return result;
 }

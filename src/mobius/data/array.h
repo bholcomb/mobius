@@ -26,6 +26,9 @@ public:
     const Value& operator[](size_t index) const;
     Value& operator[](size_t index);
 
+    Value* data() { return elements.data(); }
+    const Value* data() const { return elements.data(); }
+
 private:
     std::vector<Value> elements;
 };

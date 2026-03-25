@@ -6,6 +6,8 @@
 #include "internal/string_intern.h"
 
 #include <vector>
+#include <unordered_set>
+#include <string>
 #include <cstdint>
 
 class MobiusState;
@@ -60,6 +62,7 @@ private:
     FunctionState* current_;
     StringInternPool* pool_;
     MobiusState* state_;
+    std::unordered_set<std::string> enum_names_;
 
     // --- Register management ---
     int allocReg();
@@ -106,6 +109,7 @@ private:
     int compileUnary(UnaryExpr* expr, int dest);
     int compileAssignment(AssignmentExpr* expr, int dest);
     int compileCall(CallExpr* expr, int dest);
+    void compileTailCall(CallExpr* expr);
     int compileGrouping(GroupingExpr* expr, int dest);
     int compileArrayLiteral(ArrayLiteralExpr* expr, int dest);
     int compileArrayIndex(ArrayIndexExpr* expr, int dest);

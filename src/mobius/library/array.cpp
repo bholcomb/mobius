@@ -1,9 +1,11 @@
 #include "library/array.h"
 #include "data/array.h"
 #include "data/value.h"
+#include <mobius/mobius_plugin.h>
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <algorithm>
 
 // =============================================================================
 // UNIFIED ARRAY FUNCTION IMPLEMENTATIONS
@@ -309,5 +311,277 @@ int lib_array_find(MobiusState* state, int arg_count) {
 
     // Not found
     state->npush(make_int64_value(-1));
+    return 1;
+}
+
+static bool value_less_than(const Value& a, const Value& b) {
+    if (a.type == VAL_INT64 && b.type == VAL_INT64) return a.as.i64 < b.as.i64;
+    if (a.type == VAL_FLOAT64 && b.type == VAL_FLOAT64) return a.as.double_val < b.as.double_val;
+    if (a.type == VAL_INT64 && b.type == VAL_FLOAT64) return (double)a.as.i64 < b.as.double_val;
+    if (a.type == VAL_FLOAT64 && b.type == VAL_INT64) return a.as.double_val < (double)b.as.i64;
+    if (a.type == VAL_STRING && b.type == VAL_STRING && a.as.string && b.as.string)
+        return strcmp(a.as.string->data, b.as.string->data) < 0;
+    return false;
+}
+
+int lib_array_sort(MobiusState* state, int arg_count) {
+    if (arg_count < 1 || arg_count > 2) {
+        return state->error("array_sort expects 1 or 2 arguments (array [, comparator])");
+    }
+
+    Value comp_val;
+    if (arg_count == 2) {
+        comp_val = state->npeek(0);
+        state->npop();
+    }
+    Value array_val = state->npeek(0);
+    state->npop();
+
+    if (array_val.type != VAL_ARRAY || !array_val.as.array) {
+        return state->error("array_sort first argument must be an array");
+    }
+
+    ArrayValue* arr = array_val.as.array;
+    size_t len = arr->length();
+
+    if (arg_count == 1) {
+        std::sort(arr->data(), arr->data() + len, value_less_than);
+    } else {
+        if (comp_val.type != VAL_FUNCTION && comp_val.type != VAL_NATIVE_FUNCTION) {
+            return state->error("array_sort comparator must be a function");
+        }
+        bool sort_error = false;
+        std::sort(arr->data(), arr->data() + len, [&](const Value& a, const Value& b) -> bool {
+            if (sort_error) return false;
+            mobius_stack_pushNil(state);
+            state->npeek(0) = comp_val;
+            state->npush(a);
+            state->npush(b);
+            int rc = mobius_pcall(state, 2, 1);
+            if (rc < 0) { sort_error = true; return false; }
+            Value result = state->npop();
+            return is_truthy(result);
+        });
+        if (sort_error) return -1;
+    }
+
+    state->npush(array_val);
+    return 1;
+}
+
+int lib_array_map(MobiusState* state, int arg_count) {
+    if (arg_count != 2) {
+        return state->error("array_map expects 2 arguments (array, function)");
+    }
+
+    Value func_val = state->npeek(0);
+    Value array_val = state->npeek(1);
+    state->npop();
+    state->npop();
+
+    if (array_val.type != VAL_ARRAY || !array_val.as.array) {
+        return state->error("array_map first argument must be an array");
+    }
+    if (func_val.type != VAL_FUNCTION && func_val.type != VAL_NATIVE_FUNCTION) {
+        return state->error("array_map second argument must be a function");
+    }
+
+    ArrayValue* src = array_val.as.array;
+    size_t len = src->length();
+    ArrayValue* result = new ArrayValue(len);
+
+    for (size_t i = 0; i < len; i++) {
+        mobius_stack_pushNil(state);
+        state->npeek(0) = func_val;
+        state->npush((*src)[i]);
+        state->npush(make_int64_value((int64_t)i));
+        int rc = mobius_pcall(state, 2, 1);
+        if (rc < 0) { delete result; return -1; }
+        result->push(state->npop());
+    }
+
+    state->npush(make_array_value(result));
+    return 1;
+}
+
+int lib_array_filter(MobiusState* state, int arg_count) {
+    if (arg_count != 2) {
+        return state->error("array_filter expects 2 arguments (array, function)");
+    }
+
+    Value func_val = state->npeek(0);
+    Value array_val = state->npeek(1);
+    state->npop();
+    state->npop();
+
+    if (array_val.type != VAL_ARRAY || !array_val.as.array) {
+        return state->error("array_filter first argument must be an array");
+    }
+    if (func_val.type != VAL_FUNCTION && func_val.type != VAL_NATIVE_FUNCTION) {
+        return state->error("array_filter second argument must be a function");
+    }
+
+    ArrayValue* src = array_val.as.array;
+    size_t len = src->length();
+    ArrayValue* result = new ArrayValue(len);
+
+    for (size_t i = 0; i < len; i++) {
+        mobius_stack_pushNil(state);
+        state->npeek(0) = func_val;
+        state->npush((*src)[i]);
+        state->npush(make_int64_value((int64_t)i));
+        int rc = mobius_pcall(state, 2, 1);
+        if (rc < 0) { delete result; return -1; }
+        Value pred = state->npop();
+        if (is_truthy(pred)) {
+            result->push((*src)[i]);
+        }
+    }
+
+    state->npush(make_array_value(result));
+    return 1;
+}
+
+int lib_array_reduce(MobiusState* state, int arg_count) {
+    if (arg_count != 3) {
+        return state->error("array_reduce expects 3 arguments (array, function, initial)");
+    }
+
+    Value initial = state->npeek(0);
+    Value func_val = state->npeek(1);
+    Value array_val = state->npeek(2);
+    state->npop();
+    state->npop();
+    state->npop();
+
+    if (array_val.type != VAL_ARRAY || !array_val.as.array) {
+        return state->error("array_reduce first argument must be an array");
+    }
+    if (func_val.type != VAL_FUNCTION && func_val.type != VAL_NATIVE_FUNCTION) {
+        return state->error("array_reduce second argument must be a function");
+    }
+
+    ArrayValue* src = array_val.as.array;
+    size_t len = src->length();
+    Value accumulator = initial;
+
+    for (size_t i = 0; i < len; i++) {
+        mobius_stack_pushNil(state);
+        state->npeek(0) = func_val;
+        state->npush(accumulator);
+        state->npush((*src)[i]);
+        int rc = mobius_pcall(state, 2, 1);
+        if (rc < 0) return -1;
+        accumulator = state->npop();
+    }
+
+    state->npush(accumulator);
+    return 1;
+}
+
+int lib_array_foreach(MobiusState* state, int arg_count) {
+    if (arg_count != 2) {
+        return state->error("array_foreach expects 2 arguments (array, function)");
+    }
+
+    Value func_val = state->npeek(0);
+    Value array_val = state->npeek(1);
+    state->npop();
+    state->npop();
+
+    if (array_val.type != VAL_ARRAY || !array_val.as.array) {
+        return state->error("array_foreach first argument must be an array");
+    }
+    if (func_val.type != VAL_FUNCTION && func_val.type != VAL_NATIVE_FUNCTION) {
+        return state->error("array_foreach second argument must be a function");
+    }
+
+    ArrayValue* src = array_val.as.array;
+    size_t len = src->length();
+
+    for (size_t i = 0; i < len; i++) {
+        mobius_stack_pushNil(state);
+        state->npeek(0) = func_val;
+        state->npush((*src)[i]);
+        state->npush(make_int64_value((int64_t)i));
+        int rc = mobius_pcall(state, 2, 1);
+        if (rc < 0) return -1;
+        state->npop();
+    }
+
+    return 0;
+}
+
+int lib_array_any(MobiusState* state, int arg_count) {
+    if (arg_count != 2) {
+        return state->error("array_any expects 2 arguments (array, function)");
+    }
+
+    Value func_val = state->npeek(0);
+    Value array_val = state->npeek(1);
+    state->npop();
+    state->npop();
+
+    if (array_val.type != VAL_ARRAY || !array_val.as.array) {
+        return state->error("array_any first argument must be an array");
+    }
+    if (func_val.type != VAL_FUNCTION && func_val.type != VAL_NATIVE_FUNCTION) {
+        return state->error("array_any second argument must be a function");
+    }
+
+    ArrayValue* src = array_val.as.array;
+    size_t len = src->length();
+
+    for (size_t i = 0; i < len; i++) {
+        mobius_stack_pushNil(state);
+        state->npeek(0) = func_val;
+        state->npush((*src)[i]);
+        int rc = mobius_pcall(state, 1, 1);
+        if (rc < 0) return -1;
+        Value result = state->npop();
+        if (is_truthy(result)) {
+            state->npush(make_bool_value(true));
+            return 1;
+        }
+    }
+
+    state->npush(make_bool_value(false));
+    return 1;
+}
+
+int lib_array_all(MobiusState* state, int arg_count) {
+    if (arg_count != 2) {
+        return state->error("array_all expects 2 arguments (array, function)");
+    }
+
+    Value func_val = state->npeek(0);
+    Value array_val = state->npeek(1);
+    state->npop();
+    state->npop();
+
+    if (array_val.type != VAL_ARRAY || !array_val.as.array) {
+        return state->error("array_all first argument must be an array");
+    }
+    if (func_val.type != VAL_FUNCTION && func_val.type != VAL_NATIVE_FUNCTION) {
+        return state->error("array_all second argument must be a function");
+    }
+
+    ArrayValue* src = array_val.as.array;
+    size_t len = src->length();
+
+    for (size_t i = 0; i < len; i++) {
+        mobius_stack_pushNil(state);
+        state->npeek(0) = func_val;
+        state->npush((*src)[i]);
+        int rc = mobius_pcall(state, 1, 1);
+        if (rc < 0) return -1;
+        Value result = state->npop();
+        if (!is_truthy(result)) {
+            state->npush(make_bool_value(false));
+            return 1;
+        }
+    }
+
+    state->npush(make_bool_value(true));
     return 1;
 }
