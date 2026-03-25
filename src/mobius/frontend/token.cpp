@@ -16,16 +16,17 @@ static const char* token_names[] = {
     // One or two character tokens
     "BANG", "BANG_EQUAL", "EQUAL", "EQUAL_EQUAL", "GREATER", "GREATER_EQUAL",
     "LESS", "LESS_EQUAL", "PLUS_PLUS", "MINUS_MINUS", "PLUS_EQUAL",
-    "MINUS_EQUAL", "STAR_EQUAL", "SLASH_EQUAL", "AND_AND", "OR_OR",
+    "MINUS_EQUAL", "STAR_EQUAL", "SLASH_EQUAL", "PERCENT_EQUAL", "AND_AND", "OR_OR",
     "LEFT_SHIFT", "RIGHT_SHIFT", "DOT_DOT", "DOT_DOT_DOT",
     
     // Literals
-    "IDENTIFIER", "STRING", "INTEGER", "FLOAT", "CHAR",
+    "IDENTIFIER", "STRING", "INTERP_STRING", "INTEGER", "FLOAT", "CHAR",
     
     // Keywords
     "AND", "BREAK", "CASE", "CONTINUE", "DEFAULT", "ELSE", "ELIF", 
     "ENUM", "FALSE", "FOR", "FUNC", "IF", "IMPORT", "IS", "NIL", 
-    "NOT", "OR", "RETURN", "SWITCH", "TRUE", "VAR", "WHILE",
+    "NOT", "OR", "RETURN", "SWITCH", "TRUE", "THROW", "TRY", "CATCH", "IN",
+    "VAR", "WHEN", "WHILE", "FINALLY",
     
     // Type annotation tokens
     "TYPE_INT64", "TYPE_UINT64", "TYPE_FLOAT64",

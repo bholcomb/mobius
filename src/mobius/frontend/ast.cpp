@@ -808,6 +808,10 @@ void free_stmt(Stmt* stmt) {
                 free_stmt(stmt->as.try_catch_stmt.catch_body[i]);
             }
             if (stmt->as.try_catch_stmt.catch_body) free(stmt->as.try_catch_stmt.catch_body);
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.finally_body_count; i++) {
+                free_stmt(stmt->as.try_catch_stmt.finally_body[i]);
+            }
+            if (stmt->as.try_catch_stmt.finally_body) free(stmt->as.try_catch_stmt.finally_body);
             break;
         case STMT_THROW:
             if (stmt->as.throw_stmt.value) {
@@ -1090,6 +1094,9 @@ void ast_release_stmt(Stmt* stmt) {
             }
             case STMT_FOR_IN:
                 free_token(&stmt->as.for_in_stmt.var_name);
+                if (stmt->as.for_in_stmt.has_two_vars) {
+                    free_token(&stmt->as.for_in_stmt.var_name2);
+                }
                 ast_release_expr(stmt->as.for_in_stmt.iterable);
                 ast_release_stmt(stmt->as.for_in_stmt.body);
                 break;
@@ -1106,6 +1113,12 @@ void ast_release_stmt(Stmt* stmt) {
                         ast_release_stmt(stmt->as.try_catch_stmt.catch_body[i]);
                     }
                     free(stmt->as.try_catch_stmt.catch_body);
+                }
+                if (stmt->as.try_catch_stmt.finally_body) {
+                    for (size_t i = 0; i < stmt->as.try_catch_stmt.finally_body_count; i++) {
+                        ast_release_stmt(stmt->as.try_catch_stmt.finally_body[i]);
+                    }
+                    free(stmt->as.try_catch_stmt.finally_body);
                 }
                 break;
             case STMT_THROW:
@@ -1248,13 +1261,29 @@ Stmt* make_for_in_stmt(Token var_name, Expr* iterable, Stmt* body) {
     stmt->type = STMT_FOR_IN;
     stmt->ref_count = 1;
     stmt->as.for_in_stmt.var_name = copy_token(&var_name);
+    stmt->as.for_in_stmt.has_two_vars = false;
+    stmt->as.for_in_stmt.iterable = iterable;
+    stmt->as.for_in_stmt.body = body;
+    return stmt;
+}
+
+Stmt* make_for_in_stmt_kv(Token var_name, Token var_name2, Expr* iterable, Stmt* body) {
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+
+    stmt->type = STMT_FOR_IN;
+    stmt->ref_count = 1;
+    stmt->as.for_in_stmt.var_name = copy_token(&var_name);
+    stmt->as.for_in_stmt.var_name2 = copy_token(&var_name2);
+    stmt->as.for_in_stmt.has_two_vars = true;
     stmt->as.for_in_stmt.iterable = iterable;
     stmt->as.for_in_stmt.body = body;
     return stmt;
 }
 
 Stmt* make_try_catch_stmt(Stmt** try_body, size_t try_body_count,
-                          Token catch_var, Stmt** catch_body, size_t catch_body_count) {
+                          Token catch_var, Stmt** catch_body, size_t catch_body_count,
+                          Stmt** finally_body, size_t finally_body_count) {
     Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
 
@@ -1265,6 +1294,8 @@ Stmt* make_try_catch_stmt(Stmt** try_body, size_t try_body_count,
     stmt->as.try_catch_stmt.catch_var = copy_token(&catch_var);
     stmt->as.try_catch_stmt.catch_body = catch_body;
     stmt->as.try_catch_stmt.catch_body_count = catch_body_count;
+    stmt->as.try_catch_stmt.finally_body = finally_body;
+    stmt->as.try_catch_stmt.finally_body_count = finally_body_count;
     return stmt;
 }
 

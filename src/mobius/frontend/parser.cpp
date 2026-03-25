@@ -784,8 +784,8 @@ Expr* parse_assignment(Parser* parser) {
         free_expr(value);
     }
 
-    if (parser_match_any(parser, 4, TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL,
-                         TOKEN_STAR_EQUAL, TOKEN_SLASH_EQUAL)) {
+    if (parser_match_any(parser, 5, TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL,
+                         TOKEN_STAR_EQUAL, TOKEN_SLASH_EQUAL, TOKEN_PERCENT_EQUAL)) {
         Token compound_op = parser_previous(parser);
 
         if (expr->type != EXPR_VARIABLE &&
@@ -801,7 +801,8 @@ Expr* parse_assignment(Parser* parser) {
             case TOKEN_PLUS_EQUAL:  bin_op.type = TOKEN_PLUS;  break;
             case TOKEN_MINUS_EQUAL: bin_op.type = TOKEN_MINUS; break;
             case TOKEN_STAR_EQUAL:  bin_op.type = TOKEN_STAR;  break;
-            case TOKEN_SLASH_EQUAL: bin_op.type = TOKEN_SLASH; break;
+            case TOKEN_SLASH_EQUAL:   bin_op.type = TOKEN_SLASH;   break;
+            case TOKEN_PERCENT_EQUAL: bin_op.type = TOKEN_PERCENT; break;
             default: break;
         }
 
@@ -938,43 +939,68 @@ Stmt* parse_while_statement(Parser* parser) {
     return make_while_stmt(condition, body);
 }
 
-Stmt* parse_for_in_statement(Parser* parser, Token var_name) {
+Stmt* parse_for_in_statement(Parser* parser, Token var_name, bool has_two, Token var_name2) {
     Expr* iterable = parse_expression(parser);
     consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after for-in expression.");
 
     while (parser_check(parser, TOKEN_NEWLINE)) parser_advance(parser);
 
     Stmt* body = parse_statement(parser);
+    if (has_two) {
+        return make_for_in_stmt_kv(var_name, var_name2, iterable, body);
+    }
     return make_for_in_stmt(var_name, iterable, body);
 }
 
 Stmt* parse_for_statement(Parser* parser) {
     consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
 
-    // Detect for-in: for (var x in expr) or for (x in expr)
+    // Detect for-in: for (var x in expr), for (var k, v in expr), or for (x in expr)
     size_t saved = parser->current;
     bool is_for_in = false;
+    bool has_two_vars = false;
     Token for_in_var = {};
+    Token for_in_var2 = {};
 
     if (parser_check(parser, TOKEN_VAR)) {
         parser_advance(parser);
         if (parser_check(parser, TOKEN_IDENTIFIER)) {
             for_in_var = parser_advance(parser);
-            if (parser_check(parser, TOKEN_IN)) {
+            if (parser_check(parser, TOKEN_COMMA)) {
+                parser_advance(parser);
+                if (parser_check(parser, TOKEN_IDENTIFIER)) {
+                    for_in_var2 = parser_advance(parser);
+                    if (parser_check(parser, TOKEN_IN)) {
+                        parser_advance(parser);
+                        is_for_in = true;
+                        has_two_vars = true;
+                    }
+                }
+            } else if (parser_check(parser, TOKEN_IN)) {
                 parser_advance(parser);
                 is_for_in = true;
             }
         }
     } else if (parser_check(parser, TOKEN_IDENTIFIER)) {
         for_in_var = parser_advance(parser);
-        if (parser_check(parser, TOKEN_IN)) {
+        if (parser_check(parser, TOKEN_COMMA)) {
+            parser_advance(parser);
+            if (parser_check(parser, TOKEN_IDENTIFIER)) {
+                for_in_var2 = parser_advance(parser);
+                if (parser_check(parser, TOKEN_IN)) {
+                    parser_advance(parser);
+                    is_for_in = true;
+                    has_two_vars = true;
+                }
+            }
+        } else if (parser_check(parser, TOKEN_IN)) {
             parser_advance(parser);
             is_for_in = true;
         }
     }
 
     if (is_for_in) {
-        return parse_for_in_statement(parser, for_in_var);
+        return parse_for_in_statement(parser, for_in_var, has_two_vars, for_in_var2);
     }
 
     parser->current = saved;
@@ -1121,8 +1147,25 @@ Stmt* parse_statement(Parser* parser) {
             catch_body[catch_count++] = s;
         }
         consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after catch body.");
+        while (parser_match(parser, TOKEN_NEWLINE)) {}
 
-        return make_try_catch_stmt(try_body, try_count, catch_var, catch_body, catch_count);
+        Stmt** finally_body = NULL;
+        size_t finally_count = 0;
+        if (parser_match(parser, TOKEN_FINALLY)) {
+            consume(parser, TOKEN_LEFT_BRACE, "Expect '{' after 'finally'.");
+            size_t finally_cap = 0;
+            while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+                if (parser_match(parser, TOKEN_NEWLINE)) continue;
+                Stmt* s = parse_declaration(parser);
+                if (!s) break;
+                if (finally_count >= finally_cap) { finally_cap = finally_cap == 0 ? 8 : finally_cap * 2; finally_body = (Stmt**)realloc(finally_body, finally_cap * sizeof(Stmt*)); }
+                finally_body[finally_count++] = s;
+            }
+            consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after finally body.");
+        }
+
+        return make_try_catch_stmt(try_body, try_count, catch_var, catch_body, catch_count,
+                                   finally_body, finally_count);
     }
 
     if (parser_match(parser, TOKEN_THROW)) {
@@ -1519,9 +1562,13 @@ SwitchCase* parse_switch_case(Parser* parser) {
         patterns[pattern_count++] = parse_case_pattern(parser);
     }
 
+    Expr* guard = NULL;
+    if (parser_match(parser, TOKEN_WHEN)) {
+        guard = parse_expression(parser);
+    }
+
     consume(parser, TOKEN_COLON, "Expect ':' after case pattern");
     
-    // Parse case body statements
     Stmt** body = NULL;
     size_t body_count = 0;
     size_t body_capacity = 0;
@@ -1531,13 +1578,11 @@ SwitchCase* parse_switch_case(Parser* parser) {
            !parser_check(parser, TOKEN_DEFAULT) && 
            !parser_check(parser, TOKEN_RIGHT_BRACE) && 
            !parser_at_end(parser)) {
-        // Skip newlines
         if (parser_match(parser, TOKEN_NEWLINE)) {
             continue;
         }
         Stmt* stmt = parse_statement(parser);
         
-        // Check if this statement is a break
         if (stmt->type == STMT_BREAK) {
             has_break = true;
         }
@@ -1547,12 +1592,9 @@ SwitchCase* parse_switch_case(Parser* parser) {
             body = realloc(body, sizeof(Stmt*) * body_capacity);
         }
         body[body_count++] = stmt;
-        
-        // Continue parsing statements even after break (they become unreachable code)
-        // The break flag will be used by the evaluator to stop execution
     }
     
-    return make_switch_case(patterns, pattern_count, NULL, body, body_count, has_break);
+    return make_switch_case(patterns, pattern_count, guard, body, body_count, has_break);
 }
 
 CasePattern* parse_case_pattern(Parser* parser) {

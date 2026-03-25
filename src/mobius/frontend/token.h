@@ -48,6 +48,7 @@ typedef enum {
     TOKEN_MINUS_EQUAL,      // -=
     TOKEN_STAR_EQUAL,       // *=
     TOKEN_SLASH_EQUAL,      // /=
+    TOKEN_PERCENT_EQUAL,    // %=
     TOKEN_AND_AND,          // &&
     TOKEN_OR_OR,            // ||
     TOKEN_LEFT_SHIFT,       // <<
@@ -89,7 +90,9 @@ typedef enum {
     TOKEN_CATCH,            // catch
     TOKEN_IN,               // in
     TOKEN_VAR,              // var (mutable variable)
+    TOKEN_WHEN,             // when (guard clause in switch)
     TOKEN_WHILE,            // while
+    TOKEN_FINALLY,          // finally
 
     // Type annotation tokens
     TOKEN_TYPE_INT64,       // int64

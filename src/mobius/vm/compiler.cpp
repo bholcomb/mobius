@@ -2076,6 +2076,13 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                     break;
                 }
 
+                case PATTERN_TYPE: {
+                    emitABC(OP_TYPEIS, 1, (uint8_t)disc_reg,
+                            (uint8_t)pat->as.type_pattern.value_type);
+                    match_jumps.push_back(emitJump());
+                    break;
+                }
+
                 case PATTERN_WILDCARD:
                     match_jumps.push_back(emitJump());
                     break;
@@ -2093,6 +2100,15 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
         // All match jumps land here (at the body)
         for (int jmp : match_jumps) {
             patchJump(jmp);
+        }
+
+        int guard_fail_jump = -1;
+        if (sc->guard) {
+            int save2 = current_->free_reg;
+            int guard_reg = compileExpr(sc->guard);
+            emitABC(OP_TEST, (uint8_t)guard_reg, 0, 0);
+            guard_fail_jump = emitJump();
+            setFreeReg(save2);
         }
 
         // Case body
@@ -2177,6 +2193,9 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
             break_jumps.push_back(emitJump());
         }
 
+        if (guard_fail_jump >= 0) {
+            patchJump(guard_fail_jump);
+        }
         if (final_no_match_jump >= 0) {
             patchJump(final_no_match_jump);
         }
@@ -2600,7 +2619,15 @@ void Compiler::compileForInStmt(ForInStmt* stmt) {
     int iter_reg = addLocal("(for iterator)");
     int state_reg = addLocal("(for state)");
     addLocal("(for control)");
-    addLocal(stmt->var_name.identifier);
+
+    uint8_t num_vars = 1;
+    if (stmt->has_two_vars) {
+        addLocal(stmt->var_name.identifier);   // R[A+3] = key
+        addLocal(stmt->var_name2.identifier);  // R[A+4] = value
+        num_vars = 2;
+    } else {
+        addLocal(stmt->var_name.identifier);   // R[A+3] = value
+    }
 
     compileExpr(stmt->iterable, iter_reg);
     emitABC(OP_LOADNIL, (uint8_t)state_reg, 1, 0);
@@ -2610,7 +2637,7 @@ void Compiler::compileForInStmt(ForInStmt* stmt) {
     loop.scope_depth = current_->scope_depth;
     current_->loops.push_back(loop);
 
-    emitABC(OP_TFORLOOP, (uint8_t)iter_reg, 0, 1);
+    emitABC(OP_TFORLOOP, (uint8_t)iter_reg, 0, num_vars);
 
     int jmp_exit = emitJump();
 
@@ -2654,6 +2681,10 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
     compileBlock(stmt->catch_body, stmt->catch_body_count);
 
     patchJump(jmp_past_catch);
+
+    if (stmt->finally_body && stmt->finally_body_count > 0) {
+        compileBlock(stmt->finally_body, stmt->finally_body_count);
+    }
 
     endScope();
     setFreeReg(save);
