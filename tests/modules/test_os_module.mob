@@ -1,0 +1,258 @@
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+assert_test("platform is string", os.platform is string)
+assert_test("platform is linux", os.platform == "linux" || os.platform == "darwin" || os.platform == "windows")
+assert_test("separator is string", os.separator is string)
+assert_test("separator is / or \\", os.separator == "/" || os.separator == "\\")
+
+// ============================================================================
+// Environment
+// ============================================================================
+os.setenv("MOBIUS_OS_TEST", "hello123")
+assert_test("setenv+getenv", os.getenv("MOBIUS_OS_TEST") == "hello123")
+os.unsetenv("MOBIUS_OS_TEST")
+assert_test("unsetenv", os.getenv("MOBIUS_OS_TEST") == nil)
+assert_test("getenv nil for missing", os.getenv("__MOBIUS_NONEXISTENT_VAR__") == nil)
+
+// ============================================================================
+// Working directory
+// ============================================================================
+var cwd = os.getcwd()
+assert_test("getcwd not nil", cwd != nil)
+assert_test("getcwd is string", cwd is string)
+
+// ============================================================================
+// Process info
+// ============================================================================
+var pid = os.getpid()
+assert_test("getpid > 0", pid > 0)
+
+// ============================================================================
+// CPU count
+// ============================================================================
+var cpus = os.cpu_count()
+assert_test("cpu_count >= 1", cpus >= 1)
+
+// ============================================================================
+// uname
+// ============================================================================
+var u = os.uname()
+assert_test("uname.sysname", u.sysname is string)
+assert_test("uname.machine", u.machine is string)
+assert_test("uname.nodename", u.nodename is string)
+
+// ============================================================================
+// Temp directory and temp file
+// ============================================================================
+var td = os.tmpdir()
+assert_test("tmpdir not nil", td != nil)
+assert_test("tmpdir is string", td is string)
+
+var tf = os.tmpfile()
+assert_test("tmpfile not nil", tf != nil)
+assert_test("tmpfile is string", tf is string)
+assert_test("tmpfile exists", os.exists(tf))
+os.remove(tf)
+assert_test("tmpfile removed", !os.exists(tf))
+
+// ============================================================================
+// mkdir, touch, listdir, stat, filesize, rmdir
+// ============================================================================
+var test_dir = os.tmpdir() + "/mobius_test_" + str(os.getpid())
+assert_test("mkdir", os.mkdir(test_dir))
+
+os.touch(test_dir + "/a.txt")
+os.touch(test_dir + "/b.txt")
+os.touch(test_dir + "/c.log")
+
+var entries = os.listdir(test_dir)
+assert_test("listdir count 3", len(entries) == 3)
+
+var st = os.stat(test_dir + "/a.txt")
+assert_test("stat not nil", st != nil)
+assert_test("stat.is_file", st.is_file == true)
+assert_test("stat.is_dir false", st.is_dir == false)
+assert_test("stat.size == 0", st.size == 0)
+
+var st_dir = os.stat(test_dir)
+assert_test("stat dir.is_dir", st_dir.is_dir == true)
+assert_test("stat dir.is_file", st_dir.is_file == false)
+
+assert_test("filesize 0", os.filesize(test_dir + "/a.txt") == 0)
+assert_test("filesize nil for missing", os.filesize(test_dir + "/nope.txt") == nil)
+
+// ============================================================================
+// exists, is_file, is_dir
+// ============================================================================
+assert_test("exists true", os.exists(test_dir + "/a.txt"))
+assert_test("exists false", !os.exists(test_dir + "/nonexistent.xyz"))
+assert_test("is_file true", os.is_file(test_dir + "/a.txt"))
+assert_test("is_file false for dir", !os.is_file(test_dir))
+assert_test("is_dir true", os.is_dir(test_dir))
+assert_test("is_dir false for file", !os.is_dir(test_dir + "/a.txt"))
+
+// ============================================================================
+// rename and cp
+// ============================================================================
+assert_test("rename", os.rename(test_dir + "/a.txt", test_dir + "/a_renamed.txt"))
+assert_test("rename src gone", !os.exists(test_dir + "/a.txt"))
+assert_test("rename dst exists", os.exists(test_dir + "/a_renamed.txt"))
+
+assert_test("cp", os.cp(test_dir + "/a_renamed.txt", test_dir + "/a_copy.txt"))
+assert_test("cp dst exists", os.exists(test_dir + "/a_copy.txt"))
+
+// ============================================================================
+// remove
+// ============================================================================
+assert_test("remove file", os.remove(test_dir + "/a_renamed.txt"))
+assert_test("remove file gone", !os.exists(test_dir + "/a_renamed.txt"))
+os.remove(test_dir + "/a_copy.txt")
+os.remove(test_dir + "/b.txt")
+os.remove(test_dir + "/c.log")
+assert_test("rmdir", os.rmdir(test_dir))
+assert_test("rmdir gone", !os.exists(test_dir))
+
+// ============================================================================
+// stat nil for missing
+// ============================================================================
+assert_test("stat nil for missing path", os.stat("/nonexistent_xyz_123") == nil)
+
+// ============================================================================
+// realpath
+// ============================================================================
+var rp = os.realpath(".")
+assert_test("realpath not nil", rp != nil)
+assert_test("realpath matches cwd", rp == cwd)
+
+// ============================================================================
+// Path utilities
+// ============================================================================
+assert_test("basename /foo/bar.txt", os.basename("/foo/bar.txt") == "bar.txt")
+assert_test("basename /foo/", os.basename("/foo/") == "foo" || os.basename("/foo/") == "")
+assert_test("basename simple", os.basename("hello.txt") == "hello.txt")
+
+assert_test("dirname /foo/bar.txt", os.dirname("/foo/bar.txt") == "/foo")
+assert_test("dirname simple", os.dirname("hello.txt") == ".")
+
+assert_test("extname foo.txt", os.extname("foo.txt") == ".txt")
+assert_test("extname foo.tar.gz", os.extname("foo.tar.gz") == ".gz")
+assert_test("extname no ext", os.extname("Makefile") == "")
+assert_test("extname /path/to/file.c", os.extname("/path/to/file.c") == ".c")
+
+assert_test("join a b", os.join("/foo", "bar") == "/foo/bar")
+assert_test("join trailing sep", os.join("/foo/", "bar") == "/foo/bar")
+assert_test("join empty a", os.join("", "bar") == "bar")
+assert_test("join empty b", os.join("/foo", "") == "/foo")
+
+// ============================================================================
+// mkdirp (recursive mkdir)
+// ============================================================================
+var deep = os.tmpdir() + "/mobius_deep_" + str(os.getpid()) + "/a/b/c"
+assert_test("mkdirp", os.mkdirp(deep))
+assert_test("mkdirp created", os.is_dir(deep))
+os.rmdir(deep)
+os.rmdir(os.dirname(deep))
+os.rmdir(os.dirname(os.dirname(deep)))
+os.rmdir(os.dirname(os.dirname(os.dirname(deep))))
+
+// ============================================================================
+// exec and system
+// ============================================================================
+var out = os.exec("echo hello_from_os")
+assert_test("exec output", out == "hello_from_os\n")
+
+var rc = os.system("true")
+assert_test("system exit 0", rc == 0)
+
+var rc2 = os.system("false")
+assert_test("system exit 1", rc2 == 1)
+
+// ============================================================================
+// sleep (brief)
+// ============================================================================
+var t1 = os.time()
+os.sleep(0.01)
+var t2 = os.time()
+assert_test("sleep does not error", true)
+
+// ============================================================================
+// Datetime
+// ============================================================================
+var now_ts = os.time()
+assert_test("time > 0", now_ts > 0)
+
+var gm = os.gmtime(0)
+assert_test("gmtime epoch year", gm.year == 1970)
+assert_test("gmtime epoch month", gm.month == 1)
+assert_test("gmtime epoch day", gm.day == 1)
+assert_test("gmtime epoch hour", gm.hour == 0)
+
+var lt = os.localtime(now_ts)
+assert_test("localtime year >= 2024", lt.year >= 2024)
+
+var sf = os.strftime("%Y", now_ts)
+assert_test("strftime year", sf == str(lt.year))
+
+var tbl = {year: 2026, month: 6, day: 15, hour: 12, min: 30, sec: 0}
+var ts = os.mktime(tbl)
+assert_test("mktime > 0", ts > 0)
+var back = os.localtime(ts)
+assert_test("mktime roundtrip year", back.year == 2026)
+assert_test("mktime roundtrip month", back.month == 6)
+assert_test("mktime roundtrip day", back.day == 15)
+assert_test("mktime roundtrip hour", back.hour == 12)
+assert_test("mktime roundtrip min", back.min == 30)
+
+// ============================================================================
+// glob
+// ============================================================================
+var gdir = os.tmpdir() + "/mobius_glob_" + str(os.getpid())
+os.mkdir(gdir)
+os.touch(gdir + "/x.txt")
+os.touch(gdir + "/y.txt")
+os.touch(gdir + "/z.log")
+var g = os.glob(gdir + "/*.txt")
+assert_test("glob *.txt count", len(g) == 2)
+os.remove(gdir + "/x.txt")
+os.remove(gdir + "/y.txt")
+os.remove(gdir + "/z.log")
+os.rmdir(gdir)
+
+// ============================================================================
+// walkdir
+// ============================================================================
+var wdir = os.tmpdir() + "/mobius_walk_" + str(os.getpid())
+os.mkdirp(wdir + "/sub")
+os.touch(wdir + "/a.txt")
+os.touch(wdir + "/sub/b.txt")
+var walked = os.walkdir(wdir)
+assert_test("walkdir >= 3 entries", len(walked) >= 3)
+os.remove(wdir + "/a.txt")
+os.remove(wdir + "/sub/b.txt")
+os.rmdir(wdir + "/sub")
+os.rmdir(wdir)
+
+// ============================================================================
+// Summary
+// ============================================================================
+print("")
+print("OS Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

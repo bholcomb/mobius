@@ -15,3 +15,15 @@ targets:
       libs: ["mobius-core", "m", "dl"]
       depends_on:
         targets: ["mobius-core"]
+
+    - name: os
+      language: cpp
+      output_prefix: ""
+      sources: ["os/os_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]

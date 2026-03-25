@@ -606,6 +606,22 @@ size_t mobius_stack_getArrayLength(MobiusState* state, int array_idx) {
     return array_val->as.array->length();
 }
 
+void mobius_stack_arrayPush(MobiusState* state, int array_idx) {
+    NativeCallContext* nctx = get_nctx(state);
+    if (nctx->top <= nctx->base) {
+        fprintf(stderr, "FATAL: mobius_stack_arrayPush() - Stack is empty\n");
+        exit(1);
+    }
+
+    Value* array_val = get_value_at(state, array_idx);
+    if (array_val->type != VAL_ARRAY) {
+        fatal_type_error("mobius_stack_arrayPush", VAL_ARRAY, array_val->type, array_idx);
+    }
+
+    Value element_val = nctx->registers[--nctx->top];
+    array_val->as.array->push(element_val);
+}
+
 // ============================================================================
 // STACK MANIPULATION
 // ============================================================================
