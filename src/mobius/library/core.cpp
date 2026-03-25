@@ -6,50 +6,24 @@
 #include <string.h>
 #include <math.h>
 
-// Helper function to process escape sequences in strings
-static void print_with_escapes(const char* str) {
-    for (const char* p = str; *p; p++) {
-        if (*p == '\\' && *(p + 1)) {
-            p++; // Skip the backslash
-            switch (*p) {
-                case 'n': putchar('\n'); break;
-                case 't': putchar('\t'); break;
-                case 'r': putchar('\r'); break;
-                case '\\': putchar('\\'); break;
-                case '"': putchar('"'); break;
-                case '\'': putchar('\''); break;
-                default:
-                    // Unknown escape, print both characters
-                    putchar('\\');
-                    putchar(*p);
-                    break;
-            }
-        } else {
-            putchar(*p);
-        }
-    }
-}
-
 // =============================================================================
 // UNIFIED CORE FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
 int lib_print(MobiusState* state, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
-        Value arg = state->npeek(arg_count - 1 - i);  // Get args in correct order
+        Value arg = state->npeek(arg_count - 1 - i);
         
-        // Handle strings specially to process escape sequences
         if (arg.type == VAL_STRING && arg.as.string) {
             const char* str_data = arg.as.string->data;
             if (str_data) {
-                print_with_escapes(str_data);
+                fwrite(str_data, 1, arg.as.string->length, stdout);
             }
         } else {
-            // For non-strings, use print_value to get proper formatting (especially for tables)
             print_value(arg);
         }
         
-        if (i < arg_count - 1) printf(" ");  // Space between arguments
+        if (i < arg_count - 1) printf(" ");
     }
     printf("\n");
     
