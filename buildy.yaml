@@ -43,4 +43,5 @@ staging:
         - "${out_dir}/bin/os.so"
         - "${out_dir}/bin/regex.so"
         - "${out_dir}/bin/json.so"
+        - "${out_dir}/bin/toml.so"
         - "${out_dir}/bin/text_processing.so"
