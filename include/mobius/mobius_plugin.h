@@ -204,8 +204,10 @@ MOBIUS_API int mobius_pcall(MobiusState* state, int nargs, int nresults);
 /*  Table operations (on values already on the stack)                      */
 /* ====================================================================== */
 
-MOBIUS_API void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* key);
-MOBIUS_API void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* key);
+MOBIUS_API void   mobius_stack_setTableField(MobiusState* state, int table_idx, const char* key);
+MOBIUS_API void   mobius_stack_getTableField(MobiusState* state, int table_idx, const char* key);
+MOBIUS_API size_t mobius_stack_getTableSize(MobiusState* state, int table_idx);
+MOBIUS_API void   mobius_stack_getTableKeys(MobiusState* state, int table_idx);
 
 /* ====================================================================== */
 /*  Array operations (on values already on the stack)                      */
