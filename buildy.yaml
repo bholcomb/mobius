@@ -40,4 +40,5 @@ staging:
     - folder: "bin/modules"
       files:
         - "${out_dir}/bin/math.so"
+        - "${out_dir}/bin/os.so"
         - "${out_dir}/bin/text_processing.so"
