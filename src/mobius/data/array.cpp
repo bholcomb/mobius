@@ -42,6 +42,18 @@ void ArrayValue::set(size_t index, Value value) {
     elements[index] = value;
 }
 
+void ArrayValue::insert(size_t index, Value value) {
+    if (index > elements.size()) index = elements.size();
+    elements.insert(elements.begin() + (ptrdiff_t)index, value);
+}
+
+Value ArrayValue::remove(size_t index) {
+    if (index >= elements.size()) return make_nil_value();
+    Value result = std::move(elements[index]);
+    elements.erase(elements.begin() + (ptrdiff_t)index);
+    return result;
+}
+
 size_t ArrayValue::length() const {
     return elements.size();
 }
