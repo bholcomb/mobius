@@ -349,20 +349,24 @@ typedef struct {
     EnumMemberDef* members;        // Linked list of enum members
 } EnumStmt;
 
-// For-in statement: for var x in expr { body }
+// For-in statement: for var x in expr { body }  or  for var k, v in expr { body }
 typedef struct {
-    Token var_name;         // Loop variable
+    Token var_name;         // Loop variable (or first variable for k,v)
+    Token var_name2;        // Second loop variable for key,value iteration (zeroed if unused)
+    bool has_two_vars;      // Whether this is a k,v style iteration
     Expr* iterable;         // Expression being iterated
     Stmt* body;
 } ForInStmt;
 
-// Try-catch statement
+// Try-catch-finally statement
 typedef struct {
     Stmt** try_body;
     size_t try_body_count;
     Token catch_var;        // Variable name for caught error
     Stmt** catch_body;
     size_t catch_body_count;
+    Stmt** finally_body;
+    size_t finally_body_count;
 } TryCatchStmt;
 
 // Throw statement
@@ -435,8 +439,10 @@ Stmt* make_enum_stmt(Token keyword, Token name, NumberType underlying_type,
                      bool has_explicit_type, EnumMemberDef* members);
 Stmt* make_pragma_stmt(Token keyword, Token name, Token value);
 Stmt* make_for_in_stmt(Token var_name, Expr* iterable, Stmt* body);
+Stmt* make_for_in_stmt_kv(Token var_name, Token var_name2, Expr* iterable, Stmt* body);
 Stmt* make_try_catch_stmt(Stmt** try_body, size_t try_body_count,
-                          Token catch_var, Stmt** catch_body, size_t catch_body_count);
+                          Token catch_var, Stmt** catch_body, size_t catch_body_count,
+                          Stmt** finally_body = nullptr, size_t finally_body_count = 0);
 Stmt* make_throw_stmt(Token keyword, Expr* value);
 
 // Enum helper functions

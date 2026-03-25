@@ -1,6 +1,7 @@
 #include "library/library.h"
 #include "library/array.h"
 #include "library/core.h"
+#include "library/file_lib.h"
 #include "library/math.h"
 #include "library/string.h"
 #include "library/table_lib.h"
@@ -22,6 +23,7 @@ static const PluginFunction library_registry[] = {
     {"str",     lib_str,    1,        "Convert a value to its string representation"},
     {"int",     lib_int,    1,        "Convert a value to an integer"},
     {"float",   lib_float,  1,        "Convert a value to a float"},
+    {"exit",    lib_exit,   SIZE_MAX, "Exit the script with optional exit code"},
 
     // Math functions
     {"abs",   lib_abs,   1,        "Absolute value"},
@@ -48,6 +50,13 @@ static const PluginFunction library_registry[] = {
     {"replace",  lib_replace,  3,        "Replace all occurrences of old with new"},
     {"find",     lib_find,     2,        "Find index of substring (-1 if not found)"},
     {"repeat",   lib_repeat,   2,        "Repeat string N times"},
+
+    // File I/O functions
+    {"readfile",    lib_readfile,    1, "Read entire file contents as a string"},
+    {"writefile",   lib_writefile,   2, "Write string content to a file (overwrites)"},
+    {"appendfile",  lib_appendfile,  2, "Append string content to a file"},
+    {"file_exists", lib_file_exists, 1, "Return true if a file exists at the given path"},
+    {"readlines",   lib_readlines,   1, "Read file into array of lines"},
 
     // Table functions
     {"table_remove",  lib_table_remove,  2, "Remove a key from a table"},

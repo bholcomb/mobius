@@ -49,8 +49,12 @@ public:
 
     MobiusState* getState() const { return state_; }
 
-private:
     static constexpr uint8_t TAG_EMPTY = 0x00;
+
+    const std::vector<TableEntry>& entries() const { return entries_; }
+    const std::vector<uint8_t>& tags() const { return tags_; }
+
+private:
     static inline uint8_t tagFromHash(size_t h) { return 0x80 | (uint8_t)(h >> 57); }
 
     void resize(size_t new_capacity);

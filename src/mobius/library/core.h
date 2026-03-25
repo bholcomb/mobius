@@ -13,6 +13,6 @@ int lib_typeof(MobiusState* state, int arg_count);
 int lib_int(MobiusState* state, int arg_count);
 int lib_float(MobiusState* state, int arg_count);
 int lib_str(MobiusState* state, int arg_count);
-
+int lib_exit(MobiusState* state, int arg_count);
 
 #endif // MOBIUS_LIBRARY_CORE_H

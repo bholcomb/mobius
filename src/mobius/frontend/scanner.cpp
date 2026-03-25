@@ -41,7 +41,9 @@ static const Keyword keywords[] = {
     {"catch",    TOKEN_CATCH},
     {"in",       TOKEN_IN},
     {"var",      TOKEN_VAR},
+    {"when",     TOKEN_WHEN},
     {"while",    TOKEN_WHILE},
+    {"finally",  TOKEN_FINALLY},
     
     // Type keywords
     {"int64",    TOKEN_TYPE_INT64},
@@ -354,7 +356,12 @@ Token scan_token(Scanner* scanner) {
         case ':': return make_simple_token(scanner, TOKEN_COLON);
         case '?': return make_simple_token(scanner, TOKEN_QUESTION);
         case '~': return make_simple_token(scanner, TOKEN_TILDE);
-        case '%': return make_simple_token(scanner, TOKEN_PERCENT);
+        case '%':
+            if (match(scanner, '=')) {
+                return make_simple_token(scanner, TOKEN_PERCENT_EQUAL);
+            } else {
+                return make_simple_token(scanner, TOKEN_PERCENT);
+            }
         case '^': return make_simple_token(scanner, TOKEN_CARET);
         case '#': return make_simple_token(scanner, TOKEN_HASH);
         case '\n': return make_simple_token(scanner, TOKEN_NEWLINE);

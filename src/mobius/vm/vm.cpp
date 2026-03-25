@@ -1480,13 +1480,55 @@ MOBIUS_FORCEINLINE static int vm_op_close(MobiusVM* vm, VMFrame& f, uint32_t ins
 // ---- TForLoop ----
 MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t a = DECODE_A(inst);
+    uint8_t c = DECODE_C(inst);  // number of user variables (1 or 2)
 
-    // R[A]=iterator, R[A+1]=state, R[A+2]=control
-    // Set up call: R[A+3]=iterator copy, R[A+4]=state, R[A+5]=control
+    Value& iter_val = f.regs[a];
+
+    if (iter_val.type == VAL_ARRAY && iter_val.as.array) {
+        ArrayValue* arr = iter_val.as.array;
+        int64_t idx = (f.regs[a + 2].type == VAL_NIL) ? 0 : f.regs[a + 2].as.i64 + 1;
+        if (idx >= (int64_t)arr->length()) {
+            return 0;
+        }
+        f.regs[a + 2] = make_int64_value(idx);
+        if (c >= 2) {
+            f.regs[a + 3] = make_int64_value(idx);
+            f.regs[a + 4] = arr->get((size_t)idx);
+        } else {
+            f.regs[a + 3] = arr->get((size_t)idx);
+        }
+        f.ip++;
+        return 0;
+    }
+
+    if (iter_val.type == VAL_TABLE && iter_val.as.table) {
+        Table* tbl = iter_val.as.table;
+        int64_t slot = (f.regs[a + 2].type == VAL_NIL) ? 0 : f.regs[a + 2].as.i64 + 1;
+        const auto& entries = tbl->entries();
+        const auto& tags = tbl->tags();
+        size_t cap = entries.size();
+        while ((size_t)slot < cap && tags[slot] == Table::TAG_EMPTY) {
+            slot++;
+        }
+        if ((size_t)slot >= cap) {
+            return 0;
+        }
+        f.regs[a + 2] = make_int64_value(slot);
+        if (c >= 2) {
+            f.regs[a + 3] = entries[slot].key;
+            f.regs[a + 4] = entries[slot].value;
+        } else {
+            f.regs[a + 3] = entries[slot].key;
+        }
+        f.ip++;
+        return 0;
+    }
+
+    // Function iterator path (existing behavior)
     int call_reg = a + 3;
-    f.regs[call_reg]     = f.regs[a];       // copy iterator to call position
-    f.regs[call_reg + 1] = f.regs[a + 1];   // arg1 = state
-    f.regs[call_reg + 2] = f.regs[a + 2];   // arg2 = control
+    f.regs[call_reg]     = f.regs[a];
+    f.regs[call_reg + 1] = f.regs[a + 1];
+    f.regs[call_reg + 2] = f.regs[a + 2];
 
     f.ci->ip = f.ip;
     int rc = vm->callFunction(vm->call_stack_.back(), call_reg, 2, 2);
@@ -1504,10 +1546,10 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
         return 0;
     }
 
-    f.regs[a + 2] = result;  // update control variable
-    f.regs[a + 3] = result;  // set loop variable
+    f.regs[a + 2] = result;
+    f.regs[a + 3] = result;
 
-    f.ip++;  // skip the JMP (body follows after it)
+    f.ip++;
     return 0;
 }
 

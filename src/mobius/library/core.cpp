@@ -166,6 +166,25 @@ int lib_float(MobiusState* state, int arg_count) {
     return 1;
 }
 
+int lib_exit(MobiusState* state, int arg_count) {
+    int exit_code = 0;
+    if (arg_count > 1) {
+        return state->error("exit expects 0 or 1 arguments");
+    }
+    if (arg_count == 1) {
+        Value arg = state->npop();
+        if (arg.type == VAL_INT64) {
+            exit_code = (int)arg.as.i64;
+        } else if (arg.type == VAL_FLOAT64) {
+            exit_code = (int)arg.as.double_val;
+        } else {
+            exit_code = 1;
+        }
+    }
+    ::exit(exit_code);
+    return 0;
+}
+
 int lib_str(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
         return state->error("str expects 1 argument");
