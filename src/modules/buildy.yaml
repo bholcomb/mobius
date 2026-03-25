@@ -27,3 +27,15 @@ targets:
       libs: ["mobius-core", "dl"]
       depends_on:
         targets: ["mobius-core"]
+
+    - name: regex
+      language: cpp
+      output_prefix: ""
+      sources: ["regex/regex_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]

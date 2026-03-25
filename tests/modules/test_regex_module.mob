@@ -1,0 +1,179 @@
+import "regex"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+// ============================================================================
+// regex.search — find first match anywhere in string
+// ============================================================================
+
+var r1 = regex.search("[0-9]+", "abc 123 def 456")
+assert_test("search finds digits", r1 != nil)
+assert_test("search match value", r1.match == "123")
+assert_test("search start index", r1.start == 4)
+assert_test("search end index", r1.end == 7)
+
+var r2 = regex.search("[0-9]+", "no digits here")
+assert_test("search returns nil on no match", r2 == nil)
+
+var r3 = regex.search("(\\w+)@(\\w+)", "user@host")
+assert_test("search with groups", r3 != nil)
+assert_test("search groups match", r3.match == "user@host")
+assert_test("search groups array", r3.groups != nil)
+assert_test("search group 1", r3.groups[0] == "user")
+assert_test("search group 2", r3.groups[1] == "host")
+
+var r4 = regex.search("^hello", "hello world")
+assert_test("search anchor start", r4 != nil)
+assert_test("search anchor start match", r4.match == "hello")
+
+var r5 = regex.search("^hello", "say hello")
+assert_test("search anchor start no match", r5 == nil)
+
+var r6 = regex.search("world$", "hello world")
+assert_test("search anchor end", r6 != nil)
+assert_test("search anchor end match", r6.match == "world")
+
+var r7 = regex.search("[a-z]+", "ABC def GHI")
+assert_test("search lowercase", r7 != nil)
+assert_test("search lowercase match", r7.match == "def")
+
+// ============================================================================
+// regex.match — full string match
+// ============================================================================
+
+var m1 = regex.match("[0-9]+", "12345")
+assert_test("match full digits", m1 != nil)
+assert_test("match full digits value", m1.match == "12345")
+
+var m2 = regex.match("[0-9]+", "abc 123")
+assert_test("match rejects partial", m2 == nil)
+
+var m3 = regex.match(".*[0-9]+.*", "abc 123 def")
+assert_test("match with wildcards", m3 != nil)
+
+var m4 = regex.match("(hello) (world)", "hello world")
+assert_test("match with groups", m4 != nil)
+assert_test("match groups[0]", m4.groups[0] == "hello")
+assert_test("match groups[1]", m4.groups[1] == "world")
+
+var m5 = regex.match("", "")
+assert_test("match empty pattern empty string", m5 != nil)
+
+// ============================================================================
+// regex.findall — find all matches
+// ============================================================================
+
+var f1 = regex.findall("[0-9]+", "abc 123 def 456 ghi 789")
+assert_test("findall count", len(f1) == 3)
+assert_test("findall first", f1[0].match == "123")
+assert_test("findall second", f1[1].match == "456")
+assert_test("findall third", f1[2].match == "789")
+
+var f2 = regex.findall("[0-9]+", "no digits")
+assert_test("findall no matches", len(f2) == 0)
+
+var f3 = regex.findall("[a-z]+", "Hello World Foo")
+assert_test("findall lowercase words", len(f3) == 3)
+assert_test("findall lc first", f3[0].match == "ello")
+assert_test("findall lc second", f3[1].match == "orld")
+assert_test("findall lc third", f3[2].match == "oo")
+
+var f4 = regex.findall("(\\w+)=(\\w+)", "a=1 b=2 c=3")
+assert_test("findall with groups count", len(f4) == 3)
+assert_test("findall groups first match", f4[0].match == "a=1")
+assert_test("findall groups first g0", f4[0].groups[0] == "a")
+assert_test("findall groups first g1", f4[0].groups[1] == "1")
+assert_test("findall groups third match", f4[2].match == "c=3")
+
+// Verify start/end offsets across multiple matches
+assert_test("findall offsets first start", f4[0].start == 0)
+assert_test("findall offsets second start", f4[1].start == 4)
+assert_test("findall offsets third start", f4[2].start == 8)
+
+// ============================================================================
+// regex.replace — replace all occurrences
+// ============================================================================
+
+var rp1 = regex.replace("[0-9]+", "foo 42 bar 99 baz", "NUM")
+assert_test("replace digits", rp1 == "foo NUM bar NUM baz")
+
+var rp2 = regex.replace("\\s+", "hello   world   foo", " ")
+assert_test("replace whitespace", rp2 == "hello world foo")
+
+var rp3 = regex.replace("[0-9]+", "no digits here", "X")
+assert_test("replace no match", rp3 == "no digits here")
+
+var rp4 = regex.replace("[aeiou]", "hello", "*")
+assert_test("replace vowels", rp4 == "h*ll*")
+
+var rp5 = regex.replace("^", "hello", ">>")
+assert_test("replace start anchor", rp5 == ">>hello")
+
+// ============================================================================
+// regex.split — split by pattern
+// ============================================================================
+
+var s1 = regex.split("[,;]+", "a,b;;c,d")
+assert_test("split count", len(s1) == 4)
+assert_test("split[0]", s1[0] == "a")
+assert_test("split[1]", s1[1] == "b")
+assert_test("split[2]", s1[2] == "c")
+assert_test("split[3]", s1[3] == "d")
+
+var s2 = regex.split("\\s+", "hello world   foo bar")
+assert_test("split whitespace count", len(s2) == 4)
+assert_test("split ws[0]", s2[0] == "hello")
+assert_test("split ws[1]", s2[1] == "world")
+assert_test("split ws[2]", s2[2] == "foo")
+assert_test("split ws[3]", s2[3] == "bar")
+
+var s3 = regex.split("[0-9]+", "abc123def456ghi")
+assert_test("split by digits count", len(s3) == 3)
+assert_test("split digits[0]", s3[0] == "abc")
+assert_test("split digits[1]", s3[1] == "def")
+assert_test("split digits[2]", s3[2] == "ghi")
+
+var s4 = regex.split(",", "single")
+assert_test("split no delimiter", len(s4) == 1)
+assert_test("split no delim value", s4[0] == "single")
+
+// ============================================================================
+// Edge cases
+// ============================================================================
+
+var e1 = regex.search(".", "x")
+assert_test("dot matches single char", e1 != nil)
+assert_test("dot match value", e1.match == "x")
+
+var e2 = regex.search("a+", "aaa")
+assert_test("greedy quantifier", e2 != nil)
+assert_test("greedy match", e2.match == "aaa")
+
+var e3 = regex.findall(".", "abc")
+assert_test("findall dot count", len(e3) == 3)
+assert_test("findall dot a", e3[0].match == "a")
+assert_test("findall dot b", e3[1].match == "b")
+assert_test("findall dot c", e3[2].match == "c")
+
+var e4 = regex.replace("(\\w+)", "hello world", "[\\0]")
+assert_test("replace with backreference", e4 == "[hello] [world]")
+
+// ============================================================================
+// Summary
+// ============================================================================
+
+print("\nRegex Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}
