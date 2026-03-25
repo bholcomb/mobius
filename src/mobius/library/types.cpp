@@ -1,6 +1,5 @@
 #include "library/types.h"
 #include "data/value.h"
-#include "state/environment.h"
 #include "data/table.h"
 
 #include <cstdio>

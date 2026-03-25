@@ -1,7 +1,6 @@
 #include <mobius/mobius_plugin.h>
 #include "state/stack.h"
 #include "state/mobius_state.h"
-#include "state/environment.h"
 #include "data/value.h"
 #include "data/table.h"
 #include "data/array.h"
@@ -472,10 +471,12 @@ void mobius_stack_getVariable(MobiusState* state, const char* name) {
         exit(1);
     }
 
-    MobiusString* interned = state->stringPool()->intern(name);
-    bool found = false;
-    Value val = state->mainContext()->current_env->get(interned, &found);
-    stack_push(state, found ? val : make_nil_value());
+    int slot = state->findGlobalSlot(name);
+    if (slot >= 0 && (state->globalSlot(slot).flags & VAL_FLAG_DEFINED)) {
+        stack_push(state, state->globalSlot(slot));
+    } else {
+        stack_push(state, make_nil_value());
+    }
 }
 
 void mobius_stack_getGlobal(MobiusState* state, const char* name) {
@@ -484,10 +485,12 @@ void mobius_stack_getGlobal(MobiusState* state, const char* name) {
         exit(1);
     }
 
-    MobiusString* interned = state->stringPool()->intern(name);
-    bool found = false;
-    Value val = state->globalEnv()->get(interned, &found);
-    stack_push(state, found ? val : make_nil_value());
+    int slot = state->findGlobalSlot(name);
+    if (slot >= 0 && (state->globalSlot(slot).flags & VAL_FLAG_DEFINED)) {
+        stack_push(state, state->globalSlot(slot));
+    } else {
+        stack_push(state, make_nil_value());
+    }
 }
 
 void mobius_stack_setVariable(MobiusState* state, const char* name) {
@@ -502,9 +505,10 @@ void mobius_stack_setVariable(MobiusState* state, const char* name) {
         exit(1);
     }
 
-    MobiusString* interned = state->stringPool()->intern(name);
     Value val = nctx->registers[--nctx->top];
-    state->mainContext()->current_env->define(interned, val);
+    int slot = state->assignGlobalSlot(name);
+    val.flags |= VAL_FLAG_DEFINED;
+    state->globalSlot(slot) = val;
 }
 
 void mobius_stack_setGlobal(MobiusState* state, const char* name) {
@@ -519,12 +523,10 @@ void mobius_stack_setGlobal(MobiusState* state, const char* name) {
         exit(1);
     }
 
-    MobiusString* interned = state->stringPool()->intern(name);
     Value val = nctx->registers[--nctx->top];
     int slot = state->assignGlobalSlot(name);
     val.flags |= VAL_FLAG_DEFINED;
     state->globalSlot(slot) = val;
-    state->globalEnv()->define(interned, val);
 }
 
 // ============================================================================
@@ -640,8 +642,6 @@ void mobius_register_function(MobiusState* state, const char* name,
     int slot = state->assignGlobalSlot(name);
     fval.flags |= VAL_FLAG_DEFINED;
     state->globalSlot(slot) = fval;
-    MobiusString* interned = state->stringPool()->intern(name);
-    state->globalEnv()->define(interned, fval);
 }
 
 // ============================================================================

@@ -2,7 +2,6 @@
 #include "data/table.h"
 #include "data/array.h"
 #include "data/value.h"
-#include "state/environment.h"
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -2,7 +2,6 @@
 #define MOBIUS_STATE_H
 
 #include "data/value.h"
-#include "state/environment.h"
 #include "mobius/mobius.h"
 
 #include <stddef.h>
@@ -17,7 +16,6 @@
 // ============================================================================
 
 class MobiusState;
-class Environment;
 class ModuleRegistry;
 class Metamethods;
 
@@ -94,8 +92,6 @@ struct CallFrame {
     FunctionType type;
     void* function_ptr;
 
-    Environment* env;
-
     size_t stack_base;
     size_t stack_top;
 
@@ -114,7 +110,7 @@ public:
     // Call stack / stack trace operations
     void pushFrame(const char* function_name, const char* filename,
                    int line, int column, FunctionType type,
-                   void* function_ptr, Environment* env);
+                   void* function_ptr);
     void popFrame();
     void clearFrames();
     size_t frameDepth() const;
@@ -124,7 +120,6 @@ public:
     StackTrace* captureStackTrace() const;
 
     MobiusState* state;
-    Environment* current_env;
 
 private:
     std::vector<CallFrame> call_frames_;
@@ -171,7 +166,6 @@ public:
     void startRepl();
 
     // Accessors
-    Environment* globalEnv() const { return global_env_; }
     ExecutionContext* mainContext() const { return main_context_; }
     ModuleRegistry* registry() const { return registry_; }
     StringInternPool* stringPool() const { return string_pool_; }
@@ -188,6 +182,7 @@ public:
     int globalSlotCount() const { return (int)globals_.size(); }
     int findGlobalSlot(const char* name) const;
     const char* globalSlotName(int idx) const;
+    void removeGlobalSlots(int from_slot);
 
     // Native call context — set by MobiusVM before calling a MobiusCFunction.
     NativeCallContext* nativeContext() const { return native_ctx_; }
@@ -215,7 +210,6 @@ public:
     }
 
 private:
-    Environment* global_env_;
     ModuleRegistry* registry_;
     StringInternPool* string_pool_;
     Metamethods* metamethods_;

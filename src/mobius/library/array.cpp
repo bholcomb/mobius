@@ -1,7 +1,6 @@
 #include "library/array.h"
 #include "data/array.h"
 #include "data/value.h"
-#include "state/environment.h"
 
 #include <stdio.h>
 #include <stdlib.h>

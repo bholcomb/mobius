@@ -7,6 +7,9 @@
 #include <string>
 #include <vector>
 
+class MobiusState;
+class Table;
+
 struct LoadedModule {
     std::string name;
     std::string path;
@@ -28,6 +31,7 @@ public:
     LoadedModule* findModule(const char* name);
     bool isModuleLoaded(const char* name);
     PluginLoadResult loadModuleByName(const char* name);
+    Table* resolveModule(const char* name, const char* caller_source, MobiusState* state);
     void printLoadedModules() const;
 
     void addPluginDirectory(const char* directory);

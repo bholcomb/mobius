@@ -2,7 +2,6 @@
 #define MOBIUS_LIBRARY_H
 
 #include "data/value.h"
-#include "state/environment.h"
 #include "state/mobius_state.h"
 #include "plugin/plugin.h"
 

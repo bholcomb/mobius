@@ -1,11 +1,17 @@
 
 #include <mobius/mobius.h>
 #include "plugin/module_registry.h"
+#include "state/mobius_state.h"
+#include "data/table.h"
+#include "data/value.h"
+#include "internal/string_intern.h"
 #include "util/utility.h"
+#include "util/file_io.h"
 
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <libgen.h>
 #include <dlfcn.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -287,6 +293,112 @@ int ModuleRegistry::scanPluginDirectory(const char* directory) {
     }
 
     return loaded_count;
+}
+
+Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source, MobiusState* state) {
+    if (!name || !state) return nullptr;
+
+
+    const char* default_dirs[] = {
+        "./modules",
+        "./bin/modules",
+        "/usr/local/lib/mobius/modules",
+        nullptr
+    };
+
+    std::string mob_filename = std::string(name) + ".mob";
+    std::string so_filename  = std::string(name) + ".so";
+
+    // Build ordered list of directories to search
+    std::vector<std::string> search_dirs;
+
+    // 1. Caller's directory
+    if (caller_source && caller_source[0] != '\0'
+        && strcmp(caller_source, "<string>") != 0) {
+        char* buf = strdup(caller_source);
+        if (buf) {
+            char* dir = dirname(buf);
+            if (dir && dir[0] != '\0') {
+                search_dirs.emplace_back(dir);
+            }
+            free(buf);
+        }
+    }
+
+    // 2. User-configured plugin directories
+    for (const auto& d : plugin_directories_) {
+        search_dirs.push_back(d);
+    }
+
+    // 3. Default directories
+    for (int i = 0; default_dirs[i]; i++) {
+        search_dirs.emplace_back(default_dirs[i]);
+    }
+
+    // Search each directory for .mob and/or .so
+    for (const auto& dir : search_dirs) {
+        char mob_path[1024], so_path[1024];
+        snprintf(mob_path, sizeof(mob_path), "%s/%s", dir.c_str(), mob_filename.c_str());
+        snprintf(so_path,  sizeof(so_path),  "%s/%s", dir.c_str(), so_filename.c_str());
+
+        struct stat st_mob, st_so;
+        bool has_mob = (stat(mob_path, &st_mob) == 0 && S_ISREG(st_mob.st_mode));
+        bool has_so  = (stat(so_path,  &st_so)  == 0 && S_ISREG(st_so.st_mode));
+
+        if (!has_mob && !has_so) continue;
+
+        Table* mod_table = new (std::nothrow) Table(state, 16);
+        if (!mod_table) return nullptr;
+
+        // Load .so first if present
+        if (has_so) {
+            // Check if already loaded by scanPlugins or a prior import
+            LoadedModule* lm = findModule(name);
+            if (!lm) {
+                PluginLoadResult result = loadModule(so_path);
+                if (result.status == PLUGIN_STATUS_LOADED && result.plugin) {
+                    lm = findModule(result.plugin->metadata.name);
+                }
+            }
+            if (lm && lm->plugin) {
+                for (size_t i = 0; i < lm->plugin->function_count; i++) {
+                    PluginFunction* func = &lm->plugin->functions[i];
+                    if (!func || !func->name || !func->function) continue;
+                    Value func_key = make_string_value_from_cstr(state, func->name);
+                    Value func_val = make_native_function_value(func->function);
+                    mod_table->set(func_key, func_val);
+                }
+            }
+        }
+
+        // Load .mob overlay/standalone
+        if (has_mob) {
+            int snapshot = state->globalSlotCount();
+            int rc = state->execFile(mob_path);
+            if (rc != 0) {
+                state->removeGlobalSlots(snapshot);
+                if (!has_so) {
+                    delete mod_table;
+                    return nullptr;
+                }
+            } else {
+                int new_count = state->globalSlotCount();
+                for (int i = snapshot; i < new_count; i++) {
+                    const Value& val = state->globalSlot(i);
+                    if (!(val.flags & VAL_FLAG_DEFINED)) continue;
+                    const char* slot_name = state->globalSlotName(i);
+                    if (!slot_name || strcmp(slot_name, "<unknown>") == 0) continue;
+                    Value key = make_string_value_from_cstr(state, slot_name);
+                    mod_table->set(key, val);
+                }
+                state->removeGlobalSlots(snapshot);
+            }
+        }
+
+        return mod_table;
+    }
+
+    return nullptr;
 }
 
 PluginLoadResult ModuleRegistry::loadModuleByName(const char* name) {

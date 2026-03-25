@@ -2,7 +2,6 @@
 
 #include <mobius/mobius_plugin.h>
 #include "state/mobius_state.h"
-#include "state/environment.h"
 #include "frontend/ast.h"
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
@@ -55,7 +54,7 @@ static uint64_t get_time_ns(void) {
 // ============================================================================
 
 ExecutionContext::ExecutionContext(MobiusState* owner, size_t max_depth)
-    : state(owner), current_env(nullptr), max_depth_(max_depth) {
+    : state(owner), max_depth_(max_depth) {
     call_frames_.reserve(64);
 }
 
@@ -68,7 +67,7 @@ ExecutionContext::~ExecutionContext() {
 
 void ExecutionContext::pushFrame(const char* function_name, const char* filename,
                                  int line, int column, FunctionType type,
-                                 void* function_ptr, Environment* env) {
+                                 void* function_ptr) {
     if (call_frames_.size() >= max_depth_) {
         fprintf(stderr, "Stack overflow: call depth exceeds maximum %zu\n", max_depth_);
         return;
@@ -81,16 +80,11 @@ void ExecutionContext::pushFrame(const char* function_name, const char* filename
     frame.column = column;
     frame.type = type;
     frame.function_ptr = function_ptr;
-    frame.env = env;
     frame.stack_base = 0;
     frame.stack_top = 0;
     frame.start_time = get_time_ns();
 
     call_frames_.push_back(frame);
-
-    if (env) {
-        current_env = env;
-    }
 }
 
 void ExecutionContext::popFrame() {
@@ -99,14 +93,6 @@ void ExecutionContext::popFrame() {
     }
 
     call_frames_.pop_back();
-
-    if (!call_frames_.empty()) {
-        current_env = call_frames_.back().env;
-    } else {
-        if (state && state->globalEnv()) {
-            current_env = state->globalEnv();
-        }
-    }
 }
 
 void ExecutionContext::clearFrames() {
@@ -252,7 +238,7 @@ static void free_internal_error(InternalError* error) {
 static void default_error_handler(MobiusState* state, const MobiusError* error, void* userdata);
 
 MobiusState::MobiusState(MobiusConfig* config)
-    : global_env_(nullptr), registry_(nullptr), string_pool_(nullptr),
+    : registry_(nullptr), string_pool_(nullptr),
       metamethods_(nullptr),
       main_context_(nullptr), native_ctx_(nullptr), last_error_(nullptr),
       error_handler_(default_error_handler), error_handler_userdata_(nullptr),
@@ -270,12 +256,6 @@ MobiusState::MobiusState(MobiusConfig* config)
         this, config_.max_call_depth);
     if (!main_context_) return;
 
-    global_env_ = new (std::nothrow) Environment();
-    if (!global_env_) return;
-
-    global_env_->current_context = main_context_;
-    main_context_->current_env = global_env_;
-
     registry_ = getGlobalRegistry();
     if (!registry_) return;
 
@@ -286,7 +266,6 @@ MobiusState::MobiusState(MobiusConfig* config)
         val.flags |= VAL_FLAG_DEFINED;
         if (readonly) val.flags |= VAL_FLAG_READONLY;
         globals_[slot] = val;
-        global_env_->define(string_pool_->intern(name), val);
     };
     defineGlobal("nil", make_nil_value(), true);
     defineGlobal("true", make_bool_value(true), true);
@@ -300,7 +279,6 @@ MobiusState::~MobiusState() {
     owned_protos_.clear();
 
     delete main_context_;
-    if (global_env_) global_env_->release();
     delete metamethods_;
 
     // Don't free module registry — it's a global singleton freed via atexit()
@@ -340,6 +318,22 @@ const char* MobiusState::globalSlotName(int idx) const {
         if (kv.second == idx) return kv.first.c_str();
     }
     return "<unknown>";
+}
+
+void MobiusState::removeGlobalSlots(int from_slot) {
+    if (from_slot < 0 || from_slot >= (int)globals_.size()) return;
+
+    std::vector<std::string> to_remove;
+    for (auto& kv : global_slot_map_) {
+        if (kv.second >= from_slot) {
+            to_remove.push_back(kv.first);
+        }
+    }
+    for (auto& name : to_remove) {
+        global_slot_map_.erase(name);
+    }
+
+    globals_.resize(from_slot);
 }
 
 int MobiusState::initStdlib() {
@@ -418,8 +412,10 @@ int MobiusState::execFile(const char* filename) {
         return MOBIUS_ERROR_RUNTIME;
     }
 
-    char* content = file_result.content;
-    int result = execString(content);
+    const char* saved_source = source_code_;
+    source_code_ = filename;
+    int result = execString(file_result.content);
+    source_code_ = saved_source;
     free_file_result(&file_result);
     return result;
 }
@@ -556,7 +552,7 @@ extern "C" {
 MobiusState* mobius_new_state(MobiusConfig* config) {
     MobiusState* state = new (std::nothrow) MobiusState(config);
     if (!state) return NULL;
-    if (!state->globalEnv() || !state->mainContext() || !state->stringPool()) {
+    if (!state->mainContext() || !state->stringPool()) {
         delete state;
         return NULL;
     }

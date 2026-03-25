@@ -1,6 +1,5 @@
 #include "vm/vm.h"
 #include "state/mobius_state.h"
-#include "state/environment.h"
 #include "data/table.h"
 #include "data/array.h"
 #include "data/enum.h"
@@ -45,7 +44,7 @@ inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
 // ============================================================================
 
 MobiusVM::MobiusVM(MobiusState* state)
-    : state_(state), global_env_(state->globalEnv()) {}
+    : state_(state) {}
 
 // ============================================================================
 // Error handling
@@ -118,7 +117,7 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
     state_->setNativeContext(&nctx);
 
     ctx->pushFrame("native", nullptr, currentLine(), 0,
-                   FUNCTION_TYPE_NATIVE, nullptr, nullptr);
+                   FUNCTION_TYPE_NATIVE, nullptr);
     int rc = func(state_, nargs);
     ctx->popFrame();
 
@@ -246,7 +245,7 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         state_->setNativeContext(&nctx);
 
         ctx->pushFrame("metamethod", nullptr, currentLine(), 0,
-                       FUNCTION_TYPE_NATIVE, nullptr, nullptr);
+                       FUNCTION_TYPE_NATIVE, nullptr);
         int rc = method.as.native_function(state_, 2);
         ctx->popFrame();
         state_->setNativeContext(nullptr);
@@ -1447,8 +1446,6 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
     mf->param_count = child_proto->num_params;
     mf->body = nullptr;
     mf->body_count = 0;
-    mf->closure = vm->global_env_;
-    if (mf->closure) mf->closure->retain();
     mf->ref_count = 1;
     mf->proto = child_proto;
     if (child_proto->num_params > 0 && !child_proto->local_vars.empty()) {
@@ -1647,34 +1644,47 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
     }
     const char* module_name = mod_name_val.as.string->data;
     const char* alias_name  = alias_val.as.string->data;
+
+    bool is_global = (strcmp(alias_name, "_GLOBAL") == 0);
+
+    // Cache check: if alias already exists as a table global, short-circuit
+    if (!is_global) {
+        int alias_slot = vm->state_->findGlobalSlot(alias_name);
+        if (alias_slot >= 0) {
+            const Value& existing = vm->state_->globalSlot(alias_slot);
+            if ((existing.flags & VAL_FLAG_DEFINED) && existing.type == VAL_TABLE) {
+                return 0;
+            }
+        }
+    }
+
     ModuleRegistry* registry = getGlobalRegistry();
     if (!registry) { vm->runtimeError("Module registry not initialized"); return -1; }
-    LoadedModule* module = registry->findModule(module_name);
-    if (!module) {
-        PluginLoadResult result = registry->loadModuleByName(module_name);
-        if (result.status != PLUGIN_STATUS_LOADED) {
-            vm->runtimeError("Import failed - module '%s' not found", module_name); return -1;
-        }
-        module = registry->findModule(module_name);
+
+    const char* caller_source = f.ci->proto->source.c_str();
+    Table* mod_table = registry->resolveModule(module_name, caller_source, vm->state_);
+    if (!mod_table) {
+        vm->runtimeError("Import failed - module '%s' not found", module_name);
+        return -1;
     }
-    if (!module || !module->plugin) {
-        vm->runtimeError("Module '%s' has no plugin interface", module_name); return -1;
-    }
-    registry->incrementRefCount(module_name);
-    Plugin* plugin = module->plugin;
+
     StringInternPool* pool = vm->state_->stringPool();
-    bool is_global = (strcmp(alias_name, "_GLOBAL") == 0);
+
     if (is_global) {
-        for (size_t i = 0; i < plugin->function_count; i++) {
-            PluginFunction* func = &plugin->functions[i];
-            if (!func || !func->name || !func->function) continue;
-            Value func_val = make_native_function_value(func->function);
-            int slot = vm->state_->assignGlobalSlot(func->name);
-            func_val.flags |= VAL_FLAG_DEFINED;
-            vm->state_->globalSlot(slot) = func_val;
-            vm->global_env_->define(pool->intern(func->name), func_val);
+        // Spread table entries into individual globals
+        const auto& entries = mod_table->entries();
+        const auto& tags = mod_table->tags();
+        for (size_t i = 0; i < entries.size(); i++) {
+            if (tags[i] == Table::TAG_EMPTY) continue;
+            const Value& key = entries[i].key;
+            if (key.type != VAL_STRING || !key.as.string) continue;
+            Value val = entries[i].value;
+            val.flags |= VAL_FLAG_DEFINED;
+            int slot = vm->state_->assignGlobalSlot(key.as.string->data);
+            vm->state_->globalSlot(slot) = val;
         }
     } else if (strchr(alias_name, '.') != nullptr) {
+        // Dotted path: walk/create nested tables, put module table at the leaf
         char buf[256];
         strncpy(buf, alias_name, sizeof(buf) - 1);
         buf[sizeof(buf) - 1] = '\0';
@@ -1682,20 +1692,15 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         int ncomps = 0;
         char* tok = strtok(buf, ".");
         while (tok && ncomps < 32) { components[ncomps++] = tok; tok = strtok(nullptr, "."); }
-        MobiusString* first = pool->intern(components[0]);
-        bool found = false;
-        Value cur_val;
-        int ns_slot = vm->state_->findGlobalSlot(components[0]);
-        if (ns_slot >= 0 && (vm->state_->globalSlot(ns_slot).flags & VAL_FLAG_DEFINED)) {
-            cur_val = vm->state_->globalSlot(ns_slot); found = true;
-        } else {
-            cur_val = vm->global_env_->get(first, &found);
-        }
+
         Table* cur_table = nullptr;
-        if (found && cur_val.type == VAL_TABLE) {
-            cur_table = cur_val.as.table;
-        } else if (found) {
-            vm->runtimeError("Cannot create nested namespace '%s': '%s' is not a table", alias_name, components[0]);
+        int ns_slot = vm->state_->findGlobalSlot(components[0]);
+        bool first_exists = (ns_slot >= 0 && (vm->state_->globalSlot(ns_slot).flags & VAL_FLAG_DEFINED));
+        if (first_exists && vm->state_->globalSlot(ns_slot).type == VAL_TABLE) {
+            cur_table = vm->state_->globalSlot(ns_slot).as.table;
+        } else if (first_exists) {
+            vm->runtimeError("Cannot create nested namespace '%s': '%s' is not a table",
+                             alias_name, components[0]);
             return -1;
         } else {
             cur_table = new (std::nothrow) Table(vm->state_, 16);
@@ -1704,9 +1709,10 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             tval.flags |= VAL_FLAG_DEFINED;
             int s = vm->state_->assignGlobalSlot(components[0]);
             vm->state_->globalSlot(s) = tval;
-            vm->global_env_->define(first, tval);
         }
-        for (int i = 1; i < ncomps; i++) {
+
+        // Walk/create intermediate tables
+        for (int i = 1; i < ncomps - 1; i++) {
             Value key = make_string_value_from_cstr(vm->state_, components[i]);
             Value next = cur_table->get(key);
             if (next.type == VAL_TABLE) {
@@ -1718,45 +1724,20 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
                 cur_table = sub;
             }
         }
-        for (size_t i = 0; i < plugin->function_count; i++) {
-            PluginFunction* func = &plugin->functions[i];
-            if (!func || !func->name || !func->function) continue;
-            Value func_key = make_string_value_from_cstr(vm->state_, func->name);
-            Value func_val = make_native_function_value(func->function);
-            cur_table->set(func_key, func_val);
+
+        // Set the last component to point at the module table
+        if (ncomps > 1) {
+            Value leaf_key = make_string_value_from_cstr(vm->state_, components[ncomps - 1]);
+            cur_table->set(leaf_key, make_table_value(mod_table));
         }
     } else {
-        MobiusString* interned_alias = pool->intern(alias_name);
-        bool found = false;
-        Value existing;
-        int alias_slot = vm->state_->findGlobalSlot(alias_name);
-        if (alias_slot >= 0 && (vm->state_->globalSlot(alias_slot).flags & VAL_FLAG_DEFINED)) {
-            existing = vm->state_->globalSlot(alias_slot); found = true;
-        } else {
-            existing = vm->global_env_->get(interned_alias, &found);
-        }
-        Table* mod_table = nullptr;
-        if (found && existing.type == VAL_TABLE) {
-            mod_table = existing.as.table;
-        } else {
-            mod_table = new (std::nothrow) Table(vm->state_, 16);
-            if (!mod_table) { vm->runtimeError("Failed to create module table"); return -1; }
-        }
-        for (size_t i = 0; i < plugin->function_count; i++) {
-            PluginFunction* func = &plugin->functions[i];
-            if (!func || !func->name || !func->function) continue;
-            Value func_key = make_string_value_from_cstr(vm->state_, func->name);
-            Value func_val = make_native_function_value(func->function);
-            mod_table->set(func_key, func_val);
-        }
-        if (!found || existing.type != VAL_TABLE) {
-            Value tval = make_table_value(mod_table);
-            tval.flags |= VAL_FLAG_DEFINED;
-            int s = vm->state_->assignGlobalSlot(alias_name);
-            vm->state_->globalSlot(s) = tval;
-            vm->global_env_->define(interned_alias, tval);
-        }
+        // Simple alias: bind module table to a single global
+        Value tval = make_table_value(mod_table);
+        tval.flags |= VAL_FLAG_DEFINED;
+        int s = vm->state_->assignGlobalSlot(alias_name);
+        vm->state_->globalSlot(s) = tval;
     }
+
     return 0;
 }
 

@@ -1,0 +1,11 @@
+// Test that importing the same module twice reuses the cached global
+
+import "helpers" as helpers
+import "helpers" as helpers
+
+var result = helpers.add(10, 20)
+if (result != 30) { exit(1) }
+
+if (helpers.VERSION != "1.0") { exit(1) }
+
+exit(0)

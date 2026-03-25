@@ -14,7 +14,6 @@
 #include "frontend/ast.h"
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
-#include "state/environment.h"
 
 // Extended functionality
 #include "util/file_io.h"

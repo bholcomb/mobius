@@ -8,7 +8,6 @@
 #include <cstdint>
 
 class MobiusState;
-class Environment;
 
 // ============================================================================
 // Upvalue — runtime representation of a captured variable
@@ -76,7 +75,6 @@ public:
 
     // VM state — public so MOBIUS_FORCEINLINE handler functions can access them
     MobiusState* state_;
-    Environment* global_env_;
     std::vector<Value>    registers_;
     std::vector<CallInfo> call_stack_;
 

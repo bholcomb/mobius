@@ -1,0 +1,12 @@
+// Helper module for import tests
+
+func add(a, b) {
+    return a + b
+}
+
+func greet(name) {
+    return "hello " + name
+}
+
+var VERSION = "1.0"
+var PI = 3.14159

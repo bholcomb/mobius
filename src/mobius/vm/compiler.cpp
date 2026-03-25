@@ -38,7 +38,12 @@ Compiler::FunctionState* Compiler::initCompiler(FunctionState* enclosing,
     auto* fs = new FunctionState();
     fs->proto = new Prototype();
     fs->enclosing = enclosing;
-    if (name) fs->proto->name = name;
+    if (name) {
+        fs->proto->name = name;
+        if (!enclosing) {
+            fs->proto->source = name;
+        }
+    }
     fs->scope_depth = 0;
     fs->free_reg = 0;
     fs->max_reg = 0;
