@@ -1,0 +1,61 @@
+// Test C-style string escape sequences
+
+// \n is a newline byte
+var nl = "\n"
+if (len(nl) != 1) { exit(1) }
+
+// \t is a tab byte
+var tab = "\t"
+if (len(tab) != 1) { exit(1) }
+
+// \r is a carriage return byte
+var cr = "\r"
+if (len(cr) != 1) { exit(1) }
+
+// \\ is a single backslash
+var bs = "\\"
+if (len(bs) != 1) { exit(1) }
+
+// \" is a double quote
+var dq = "\""
+if (len(dq) != 1) { exit(1) }
+
+// \' is a single quote
+var sq = "\'"
+if (len(sq) != 1) { exit(1) }
+
+// \\n is backslash followed by n (not a newline)
+var escaped_n = "\\n"
+if (len(escaped_n) != 2) { exit(1) }
+if (escaped_n[0] != "\\") { exit(1) }
+if (escaped_n[1] != "n") { exit(1) }
+
+// \\t is backslash followed by t
+var escaped_t = "\\t"
+if (len(escaped_t) != 2) { exit(1) }
+
+// Embedded newline in a larger string
+var hello = "hello\nworld"
+if (len(hello) != 11) { exit(1) }
+
+// Multiple escapes
+var multi = "a\tb\nc"
+if (len(multi) != 5) { exit(1) }
+
+// Escaped backslash before newline: \\  then \n
+var tricky = "\\\n"
+if (len(tricky) != 2) { exit(1) }
+
+// String with escaped quotes inside
+var quoted = "say \"hello\""
+if (len(quoted) != 11) { exit(1) }
+
+// Write and read back with real newlines
+writefile("/tmp/mobius_escape_test.txt", "line1\nline2\nline3")
+var lines = readlines("/tmp/mobius_escape_test.txt")
+if (len(lines) != 3) { exit(1) }
+if (lines[0] != "line1") { exit(1) }
+if (lines[1] != "line2") { exit(1) }
+if (lines[2] != "line3") { exit(1) }
+
+exit(0)

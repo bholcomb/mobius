@@ -1,0 +1,44 @@
+// Test string indexing (str[i] returns single-character string)
+
+var s = "hello"
+
+// Basic indexing
+if (s[0] != "h") { exit(1) }
+if (s[1] != "e") { exit(1) }
+if (s[2] != "l") { exit(1) }
+if (s[3] != "l") { exit(1) }
+if (s[4] != "o") { exit(1) }
+
+// Out of bounds returns nil
+if (s[5] != nil) { exit(1) }
+if (s[-1] != nil) { exit(1) }
+
+// Indexing empty string
+var empty = ""
+if (empty[0] != nil) { exit(1) }
+
+// Single character string
+var c = "x"
+if (c[0] != "x") { exit(1) }
+
+// Indexing with a variable
+var idx = 2
+if (s[idx] != "l") { exit(1) }
+
+// Use in a loop to build reversed string
+var original = "abcd"
+var reversed = ""
+for (var i = len(original) - 1; i >= 0; i -= 1) {
+    reversed = reversed + original[i]
+}
+if (reversed != "dcba") { exit(1) }
+
+// String indexing works with len
+if (len(s[0]) != 1) { exit(1) }
+
+// Character comparison
+var word = "Hello"
+if (word[0] != "H") { exit(1) }
+if (word[0] == "h") { exit(1) }
+
+exit(0)

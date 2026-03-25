@@ -157,11 +157,40 @@ Token make_simple_token(Scanner* scanner, TokenType type) {
                      scanner->pool);
 }
 
+// Process escape sequences in a raw source range, writing the decoded bytes
+// into `out`. Returns the number of bytes written.
+static size_t process_escapes(const char* src, size_t src_len, char* out) {
+    size_t w = 0;
+    for (size_t i = 0; i < src_len; i++) {
+        if (src[i] == '\\' && i + 1 < src_len) {
+            i++;
+            switch (src[i]) {
+                case 'n':  out[w++] = '\n'; break;
+                case 't':  out[w++] = '\t'; break;
+                case 'r':  out[w++] = '\r'; break;
+                case '\\': out[w++] = '\\'; break;
+                case '"':  out[w++] = '"';  break;
+                case '\'': out[w++] = '\''; break;
+                case '0':  out[w++] = '\0'; break;
+                default:
+                    out[w++] = '\\';
+                    out[w++] = src[i];
+                    break;
+            }
+        } else {
+            out[w++] = src[i];
+        }
+    }
+    return w;
+}
+
 // Scan string literal
 Token scan_string(Scanner* scanner) {
     while (peek(scanner) != '"' && !is_at_end(scanner)) {
-        if (peek(scanner) == '\n') {
-            // Multi-line strings allowed
+        if (peek(scanner) == '\\' && !is_at_end(scanner)) {
+            advance(scanner); // skip the backslash
+            if (!is_at_end(scanner)) advance(scanner); // skip the escaped char
+            continue;
         }
         advance(scanner);
     }
@@ -173,16 +202,14 @@ Token scan_string(Scanner* scanner) {
     // Consume closing quote
     advance(scanner);
     
-    // Create string token (without quotes)
     Token token = make_simple_token(scanner, TOKEN_STRING);
     
-    // Allocate memory for string content (without quotes)
-    // This memory will be freed by free_token() when the token is cleaned up
-    size_t content_length = scanner->current - scanner->start - 2; // -2 for quotes
-    char* string_content = malloc(content_length + 1);
+    const char* raw = scanner->start + 1;           // skip opening quote
+    size_t raw_len = scanner->current - scanner->start - 2; // exclude both quotes
+    char* string_content = (char*)malloc(raw_len + 1); // may shrink due to escapes
     if (string_content) {
-        strncpy(string_content, scanner->start + 1, content_length);
-        string_content[content_length] = '\0';
+        size_t decoded_len = process_escapes(raw, raw_len, string_content);
+        string_content[decoded_len] = '\0';
         token.literal.string = string_content;
     } else {
         token.literal.string = NULL;
@@ -198,6 +225,19 @@ Token scan_char(Scanner* scanner) {
     }
     
     char character = advance(scanner);
+    if (character == '\\' && !is_at_end(scanner)) {
+        char esc = advance(scanner);
+        switch (esc) {
+            case 'n':  character = '\n'; break;
+            case 't':  character = '\t'; break;
+            case 'r':  character = '\r'; break;
+            case '\\': character = '\\'; break;
+            case '\'': character = '\''; break;
+            case '"':  character = '"';  break;
+            case '0':  character = '\0'; break;
+            default:   character = esc;  break;
+        }
+    }
     
     if (peek(scanner) != '\'') {
         return make_error_token("Unterminated character", scanner->line, scanner->column);
@@ -437,7 +477,11 @@ Token scan_token(Scanner* scanner) {
         // Interpolated string literals
         case '`': {
             while (peek(scanner) != '`' && !is_at_end(scanner)) {
-                if (peek(scanner) == '\n') { /* allow multi-line */ }
+                if (peek(scanner) == '\\') {
+                    advance(scanner);
+                    if (!is_at_end(scanner)) advance(scanner);
+                    continue;
+                }
                 advance(scanner);
             }
             if (is_at_end(scanner)) {
@@ -445,11 +489,12 @@ Token scan_token(Scanner* scanner) {
             }
             advance(scanner);
             Token token = make_simple_token(scanner, TOKEN_INTERP_STRING);
-            size_t content_length = scanner->current - scanner->start - 2;
-            char* content = (char*)malloc(content_length + 1);
+            const char* raw = scanner->start + 1;
+            size_t raw_len = scanner->current - scanner->start - 2;
+            char* content = (char*)malloc(raw_len + 1);
             if (content) {
-                strncpy(content, scanner->start + 1, content_length);
-                content[content_length] = '\0';
+                size_t decoded_len = process_escapes(raw, raw_len, content);
+                content[decoded_len] = '\0';
                 token.literal.string = content;
             } else {
                 token.literal.string = NULL;

@@ -476,6 +476,20 @@ MOBIUS_FORCEINLINE static int vm_op_gettable(MobiusVM* vm, VMFrame& f, uint32_t 
             vm->runtimeError("Array index must be an integer");
             return -1;
         }
+    } else if (tbl.type == VAL_STRING && tbl.as.string) {
+        if (key.type == VAL_INT64) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            MobiusString* s = tbl.as.string;
+            if (idx >= 0 && idx < (int64_t)s->length) {
+                char buf[2] = { s->data[idx], '\0' };
+                RA(inst) = make_string_value(vm->state_->stringPool()->intern(buf, 1));
+            } else {
+                RA(inst) = Value();
+            }
+        } else {
+            vm->runtimeError("String index must be an integer");
+            return -1;
+        }
     } else {
         vm->runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
         return -1;
@@ -1345,6 +1359,20 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_gettable(MobiusVM* vm, VMFrame& f,
                 f.regs[a] = Value();
         } else {
             vm->runtimeError("Array index must be an integer");
+            return -1;
+        }
+    } else if (tbl.type == VAL_STRING && tbl.as.string) {
+        if (key.type == VAL_INT64) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            MobiusString* s = tbl.as.string;
+            if (idx >= 0 && idx < (int64_t)s->length) {
+                char buf[2] = { s->data[idx], '\0' };
+                f.regs[a] = make_string_value(vm->state_->stringPool()->intern(buf, 1));
+            } else {
+                f.regs[a] = Value();
+            }
+        } else {
+            vm->runtimeError("String index must be an integer");
             return -1;
         }
     } else {
