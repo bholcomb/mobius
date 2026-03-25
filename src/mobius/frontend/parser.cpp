@@ -18,6 +18,7 @@ void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token
     parser->current = 0;
     parser->had_error = false;
     parser->panic_mode = false;
+    parser->source_name = state ? state->getSourceContext() : nullptr;
     parser->state = state;
 }
 
@@ -88,7 +89,11 @@ void parser_error(Parser* parser, Token token, const char* message) {
     parser->panic_mode = true;
     parser->had_error = true;
     
-    fprintf(stderr, "[line %d] Error", token.line);
+    if (parser->source_name) {
+        fprintf(stderr, "[%s:%d] Error", parser->source_name, token.line);
+    } else {
+        fprintf(stderr, "[line %d] Error", token.line);
+    }
     
     if (token.type == TOKEN_EOF) {
         fprintf(stderr, " at end");
@@ -668,6 +673,42 @@ Expr* parse_shift(Parser* parser) {
     return expr;
 }
 
+// Shared helper: consume a type name token and return the corresponding ValueType.
+// Returns (ValueType)-1 on failure and reports an error.
+static ValueType parse_type_name(Parser* parser) {
+    const char* type_name = NULL;
+
+    if (parser_check(parser, TOKEN_IDENTIFIER)) {
+        Token t = parser_advance(parser);
+        type_name = t.identifier;
+    } else if (parser_check(parser, TOKEN_TYPE_INT64))   { parser_advance(parser); type_name = "int64";   }
+      else if (parser_check(parser, TOKEN_TYPE_UINT64))  { parser_advance(parser); type_name = "uint64";  }
+      else if (parser_check(parser, TOKEN_TYPE_FLOAT64)) { parser_advance(parser); type_name = "float64"; }
+      else if (parser_check(parser, TOKEN_NIL))          { parser_advance(parser); type_name = "nil";     }
+      else if (parser_check(parser, TOKEN_TRUE) || parser_check(parser, TOKEN_FALSE)) {
+          parser_advance(parser); type_name = "bool";
+      } else {
+        parser_error_at_current(parser, "Expect type name after 'is'");
+        return (ValueType)-1;
+    }
+
+    if (strcmp(type_name, "string") == 0)                                          return VAL_STRING;
+    if (strcmp(type_name, "int") == 0 || strcmp(type_name, "integer") == 0 ||
+        strcmp(type_name, "int64") == 0)                                          return VAL_INT64;
+    if (strcmp(type_name, "uint64") == 0)                                          return VAL_UINT64;
+    if (strcmp(type_name, "float") == 0 || strcmp(type_name, "float64") == 0)      return VAL_FLOAT64;
+    if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0)       return VAL_BOOL;
+    if (strcmp(type_name, "array") == 0)                                           return VAL_ARRAY;
+    if (strcmp(type_name, "table") == 0)                                           return VAL_TABLE;
+    if (strcmp(type_name, "function") == 0)                                        return VAL_FUNCTION;
+    if (strcmp(type_name, "nil") == 0)                                             return VAL_NIL;
+    if (strcmp(type_name, "userdata") == 0)                                        return VAL_USERDATA;
+    if (strcmp(type_name, "enum") == 0)                                            return VAL_ENUM;
+
+    parser_error_at_current(parser, "Unknown type name in 'is' expression");
+    return (ValueType)-1;
+}
+
 Expr* parse_comparison(Parser* parser) {
     Expr* expr = parse_shift(parser);
     
@@ -677,7 +718,17 @@ Expr* parse_comparison(Parser* parser) {
         Expr* right = parse_shift(parser);
         expr = make_binary_expr(expr, op, right);
     }
-    
+
+    // Handle 'expr is type' — same precedence level as comparisons
+    if (parser_match(parser, TOKEN_IS)) {
+        Token op = parser_previous(parser);
+        ValueType vt = parse_type_name(parser);
+        if ((int)vt >= 0) {
+            Expr* right = make_literal_expr(make_int64_value((int64_t)vt));
+            expr = make_binary_expr(expr, op, right);
+        }
+    }
+
     return expr;
 }
 
@@ -1742,57 +1793,9 @@ CasePattern* parse_case_pattern(Parser* parser) {
         consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after table pattern");
         return make_table_pattern(fields, count, false);
     } else if (parser_check(parser, TOKEN_IS)) {
-        // Type matching pattern: is string, is array, etc.
         parser_advance(parser); // consume 'is'
-        
-        ValueType value_type;
-        const char* type_name = NULL;
-        
-        if (parser_check(parser, TOKEN_IDENTIFIER)) {
-            Token type_token = parser_advance(parser);
-            type_name = type_token.identifier;
-        } else if (parser_check(parser, TOKEN_TYPE_INT64)) {
-            parser_advance(parser);
-            type_name = "int64";
-        } else if (parser_check(parser, TOKEN_TYPE_UINT64)) {
-            parser_advance(parser);
-            type_name = "uint64";
-        } else if (parser_check(parser, TOKEN_TYPE_FLOAT64)) {
-            parser_advance(parser);
-            type_name = "float64";
-        } else if (parser_check(parser, TOKEN_NIL)) {
-            parser_advance(parser);
-            type_name = "nil";
-        } else {
-            parser_error_at_current(parser, "Expect type name after 'is'");
-            return make_wildcard_pattern();
-        }
-        
-        // Map type names to ValueType enum
-        if (strcmp(type_name, "string") == 0) {
-            value_type = VAL_STRING;
-        } else if (strcmp(type_name, "int") == 0 || strcmp(type_name, "integer") == 0 ||
-                   strcmp(type_name, "int64") == 0) {
-            value_type = VAL_INT64;
-        } else if (strcmp(type_name, "uint64") == 0) {
-            value_type = VAL_UINT64;
-        } else if (strcmp(type_name, "float") == 0 || strcmp(type_name, "float64") == 0) {
-            value_type = VAL_FLOAT64;
-        } else if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0) {
-            value_type = VAL_BOOL;
-        } else if (strcmp(type_name, "array") == 0) {
-            value_type = VAL_ARRAY;
-        } else if (strcmp(type_name, "table") == 0) {
-            value_type = VAL_TABLE;
-        } else if (strcmp(type_name, "function") == 0) {
-            value_type = VAL_FUNCTION;
-        } else if (strcmp(type_name, "nil") == 0) {
-            value_type = VAL_NIL;
-        } else {
-            parser_error_at_current(parser, "Unknown type name in 'is' pattern");
-            return make_wildcard_pattern();
-        }
-        
+        ValueType value_type = parse_type_name(parser);
+        if ((int)value_type < 0) return make_wildcard_pattern();
         return make_type_pattern(value_type);
     } else {
         parser_error_at_current(parser, "Expect literal value in case pattern");

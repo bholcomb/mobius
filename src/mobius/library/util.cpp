@@ -110,7 +110,10 @@ int lib_load(MobiusState* state, int arg_count) {
         return state->error("Failed to read file");
     }
     
+    const char* saved_source = state->getSourceContext();
+    state->setSourceContext(filename);
     int exec_result = state->execString(file_result.content);
+    state->setSourceContext(saved_source);
     free_file_result(&file_result);
 
     if (exec_result != MOBIUS_OK) {
@@ -121,7 +124,52 @@ int lib_load(MobiusState* state, int arg_count) {
     return 1;
 }
 
-// Get identity (memory address) of a value - useful for comparing table/array references
+int lib_randomseed(MobiusState* state, int arg_count) {
+    if (arg_count != 1) {
+        return state->error("randomseed expects exactly 1 argument");
+    }
+    Value arg = state->npeek(0);
+    state->npop();
+    if (arg.type == VAL_INT64) {
+        srand((unsigned int)arg.as.i64);
+    } else if (arg.type == VAL_FLOAT64) {
+        srand((unsigned int)arg.as.double_val);
+    } else {
+        return state->error("randomseed expects a numeric argument");
+    }
+    return 0;
+}
+
+int lib_isnan(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return state->error("isnan expects 1 argument");
+    Value arg = state->npeek(0);
+    state->npop();
+    bool result = false;
+    if (arg.type == VAL_FLOAT64) result = isnan(arg.as.double_val);
+    state->npush(make_bool_value(result));
+    return 1;
+}
+
+int lib_isinf(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return state->error("isinf expects 1 argument");
+    Value arg = state->npeek(0);
+    state->npop();
+    bool result = false;
+    if (arg.type == VAL_FLOAT64) result = isinf(arg.as.double_val);
+    state->npush(make_bool_value(result));
+    return 1;
+}
+
+int lib_isfinite(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return state->error("isfinite expects 1 argument");
+    Value arg = state->npeek(0);
+    state->npop();
+    bool result = true;
+    if (arg.type == VAL_FLOAT64) result = isfinite(arg.as.double_val);
+    state->npush(make_bool_value(result));
+    return 1;
+}
+
 int lib_id(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
         return state->error("id() expects exactly 1 argument");

@@ -44,6 +44,10 @@ Compiler::FunctionState* Compiler::initCompiler(FunctionState* enclosing,
             fs->proto->source = name;
         }
     }
+    // Nested functions inherit the source filename from the enclosing scope
+    if (enclosing && !enclosing->proto->source.empty()) {
+        fs->proto->source = enclosing->proto->source;
+    }
     fs->scope_depth = 0;
     fs->free_reg = 0;
     fs->max_reg = 0;
@@ -294,7 +298,8 @@ int Compiler::compileExpr(Expr* expr, int dest) {
         case EXPR_FUNCTION:
             return compileFunctionExpr(&expr->as.function_expr, dest);
         default:
-            fprintf(stderr, "Compiler: unknown expression type %d\n", expr->type);
+            fprintf(stderr, "Compiler [%s]: unknown expression type %d\n",
+                    current_->proto->source.c_str(), expr->type);
             return -1;
     }
 }
@@ -407,6 +412,28 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     }
     if (expr->op.type == TOKEN_OR || expr->op.type == TOKEN_OR_OR) {
         return compileLogicalOr(expr, dest);
+    }
+
+    // Type-check operator: expr is type -> bool
+    if (expr->op.type == TOKEN_IS) {
+        int reg = (dest >= 0) ? dest : allocReg();
+        int save = current_->free_reg;
+        int val_reg = compileExpr(expr->left);
+        uint8_t type_tag = (uint8_t)expr->right->as.literal.value.as.i64;
+
+        emitABC(OP_TYPEIS, 1, (uint8_t)val_reg, type_tag);
+        int jmp = emitJump();
+        emitABC(OP_LOADBOOL, (uint8_t)reg, 0, 1);
+        patchJump(jmp);
+        emitABC(OP_LOADBOOL, (uint8_t)reg, 1, 0);
+
+        setFreeReg(save);
+        if (dest < 0) {
+            current_->free_reg = reg + 1;
+            if (current_->free_reg > current_->max_reg)
+                current_->max_reg = current_->free_reg;
+        }
+        return reg;
     }
 
     // Constant folding: evaluate operations on two literal operands at compile time
@@ -818,7 +845,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             break;
         }
         default:
-            fprintf(stderr, "Compiler: unknown binary operator %d\n", expr->op.type);
+            fprintf(stderr, "Compiler [%s:%d]: unknown binary operator %d\n",
+                    current_->proto->source.c_str(), currentLine_, expr->op.type);
             break;
     }
 
@@ -937,7 +965,8 @@ int Compiler::compileUnary(UnaryExpr* expr, int dest) {
                 emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)operand, 0);
             break;
         default:
-            fprintf(stderr, "Compiler: unknown unary operator %d\n", expr->op.type);
+            fprintf(stderr, "Compiler [%s:%d]: unknown unary operator %d\n",
+                    current_->proto->source.c_str(), currentLine_, expr->op.type);
             break;
     }
 
@@ -1057,7 +1086,8 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
         }
 
         default:
-            fprintf(stderr, "Compiler: invalid assignment target %d\n", expr->target->type);
+            fprintf(stderr, "Compiler [%s:%d]: invalid assignment target %d\n",
+                    current_->proto->source.c_str(), currentLine_, expr->target->type);
             return -1;
     }
 }
@@ -1105,6 +1135,29 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
     }
 
     return result_reg;
+}
+
+// --- Tail Call ---
+
+void Compiler::compileTailCall(CallExpr* expr) {
+    currentLine_ = expr->paren.line;
+    int base = current_->free_reg;
+    int func_reg = allocReg();
+
+    if (expr->callee->type == EXPR_TABLE_DOT) {
+        compileTableDot(&expr->callee->as.table_dot, func_reg);
+    } else {
+        compileExpr(expr->callee, func_reg);
+    }
+
+    for (size_t i = 0; i < expr->arg_count; i++) {
+        int arg_reg = allocReg();
+        compileExpr(expr->arguments[i], arg_reg);
+    }
+
+    int nargs = (int)expr->arg_count + 1;  // B = nargs + 1
+    emitABC(OP_TAILCALL, (uint8_t)func_reg, (uint8_t)nargs, 0);
+    setFreeReg(base);
 }
 
 // --- Grouping ---
@@ -1211,11 +1264,23 @@ int Compiler::compileTableDot(TableDotExpr* expr, int dest) {
     int reg = (dest >= 0) ? dest : allocReg();
     int save = current_->free_reg;
 
+    bool is_enum = false;
+    if (expr->table && expr->table->type == EXPR_VARIABLE) {
+        const char* name = expr->table->as.variable.name.identifier;
+        if (name && enum_names_.count(name)) {
+            is_enum = true;
+        }
+    }
+
     int tbl_reg = compileExpr(expr->table);
     int ki = stringConstant(expr->key.identifier);
     uint8_t rk_key = makeRK(ki);
 
-    emitABC(OP_GETTABLE, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
+    if (is_enum) {
+        emitABC(OP_GETENUM, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
+    } else {
+        emitABC(OP_GETTABLE, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
+    }
 
     setFreeReg(save);
     if (dest < 0) {
@@ -1232,7 +1297,6 @@ int Compiler::compileEnumAccess(EnumAccessExpr* expr, int dest) {
     int reg = (dest >= 0) ? dest : allocReg();
     int save = current_->free_reg;
 
-    // Compile as global lookup of __enum_<name> then member access
     char enum_var[256];
     snprintf(enum_var, sizeof(enum_var), "__enum_%s", expr->enum_name.identifier);
     const char* interned = pool_->intern(enum_var)->data;
@@ -1241,7 +1305,7 @@ int Compiler::compileEnumAccess(EnumAccessExpr* expr, int dest) {
     emitGetGlobal(enum_reg, interned);
 
     int member_ki = stringConstant(expr->member_name.identifier);
-    emitABC(OP_GETTABLE, (uint8_t)reg, (uint8_t)enum_reg, makeRK(member_ki));
+    emitABC(OP_GETENUM, (uint8_t)reg, (uint8_t)enum_reg, makeRK(member_ki));
 
     setFreeReg(save);
     if (dest < 0) {
@@ -1357,7 +1421,8 @@ void Compiler::compileStmt(Stmt* stmt) {
             compileThrowStmt(&stmt->as.throw_stmt);
             break;
         default:
-            fprintf(stderr, "Compiler: unknown statement type %d\n", stmt->type);
+            fprintf(stderr, "Compiler [%s]: unknown statement type %d\n",
+                    current_->proto->source.c_str(), stmt->type);
             break;
     }
 }
@@ -1837,6 +1902,8 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     FunctionState child_fs;
     child_fs.proto = new Prototype();
     child_fs.proto->name = name ? name : "";
+    if (!enclosing->proto->source.empty())
+        child_fs.proto->source = enclosing->proto->source;
     child_fs.enclosing = enclosing;
     child_fs.scope_depth = 0;
     child_fs.free_reg = 0;
@@ -1888,6 +1955,13 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
     currentLine_ = stmt->keyword.line;
 
     if (stmt->value) {
+        // Tail call optimization: if the return value is a direct call,
+        // emit OP_TAILCALL instead of OP_CALL + OP_RETURN.
+        if (stmt->value->type == EXPR_CALL) {
+            compileTailCall(&stmt->value->as.call);
+            return;
+        }
+
         int save = current_->free_reg;
         int reg = compileExpr(stmt->value);
         emitReturn(reg, 1);
@@ -2231,7 +2305,8 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
 
 void Compiler::compileBreakStmt() {
     if (current_->loops.empty()) {
-        fprintf(stderr, "Compiler: 'break' outside of loop\n");
+        fprintf(stderr, "Compiler [%s:%d]: 'break' outside of loop\n",
+                current_->proto->source.c_str(), currentLine_);
         return;
     }
     int jmp = emitJump();
@@ -2242,7 +2317,8 @@ void Compiler::compileBreakStmt() {
 
 void Compiler::compileContinueStmt() {
     if (current_->loops.empty()) {
-        fprintf(stderr, "Compiler: 'continue' outside of loop\n");
+        fprintf(stderr, "Compiler [%s:%d]: 'continue' outside of loop\n",
+                current_->proto->source.c_str(), currentLine_);
         return;
     }
 
@@ -2298,36 +2374,30 @@ void Compiler::compileImportStmt(ImportStmt* stmt) {
 void Compiler::compileEnumStmt(EnumStmt* stmt) {
     currentLine_ = stmt->keyword.line;
 
-    int member_count = 0;
-    for (EnumMemberDef* m = stmt->members; m; m = m->next) {
-        member_count++;
-    }
+    enum_names_.insert(stmt->name.identifier);
 
     int save = current_->free_reg;
     int enum_reg = allocReg();
 
-    // Create a table to hold the enum members: { RED = 0, GREEN = 1, ... }
-    emitABC(OP_NEWTABLE, (uint8_t)enum_reg, 0, (uint8_t)(member_count & 0xFF));
+    int name_ki = stringConstant(stmt->name.identifier);
+    emitABx(OP_NEWENUM, (uint8_t)enum_reg, (uint16_t)name_ki);
 
     int idx = 0;
     for (EnumMemberDef* m = stmt->members; m; m = m->next, idx++) {
         int inner_save = current_->free_reg;
-        int val_reg;
+        int member_name_ki = stringConstant(m->name.identifier);
 
         if (m->value) {
-            val_reg = compileExpr(m->value);
+            int val_reg = compileExpr(m->value);
+            emitABC(OP_ENUMVAL, (uint8_t)enum_reg, (uint8_t)val_reg, makeRK(member_name_ki));
         } else {
-            val_reg = allocReg();
+            int val_reg = allocReg();
             emitAsBx(OP_LOADINT, (uint8_t)val_reg, idx);
+            emitABC(OP_ENUMVAL, (uint8_t)enum_reg, (uint8_t)val_reg, makeRK(member_name_ki));
         }
-
-        int key_ki = stringConstant(m->name.identifier);
-        emitABC(OP_SETTABLE, (uint8_t)enum_reg, makeRK(key_ki), (uint8_t)val_reg);
         setFreeReg(inner_save);
     }
 
-    // Store as both the plain name and __enum_<name> so that table dot
-    // access (Color.RED) and EXPR_ENUM_ACCESS (switch patterns) both work.
     emitSetGlobal(enum_reg, stmt->name.identifier);
 
     char enum_var[256];
@@ -2369,7 +2439,7 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             int offset = DECODE_sBx_wide(code[i]);
             target = (int)i + 1 + offset;
         } else if (info.format == FMT_AsBx) {
-            if (op == OP_TESTJMP || op == OP_FORPREP || op == OP_FORLOOP ||
+            if (op == OP_TESTJMP ||
                 op == OP_IFORPREP || op == OP_IFORLOOP) {
                 int offset = DECODE_sBx(code[i]);
                 target = (int)i + 1 + offset;
@@ -2481,7 +2551,7 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             // to the original position. We need to find the original index.
             is_jump = true;
         } else if (info.format == FMT_AsBx) {
-            if (op == OP_TESTJMP || op == OP_FORPREP || op == OP_FORLOOP ||
+            if (op == OP_TESTJMP ||
                 op == OP_IFORPREP || op == OP_IFORLOOP) {
                 is_jump = true;
             }
@@ -2582,6 +2652,8 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     FunctionState child_fs;
     child_fs.proto = new Prototype();
     child_fs.proto->name = name;
+    if (!enclosing->proto->source.empty())
+        child_fs.proto->source = enclosing->proto->source;
     child_fs.enclosing = enclosing;
     child_fs.scope_depth = 0;
     child_fs.free_reg = 0;

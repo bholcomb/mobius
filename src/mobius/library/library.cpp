@@ -77,16 +77,29 @@ static const PluginFunction library_registry[] = {
     {"array_concat",  lib_array_concat,  2,        "Return a new array combining two or more arrays"},
     {"array_reverse", lib_array_reverse, 1,        "Return a reversed copy of an array"},
     {"array_find",    lib_array_find,    2,        "Return the index of a value, or -1 if not found"},
+    {"array_sort",    lib_array_sort,    SIZE_MAX, "Sort array in-place (optional comparator function)"},
+    {"array_map",     lib_array_map,     2,        "Apply function to each element, return new array"},
+    {"array_filter",  lib_array_filter,  2,        "Filter elements by predicate, return new array"},
+    {"array_reduce",  lib_array_reduce,  3,        "Fold array to single value (array, func, initial)"},
+    {"array_foreach", lib_array_foreach, 2,        "Call function for each element"},
+    {"array_any",     lib_array_any,     2,        "Return true if any element satisfies predicate"},
+    {"array_all",     lib_array_all,     2,        "Return true if all elements satisfy predicate"},
 
     // Type system functions
     {"get_type_config", lib_get_type_config, 0, "Return the current type checking configuration"},
 
     // Utility functions
-    {"random", lib_random, 0, "Random float in [0,1), or integer in [min,max] with 1 or 2 args"},
-    {"time",   lib_time,   0, "Return the current Unix timestamp as an integer"},
-    {"clock",  lib_clock,  0, "Return elapsed CPU time in seconds as a float"},
-    {"load",   lib_load,   1, "Execute a Mobius script file by path"},
-    {"id",     lib_id,     1, "Return the memory address of a heap-allocated value"},
+    {"random",     lib_random,     0,        "Random float in [0,1), or integer in [min,max] with 1 or 2 args"},
+    {"randomseed", lib_randomseed, 1,        "Seed the random number generator"},
+    {"time",       lib_time,       0,        "Return the current Unix timestamp as an integer"},
+    {"clock",      lib_clock,      0,        "Return elapsed CPU time in seconds as a float"},
+    {"load",       lib_load,       1,        "Execute a Mobius script file by path"},
+    {"id",         lib_id,         1,        "Return the memory address of a heap-allocated value"},
+
+    // Float type inspection
+    {"isnan",      lib_isnan,      1,        "Return true if value is NaN"},
+    {"isinf",      lib_isinf,      1,        "Return true if value is infinity"},
+    {"isfinite",   lib_isfinite,   1,        "Return true if value is finite (not NaN or infinity)"},
 
     // Sentinel
     {NULL, NULL, 0, NULL}

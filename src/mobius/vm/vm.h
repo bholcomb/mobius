@@ -77,6 +77,7 @@ public:
     MobiusState* state_;
     std::vector<Value>    registers_;
     std::vector<CallInfo> call_stack_;
+    uint32_t* current_ip_;  // updated by dispatch loop for error reporting
 
     int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
     void closeUpvalues(CallInfo& ci, int from_reg);

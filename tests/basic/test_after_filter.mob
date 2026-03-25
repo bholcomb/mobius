@@ -1,0 +1,16 @@
+var evens = array_filter([1, 2, 3, 4], func(x, i) { return x % 2 == 0; });
+print("filter done, len:", array_length(evens));
+
+// Simple operations after filter
+var a = 10;
+print("a:", a);
+var b = a + 20;
+print("b:", b);
+
+// Array literal
+var arr = [1, 2, 3];
+print("arr[0]:", arr[0]);
+print("arr[1]:", arr[1]);
+print("arr[2]:", arr[2]);
+
+print("all done");

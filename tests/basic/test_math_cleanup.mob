@@ -1,0 +1,179 @@
+// Test math module after cleanup: no duplicates, new functions, constants as values
+
+import "math" as m
+
+print("=== Math Module Cleanup Tests ===")
+
+// Test 1: Trig functions still work
+print("\n1. Trigonometric functions...")
+var s = m.sin(0)
+var c = m.cos(0)
+var t = m.tan(0)
+if (s == 0.0 && c == 1.0 && t == 0.0) {
+    print("PASS: basic trig")
+} else {
+    print("FAIL: basic trig")
+}
+
+// Test 2: Inverse trig
+var as_val = m.asin(1.0)
+var ac_val = m.acos(1.0)
+var at_val = m.atan(1.0)
+if (as_val > 1.57 && as_val < 1.58 && ac_val == 0.0 && at_val > 0.78 && at_val < 0.79) {
+    print("PASS: inverse trig")
+} else {
+    print("FAIL: inverse trig", as_val, ac_val, at_val)
+}
+
+// Test 3: Hyperbolic functions
+var sh = m.sinh(0)
+var ch = m.cosh(0)
+var th = m.tanh(0)
+if (sh == 0.0 && ch == 1.0 && th == 0.0) {
+    print("PASS: hyperbolic")
+} else {
+    print("FAIL: hyperbolic")
+}
+
+// Test 4: Inverse hyperbolic (NEW)
+print("\n2. New inverse hyperbolic functions...")
+var ash = m.asinh(0)
+var ach = m.acosh(1.0)
+var ath = m.atanh(0)
+if (ash == 0.0 && ach == 0.0 && ath == 0.0) {
+    print("PASS: inverse hyperbolic at zero/identity")
+} else {
+    print("FAIL: inverse hyperbolic", ash, ach, ath)
+}
+
+var ash2 = m.asinh(1.0)
+if (ash2 > 0.88 && ash2 < 0.89) {
+    print("PASS: asinh(1)")
+} else {
+    print("FAIL: asinh(1) =", ash2)
+}
+
+// Test 5: Logarithmic functions (existing)
+print("\n3. Logarithmic functions...")
+var ln_e = m.log(2.718281828)
+if (ln_e > 0.999 && ln_e < 1.001) {
+    print("PASS: log(e)")
+} else {
+    print("FAIL: log(e) =", ln_e)
+}
+
+var l10 = m.log10(100)
+if (l10 == 2.0) {
+    print("PASS: log10(100)")
+} else {
+    print("FAIL: log10(100) =", l10)
+}
+
+// Test 6: New log/exp functions
+print("\n4. New log/exp functions...")
+var l2 = m.log2(8)
+if (l2 == 3.0) {
+    print("PASS: log2(8)")
+} else {
+    print("FAIL: log2(8) =", l2)
+}
+
+var l1p = m.log1p(0)
+if (l1p == 0.0) {
+    print("PASS: log1p(0)")
+} else {
+    print("FAIL: log1p(0) =", l1p)
+}
+
+var em1 = m.expm1(0)
+if (em1 == 0.0) {
+    print("PASS: expm1(0)")
+} else {
+    print("FAIL: expm1(0) =", em1)
+}
+
+var e2 = m.exp2(3)
+if (e2 == 8.0) {
+    print("PASS: exp2(3)")
+} else {
+    print("FAIL: exp2(3) =", e2)
+}
+
+// Test 7: Constants as table values (not functions)
+print("\n5. Constants as table values...")
+print("m.pi =", m.pi)
+print("m.e =", m.e)
+print("m.tau =", m.tau)
+
+if (m.pi > 3.14159 && m.pi < 3.14160) {
+    print("PASS: m.pi")
+} else {
+    print("FAIL: m.pi =", m.pi)
+}
+
+if (m.e > 2.71828 && m.e < 2.71829) {
+    print("PASS: m.e")
+} else {
+    print("FAIL: m.e =", m.e)
+}
+
+if (m.tau > 6.28318 && m.tau < 6.28319) {
+    print("PASS: m.tau")
+} else {
+    print("FAIL: m.tau =", m.tau)
+}
+
+// Test 8: Utility functions still work
+print("\n6. Utility functions...")
+var d2r = m.deg2rad(180)
+if (d2r > 3.14159 && d2r < 3.14160) {
+    print("PASS: deg2rad(180)")
+} else {
+    print("FAIL: deg2rad(180) =", d2r)
+}
+
+var r2d = m.rad2deg(3.14159265358979)
+if (r2d > 179.99 && r2d < 180.01) {
+    print("PASS: rad2deg(pi)")
+} else {
+    print("FAIL: rad2deg(pi) =", r2d)
+}
+
+var sg = m.sign(-42)
+if (sg == -1.0) {
+    print("PASS: sign(-42)")
+} else {
+    print("FAIL: sign(-42) =", sg)
+}
+
+var cl = m.clamp(15, 0, 10)
+if (cl == 10.0) {
+    print("PASS: clamp(15, 0, 10)")
+} else {
+    print("FAIL: clamp(15, 0, 10) =", cl)
+}
+
+// Test 9: Advanced functions
+print("\n7. Advanced functions...")
+var f = m.factorial(5)
+if (f == 120.0) {
+    print("PASS: factorial(5)")
+} else {
+    print("FAIL: factorial(5) =", f)
+}
+
+var g = m.gcd(12, 8)
+if (g == 4) {
+    print("PASS: gcd(12, 8)")
+} else {
+    print("FAIL: gcd(12, 8) =", g)
+}
+
+var lv = m.lcm(4, 6)
+if (lv == 12) {
+    print("PASS: lcm(4, 6)")
+} else {
+    print("FAIL: lcm(4, 6) =", lv)
+}
+
+print("\n=== Math Module Cleanup Tests Complete ===")

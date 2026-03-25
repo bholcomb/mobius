@@ -26,11 +26,11 @@ print("time() =", time());
 import "math";
 
 print("\n📦 Math Extension Functions (Plugin-only, via namespace):");
-print("math.sin(math.pi() / 2) =", math.sin(math.pi() / 2));
+print("math.sin(math.pi / 2) =", math.sin(math.pi / 2));
 print("math.cos(0) =", math.cos(0));
-print("math.tan(math.pi() / 4) =", math.tan(math.pi() / 4));
+print("math.tan(math.pi / 4) =", math.tan(math.pi / 4));
 
-print("math.log(math.e()) =", math.log(math.e()));
+print("math.log(math.e) =", math.log(math.e));
 print("math.log10(100) =", math.log10(100));
 print("math.exp(1) =", math.exp(1));
 
@@ -39,8 +39,8 @@ print("math.gcd(12, 8) =", math.gcd(12, 8));
 print("math.lcm(4, 6) =", math.lcm(4, 6));
 
 print("Math constants:");
-print("math.pi() =", math.pi());
-print("math.e() =", math.e());
+print("math.pi =", math.pi);
+print("math.e =", math.e);
 
 print("\n✅ Architecture Benefits:");
 print("1. Built-in functions always work (no plugin needed)");

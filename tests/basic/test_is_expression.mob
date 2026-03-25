@@ -1,0 +1,136 @@
+// Test the 'is' type-check expression operator
+
+print("=== Testing 'is' Expression Operator ===");
+
+// Test 1: Integer type check
+var i = 42;
+if (i is integer) {
+    print("PASS: 42 is integer");
+} else {
+    print("FAIL: 42 should be integer");
+}
+if (!(i is string)) {
+    print("PASS: 42 is not string");
+} else {
+    print("FAIL: 42 should not be string");
+}
+
+// Test 2: Float type check
+var f = 3.14;
+if (f is float) {
+    print("PASS: 3.14 is float");
+} else {
+    print("FAIL: 3.14 should be float");
+}
+
+// Test 3: String type check
+var s = "hello";
+if (s is string) {
+    print("PASS: 'hello' is string");
+} else {
+    print("FAIL: 'hello' should be string");
+}
+
+// Test 4: Boolean type check
+var b = true;
+if (b is bool) {
+    print("PASS: true is bool");
+} else {
+    print("FAIL: true should be bool");
+}
+
+// Test 5: Nil type check
+var n = nil;
+if (n is nil) {
+    print("PASS: nil is nil");
+} else {
+    print("FAIL: nil should be nil");
+}
+
+// Test 6: Array type check
+var arr = [1, 2, 3];
+if (arr is array) {
+    print("PASS: [1,2,3] is array");
+} else {
+    print("FAIL: [1,2,3] should be array");
+}
+
+// Test 7: Table type check
+var t = {name: "test"};
+if (t is table) {
+    print("PASS: {name:'test'} is table");
+} else {
+    print("FAIL: {name:'test'} should be table");
+}
+
+// Test 8: Function type check
+func dummy() { return 1; }
+if (dummy is function) {
+    print("PASS: func is function");
+} else {
+    print("FAIL: func should be function");
+}
+
+// Test 9: Use in ternary
+var type_name = (42 is integer) ? "it's an int" : "not an int";
+if (type_name == "it's an int") {
+    print("PASS: is works in ternary");
+} else {
+    print("FAIL: ternary with is failed");
+}
+
+// Test 10: Use with variables
+func check_type(val) {
+    if (val is string) {
+        return "string";
+    }
+    if (val is integer) {
+        return "integer";
+    }
+    if (val is float) {
+        return "float";
+    }
+    if (val is bool) {
+        return "bool";
+    }
+    if (val is nil) {
+        return "nil";
+    }
+    return "other";
+}
+
+if (check_type("hi") == "string" && check_type(10) == "integer" &&
+    check_type(1.5) == "float" && check_type(true) == "bool" &&
+    check_type(nil) == "nil") {
+    print("PASS: is works in function with multiple types");
+} else {
+    print("FAIL: type dispatch function failed");
+}
+
+// Test 11: Negation
+if (!(42 is string)) {
+    print("PASS: !(42 is string) works");
+} else {
+    print("FAIL: negation of is failed");
+}
+
+// Test 12: Alternative type names
+if (42 is int) {
+    print("PASS: 42 is int (alias for integer)");
+} else {
+    print("FAIL: 'int' alias should work");
+}
+
+if (3.14 is float64) {
+    print("PASS: 3.14 is float64");
+} else {
+    print("FAIL: 'float64' should work for floats");
+}
+
+if (true is boolean) {
+    print("PASS: true is boolean (alias for bool)");
+} else {
+    print("FAIL: 'boolean' alias should work");
+}
+
+print("=== 'is' Expression Tests Complete ===");

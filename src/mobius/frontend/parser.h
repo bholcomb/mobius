@@ -14,6 +14,7 @@ typedef struct {
     bool had_error;         // Whether an error occurred
     bool panic_mode;        // Whether we're in panic mode recovery
     MobiusState* state;     // Mobius state we're parsing in
+    const char* source_name; // Source filename for error messages (may be NULL)
 } Parser;
 
 // Parser result structure

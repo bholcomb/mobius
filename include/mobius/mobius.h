@@ -103,6 +103,7 @@ typedef struct {
     int         code;
     const char* message;
     const char* suggestion;    /* may be NULL */
+    const char* filename;      /* may be NULL */
     int         line;
     int         column;
     const char* function_name; /* may be NULL */
@@ -180,20 +181,15 @@ MOBIUS_API int mobius_exec_file(MobiusState* state, const char* filename);
 /* ====================================================================== */
 
 /**
- * Add a directory to the plugin search path.
- * Call before mobius_new_state() or mobius_init_stdlib().
+ * Add a directory to the plugin/module search path.
+ * Modules are loaded lazily on first import.
  */
 MOBIUS_API void mobius_add_plugin_directory(const char* path);
 
 /**
- * Return the number of currently loaded modules.
+ * Clear all configured plugin/module search directories.
  */
-MOBIUS_API size_t mobius_get_module_count(MobiusState* state);
-
-/**
- * Print a summary of loaded modules to stdout.
- */
-MOBIUS_API void mobius_print_modules(MobiusState* state);
+MOBIUS_API void mobius_clear_plugin_directories(void);
 
 /* ====================================================================== */
 /*  REPL                                                                   */

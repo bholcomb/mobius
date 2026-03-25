@@ -1,0 +1,9 @@
+// Test that error messages include filename context
+// This test is expected to fail — it triggers a runtime error
+// The error should include the filename in the output
+
+func trigger_error() {
+    var x = undefined_variable;
+}
+
+trigger_error();
