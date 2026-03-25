@@ -215,6 +215,9 @@ MOBIUS_API void   mobius_stack_setArrayElement(MobiusState* state, int array_idx
 MOBIUS_API void   mobius_stack_getArrayElement(MobiusState* state, int array_idx, size_t element_idx);
 MOBIUS_API size_t mobius_stack_getArrayLength(MobiusState* state, int array_idx);
 MOBIUS_API void   mobius_stack_arrayPush(MobiusState* state, int array_idx);
+MOBIUS_API void   mobius_stack_arrayPop(MobiusState* state, int array_idx);
+MOBIUS_API void   mobius_stack_arrayInsert(MobiusState* state, int array_idx, size_t element_idx);
+MOBIUS_API void   mobius_stack_arrayRemove(MobiusState* state, int array_idx, size_t element_idx);
 
 /* ====================================================================== */
 /*  Register a native C function as a global                               */

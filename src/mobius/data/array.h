@@ -19,6 +19,8 @@ public:
     Value pop();
     Value get(size_t index) const;
     void set(size_t index, Value value);
+    void insert(size_t index, Value value);
+    Value remove(size_t index);
     size_t length() const;
     void reserve(size_t new_capacity);
     void reverse();

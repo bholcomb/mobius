@@ -622,6 +622,40 @@ void mobius_stack_arrayPush(MobiusState* state, int array_idx) {
     array_val->as.array->push(element_val);
 }
 
+void mobius_stack_arrayPop(MobiusState* state, int array_idx) {
+    Value* array_val = get_value_at(state, array_idx);
+    if (array_val->type != VAL_ARRAY) {
+        fatal_type_error("mobius_stack_arrayPop", VAL_ARRAY, array_val->type, array_idx);
+    }
+
+    stack_push(state, array_val->as.array->pop());
+}
+
+void mobius_stack_arrayInsert(MobiusState* state, int array_idx, size_t element_idx) {
+    NativeCallContext* nctx = get_nctx(state);
+    if (nctx->top <= nctx->base) {
+        fprintf(stderr, "FATAL: mobius_stack_arrayInsert() - Stack is empty\n");
+        exit(1);
+    }
+
+    Value* array_val = get_value_at(state, array_idx);
+    if (array_val->type != VAL_ARRAY) {
+        fatal_type_error("mobius_stack_arrayInsert", VAL_ARRAY, array_val->type, array_idx);
+    }
+
+    Value element_val = nctx->registers[--nctx->top];
+    array_val->as.array->insert(element_idx, element_val);
+}
+
+void mobius_stack_arrayRemove(MobiusState* state, int array_idx, size_t element_idx) {
+    Value* array_val = get_value_at(state, array_idx);
+    if (array_val->type != VAL_ARRAY) {
+        fatal_type_error("mobius_stack_arrayRemove", VAL_ARRAY, array_val->type, array_idx);
+    }
+
+    stack_push(state, array_val->as.array->remove(element_idx));
+}
+
 // ============================================================================
 // STACK MANIPULATION
 // ============================================================================
