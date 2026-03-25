@@ -42,4 +42,5 @@ staging:
         - "${out_dir}/bin/math.so"
         - "${out_dir}/bin/os.so"
         - "${out_dir}/bin/regex.so"
+        - "${out_dir}/bin/json.so"
         - "${out_dir}/bin/text_processing.so"

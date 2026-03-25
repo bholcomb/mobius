@@ -571,6 +571,28 @@ void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* k
     stack_push(state, table_val->as.table->get(key_val));
 }
 
+size_t mobius_stack_getTableSize(MobiusState* state, int table_idx) {
+    Value* table_val = get_value_at(state, table_idx);
+    if (table_val->type != VAL_TABLE) return 0;
+    return table_val->as.table->size();
+}
+
+void mobius_stack_getTableKeys(MobiusState* state, int table_idx) {
+    Value* table_val = get_value_at(state, table_idx);
+    if (table_val->type != VAL_TABLE) {
+        fatal_type_error("mobius_stack_getTableKeys", VAL_TABLE, table_val->type, table_idx);
+    }
+
+    Table* tbl = table_val->as.table;
+    mobius_stack_pushNewArray(state, tbl->size());
+    int arr_idx = mobius_stack_size(state) - 1;
+
+    tbl->forEach([&](const Value& key, const Value& /*value*/) {
+        stack_push(state, key);
+        mobius_stack_arrayPush(state, arr_idx);
+    });
+}
+
 // ============================================================================
 // ARRAY OPERATIONS
 // ============================================================================

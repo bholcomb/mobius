@@ -1,0 +1,217 @@
+import "json"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+// ============================================================================
+// json.parse — primitives
+// ============================================================================
+
+assert_test("parse null", json.parse("null") == nil)
+assert_test("parse true", json.parse("true") == true)
+assert_test("parse false", json.parse("false") == false)
+assert_test("parse integer", json.parse("42") == 42)
+assert_test("parse negative int", json.parse("-7") == -7)
+assert_test("parse zero", json.parse("0") == 0)
+assert_test("parse float", json.parse("3.14") == 3.14)
+assert_test("parse negative float", json.parse("-0.5") == -0.5)
+assert_test("parse exponent", json.parse("1e10") == 10000000000.0)
+assert_test("parse neg exponent", json.parse("1e-3") == 0.001)
+assert_test("parse string", json.parse("\"hello\"") == "hello")
+assert_test("parse empty string", json.parse("\"\"") == "")
+
+// ============================================================================
+// json.parse — string escapes
+// ============================================================================
+
+assert_test("parse escaped quote", json.parse("\"a\\\"b\"") == "a\"b")
+assert_test("parse escaped backslash", json.parse("\"a\\\\b\"") == "a\\b")
+assert_test("parse escaped slash", json.parse("\"a\\/b\"") == "a/b")
+assert_test("parse escaped newline", json.parse("\"a\\nb\"") == "a\nb")
+assert_test("parse escaped tab", json.parse("\"a\\tb\"") == "a\tb")
+assert_test("parse escaped carriage return", json.parse("\"a\\rb\"") == "a\rb")
+assert_test("parse unicode escape", json.parse("\"\\u0041\"") == "A")
+var euro = json.parse("\"\\u20AC\"")
+assert_test("parse unicode escape is string", euro is string)
+assert_test("parse unicode escape len", len(euro) == 3)
+
+// ============================================================================
+// json.parse — arrays
+// ============================================================================
+
+var a1 = json.parse("[]")
+assert_test("parse empty array", a1 is array)
+assert_test("parse empty array len", len(a1) == 0)
+
+var a2 = json.parse("[1, 2, 3]")
+assert_test("parse int array len", len(a2) == 3)
+assert_test("parse int array[0]", a2[0] == 1)
+assert_test("parse int array[1]", a2[1] == 2)
+assert_test("parse int array[2]", a2[2] == 3)
+
+var a3 = json.parse("[\"a\", true, null, 42]")
+assert_test("parse mixed array len", len(a3) == 4)
+assert_test("parse mixed[0] string", a3[0] == "a")
+assert_test("parse mixed[1] bool", a3[1] == true)
+assert_test("parse mixed[2] null", a3[2] == nil)
+assert_test("parse mixed[3] int", a3[3] == 42)
+
+var a4 = json.parse("[[1, 2], [3, 4]]")
+assert_test("parse nested arrays", len(a4) == 2)
+assert_test("parse nested[0][0]", a4[0][0] == 1)
+assert_test("parse nested[1][1]", a4[1][1] == 4)
+
+// ============================================================================
+// json.parse — objects
+// ============================================================================
+
+var o1 = json.parse("{}")
+assert_test("parse empty object", o1 is table)
+
+var o2 = json.parse("{\"x\": 1, \"y\": 2}")
+assert_test("parse object x", o2.x == 1)
+assert_test("parse object y", o2.y == 2)
+
+var o3 = json.parse("{\"name\": \"Alice\", \"age\": 30, \"active\": true}")
+assert_test("parse object string field", o3.name == "Alice")
+assert_test("parse object int field", o3.age == 30)
+assert_test("parse object bool field", o3.active == true)
+
+var o4 = json.parse("{\"nested\": {\"a\": 1}}")
+assert_test("parse nested object", o4.nested.a == 1)
+
+var o5 = json.parse("{\"items\": [1, 2, 3]}")
+assert_test("parse object with array", len(o5.items) == 3)
+assert_test("parse object array[1]", o5.items[1] == 2)
+
+// ============================================================================
+// json.parse — whitespace handling
+// ============================================================================
+
+var ws = json.parse("  {  \"a\"  :  1  ,  \"b\"  :  2  }  ")
+assert_test("parse with extra whitespace", ws.a == 1)
+assert_test("parse with extra whitespace b", ws.b == 2)
+
+var nl = json.parse("{\n  \"x\": 1,\n  \"y\": 2\n}")
+assert_test("parse with newlines", nl.x == 1)
+
+// ============================================================================
+// json.parse — large integers
+// ============================================================================
+
+var big = json.parse("9007199254740992")
+assert_test("parse large int", big == 9007199254740992)
+
+var nbig = json.parse("-9007199254740992")
+assert_test("parse large negative int", nbig == -9007199254740992)
+
+// ============================================================================
+// json.stringify — primitives
+// ============================================================================
+
+assert_test("stringify null", json.stringify(nil) == "null")
+assert_test("stringify true", json.stringify(true) == "true")
+assert_test("stringify false", json.stringify(false) == "false")
+assert_test("stringify integer", json.stringify(42) == "42")
+assert_test("stringify negative int", json.stringify(-7) == "-7")
+assert_test("stringify zero", json.stringify(0) == "0")
+assert_test("stringify string", json.stringify("hello") == "\"hello\"")
+assert_test("stringify empty string", json.stringify("") == "\"\"")
+
+// ============================================================================
+// json.stringify — string escapes
+// ============================================================================
+
+assert_test("stringify escaped quote", json.stringify("a\"b") == "\"a\\\"b\"")
+assert_test("stringify escaped backslash", json.stringify("a\\b") == "\"a\\\\b\"")
+assert_test("stringify escaped newline", json.stringify("a\nb") == "\"a\\nb\"")
+assert_test("stringify escaped tab", json.stringify("a\tb") == "\"a\\tb\"")
+
+// ============================================================================
+// json.stringify — arrays
+// ============================================================================
+
+var empty_arr = array_create(0)
+assert_test("stringify empty array", json.stringify(empty_arr) == "[]")
+
+var arr = array_create(0)
+array_push(arr, 1)
+array_push(arr, 2)
+array_push(arr, 3)
+assert_test("stringify int array", json.stringify(arr) == "[1,2,3]")
+
+// ============================================================================
+// json.stringify — objects (tables)
+// ============================================================================
+
+var empty_tbl = {}
+assert_test("stringify empty object", json.stringify(empty_tbl) == "{}")
+
+// ============================================================================
+// json.stringify — pretty printing
+// ============================================================================
+
+var pretty_arr = json.stringify(arr, 2)
+assert_test("pretty array has newlines", contains(pretty_arr, "\n"))
+assert_test("pretty array has indent", contains(pretty_arr, "  1"))
+
+// ============================================================================
+// json.stringify — special float values
+// ============================================================================
+
+assert_test("stringify inf as null", json.stringify(inf) == "null")
+assert_test("stringify nan as null", json.stringify(nan) == "null")
+
+// ============================================================================
+// Round-trip tests
+// ============================================================================
+
+var rt_input = "{\"name\":\"Bob\",\"scores\":[10,20,30],\"meta\":{\"active\":true,\"level\":null}}"
+var rt_parsed = json.parse(rt_input)
+assert_test("roundtrip name", rt_parsed.name == "Bob")
+assert_test("roundtrip scores", len(rt_parsed.scores) == 3)
+assert_test("roundtrip scores[2]", rt_parsed.scores[2] == 30)
+assert_test("roundtrip meta active", rt_parsed.meta.active == true)
+assert_test("roundtrip meta level nil", rt_parsed.meta.level == nil)
+
+var rt_str = json.stringify(rt_parsed)
+var rt2 = json.parse(rt_str)
+assert_test("double roundtrip name", rt2.name == "Bob")
+assert_test("double roundtrip scores[0]", rt2.scores[0] == 10)
+assert_test("double roundtrip meta active", rt2.meta.active == true)
+
+// ============================================================================
+// Edge cases
+// ============================================================================
+
+var deeply_nested = json.parse("{\"a\": {\"b\": {\"c\": {\"d\": 42}}}}")
+assert_test("deeply nested parse", deeply_nested.a.b.c.d == 42)
+
+var arr_of_objs = json.parse("[{\"id\": 1}, {\"id\": 2}, {\"id\": 3}]")
+assert_test("array of objects len", len(arr_of_objs) == 3)
+assert_test("array of objects[1].id", arr_of_objs[1].id == 2)
+
+var float_precision = json.parse("1.7976931348623157e+308")
+assert_test("parse max float", float_precision > 1e307)
+
+var zero_float = json.parse("0.0")
+assert_test("parse 0.0 is float", zero_float == 0.0)
+
+// ============================================================================
+// Summary
+// ============================================================================
+
+print("\nJSON Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}
