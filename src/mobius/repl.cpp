@@ -1,6 +1,5 @@
 #include "repl.h"
 #include "state/mobius_state.h"
-#include "state/environment.h"
 #include "frontend/scanner.h"
 #include "frontend/parser.h"
 #include "vm/compiler.h"
@@ -78,7 +77,7 @@ bool Repl::processLine(const char* line) {
         return true;
     }
 
-    Compiler compiler(state_->stringPool());
+    Compiler compiler(state_->stringPool(), state_);
     Prototype* proto = compiler.compile(parse_result.statements,
                                         parse_result.count, "<repl>");
     free_parse_result(&parse_result);
@@ -165,8 +164,15 @@ void Repl::commandHelp() {
 }
 
 void Repl::commandEnv() const {
-    printf("Current environment:\n");
-    state_->globalEnv()->print();
+    printf("Current environment (globals: %d):\n", state_->globalSlotCount());
+    for (int i = 0; i < state_->globalSlotCount(); i++) {
+        const Value& val = state_->globalSlot(i);
+        if (!(val.flags & VAL_FLAG_DEFINED)) continue;
+        const char* name = state_->globalSlotName(i);
+        char* str = value_to_string(val);
+        printf("  %s = %s\n", name, str ? str : "(null)");
+        free(str);
+    }
 }
 
 void Repl::commandClear() {

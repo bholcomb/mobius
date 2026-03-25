@@ -1,6 +1,5 @@
 #include "library/core.h"
 #include "data/value.h"
-#include "state/environment.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

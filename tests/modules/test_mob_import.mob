@@ -1,0 +1,16 @@
+// Test basic .mob file import
+
+import "helpers" as helpers
+
+// Test function calls
+var result = helpers.add(3, 4)
+if (result != 7) { exit(1) }
+
+var greeting = helpers.greet("world")
+if (greeting != "hello world") { exit(1) }
+
+// Test variable access
+if (helpers.VERSION != "1.0") { exit(1) }
+if (helpers.PI != 3.14159) { exit(1) }
+
+exit(0)

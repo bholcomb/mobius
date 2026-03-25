@@ -5,7 +5,6 @@
 #include "data/function.h"
 #include "frontend/ast.h"
 #include "state/mobius_state.h"
-#include "state/environment.h"
 #include "util/utility.h"
 
 #include <stdio.h>
@@ -29,9 +28,6 @@ void Value::releaseRefSlow() {
                 MobiusFunction* func = as.function;
                 func->ref_count--;
                 if (func->ref_count <= 0) {
-                    if (func->closure) {
-                        func->closure->release();
-                    }
                     free(func->param_names);
                     if (func->body) {
                         for (size_t i = 0; i < func->body_count; i++) {

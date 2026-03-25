@@ -1,7 +1,6 @@
 #include "library/string.h"
 #include "data/value.h"
 #include "data/array.h"
-#include "state/environment.h"
 #include "state/mobius_state.h"
 
 #include <stdio.h>

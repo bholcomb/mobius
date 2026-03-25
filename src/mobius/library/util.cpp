@@ -1,6 +1,5 @@
 #include "library/util.h"
 #include "data/value.h"
-#include "state/environment.h"
 #include "state/mobius_state.h"
 #include "util/file_io.h"
 

@@ -1,0 +1,13 @@
+// Test import with alias
+
+import "helpers" as h
+
+var result = h.add(100, 200)
+if (result != 300) { exit(1) }
+
+var greeting = h.greet("mobius")
+if (greeting != "hello mobius") { exit(1) }
+
+if (h.VERSION != "1.0") { exit(1) }
+
+exit(0)

@@ -101,9 +101,8 @@ static const PluginFunction library_registry[] = {
  * @param state The MobiusState containing the global environment
  */
 void register_stdlib_functions(MobiusState* state) {
-    if (!state || !state->globalEnv()) return;
+    if (!state) return;
     
-    StringInternPool* pool = state->stringPool();
     for (size_t i = 0; library_registry[i].name != NULL; i++) {
         const PluginFunction* func = &library_registry[i];
         
@@ -112,7 +111,6 @@ void register_stdlib_functions(MobiusState* state) {
         int slot = state->assignGlobalSlot(func->name);
         func_value.flags |= VAL_FLAG_DEFINED;
         state->globalSlot(slot) = func_value;
-        state->globalEnv()->define(pool->intern(func->name), func_value);
     }
 }
 
