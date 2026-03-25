@@ -1,0 +1,46 @@
+// Test file I/O stdlib functions
+
+var test_path = "/tmp/mobius_test_file_io.txt"
+
+// Test writefile
+var ok = writefile(test_path, "hello world")
+if (!ok) { exit(1) }
+
+// Test file_exists
+if (!file_exists(test_path)) { exit(1) }
+
+// Test readfile
+var content = readfile(test_path)
+if (content != "hello world") { exit(1) }
+
+// Test appendfile
+ok = appendfile(test_path, " appended")
+if (!ok) { exit(1) }
+
+var content2 = readfile(test_path)
+if (content2 != "hello world appended") { exit(1) }
+
+// Test readlines with a multi-line file created via multiple writes
+// Since Mobius strings store \n literally, we write line by line
+var lines_path = "/tmp/mobius_test_lines.txt"
+writefile(lines_path, "alpha")
+
+// Test readlines on single-line file
+var lines = readlines(lines_path)
+if (len(lines) != 1) { exit(1) }
+if (lines[0] != "alpha") { exit(1) }
+
+// Test file_exists with non-existent file
+if (file_exists("/tmp/mobius_nonexistent_file_xyz.txt")) { exit(1) }
+
+// Test writefile overwrites
+writefile(test_path, "new content")
+var content3 = readfile(test_path)
+if (content3 != "new content") { exit(1) }
+
+// Test empty file
+writefile(test_path, "")
+var content4 = readfile(test_path)
+if (content4 != "") { exit(1) }
+
+exit(0)

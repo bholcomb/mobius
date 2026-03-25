@@ -1,0 +1,40 @@
+// Test switch guard clauses (case x when condition:)
+
+func classify(n) {
+    switch (n) {
+        case is int64 when n > 100:
+            return "big"
+        case is int64 when n > 0:
+            return "positive"
+        case 0:
+            return "zero"
+        case is int64 when n < 0:
+            return "negative"
+        default:
+            return "other"
+    }
+}
+
+if (classify(200) != "big") { exit(1) }
+if (classify(50) != "positive") { exit(1) }
+if (classify(0) != "zero") { exit(1) }
+if (classify(-5) != "negative") { exit(1) }
+if (classify("hello") != "other") { exit(1) }
+
+// Guard with value pattern
+func describe(x) {
+    switch (x) {
+        case 1 when true:
+            return "one-guarded"
+        case 2:
+            return "two"
+        default:
+            return "default"
+    }
+}
+
+if (describe(1) != "one-guarded") { exit(1) }
+if (describe(2) != "two") { exit(1) }
+if (describe(3) != "default") { exit(1) }
+
+exit(0)

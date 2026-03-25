@@ -1,0 +1,33 @@
+// Test %= compound assignment operator
+
+var a = 10
+a %= 3
+if (a != 1) { exit(1) }
+
+var b = 17
+b %= 5
+if (b != 2) { exit(1) }
+
+var c = 100
+c %= 10
+if (c != 0) { exit(1) }
+
+// %= on table field
+var t = { x: 10 }
+t.x %= 3
+if (t.x != 1) { exit(1) }
+
+// %= on array element
+var arr = [10, 20, 30]
+arr[0] %= 3
+if (arr[0] != 1) { exit(1) }
+
+arr[1] %= 7
+if (arr[1] != 6) { exit(1) }
+
+// %= with larger values
+var d = 1000000
+d %= 7
+if (d != 1000000 % 7) { exit(1) }
+
+exit(0)

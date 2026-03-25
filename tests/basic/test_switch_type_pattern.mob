@@ -1,0 +1,24 @@
+// Test switch case with type patterns (case is type:)
+
+func check_type(val) {
+    switch (val) {
+        case is int64:
+            return "integer"
+        case is float64:
+            return "float"
+        case is string:
+            return "string"
+        case is bool:
+            return "boolean"
+        default:
+            return "other"
+    }
+}
+
+if (check_type(42) != "integer") { exit(1) }
+if (check_type(3.14) != "float") { exit(1) }
+if (check_type("hello") != "string") { exit(1) }
+if (check_type(true) != "boolean") { exit(1) }
+if (check_type(nil) != "other") { exit(1) }
+
+exit(0)

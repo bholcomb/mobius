@@ -1,0 +1,48 @@
+// Test try/catch/finally
+
+// finally runs after successful try
+var a = 0
+try {
+    a = 1
+} catch err {
+    a = 99
+} finally {
+    a += 10
+}
+if (a != 11) { exit(1) }
+
+// finally runs after catch
+var b = 0
+try {
+    throw "error"
+} catch err {
+    b = 1
+} finally {
+    b += 10
+}
+if (b != 11) { exit(1) }
+
+// finally with value propagation
+var log = ""
+try {
+    log = log + "try "
+    throw "oops"
+} catch err {
+    log = log + "catch "
+} finally {
+    log = log + "finally"
+}
+if (log != "try catch finally") { exit(1) }
+
+// finally with no exception
+var c = 0
+try {
+    c = 5
+} catch err {
+    c = 99
+} finally {
+    c = c * 2
+}
+if (c != 10) { exit(1) }
+
+exit(0)
