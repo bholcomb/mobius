@@ -1,0 +1,255 @@
+import "toml"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+// ============================================================================
+// Basic key-value pairs
+// ============================================================================
+
+var t1 = toml.parse("key = \"value\"")
+assert_test("basic string value", t1.key == "value")
+
+var t2 = toml.parse("num = 42")
+assert_test("basic integer value", t2.num == 42)
+
+var t3 = toml.parse("flag = true")
+assert_test("basic bool true", t3.flag == true)
+
+var t4 = toml.parse("flag = false")
+assert_test("basic bool false", t4.flag == false)
+
+var t5 = toml.parse("pi = 3.14159")
+assert_test("basic float value", t5.pi > 3.14 && t5.pi < 3.15)
+
+var t6 = toml.parse("neg = -17")
+assert_test("negative integer", t6.neg == -17)
+
+var t7 = toml.parse("neg_float = -0.5")
+assert_test("negative float", t7.neg_float == -0.5)
+
+// ============================================================================
+// String types
+// ============================================================================
+
+var s1 = toml.parse("s = \"hello\\nworld\"")
+assert_test("basic string with escape", s1.s == "hello\nworld")
+
+var s2 = toml.parse("s = \"tab\\there\"")
+assert_test("string with tab escape", s2.s == "tab\there")
+
+var s3 = toml.parse("s = \"quote\\\"inside\"")
+assert_test("string with escaped quote", s3.s == "quote\"inside")
+
+var s4 = toml.parse("s = 'literal \\n string'")
+assert_test("literal string no escapes", s4.s == "literal \\n string")
+
+var s5 = toml.parse("s = \"\"\"\nmultiline\nstring\"\"\"")
+assert_test("multiline basic string", s5.s == "multiline\nstring")
+
+var s6 = toml.parse("s = '''\nmultiline\nliteral'''")
+assert_test("multiline literal string", s6.s == "multiline\nliteral")
+
+// ============================================================================
+// Numbers — special formats
+// ============================================================================
+
+var n1 = toml.parse("n = 1_000")
+assert_test("integer with underscores", n1.n == 1000)
+
+var n2 = toml.parse("n = 0xff")
+assert_test("hex integer", n2.n == 255)
+
+var n3 = toml.parse("n = 0o77")
+assert_test("octal integer", n3.n == 63)
+
+var n4 = toml.parse("n = 0b1010")
+assert_test("binary integer", n4.n == 10)
+
+var n5 = toml.parse("n = 1e6")
+assert_test("scientific notation", n5.n == 1000000.0)
+
+var n6 = toml.parse("n = +inf")
+assert_test("positive infinity", isinf(n6.n))
+
+var n7 = toml.parse("n = -inf")
+assert_test("negative infinity", isinf(n7.n))
+
+var n8 = toml.parse("n = nan")
+assert_test("nan value", isnan(n8.n))
+
+var n9 = toml.parse("n = +99")
+assert_test("explicit positive int", n9.n == 99)
+
+// ============================================================================
+// Arrays
+// ============================================================================
+
+var a1 = toml.parse("arr = [1, 2, 3]")
+assert_test("integer array len", len(a1.arr) == 3)
+assert_test("integer array[0]", a1.arr[0] == 1)
+assert_test("integer array[2]", a1.arr[2] == 3)
+
+var a2 = toml.parse("arr = [\"a\", \"b\", \"c\"]")
+assert_test("string array", a2.arr[1] == "b")
+
+var a3 = toml.parse("arr = []")
+assert_test("empty array", len(a3.arr) == 0)
+
+var a4 = toml.parse("arr = [[1, 2], [3, 4]]")
+assert_test("nested array", a4.arr[0][0] == 1)
+assert_test("nested array[1][1]", a4.arr[1][1] == 4)
+
+var a5 = toml.parse("arr = [\n  1,\n  2,\n  3,\n]")
+assert_test("multiline array", len(a5.arr) == 3)
+assert_test("multiline array trailing comma", a5.arr[2] == 3)
+
+// ============================================================================
+// Tables
+// ============================================================================
+
+var tb1 = toml.parse("[server]\nhost = \"localhost\"\nport = 8080")
+assert_test("table section host", tb1.server.host == "localhost")
+assert_test("table section port", tb1.server.port == 8080)
+
+var tb2 = toml.parse("[a]\nx = 1\n[b]\ny = 2")
+assert_test("multiple tables a.x", tb2.a.x == 1)
+assert_test("multiple tables b.y", tb2.b.y == 2)
+
+var tb3 = toml.parse("[a.b]\nc = 3")
+assert_test("dotted table header", tb3.a.b.c == 3)
+
+var tb4 = toml.parse("inline = {x = 1, y = 2}")
+assert_test("inline table x", tb4.inline.x == 1)
+assert_test("inline table y", tb4.inline.y == 2)
+
+var tb5 = toml.parse("empty = {}")
+assert_test("empty inline table", tb5.empty is table)
+
+// ============================================================================
+// Dotted keys
+// ============================================================================
+
+var dk1 = toml.parse("a.b.c = 42")
+assert_test("dotted key", dk1.a.b.c == 42)
+
+var dk2 = toml.parse("fruit.name = \"apple\"\nfruit.color = \"red\"")
+assert_test("multiple dotted keys name", dk2.fruit.name == "apple")
+assert_test("multiple dotted keys color", dk2.fruit.color == "red")
+
+// ============================================================================
+// Array of tables
+// ============================================================================
+
+var aot1 = toml.parse("[[items]]\nname = \"A\"\n\n[[items]]\nname = \"B\"\n\n[[items]]\nname = \"C\"")
+assert_test("array of tables len", len(aot1.items) == 3)
+assert_test("array of tables[0]", aot1.items[0].name == "A")
+assert_test("array of tables[1]", aot1.items[1].name == "B")
+assert_test("array of tables[2]", aot1.items[2].name == "C")
+
+// ============================================================================
+// Comments
+// ============================================================================
+
+var c1 = toml.parse("# This is a comment\nkey = \"value\" # inline comment")
+assert_test("comments ignored", c1.key == "value")
+
+// ============================================================================
+// Datetimes
+// ============================================================================
+
+var dt1 = toml.parse("dt = 2024-01-15T10:30:00Z")
+assert_test("datetime year", dt1.dt.year == 2024)
+assert_test("datetime month", dt1.dt.month == 1)
+assert_test("datetime day", dt1.dt.day == 15)
+assert_test("datetime hour", dt1.dt.hour == 10)
+assert_test("datetime min", dt1.dt.min == 30)
+assert_test("datetime sec", dt1.dt.sec == 0)
+assert_test("datetime tz", dt1.dt.tz == "Z")
+
+var dt2 = toml.parse("d = 2024-06-15")
+assert_test("local date year", dt2.d.year == 2024)
+assert_test("local date month", dt2.d.month == 6)
+assert_test("local date day", dt2.d.day == 15)
+
+var dt3 = toml.parse("t = 14:30:00")
+assert_test("local time hour", dt3.t.hour == 14)
+assert_test("local time min", dt3.t.min == 30)
+
+// ============================================================================
+// toml.stringify round-trip
+// ============================================================================
+
+var rt_input = "title = \"Test\"\nversion = 1\n\n[database]\nhost = \"localhost\"\nport = 5432\nenabled = true\n"
+var rt_doc = toml.parse(rt_input)
+var rt_str = toml.stringify(rt_doc)
+var rt_doc2 = toml.parse(rt_str)
+assert_test("roundtrip title", rt_doc2.title == "Test")
+assert_test("roundtrip version", rt_doc2.version == 1)
+assert_test("roundtrip db host", rt_doc2.database.host == "localhost")
+assert_test("roundtrip db port", rt_doc2.database.port == 5432)
+assert_test("roundtrip db enabled", rt_doc2.database.enabled == true)
+
+// ============================================================================
+// toml.stringify — special values
+// ============================================================================
+
+var spec = toml.parse("pos_inf = +inf\nneg_inf = -inf\nnan_val = nan")
+var spec_str = toml.stringify(spec)
+assert_test("stringify inf roundtrip", contains(spec_str, "inf"))
+assert_test("stringify nan roundtrip", contains(spec_str, "nan"))
+
+// ============================================================================
+// toml.stringify — array of tables round-trip
+// ============================================================================
+
+var aot_input = "[[products]]\nname = \"Hammer\"\nprice = 9\n\n[[products]]\nname = \"Nail\"\nprice = 1\n"
+var aot_doc = toml.parse(aot_input)
+var aot_str = toml.stringify(aot_doc)
+var aot_doc2 = toml.parse(aot_str)
+assert_test("aot roundtrip len", len(aot_doc2.products) == 2)
+assert_test("aot roundtrip[0] name", aot_doc2.products[0].name == "Hammer")
+assert_test("aot roundtrip[1] name", aot_doc2.products[1].name == "Nail")
+assert_test("aot roundtrip[1] price", aot_doc2.products[1].price == 1)
+
+// ============================================================================
+// toml.parsefile
+// ============================================================================
+
+var pf_doc = toml.parsefile("/tmp/test_toml_aot.toml")
+assert_test("parsefile title", pf_doc.title == "Test Config")
+assert_test("parsefile servers len", len(pf_doc.servers) == 2)
+assert_test("parsefile servers[0] name", pf_doc.servers[0].name == "alpha")
+assert_test("parsefile settings timeout", pf_doc.settings.timeout == 30)
+
+// ============================================================================
+// Edge cases
+// ============================================================================
+
+var e1 = toml.parse("")
+assert_test("parse empty string", e1 is table)
+
+var e2 = toml.parse("# just a comment\n")
+assert_test("parse only comment", e2 is table)
+
+var e3 = toml.parse("\"quoted key\" = \"value\"")
+assert_test("quoted key", e3["quoted key"] == "value")
+
+// ============================================================================
+// Summary
+// ============================================================================
+
+print("\nTOML Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}
