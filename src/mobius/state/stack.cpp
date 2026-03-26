@@ -774,8 +774,8 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
 
     Prototype* child_proto = mf->proto;
 
-    int caller_top = vm->call_stack_.back().base +
-                     vm->call_stack_.back().proto->num_registers;
+    int caller_top = vm->callStackTop().base +
+                     vm->callStackTop().proto->num_registers;
     int pcall_base = caller_top;
     int child_base = pcall_base + 1;
     int needed = child_base + child_proto->num_registers + 16;
@@ -790,25 +790,16 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     nctx->registers = vm->registers_.data();
     nctx->capacity = (int)vm->registers_.size();
 
-    CallInfo child_ci;
-    child_ci.proto = child_proto;
-    child_ci.ip = child_proto->code.data();
-    child_ci.base = child_base;
-    child_ci.nresults = nresults + 1;
-
+    CallInfo& child_ci = vm->callStackPush(child_proto, child_proto->code.data(),
+                                            child_base, nresults + 1);
     if (mf->upvalues && mf->upvalue_count > 0) {
-        child_ci.open_upvalues.resize(mf->upvalue_count);
-        for (int u = 0; u < mf->upvalue_count; u++) {
-            child_ci.open_upvalues[u] = mf->upvalues[u];
-        }
+        child_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
     }
-
-    vm->call_stack_.push_back(child_ci);
 
     NativeCallContext* saved_nctx = state->nativeContext();
     state->setNativeContext(nullptr);
 
-    size_t depth = vm->call_stack_.size() - 1;
+    size_t depth = vm->callStackSize() - 1;
     int rc = vm->run(depth);
 
     state->setNativeContext(saved_nctx);

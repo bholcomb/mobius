@@ -11,15 +11,11 @@ class MobiusState;
 
 // ============================================================================
 // Upvalue — runtime representation of a captured variable
-//
-// "Open" upvalues point into the register array of the enclosing CallInfo.
-// When the enclosing scope exits, open upvalues are "closed" by copying the
-// register value into the Upvalue's own storage.
 // ============================================================================
 
 struct Upvalue {
-    Value* location;    // points into register array while open
-    Value  closed;      // holds the value after closing
+    Value* location;
+    Value  closed;
     bool   is_open;
 
     Upvalue() : location(nullptr), is_open(true) {}
@@ -27,70 +23,148 @@ struct Upvalue {
 
 // ============================================================================
 // CallInfo — one per active function invocation in the VM
+//
+// Uses pointer+count for upvalues instead of std::vector to eliminate
+// heap allocation on every function call.
 // ============================================================================
+
+static constexpr int CALLINFO_INLINE_UPVALS = 4;
 
 struct CallInfo {
     Prototype*  proto;
-    uint32_t*   ip;         // instruction pointer (into proto->code)
-    int         base;       // base register index in the flat register array
-    int         nresults;   // expected result count (from OP_CALL's C field)
+    uint32_t*   ip;
+    int         base;
+    int         nresults;
 
-    std::vector<Upvalue*> open_upvalues;
+    Upvalue**   upvalues;
+    int         upvalue_count;
+    int         upvalue_capacity;
+    Upvalue*    inline_upvals[CALLINFO_INLINE_UPVALS];
+
+    CallInfo() : proto(nullptr), ip(nullptr), base(0), nresults(0),
+                 upvalues(inline_upvals), upvalue_count(0),
+                 upvalue_capacity(CALLINFO_INLINE_UPVALS) {}
+
+    CallInfo(const CallInfo&) = delete;
+    CallInfo& operator=(const CallInfo&) = delete;
+
+    void initUpvalues() {
+        if (upvalues != inline_upvals) delete[] upvalues;
+        upvalues = inline_upvals;
+        upvalue_count = 0;
+        upvalue_capacity = CALLINFO_INLINE_UPVALS;
+    }
+
+    void reset(Prototype* p, uint32_t* i, int b, int nr) {
+        proto = p; ip = i; base = b; nresults = nr;
+        initUpvalues();
+    }
+
+    void setUpvaluesFrom(Upvalue** src, int count) {
+        if (upvalues != inline_upvals) delete[] upvalues;
+        if (count <= CALLINFO_INLINE_UPVALS) {
+            upvalues = inline_upvals;
+            upvalue_capacity = CALLINFO_INLINE_UPVALS;
+        } else {
+            upvalues = new Upvalue*[count];
+            upvalue_capacity = count;
+        }
+        for (int i = 0; i < count; i++) upvalues[i] = src[i];
+        upvalue_count = count;
+    }
+
+    void pushUpvalue(Upvalue* uv) {
+        if (upvalue_count >= upvalue_capacity) {
+            int new_cap = upvalue_capacity * 2;
+            Upvalue** new_buf = new Upvalue*[new_cap];
+            for (int i = 0; i < upvalue_count; i++) new_buf[i] = upvalues[i];
+            if (upvalues != inline_upvals) delete[] upvalues;
+            upvalues = new_buf;
+            upvalue_capacity = new_cap;
+        }
+        upvalues[upvalue_count++] = uv;
+    }
+
+    void clearUpvalues() {
+        if (upvalues != inline_upvals) delete[] upvalues;
+        upvalues = inline_upvals;
+        upvalue_count = 0;
+        upvalue_capacity = CALLINFO_INLINE_UPVALS;
+    }
+
+    ~CallInfo() {
+        if (upvalues != inline_upvals) delete[] upvalues;
+    }
 };
 
 // ============================================================================
 // MobiusVM — register-based bytecode virtual machine
-//
-// Usage:
-//   MobiusVM vm(state);
-//   Prototype* proto = compiler.compile(stmts, count, "script.mob");
-//   int rc = vm.execute(proto);
 // ============================================================================
+
+static constexpr size_t VM_INITIAL_CALL_STACK = 512;
+static constexpr size_t VM_INITIAL_REGISTERS  = 8192;
 
 struct VMFrame;
 
 class MobiusVM {
 public:
     explicit MobiusVM(MobiusState* state);
+    ~MobiusVM();
 
-    // Execute a top-level prototype. Returns 0 on success, -1 on error.
     int execute(Prototype* proto);
-
-    // Refresh a VMFrame after a call/return changes the active CallInfo.
     void refreshFrame(VMFrame& f);
 
-    // Integer extraction helpers
     static inline int64_t  vm_extract_int64(const Value& v);
     static inline uint64_t vm_extract_uint64(const Value& v);
     static inline double   vm_extract_double(const Value& v);
     static inline bool     vm_use_unsigned(const Value& l, const Value& r);
 
-    // Error reporting
     void runtimeError(const char* fmt, ...);
     int currentLine() const;
 
-    // Metamethod dispatch
     int callMetamethod(const Value& table_val, MobiusString* mm_name,
                        const Value& lhs, const Value& rhs, Value& out);
 
-    // VM state — public so MOBIUS_FORCEINLINE handler functions can access them
     MobiusState* state_;
-    std::vector<Value>    registers_;
-    std::vector<CallInfo> call_stack_;
-    uint32_t* current_ip_;  // updated by dispatch loop for error reporting
+    std::vector<Value> registers_;
+
+    CallInfo*  call_stack_;
+    size_t     call_depth_;
+    size_t     call_stack_capacity_;
+
+    uint32_t* current_ip_;
+
+    CallInfo& callStackTop() { return call_stack_[call_depth_]; }
+    const CallInfo& callStackTop() const { return call_stack_[call_depth_]; }
+    size_t callStackSize() const { return call_depth_ + 1; }
+
+    CallInfo& callStackPush(Prototype* proto, uint32_t* ip, int base, int nresults) {
+        call_depth_++;
+        if (MOBIUS_UNLIKELY(call_depth_ >= call_stack_capacity_)) growCallStack();
+        CallInfo& ci = call_stack_[call_depth_];
+        ci.reset(proto, ip, base, nresults);
+        return ci;
+    }
+
+    void callStackPop() {
+        call_stack_[call_depth_].clearUpvalues();
+        call_depth_--;
+    }
 
     int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
     void closeUpvalues(CallInfo& ci, int from_reg);
 
     struct TryBlock {
-        size_t call_stack_depth;  // call stack depth at time of TRY_BEGIN
-        uint32_t* catch_ip;       // instruction pointer to jump to on error
-        int catch_reg;            // register to store the error value
-        int base;                 // base register of the frame that contains the try
+        size_t call_stack_depth;
+        uint32_t* catch_ip;
+        int catch_reg;
+        int base;
     };
     std::vector<TryBlock> try_stack_;
 
     int run(size_t base_depth);
+
+    void growCallStack();
 
 private:
     int callNative(MobiusCFunction func, int func_reg, int nargs, int nresults);

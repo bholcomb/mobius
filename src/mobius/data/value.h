@@ -103,15 +103,16 @@ public:
 
     Value& operator=(const Value& other) {
         if (this != &other) {
-            // Copy-and-swap: construct a temporary copy (which retains),
-            // then swap contents, so the temporary's destructor releases
-            // the old value safely. This prevents use-after-free when
-            // both Values point to the same refcounted object.
-            Value tmp(other);
-            ValueType t = type;  type  = tmp.type;  tmp.type  = t;
-            uint8_t f   = flags; flags = tmp.flags; tmp.flags = f;
-            int32_t a   = aux;   aux   = tmp.aux;   tmp.aux   = a;
-            int64_t v   = as.i64; as.i64 = tmp.as.i64; tmp.as.i64 = v;
+            if (MOBIUS_LIKELY(type < VAL_STRING && other.type < VAL_STRING)) {
+                type = other.type; flags = other.flags;
+                aux = other.aux; as.i64 = other.as.i64;
+            } else {
+                // Retain new before releasing old to handle self-referencing safely
+                other.retain();
+                releaseRef();
+                type = other.type; flags = other.flags;
+                aux = other.aux; as.i64 = other.as.i64;
+            }
         }
         return *this;
     }
