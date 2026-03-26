@@ -40,11 +40,52 @@ inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
 }
 
 // ============================================================================
-// Constructor
+// Constructor / Destructor
 // ============================================================================
 
 MobiusVM::MobiusVM(MobiusState* state)
-    : state_(state), current_ip_(nullptr) {}
+    : state_(state), current_ip_(nullptr),
+      call_depth_(0), call_stack_capacity_(VM_INITIAL_CALL_STACK)
+{
+    registers_.reserve(VM_INITIAL_REGISTERS);
+    call_stack_ = new CallInfo[VM_INITIAL_CALL_STACK];
+    call_stack_[0].initUpvalues();
+}
+
+MobiusVM::~MobiusVM() {
+    delete[] call_stack_;
+}
+
+void MobiusVM::growCallStack() {
+    size_t new_cap = call_stack_capacity_ * 2;
+    CallInfo* new_stack = new CallInfo[new_cap];
+    for (size_t i = 0; i <= call_depth_; i++) {
+        CallInfo& src = call_stack_[i];
+        CallInfo& dst = new_stack[i];
+        dst.proto = src.proto;
+        dst.ip = src.ip;
+        dst.base = src.base;
+        dst.nresults = src.nresults;
+        if (src.upvalues != src.inline_upvals) {
+            // Heap-allocated: transfer ownership
+            dst.upvalues = src.upvalues;
+            dst.upvalue_count = src.upvalue_count;
+            dst.upvalue_capacity = src.upvalue_capacity;
+            src.upvalues = src.inline_upvals;
+            src.upvalue_count = 0;
+        } else {
+            // Inline: copy elements, fix pointer
+            for (int j = 0; j < src.upvalue_count; j++)
+                dst.inline_upvals[j] = src.inline_upvals[j];
+            dst.upvalues = dst.inline_upvals;
+            dst.upvalue_count = src.upvalue_count;
+            dst.upvalue_capacity = CALLINFO_INLINE_UPVALS;
+        }
+    }
+    delete[] call_stack_;
+    call_stack_ = new_stack;
+    call_stack_capacity_ = new_cap;
+}
 
 // ============================================================================
 // Error handling
@@ -59,18 +100,13 @@ void MobiusVM::runtimeError(const char* fmt, ...) {
 
     int line = currentLine();
     const char* source = nullptr;
-    if (!call_stack_.empty()) {
-        const std::string& src = call_stack_.back().proto->source;
-        if (!src.empty()) source = src.c_str();
-    }
+    const std::string& src = callStackTop().proto->source;
+    if (!src.empty()) source = src.c_str();
     state_->setError(MOBIUS_ERROR_RUNTIME, buf, nullptr, line, 0, nullptr, source);
 }
 
 int MobiusVM::currentLine() const {
-    if (call_stack_.empty()) return 0;
-    const CallInfo& ci = call_stack_.back();
-    // current_ip_ tracks the dispatch loop's ip (past the just-decoded instruction).
-    // Use it when available for accurate line info; fall back to ci.ip.
+    const CallInfo& ci = callStackTop();
     const uint32_t* ip = current_ip_ ? current_ip_ : ci.ip;
     int pc = (int)(ip - ci.proto->code.data()) - 1;
     if (pc >= 0 && pc < (int)ci.proto->line_info.size())
@@ -83,16 +119,12 @@ int MobiusVM::currentLine() const {
 // ============================================================================
 
 int MobiusVM::execute(Prototype* proto) {
-    registers_.resize(proto->num_registers + 256, Value());
+    int needed = proto->num_registers + 256;
+    if (needed > (int)registers_.size())
+        registers_.resize(needed, Value());
 
-    size_t depth_before = call_stack_.size();
-
-    CallInfo ci;
-    ci.proto = proto;
-    ci.ip = proto->code.data();
-    ci.base = 0;
-    ci.nresults = 0;
-    call_stack_.push_back(ci);
+    size_t depth_before = callStackSize();
+    callStackPush(proto, proto->code.data(), 0, 0);
 
     MobiusVM* prev_vm = state_->activeVM();
     state_->setActiveVM(this);
@@ -101,8 +133,8 @@ int MobiusVM::execute(Prototype* proto) {
 
     state_->setActiveVM(prev_vm);
 
-    if (!call_stack_.empty() && call_stack_.size() > depth_before) {
-        call_stack_.pop_back();
+    if (callStackSize() > depth_before) {
+        callStackPop();
     }
     return rc;
 }
@@ -112,8 +144,7 @@ int MobiusVM::execute(Prototype* proto) {
 // ============================================================================
 
 int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nresults) {
-    ExecutionContext* ctx = state_->mainContext();
-    int caller_base = call_stack_.back().base;
+    int caller_base = callStackTop().base;
     int args_base = caller_base + func_reg + 1;
 
     int needed = args_base + nargs + 16;
@@ -128,10 +159,7 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
     nctx.capacity  = (int)registers_.size();
     state_->setNativeContext(&nctx);
 
-    ctx->pushFrame("native", nullptr, currentLine(), 0,
-                   FUNCTION_TYPE_NATIVE, nullptr);
     int rc = func(state_, nargs);
-    ctx->popFrame();
 
     state_->setNativeContext(nullptr);
 
@@ -189,20 +217,10 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         registers_.resize(needed, Value());
     }
 
-    CallInfo child_ci;
-    child_ci.proto = child;
-    child_ci.ip = child->code.data();
-    child_ci.base = child_base;
-    child_ci.nresults = nresults;
-
+    CallInfo& new_ci = callStackPush(child, child->code.data(), child_base, nresults);
     if (mf->upvalues && mf->upvalue_count > 0) {
-        child_ci.open_upvalues.resize(mf->upvalue_count);
-        for (int u = 0; u < mf->upvalue_count; u++) {
-            child_ci.open_upvalues[u] = mf->upvalues[u];
-        }
+        new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
     }
-
-    call_stack_.push_back(child_ci);
 
     return 1;
 }
@@ -212,7 +230,8 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
 // ============================================================================
 
 void MobiusVM::closeUpvalues(CallInfo& ci, int from_reg) {
-    for (auto* uv : ci.open_upvalues) {
+    for (int i = 0; i < ci.upvalue_count; i++) {
+        Upvalue* uv = ci.upvalues[i];
         if (uv->is_open) {
             int reg_idx = (int)(uv->location - registers_.data());
             if (reg_idx >= ci.base + from_reg) {
@@ -236,10 +255,8 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
     if (method.type == VAL_NIL) return 0;
 
     if (method.type == VAL_NATIVE_FUNCTION) {
-        ExecutionContext* ctx = state_->mainContext();
-
-        int caller_base = call_stack_.back().base;
-        int caller_regs = call_stack_.back().proto->num_registers;
+        int caller_base = callStackTop().base;
+        int caller_regs = callStackTop().proto->num_registers;
         int scratch = caller_base + caller_regs;
 
         int needed = scratch + 4;
@@ -256,10 +273,7 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         nctx.capacity  = (int)registers_.size();
         state_->setNativeContext(&nctx);
 
-        ctx->pushFrame("metamethod", nullptr, currentLine(), 0,
-                       FUNCTION_TYPE_NATIVE, nullptr);
         int rc = method.as.native_function(state_, 2);
-        ctx->popFrame();
         state_->setNativeContext(nullptr);
 
         if (rc < 0) {
@@ -286,8 +300,8 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
             return -1;
         }
 
-        int caller_base = call_stack_.back().base;
-        int caller_num_regs = call_stack_.back().proto->num_registers;
+        int caller_base = callStackTop().base;
+        int caller_num_regs = callStackTop().proto->num_registers;
         int scratch = caller_base + caller_num_regs;
 
         Prototype* child = mf->proto;
@@ -300,14 +314,8 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         registers_[scratch + 2] = rhs;
 
         int child_base = scratch + 1;
-        CallInfo child_ci;
-        child_ci.proto = child;
-        child_ci.ip = child->code.data();
-        child_ci.base = child_base;
-        child_ci.nresults = 2;
-
-        size_t stop_depth = call_stack_.size();
-        call_stack_.push_back(child_ci);
+        size_t stop_depth = callStackSize();
+        callStackPush(child, child->code.data(), child_base, 2);
 
         int rc = run(stop_depth);
 
@@ -437,8 +445,8 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
 MOBIUS_FORCEINLINE static int vm_op_getupval(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
     int b = DECODE_B(inst);
-    if (b < (int)f.ci->open_upvalues.size() && f.ci->open_upvalues[b]) {
-        RA(inst) = *f.ci->open_upvalues[b]->location;
+    if (b < f.ci->upvalue_count && f.ci->upvalues[b]) {
+        RA(inst) = *f.ci->upvalues[b]->location;
     } else {
         RA(inst) = Value();
     }
@@ -448,8 +456,8 @@ MOBIUS_FORCEINLINE static int vm_op_getupval(MobiusVM* vm, VMFrame& f, uint32_t 
 MOBIUS_FORCEINLINE static int vm_op_setupval(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
     int b = DECODE_B(inst);
-    if (b < (int)f.ci->open_upvalues.size() && f.ci->open_upvalues[b]) {
-        *f.ci->open_upvalues[b]->location = RA(inst);
+    if (b < f.ci->upvalue_count && f.ci->upvalues[b]) {
+        *f.ci->upvalues[b]->location = RA(inst);
     }
     return 0;
 }
@@ -1332,20 +1340,53 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_gettable(MobiusVM* vm, VMFrame& f,
 }
 
 // ---- Call / Tailcall ----
-// Return 0 = no frame switch, 2 = frame switched (caller must refresh), -1 = error
 MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
     int c = DECODE_C(inst);
     int nargs = b - 1;
     f.ci->ip = f.ip;
+
+    Value& func_val = f.regs[a];
+
+    // Fast path: Mobius function call — inlined to avoid callFunction overhead
+    if (MOBIUS_LIKELY(func_val.type == VAL_FUNCTION && func_val.as.function)) {
+        MobiusFunction* mf = func_val.as.function;
+        if (MOBIUS_UNLIKELY(!mf->proto)) {
+            vm->runtimeError("Function '%s' has no bytecode prototype",
+                             mf->name ? mf->name->data : "anonymous");
+            return -1;
+        }
+        if (MOBIUS_UNLIKELY((int)mf->param_count != nargs)) {
+            vm->runtimeError("Function '%s' expects %zu arguments but got %d",
+                             mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
+            return -1;
+        }
+
+        Prototype* child = mf->proto;
+        int child_base = f.ci->base + a + 1;
+        int needed = child_base + child->num_registers + 16;
+        if (MOBIUS_UNLIKELY(needed > (int)vm->registers_.size())) {
+            vm->registers_.resize(needed, Value());
+        }
+
+        CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
+        if (mf->upvalues && mf->upvalue_count > 0) {
+            new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
+        }
+
+        vm->refreshFrame(f);
+        return 0;
+    }
+
+    // Slow path: native function or error
     int rc = vm->callFunction(*f.ci, a, nargs, c);
     if (rc < 0) return -1;
     if (rc == 1) {
         vm->refreshFrame(f);
     } else {
         f.regs = vm->registers_.data() + f.base;
-        f.ci = &vm->call_stack_.back();
+        f.ci = &vm->callStackTop();
     }
     return 0;
 }
@@ -1355,10 +1396,8 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     int b = DECODE_B(inst);
     int nargs = b - 1;
 
-    // Snapshot the callee before any register shuffling
     Value func_val = f.regs[a];
 
-    // Native functions can't reuse the frame — fall back to regular call + return
     if (func_val.type == VAL_NATIVE_FUNCTION) {
         f.ci->ip = f.ip;
         int rc = vm->callFunction(*f.ci, a, nargs, f.ci->nresults);
@@ -1367,7 +1406,7 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
             vm->refreshFrame(f);
         } else {
             f.regs = vm->registers_.data() + f.base;
-            f.ci = &vm->call_stack_.back();
+            f.ci = &vm->callStackTop();
         }
         return 0;
     }
@@ -1392,8 +1431,6 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
 
     Prototype* child = mf->proto;
 
-    // Snapshot arguments before closing upvalues or overwriting registers.
-    // The argument source registers may overlap with the destination.
     Value arg_buf[256];
     Value* args = (nargs <= 256) ? arg_buf : new Value[nargs];
     int src_base = f.ci->base + a + 1;
@@ -1401,16 +1438,13 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
         args[i] = vm->registers_[src_base + i];
     }
 
-    // Close upvalues captured from the current frame before reusing it
     vm->closeUpvalues(*f.ci, 0);
 
-    // Copy arguments to the base of the current frame (R[0]..R[nargs-1])
     for (int i = 0; i < nargs; i++) {
         vm->registers_[f.ci->base + i] = args[i];
     }
     if (args != arg_buf) delete[] args;
 
-    // Ensure enough register space for the new prototype
     int needed = f.ci->base + child->num_registers + 16;
     if (needed > (int)vm->registers_.size()) {
         vm->registers_.resize(needed, Value());
@@ -1419,18 +1453,13 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
         vm->registers_[f.ci->base + i] = Value();
     }
 
-    // Reuse the current CallInfo — update proto, ip, upvalues; keep base and nresults
     f.ci->proto = child;
     f.ci->ip = child->code.data();
-    f.ci->open_upvalues.clear();
+    f.ci->clearUpvalues();
     if (mf->upvalues && mf->upvalue_count > 0) {
-        f.ci->open_upvalues.resize(mf->upvalue_count);
-        for (int u = 0; u < mf->upvalue_count; u++) {
-            f.ci->open_upvalues[u] = mf->upvalues[u];
-        }
+        f.ci->setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
     }
 
-    // Refresh the VMFrame to point at the rewritten CallInfo
     f.proto = child;
     f.ip = f.ci->ip;
     f.regs = vm->registers_.data() + f.base;
@@ -1443,23 +1472,23 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
 MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t inst, size_t base_depth) {
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
-    if (vm->call_stack_.size() <= base_depth) return 1;
+    if (vm->callStackSize() <= base_depth) return 1;
     int nresults_available = (b == 0) ? 0 : (b - 1);
     vm->closeUpvalues(*f.ci, 0);
-    CallInfo returning = vm->call_stack_.back();
-    vm->call_stack_.pop_back();
-    int func_reg_abs = returning.base - 1;
-    int nresults_wanted = returning.nresults;
-    if (nresults_wanted != 0) {
-        int to_copy = nresults_wanted - 1;
+    int ret_base = f.ci->base;
+    int ret_nresults = f.ci->nresults;
+    vm->callStackPop();
+    int func_reg_abs = ret_base - 1;
+    if (ret_nresults != 0) {
+        int to_copy = ret_nresults - 1;
         for (int i = 0; i < to_copy; i++) {
             if (i < nresults_available)
-                vm->registers_[func_reg_abs + i] = vm->registers_[returning.base + a + i];
+                vm->registers_[func_reg_abs + i] = vm->registers_[ret_base + a + i];
             else
                 vm->registers_[func_reg_abs + i] = Value();
         }
     }
-    if (vm->call_stack_.size() <= base_depth) return 1;
+    if (vm->callStackSize() <= base_depth) return 1;
     vm->refreshFrame(f);
     return 0;
 }
@@ -1497,7 +1526,8 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
             if (desc.in_stack) {
                 Value* reg_ptr = &f.regs[desc.index];
                 Upvalue* existing = nullptr;
-                for (auto* ouv : f.ci->open_upvalues) {
+                for (int k = 0; k < f.ci->upvalue_count; k++) {
+                    Upvalue* ouv = f.ci->upvalues[k];
                     if (ouv->is_open && ouv->location == reg_ptr) {
                         existing = ouv;
                         break;
@@ -1509,12 +1539,12 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                     Upvalue* uv = new Upvalue();
                     uv->location = reg_ptr;
                     uv->is_open = true;
-                    f.ci->open_upvalues.push_back(uv);
+                    f.ci->pushUpvalue(uv);
                     mf->upvalues[u] = uv;
                 }
             } else {
-                if (desc.index < (int)f.ci->open_upvalues.size()) {
-                    mf->upvalues[u] = f.ci->open_upvalues[desc.index];
+                if (desc.index < f.ci->upvalue_count) {
+                    mf->upvalues[u] = f.ci->upvalues[desc.index];
                 } else {
                     mf->upvalues[u] = new Upvalue();
                 }
@@ -1588,11 +1618,11 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
     f.regs[call_reg + 2] = f.regs[a + 2];
 
     f.ci->ip = f.ip;
-    int rc = vm->callFunction(vm->call_stack_.back(), call_reg, 2, 2);
+    int rc = vm->callFunction(vm->callStackTop(), call_reg, 2, 2);
     if (rc < 0) return -1;
 
     if (rc > 0) {
-        rc = vm->run(vm->call_stack_.size() - 1);
+        rc = vm->run(vm->callStackSize() - 1);
         if (rc < 0) return -1;
     }
 
@@ -1833,7 +1863,7 @@ MOBIUS_FORCEINLINE static int vm_op_try_begin(MobiusVM* vm, VMFrame& f, uint32_t
     int sbx = DECODE_sBx(inst);
 
     MobiusVM::TryBlock tb;
-    tb.call_stack_depth = vm->call_stack_.size();
+    tb.call_stack_depth = vm->callStackSize();
     tb.catch_ip = f.ip + sbx;
     tb.catch_reg = a;
     tb.base = f.base;
@@ -1864,19 +1894,14 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
 
     MobiusVM::TryBlock& tb = vm->try_stack_.back();
 
-    // Unwind call stack to the try block's depth
-    while (vm->call_stack_.size() > tb.call_stack_depth) {
-        CallInfo& ci = vm->call_stack_.back();
-        vm->closeUpvalues(ci, 0);
-        vm->call_stack_.pop_back();
+    while (vm->callStackSize() > tb.call_stack_depth) {
+        vm->closeUpvalues(vm->callStackTop(), 0);
+        vm->callStackPop();
     }
 
-    // Set error value into catch register
     vm->registers_[tb.base + tb.catch_reg] = thrown_value;
 
-    // Jump to catch block
-    CallInfo& ci = vm->call_stack_.back();
-    ci.ip = tb.catch_ip;
+    vm->callStackTop().ip = tb.catch_ip;
 
     vm->try_stack_.pop_back();
 
@@ -1903,7 +1928,7 @@ MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // ============================================================================
 
 void MobiusVM::refreshFrame(VMFrame& f) {
-    f.ci = &call_stack_.back();
+    f.ci = &callStackTop();
     f.proto = f.ci->proto;
     f.base = f.ci->base;
     f.regs = registers_.data() + f.base;
@@ -1912,7 +1937,7 @@ void MobiusVM::refreshFrame(VMFrame& f) {
 
 int MobiusVM::run(size_t base_depth) {
     VMFrame f;
-    f.ci = &call_stack_.back();
+    f.ci = &callStackTop();
     f.ip = f.ci->ip;
     f.proto = f.ci->proto;
     f.base = f.ci->base;
@@ -1977,9 +2002,9 @@ int MobiusVM::run(size_t base_depth) {
         if (MOBIUS_UNLIKELY(_rc < 0)) {                                 \
             if (!try_stack_.empty()) {                                   \
                 TryBlock& _tb = try_stack_.back();                       \
-                while (call_stack_.size() > _tb.call_stack_depth) {      \
-                    closeUpvalues(call_stack_.back(), 0);                \
-                    call_stack_.pop_back();                               \
+                while (callStackSize() > _tb.call_stack_depth) {         \
+                    closeUpvalues(callStackTop(), 0);                    \
+                    callStackPop();                                       \
                 }                                                        \
                 InternalError* _ie = state_->getLastError();              \
                 const char* err = _ie ? _ie->message : nullptr;          \
@@ -1989,7 +2014,7 @@ int MobiusVM::run(size_t base_depth) {
                 } else {                                                 \
                     registers_[_tb.base + _tb.catch_reg] = make_nil_value();  \
                 }                                                        \
-                call_stack_.back().ip = _tb.catch_ip;                    \
+                callStackTop().ip = _tb.catch_ip;                        \
                 try_stack_.pop_back();                                    \
                 refreshFrame(f);                                         \
                 VM_NEXT();                                               \
