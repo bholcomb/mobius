@@ -25,8 +25,8 @@ public:
 
     Table* retain();
 
-    Value get(const Value& key) const;
-    Value getByString(MobiusString* key) const;
+    const Value& get(const Value& key) const;
+    const Value& getByString(MobiusString* key) const;
     bool set(const Value& key, const Value& value);
     bool setByString(MobiusString* key, const Value& value);
     bool hasKey(const Value& key) const;
@@ -39,7 +39,7 @@ public:
     Table* getMetatable() const { return metatable_; }
 
     bool hasMetamethod(MobiusString* method_name) const;
-    Value getMetamethod(MobiusString* method_name) const;
+    const Value& getMetamethod(MobiusString* method_name) const;
 
     // Iterate over all occupied entries. Callback receives (key, value).
     void forEach(const std::function<void(const Value& key, const Value& value)>& fn) const;

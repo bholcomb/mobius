@@ -154,32 +154,6 @@ bool Value::operator==(const Value& other) const {
     }
 }
 
-bool Value::exactlyEqual(const Value& other) const {
-    if (type != other.type) return false;
-
-    switch (type) {
-        case VAL_NIL:    return true;
-        case VAL_BOOL:   return as.boolean == other.as.boolean;
-        case VAL_INT64: return as.i64 == other.as.i64;
-        case VAL_UINT64:  return as.u64 == other.as.u64;
-        case VAL_FLOAT64: return as.double_val == other.as.double_val;
-        case VAL_STRING:
-            if (as.string == other.as.string) return true;
-            return as.string && other.as.string && *as.string == *other.as.string;
-        case VAL_CHAR:   return as.character == other.as.character;
-        case VAL_ARRAY:  return as.array == other.as.array;
-        case VAL_FUNCTION: return as.function == other.as.function;
-        case VAL_NATIVE_FUNCTION: return as.native_function == other.as.native_function;
-        case VAL_TABLE:  return as.table == other.as.table;
-        case VAL_USERDATA:
-            return as.userdata && other.as.userdata &&
-                   as.userdata->ptr == other.as.userdata->ptr &&
-                   as.userdata->type_name == other.as.userdata->type_name;
-        case VAL_ENUM:
-            return as.enum_def == other.as.enum_def && aux == other.aux;
-        default: return false;
-    }
-}
 
 void print_value(const Value& value) {
     switch (value.type) {
