@@ -57,7 +57,7 @@ struct CallInfo {
 
     void reset(Prototype* p, uint32_t* i, int b, int nr) {
         proto = p; ip = i; base = b; nresults = nr;
-        initUpvalues();
+        if (MOBIUS_UNLIKELY(upvalue_count > 0)) initUpvalues();
     }
 
     void setUpvaluesFrom(Upvalue** src, int count) {
@@ -112,7 +112,7 @@ public:
     ~MobiusVM();
 
     int execute(Prototype* proto);
-    void refreshFrame(VMFrame& f);
+    MOBIUS_FORCEINLINE void refreshFrame(VMFrame& f);
 
     static inline int64_t  vm_extract_int64(const Value& v);
     static inline uint64_t vm_extract_uint64(const Value& v);
@@ -147,7 +147,8 @@ public:
     }
 
     void callStackPop() {
-        call_stack_[call_depth_].clearUpvalues();
+        CallInfo& ci = call_stack_[call_depth_];
+        if (MOBIUS_UNLIKELY(ci.upvalue_count > 0)) ci.clearUpvalues();
         call_depth_--;
     }
 

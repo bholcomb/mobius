@@ -145,12 +145,12 @@ void disassemble_instruction(const Prototype* proto, int offset) {
                     else if (b == 0) printf("return R[%d]..top", a);
                     else printf("return R[%d]..R[%d]", a, a + b - 2);
                     break;
-                case OP_GETTABLE:
+                case OP_INDEX_GET:
                     printf("R[%d] = R[%d][", a, b);
                     print_rk(proto, c);
                     printf("]");
                     break;
-                case OP_SETTABLE:
+                case OP_INDEX_SET:
                     printf("R[%d][", a);
                     print_rk(proto, b);
                     printf("] = ");
@@ -305,13 +305,20 @@ void disassemble_instruction(const Prototype* proto, int offset) {
                 uint32_t inst2 = (offset + 1 < (int)proto->code.size()) ? proto->code[offset + 1] : 0;
                 int sbx = DECODE_sBx(inst2);
                 printf("R[%d] = R[%d]; R[%d] += %d (+1 fused word)", a, b, a, sbx);
-            } else if (op == OP_GETGLOBAL_GETTABLE) {
+            } else if (op == OP_GETGLOBAL_INDEX_GET) {
                 uint32_t inst2 = (offset + 1 < (int)proto->code.size()) ? proto->code[offset + 1] : 0;
                 uint8_t c2 = DECODE_C(inst2);
                 uint16_t bx = DECODE_Bx(inst);
                 printf("R[%d] = globals[%d][", a, bx);
                 print_rk(proto, c2);
                 printf("] (+1 fused word)");
+            } else if (op == OP_GETGLOBAL_CALL) {
+                uint32_t inst2 = (offset + 1 < (int)proto->code.size()) ? proto->code[offset + 1] : 0;
+                uint8_t b2 = DECODE_B(inst2);
+                uint8_t c2 = DECODE_C(inst2);
+                uint16_t bx = DECODE_Bx(inst);
+                printf("R[%d] = globals[%d]; call R[%d] %d args %d results (+1 fused word)",
+                       a, bx, a, b2 - 1, c2 - 1);
             } else {
                 printf("A=%d B=%d (+fused)", a, b);
             }

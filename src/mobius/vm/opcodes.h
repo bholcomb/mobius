@@ -125,8 +125,8 @@ enum OpCode : uint8_t {
     // -- Table and array operations --
     OP_NEWTABLE,    // A B C     R[A] = new Table(B array slots, C hash slots)
     OP_NEWARRAY,    // A B       R[A] = new Array(B capacity)
-    OP_GETTABLE,    // A B C     R[A] = R[B][RK(C)]  (use RK(C) with constant for .field)
-    OP_SETTABLE,    // A B C     R[A][RK(B)] = RK(C)
+    OP_INDEX_GET,   // A B C     R[A] = R[B][RK(C)]  (array/table/string polymorphic)
+    OP_INDEX_SET,   // A B C     R[A][RK(B)] = RK(C) (array/table polymorphic)
 
     // -- Arithmetic --
     OP_ADD,         // A B C     R[A] = RK(B) + RK(C)
@@ -232,7 +232,11 @@ enum OpCode : uint8_t {
 
     // -- Superinstructions (fused multi-instruction patterns) --
     OP_MOVE_ADDI,   // A B + next word is AsBx(ADDI): R[A]=R[B]; R[A]+=sBx; ip+=1
-    OP_GETGLOBAL_GETTABLE, // consumes 2 words: GETGLOBAL(A,Bx) then GETTABLE(A,A,RK(C))
+    OP_GETGLOBAL_INDEX_GET, // consumes 2 words: GETGLOBAL(A,Bx) then INDEX_GET(A,A,RK(C))
+    OP_GETGLOBAL_CALL, // consumes 2 words: GETGLOBAL(A,Bx) then CALL(A,B,C)
+
+    // -- Array fast-path --
+    OP_ARRAY_PUSH,  // A B       R[A].array.push(R[B])     (array-only append)
 
     // -- Miscellaneous --
     OP_LEN,         // A B       R[A] = length(R[B])  (array length or table size)
@@ -281,8 +285,8 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
 
         {"NEWTABLE",  FMT_ABC},
         {"NEWARRAY",  FMT_ABC},
-        {"GETTABLE",  FMT_ABC},
-        {"SETTABLE",  FMT_ABC},
+        {"INDEX_GET", FMT_ABC},
+        {"INDEX_SET", FMT_ABC},
 
         {"ADD",       FMT_ABC},
         {"SUB",       FMT_ABC},
@@ -364,7 +368,10 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"MODK",      FMT_ABC_D},
 
         {"MOVE_ADDI", FMT_FUSED2},
-        {"GETGLOBAL_GETTABLE", FMT_FUSED2},
+        {"GETGLOBAL_INDEX_GET", FMT_FUSED2},
+        {"GETGLOBAL_CALL", FMT_FUSED2},
+
+        {"ARRAY_PUSH",FMT_ABC},
 
         {"LEN",       FMT_ABC},
 
