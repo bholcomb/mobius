@@ -1020,7 +1020,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
         return result_reg;
     };
 
-    auto compile_index_assignment = [&](Expr* container_expr, Expr* index_expr) -> int {
+    auto compile_index_assignment = [&](Expr* container_expr, Expr* index_expr, OpCode set_op) -> int {
         int save_reg = current_->free_reg;
         int container_reg = compileExpr(container_expr);
 
@@ -1034,7 +1034,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
         }
 
         int value_reg = compileExpr(expr->value);
-        emitABC(OP_SETTABLE, (uint8_t)container_reg, rk_key, (uint8_t)value_reg);
+        emitABC(set_op, (uint8_t)container_reg, rk_key, (uint8_t)value_reg);
 
         return finish_assignment(save_reg, value_reg);
     };
@@ -1069,11 +1069,13 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 
         case EXPR_ARRAY_INDEX:
             return compile_index_assignment(expr->target->as.array_index.array,
-                                            expr->target->as.array_index.index);
+                                            expr->target->as.array_index.index,
+                                            OP_INDEX_SET);
 
         case EXPR_TABLE_INDEX:
             return compile_index_assignment(expr->target->as.table_index.table,
-                                            expr->target->as.table_index.index);
+                                            expr->target->as.table_index.index,
+                                            OP_INDEX_SET);
 
         case EXPR_TABLE_DOT: {
             int save_reg = current_->free_reg;
@@ -1081,7 +1083,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             int ki = stringConstant(expr->target->as.table_dot.key.identifier);
             uint8_t rk_key = makeRK(ki);
             int value_reg = compileExpr(expr->value);
-            emitABC(OP_SETTABLE, (uint8_t)table_reg, rk_key, (uint8_t)value_reg);
+            emitABC(OP_INDEX_SET, (uint8_t)table_reg, rk_key, (uint8_t)value_reg);
             return finish_assignment(save_reg, value_reg);
         }
 
@@ -1096,6 +1098,21 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 
 int Compiler::compileCall(CallExpr* expr, int dest) {
     currentLine_ = expr->paren.line;
+
+    if (expr->callee->type == EXPR_VARIABLE && expr->arg_count == 2) {
+        const char* fn_name = expr->callee->as.variable.name.identifier;
+        if (fn_name && strcmp(fn_name, "array_push") == 0) {
+            int save = current_->free_reg;
+            int arr_reg = compileExpr(expr->arguments[0]);
+            int val_reg = compileExpr(expr->arguments[1]);
+            emitABC(OP_ARRAY_PUSH, (uint8_t)arr_reg, (uint8_t)val_reg, 0);
+            setFreeReg(save);
+            int result_reg = (dest >= 0) ? dest : allocReg();
+            emitABC(OP_LOADNIL, (uint8_t)result_reg, 0, 0);
+            return result_reg;
+        }
+    }
+
     int base = current_->free_reg;
     int func_reg = allocReg();
 
@@ -1176,9 +1193,8 @@ int Compiler::compileArrayLiteral(ArrayLiteralExpr* expr, int dest) {
         int save = current_->free_reg;
         int val_reg = compileExpr(expr->elements[i]);
 
-        // SETTABLE array[i] = val
         int ki = current_->proto->addIntConstant((int64_t)i);
-        emitABC(OP_SETTABLE, (uint8_t)reg, makeRK(ki), (uint8_t)val_reg);
+        emitABC(OP_INDEX_SET, (uint8_t)reg, makeRK(ki), (uint8_t)val_reg);
         setFreeReg(save);
     }
 
@@ -1194,7 +1210,7 @@ int Compiler::compileArrayIndex(ArrayIndexExpr* expr, int dest) {
     int arr_reg = compileExpr(expr->array);
     int idx_reg = compileExpr(expr->index);
 
-    emitABC(OP_GETTABLE, (uint8_t)reg, (uint8_t)arr_reg, (uint8_t)idx_reg);
+    emitABC(OP_INDEX_GET, (uint8_t)reg, (uint8_t)arr_reg, (uint8_t)idx_reg);
 
     setFreeReg(save);
     if (dest < 0) {
@@ -1230,7 +1246,7 @@ int Compiler::compileTableLiteral(TableLiteralExpr* expr, int dest) {
         }
 
         int val_reg = compileExpr(pair.value);
-        emitABC(OP_SETTABLE, (uint8_t)reg, rk_key, (uint8_t)val_reg);
+        emitABC(OP_INDEX_SET, (uint8_t)reg, rk_key, (uint8_t)val_reg);
 
         setFreeReg(save);
     }
@@ -1247,7 +1263,7 @@ int Compiler::compileTableIndex(TableIndexExpr* expr, int dest) {
     int tbl_reg = compileExpr(expr->table);
     int idx_reg = compileExpr(expr->index);
 
-    emitABC(OP_GETTABLE, (uint8_t)reg, (uint8_t)tbl_reg, (uint8_t)idx_reg);
+    emitABC(OP_INDEX_GET, (uint8_t)reg, (uint8_t)tbl_reg, (uint8_t)idx_reg);
 
     setFreeReg(save);
     if (dest < 0) {
@@ -1279,7 +1295,7 @@ int Compiler::compileTableDot(TableDotExpr* expr, int dest) {
     if (is_enum) {
         emitABC(OP_GETENUM, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
     } else {
-        emitABC(OP_GETTABLE, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
+        emitABC(OP_INDEX_GET, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
     }
 
     setFreeReg(save);
@@ -2135,7 +2151,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                         const char* key = pat->as.table_pattern.fields[f].key;
                         int field_reg = allocReg();
                         int key_ki = stringConstant(key);
-                        emitABC(OP_GETTABLE, (uint8_t)field_reg,
+                        emitABC(OP_INDEX_GET, (uint8_t)field_reg,
                                 (uint8_t)disc_reg, makeRK(key_ki));
                         // Check field_reg is not nil (VAL_NIL == 0)
                         emitABC(OP_TYPEIS, 0, (uint8_t)field_reg, (uint8_t)VAL_NIL);
@@ -2204,7 +2220,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                         int local_reg = addLocal(interned_name);
                         int idx_ki = current_->proto->addConstant(
                             make_int64_value((int64_t)k));
-                        emitABC(OP_GETTABLE, (uint8_t)local_reg,
+                        emitABC(OP_INDEX_GET, (uint8_t)local_reg,
                                 (uint8_t)disc_reg, makeRK(idx_ki));
                     }
                 }
@@ -2232,7 +2248,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                     int loop_exit = emitJump();
                     patchJump(loop_body);
 
-                    emitABC(OP_GETTABLE, (uint8_t)elem_reg,
+                    emitABC(OP_INDEX_GET, (uint8_t)elem_reg,
                             (uint8_t)disc_reg, (uint8_t)idx_reg);
                     // Push to rest array via native call
                     // Use SETTABLE with integer key: rest[idx - elem_count] = elem
@@ -2241,7 +2257,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                     int offset_reg = allocReg();
                     emitABC(OP_SUB, (uint8_t)offset_reg,
                             (uint8_t)idx_reg, makeRK(offset_ki));
-                    emitABC(OP_SETTABLE, (uint8_t)rest_reg,
+                    emitABC(OP_INDEX_SET, (uint8_t)rest_reg,
                             (uint8_t)offset_reg, (uint8_t)elem_reg);
                     emitABC(OP_INC, (uint8_t)idx_reg, (uint8_t)idx_reg, 0);
                     int back_offset = loop_start - (current_->proto->currentPC() + 1);
@@ -2259,7 +2275,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
                     const char* interned_var = pool_->intern(var_name)->data;
                     int local_reg = addLocal(interned_var);
                     int key_ki = stringConstant(key);
-                    emitABC(OP_GETTABLE, (uint8_t)local_reg,
+                    emitABC(OP_INDEX_GET, (uint8_t)local_reg,
                             (uint8_t)disc_reg, makeRK(key_ki));
                 }
             }
@@ -2500,19 +2516,38 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             }
         }
 
-        // Pattern 2: GETGLOBAL A,Bx + GETTABLE A,A,RK(C)  =>  GETGLOBAL_GETTABLE
+        // Pattern 2: GETGLOBAL A,Bx + INDEX_GET A,A,RK(C)  =>  GETGLOBAL_INDEX_GET
         if (op == OP_GETGLOBAL && i + 1 < n && !is_target[i + 1]) {
             OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
-            if (op2 == OP_GETTABLE) {
+            if (op2 == OP_INDEX_GET) {
                 uint8_t gg_a = DECODE_A(code[i]);
                 uint16_t gg_bx = DECODE_Bx(code[i]);
                 uint8_t gt_a = DECODE_A(code[i + 1]);
                 uint8_t gt_b = DECODE_B(code[i + 1]);
                 if (gg_a == gt_a && gg_a == gt_b) {
-                    new_code.push_back(ENCODE_ABx(OP_GETGLOBAL_GETTABLE, gg_a, gg_bx));
+                    new_code.push_back(ENCODE_ABx(OP_GETGLOBAL_INDEX_GET, gg_a, gg_bx));
                     new_lines.push_back(lines[i]);
                     remap[i + 1] = (int)new_code.size();
-                    new_code.push_back(code[i + 1]); // keep GETTABLE encoding as data word
+                    new_code.push_back(code[i + 1]); // keep INDEX_GET encoding as data word
+                    new_lines.push_back(lines[i + 1]);
+                    i++;
+                    continue;
+                }
+            }
+        }
+
+        // Pattern 3: GETGLOBAL A,Bx + CALL A,B,C  =>  GETGLOBAL_CALL
+        if (op == OP_GETGLOBAL && i + 1 < n && !is_target[i + 1]) {
+            OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
+            if (op2 == OP_CALL) {
+                uint8_t gg_a = DECODE_A(code[i]);
+                uint16_t gg_bx = DECODE_Bx(code[i]);
+                uint8_t call_a = DECODE_A(code[i + 1]);
+                if (gg_a == call_a) {
+                    new_code.push_back(ENCODE_ABx(OP_GETGLOBAL_CALL, gg_a, gg_bx));
+                    new_lines.push_back(lines[i]);
+                    remap[i + 1] = (int)new_code.size();
+                    new_code.push_back(code[i + 1]); // keep CALL encoding as data word
                     new_lines.push_back(lines[i + 1]);
                     i++;
                     continue;

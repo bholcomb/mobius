@@ -56,23 +56,21 @@ func benchmark_function_calls() {
 func benchmark_arrays() {
     print("\n3. Array Operations (Dense Numeric Storage)...");
     var start = clock();
-    
-    // Create and populate array
+
     var arr = array_create(10000);
     var i = 0;
     while (i < 10000) {
-        array_push(arr, i * 2);
+        arr[i] = i * 2;
         i = i + 1;
     }
-    
-    // Read and sum
+
     var sum = 0;
     i = 0;
     while (i < 10000) {
-        sum = sum + array_get(arr, i);
+        sum = sum + arr[i];
         i = i + 1;
     }
-    
+
     var duration = clock() - start;
     print("   Time: ", duration, "s");
     print("   Sum: ", sum);

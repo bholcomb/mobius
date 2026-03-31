@@ -340,13 +340,15 @@ struct VMFrame {
     Prototype*  proto;
     int         base;
     Value*      regs;
-
-    inline void refresh(MobiusVM* vm);
 };
 
-// Defined after MobiusVM methods so we can access registers_ etc.
-// However, since VMFrame::refresh needs access to vm internals we
-// implement it via a public helper on MobiusVM instead. See below.
+MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
+    f.ci = &callStackTop();
+    f.proto = f.ci->proto;
+    f.base = f.ci->base;
+    f.regs = registers_.data() + f.base;
+    f.ip = f.ci->ip;
+}
 
 // ============================================================================
 // Opcode handler functions
@@ -478,30 +480,25 @@ MOBIUS_FORCEINLINE static int vm_op_newarray(MobiusVM* vm, VMFrame& f, uint32_t 
     return 0;
 }
 
-MOBIUS_FORCEINLINE static int vm_op_gettable(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& tbl = RB(inst);
+MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    const Value& obj = RB(inst);
     const Value& key = RKC(inst);
-    if (MOBIUS_LIKELY(tbl.type == VAL_TABLE && tbl.as.table)) {
-        if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            RA(inst) = tbl.as.table->getByString(key.as.string);
-        else
-            RA(inst) = tbl.as.table->get(key);
-    } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
-        if (key.type == VAL_INT64) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
-            if (idx >= 0 && idx < (int64_t)tbl.as.array->length()) {
-                RA(inst) = tbl.as.array->get((size_t)idx);
-            } else {
-                RA(inst) = Value();
-            }
+    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array->length())) {
+            RA(inst) = obj.as.array->get((size_t)idx);
         } else {
-            vm->runtimeError("Array index must be an integer");
-            return -1;
+            RA(inst) = Value();
         }
-    } else if (tbl.type == VAL_STRING && tbl.as.string) {
+    } else if (obj.type == VAL_TABLE && obj.as.table) {
+        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+            RA(inst) = obj.as.table->getByString(key.as.string);
+        else
+            RA(inst) = obj.as.table->get(key);
+    } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
-            MobiusString* s = tbl.as.string;
+            MobiusString* s = obj.as.string;
             if (idx >= 0 && idx < (int64_t)s->length) {
                 char buf[2] = { s->data[idx], '\0' };
                 RA(inst) = make_string_value(vm->state_->stringPool()->intern(buf, 1));
@@ -513,35 +510,45 @@ MOBIUS_FORCEINLINE static int vm_op_gettable(MobiusVM* vm, VMFrame& f, uint32_t 
             return -1;
         }
     } else {
-        vm->runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
+        vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
     return 0;
 }
 
-MOBIUS_FORCEINLINE static int vm_op_settable(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    Value& tbl = RA(inst);
+MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    Value& obj = RA(inst);
     const Value& key = RKB(inst);
     const Value& val = RKC(inst);
-    if (MOBIUS_LIKELY(tbl.type == VAL_TABLE && tbl.as.table)) {
-        if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            tbl.as.table->setByString(key.as.string, val);
-        else
-            tbl.as.table->set(key, val);
-    } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
-        if (key.type == VAL_INT64) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
-            if (idx >= 0) {
-                while ((int64_t)tbl.as.array->length() <= idx)
-                    tbl.as.array->push(Value());
-                tbl.as.array->set((size_t)idx, val);
-            }
-        } else {
-            vm->runtimeError("Array index must be an integer");
-            return -1;
+    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        if (MOBIUS_LIKELY(idx >= 0)) {
+            ArrayValue* arr = obj.as.array;
+            while ((int64_t)arr->length() <= idx)
+                arr->push(Value());
+            arr->set((size_t)idx, val);
         }
+    } else if (obj.type == VAL_TABLE && obj.as.table) {
+        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+            obj.as.table->setByString(key.as.string, val);
+        else
+            obj.as.table->set(key, val);
     } else {
-        vm->runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
+        vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
+        return -1;
+    }
+    return 0;
+}
+
+// ---- Array fast-path ----
+
+MOBIUS_FORCEINLINE static int vm_op_array_push(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    Value& arr_val = RA(inst);
+    const Value& val = RB(inst);
+    if (MOBIUS_LIKELY(arr_val.type == VAL_ARRAY && arr_val.as.array)) {
+        arr_val.as.array->push(val);
+    } else {
+        vm->runtimeError("OP_ARRAY_PUSH applied to non-array (%s)", value_type_name(arr_val.type));
         return -1;
     }
     return 0;
@@ -1287,7 +1294,7 @@ MOBIUS_FORCEINLINE static int vm_op_move_addi(MobiusVM* vm, VMFrame& f, uint32_t
     return 0;
 }
 
-MOBIUS_FORCEINLINE static int vm_op_getglobal_gettable(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
     const Value& gv = vm->state_->globalSlot(slot);
@@ -1301,27 +1308,22 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_gettable(MobiusVM* vm, VMFrame& f,
     const Value& key = IS_CONSTANT(c2)
         ? f.ci->proto->constants[RK_AS_CONSTANT(c2)]
         : f.regs[c2];
-    const Value& tbl = f.regs[a];
-    if (MOBIUS_LIKELY(tbl.type == VAL_TABLE && tbl.as.table)) {
-        if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            f.regs[a] = tbl.as.table->getByString(key.as.string);
+    const Value& obj = f.regs[a];
+    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array->length()))
+            f.regs[a] = obj.as.array->get((size_t)idx);
         else
-            f.regs[a] = tbl.as.table->get(key);
-    } else if (tbl.type == VAL_ARRAY && tbl.as.array) {
+            f.regs[a] = Value();
+    } else if (obj.type == VAL_TABLE && obj.as.table) {
+        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+            f.regs[a] = obj.as.table->getByString(key.as.string);
+        else
+            f.regs[a] = obj.as.table->get(key);
+    } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
-            if (idx >= 0 && idx < (int64_t)tbl.as.array->length())
-                f.regs[a] = tbl.as.array->get((size_t)idx);
-            else
-                f.regs[a] = Value();
-        } else {
-            vm->runtimeError("Array index must be an integer");
-            return -1;
-        }
-    } else if (tbl.type == VAL_STRING && tbl.as.string) {
-        if (key.type == VAL_INT64) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
-            MobiusString* s = tbl.as.string;
+            MobiusString* s = obj.as.string;
             if (idx >= 0 && idx < (int64_t)s->length) {
                 char buf[2] = { s->data[idx], '\0' };
                 f.regs[a] = make_string_value(vm->state_->stringPool()->intern(buf, 1));
@@ -1333,7 +1335,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_gettable(MobiusVM* vm, VMFrame& f,
             return -1;
         }
     } else {
-        vm->runtimeError("Attempt to index a %s value", value_type_name(tbl.type));
+        vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
     return 0;
@@ -1391,6 +1393,19 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
     return 0;
 }
 
+MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    int a = DECODE_A(inst);
+    int slot = DECODE_Bx(inst);
+    const Value& gv = vm->state_->globalSlot(slot);
+    if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
+        vm->runtimeError("Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        return -1;
+    }
+    f.regs[a] = gv;
+    uint32_t inst2 = *f.ip++;
+    return vm_op_call(vm, f, inst2);
+}
+
 MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
@@ -1438,7 +1453,7 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
         args[i] = vm->registers_[src_base + i];
     }
 
-    vm->closeUpvalues(*f.ci, 0);
+    if (MOBIUS_UNLIKELY(f.ci->upvalue_count > 0)) vm->closeUpvalues(*f.ci, 0);
 
     for (int i = 0; i < nargs; i++) {
         vm->registers_[f.ci->base + i] = args[i];
@@ -1474,7 +1489,7 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
     int b = DECODE_B(inst);
     if (vm->callStackSize() <= base_depth) return 1;
     int nresults_available = (b == 0) ? 0 : (b - 1);
-    vm->closeUpvalues(*f.ci, 0);
+    if (MOBIUS_UNLIKELY(f.ci->upvalue_count > 0)) vm->closeUpvalues(*f.ci, 0);
     int ret_base = f.ci->base;
     int ret_nresults = f.ci->nresults;
     vm->callStackPop();
@@ -1560,7 +1575,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
 
 // ---- Close ----
 MOBIUS_FORCEINLINE static int vm_op_close(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    vm->closeUpvalues(*f.ci, DECODE_A(inst));
+    if (MOBIUS_UNLIKELY(f.ci->upvalue_count > 0)) vm->closeUpvalues(*f.ci, DECODE_A(inst));
     return 0;
 }
 
@@ -1895,7 +1910,8 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
     MobiusVM::TryBlock& tb = vm->try_stack_.back();
 
     while (vm->callStackSize() > tb.call_stack_depth) {
-        vm->closeUpvalues(vm->callStackTop(), 0);
+        if (MOBIUS_UNLIKELY(vm->callStackTop().upvalue_count > 0))
+            vm->closeUpvalues(vm->callStackTop(), 0);
         vm->callStackPop();
     }
 
@@ -1927,14 +1943,6 @@ MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // Main dispatch loop
 // ============================================================================
 
-void MobiusVM::refreshFrame(VMFrame& f) {
-    f.ci = &callStackTop();
-    f.proto = f.ci->proto;
-    f.base = f.ci->base;
-    f.regs = registers_.data() + f.base;
-    f.ip = f.ci->ip;
-}
-
 int MobiusVM::run(size_t base_depth) {
     VMFrame f;
     f.ci = &callStackTop();
@@ -1949,7 +1957,7 @@ int MobiusVM::run(size_t base_depth) {
     static const void* dispatch_table[] = {
         &&L_OP_MOVE, &&L_OP_LOADK, &&L_OP_LOADNIL, &&L_OP_LOADBOOL, &&L_OP_LOADINT,
         &&L_OP_GETUPVAL, &&L_OP_SETUPVAL, &&L_OP_GETGLOBAL, &&L_OP_SETGLOBAL,
-        &&L_OP_NEWTABLE, &&L_OP_NEWARRAY, &&L_OP_GETTABLE, &&L_OP_SETTABLE,
+        &&L_OP_NEWTABLE, &&L_OP_NEWARRAY, &&L_OP_INDEX_GET, &&L_OP_INDEX_SET,
         &&L_OP_ADD, &&L_OP_SUB, &&L_OP_MUL, &&L_OP_DIV, &&L_OP_MOD,
         &&L_OP_UNM, &&L_OP_NOT,
         &&L_OP_BAND, &&L_OP_BOR, &&L_OP_BXOR, &&L_OP_BNOT, &&L_OP_SHL, &&L_OP_SHR,
@@ -1970,7 +1978,8 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_ADD_II, &&L_OP_ADD_FF, &&L_OP_SUB_II, &&L_OP_SUB_FF,
         &&L_OP_MUL_II, &&L_OP_MUL_FF, &&L_OP_MOD_II,
         &&L_OP_ADDK, &&L_OP_SUBK, &&L_OP_MULK, &&L_OP_DIVK, &&L_OP_MODK,
-        &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_GETTABLE,
+        &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
+        &&L_OP_ARRAY_PUSH,
         &&L_OP_LEN,
         &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
         &&L_OP_NOP,
@@ -2003,7 +2012,8 @@ int MobiusVM::run(size_t base_depth) {
             if (!try_stack_.empty()) {                                   \
                 TryBlock& _tb = try_stack_.back();                       \
                 while (callStackSize() > _tb.call_stack_depth) {         \
-                    closeUpvalues(callStackTop(), 0);                    \
+                    if (callStackTop().upvalue_count > 0)                 \
+                        closeUpvalues(callStackTop(), 0);                 \
                     callStackPop();                                       \
                 }                                                        \
                 InternalError* _ie = state_->getLastError();              \
@@ -2035,8 +2045,8 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_SETGLOBAL, vm_op_setglobal)
     VM_HANDLER(OP_NEWTABLE, vm_op_newtable)
     VM_HANDLER(OP_NEWARRAY, vm_op_newarray)
-    VM_HANDLER(OP_GETTABLE, vm_op_gettable)
-    VM_HANDLER(OP_SETTABLE, vm_op_settable)
+    VM_HANDLER(OP_INDEX_GET, vm_op_index_get)
+    VM_HANDLER(OP_INDEX_SET, vm_op_index_set)
     VM_HANDLER(OP_ADD, vm_op_add)
     VM_HANDLER(OP_SUB, vm_op_sub)
     VM_HANDLER(OP_MUL, vm_op_mul)
@@ -2099,7 +2109,10 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_IFORLOOP, vm_op_iforloop)
 
     VM_HANDLER(OP_MOVE_ADDI, vm_op_move_addi)
-    VM_HANDLER(OP_GETGLOBAL_GETTABLE, vm_op_getglobal_gettable)
+    VM_HANDLER(OP_GETGLOBAL_INDEX_GET, vm_op_getglobal_index_get)
+    VM_HANDLER(OP_GETGLOBAL_CALL, vm_op_getglobal_call)
+
+    VM_HANDLER(OP_ARRAY_PUSH, vm_op_array_push)
 
     VM_HANDLER(OP_CALL, vm_op_call)
     VM_HANDLER(OP_TAILCALL, vm_op_tailcall)
