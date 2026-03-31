@@ -98,16 +98,14 @@ func benchmark_tables() {
     var tbl = {};
     var i = 0;
     while (i < 5000) {
-        var key = array_get(keys, i);
-        tbl[key] = i * 3;
+        tbl[keys[i]] = i * 3;
         i = i + 1;
     }
 
     var sum = 0;
     i = 0;
     while (i < 5000) {
-        var key = array_get(keys, i);
-        sum = sum + tbl[key];
+        sum = sum + tbl[keys[i]];
         i = i + 1;
     }
 
