@@ -1,0 +1,31 @@
+// Test basic spawn and await
+print("=== Spawn/Await Tests ===")
+
+func add(a, b) {
+    return a + b
+}
+
+var f = spawn add(10, 20)
+var result = await f
+if (result != 30) { print("FAIL: spawn/await basic, got", result); exit(1) }
+
+func square(x) {
+    return x * x
+}
+
+var f2 = spawn square(7)
+if (await f2 != 49) { print("FAIL: spawn/await square"); exit(1) }
+
+// Multiple spawns
+var f3 = spawn add(1, 2)
+var f4 = spawn add(3, 4)
+var f5 = spawn add(5, 6)
+var r3 = await f3
+var r4 = await f4
+var r5 = await f5
+if (r3 != 3 || r4 != 7 || r5 != 11) {
+    print("FAIL: multiple spawns, got", r3, r4, r5)
+    exit(1)
+}
+
+print("=== All spawn/await tests passed! ===")

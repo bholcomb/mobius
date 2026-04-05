@@ -246,6 +246,13 @@ enum OpCode : uint8_t {
     OP_TRY_END,     //           pop recovery point (try body completed successfully)
     OP_THROW,       // A         throw R[A] as error
 
+    // -- Fiber concurrency --
+    OP_SPAWN,       // A B C     R[A] = spawn R[B] with C-1 args; result is FutureValue
+    OP_AWAIT,       // A B       R[A] = await FutureValue in R[B]; yields fiber if not ready
+    OP_YIELD,       // A         cooperatively yield current fiber (reschedule)
+    OP_SHARE,       // A         mark R[A] as shared (deep); sets VAL_FLAG_SHARED
+    OP_CANCEL_CHECK,// --        check if current fiber is cancelled; throw CancellationError if so
+
     // -- Debug / sentinel --
     OP_NOP,         //           no operation (padding / breakpoint target)
 
@@ -378,6 +385,12 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"TRY_BEGIN", FMT_AsBx},
         {"TRY_END",   FMT_ABC},
         {"THROW",     FMT_ABC},
+
+        {"SPAWN",     FMT_ABC},
+        {"AWAIT",     FMT_ABC},
+        {"YIELD",     FMT_ABC},
+        {"SHARE",     FMT_ABC},
+        {"CANCEL_CHECK", FMT_ABC},
 
         {"NOP",       FMT_ABC},
     };

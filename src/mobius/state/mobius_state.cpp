@@ -10,6 +10,7 @@
 #include "internal/string_intern.h"
 #include "data/metamethods.h"
 #include "plugin/module_registry.h"
+#include "fiber/job_system.h"
 #include "repl.h"
 #include "util/utility.h"
 #include "util/file_io.h"
@@ -21,6 +22,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <thread>
+#include <algorithm>
 
 // ============================================================================
 // CONFIGURATION
@@ -36,6 +39,13 @@ MobiusConfig mobius_default_config(void) {
     config.debug_mode = false;
     config.enable_hot_reload = false;
     config.override_behavior = MOBIUS_OVERRIDE_ERROR;
+
+    config.fiber_stack_size        = 128 * 1024;  // 128 KiB
+    config.initial_fiber_pool_size = 16;
+    config.max_fiber_pool_size     = 256;
+    unsigned int hw = std::thread::hardware_concurrency();
+    config.max_worker_threads      = static_cast<int>(std::max(1u, hw / 2));
+
     return config;
 }
 
@@ -223,7 +233,7 @@ StackTrace* ExecutionContext::captureStackTrace() const {
 // INTERNAL HELPERS
 // ============================================================================
 
-static void free_internal_error(InternalError* error) {
+void free_internal_error(InternalError* error) {
     if (!error) return;
     free(error->message);
     free(error->suggestion);
@@ -240,12 +250,14 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
 
 MobiusState::MobiusState(MobiusConfig* config)
     : registry_(nullptr), string_pool_(nullptr),
-      metamethods_(nullptr),
-      main_context_(nullptr), active_vm_(nullptr), native_ctx_(nullptr), last_error_(nullptr),
+      metamethods_(nullptr), job_system_(nullptr),
       error_handler_(default_error_handler), error_handler_userdata_(nullptr),
-      initialized_(false), source_code_(nullptr) {
+      metrics_{}, initialized_(false),
+      fallback_last_error_(nullptr), fallback_source_code_(nullptr) {
     
     config_ = config ? *config : mobius_default_config();
+
+    globals_.resize(4096);
 
     string_pool_ = new (std::nothrow) StringInternPool(256);
     if (!string_pool_) return;
@@ -253,12 +265,11 @@ MobiusState::MobiusState(MobiusConfig* config)
     metamethods_ = new (std::nothrow) Metamethods(string_pool_);
     if (!metamethods_) return;
 
-    main_context_ = new (std::nothrow) ExecutionContext(
-        this, config_.max_call_depth);
-    if (!main_context_) return;
-
     registry_ = getGlobalRegistry();
     if (!registry_) return;
+
+    job_system_ = new (std::nothrow) JobSystem(this);
+    if (!job_system_) return;
 
     auto defineGlobal = [&](const char* name, Value val, bool readonly = false) {
         int slot = assignGlobalSlot(name);
@@ -274,12 +285,13 @@ MobiusState::MobiusState(MobiusConfig* config)
 }
 
 MobiusState::~MobiusState() {
+    delete job_system_;
+
     for (Prototype* p : owned_protos_) {
         delete p;
     }
     owned_protos_.clear();
 
-    delete main_context_;
     delete metamethods_;
 
     // Don't free module registry — it's a global singleton freed via atexit()
@@ -287,34 +299,47 @@ MobiusState::~MobiusState() {
 
     delete string_pool_;
 
-    if (last_error_) {
-        free_internal_error(last_error_);
+    if (fallback_last_error_) {
+        free_internal_error(fallback_last_error_);
     }
 }
 
 void MobiusState::clearErrorInternal() {
-    if (last_error_) {
-        free_internal_error(last_error_);
-        last_error_ = nullptr;
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    InternalError*& err = vm ? vm->last_error_ : fallback_last_error_;
+    if (err) {
+        free_internal_error(err);
+        err = nullptr;
     }
 }
 
 int MobiusState::assignGlobalSlot(const char* name) {
+    std::lock_guard<std::mutex> lock(global_slot_mutex_);
     auto it = global_slot_map_.find(name);
     if (it != global_slot_map_.end()) return it->second;
-    int slot = (int)globals_.size();
-    globals_.push_back(Value());
+    int slot = global_count_.load(std::memory_order_relaxed);
+    if (slot >= (int)globals_.size()) {
+        size_t new_cap = globals_.size() * 2;
+        globals_.resize(new_cap);
+        fprintf(stderr, "Warning: globals table resized from %zu to %zu slots\n",
+                new_cap / 2, new_cap);
+    }
     global_slot_map_[name] = slot;
+    global_count_.store(slot + 1, std::memory_order_release);
+    if ((size_t)(slot + 1) > metrics_.peak_globals)
+        metrics_.peak_globals = (size_t)(slot + 1);
     return slot;
 }
 
 int MobiusState::findGlobalSlot(const char* name) const {
+    std::lock_guard<std::mutex> lock(global_slot_mutex_);
     auto it = global_slot_map_.find(name);
     if (it != global_slot_map_.end()) return it->second;
     return -1;
 }
 
 const char* MobiusState::globalSlotName(int idx) const {
+    std::lock_guard<std::mutex> lock(global_slot_mutex_);
     for (auto& kv : global_slot_map_) {
         if (kv.second == idx) return kv.first.c_str();
     }
@@ -322,8 +347,10 @@ const char* MobiusState::globalSlotName(int idx) const {
 }
 
 void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
-    int slot = findGlobalSlot(name);
-    if (slot < 0) return;
+    std::lock_guard<std::mutex> lock(global_slot_mutex_);
+    auto it = global_slot_map_.find(name);
+    if (it == global_slot_map_.end()) return;
+    int slot = it->second;
     if (readonly)
         globals_[slot].flags |= VAL_FLAG_READONLY;
     else
@@ -331,6 +358,7 @@ void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
 }
 
 bool MobiusState::removeGlobal(const char* name) {
+    std::lock_guard<std::mutex> lock(global_slot_mutex_);
     auto it = global_slot_map_.find(name);
     if (it == global_slot_map_.end()) return false;
     int slot = it->second;
@@ -341,7 +369,9 @@ bool MobiusState::removeGlobal(const char* name) {
 }
 
 void MobiusState::removeGlobalSlots(int from_slot) {
-    if (from_slot < 0 || from_slot >= (int)globals_.size()) return;
+    std::lock_guard<std::mutex> lock(global_slot_mutex_);
+    int count = global_count_.load(std::memory_order_relaxed);
+    if (from_slot < 0 || from_slot >= count) return;
 
     std::vector<std::string> to_remove;
     for (auto& kv : global_slot_map_) {
@@ -353,13 +383,21 @@ void MobiusState::removeGlobalSlots(int from_slot) {
         global_slot_map_.erase(name);
     }
 
-    globals_.resize(from_slot);
+    for (int i = from_slot; i < count; i++) {
+        globals_[i] = Value();
+    }
+    global_count_.store(from_slot, std::memory_order_release);
 }
 
 int MobiusState::initStdlib() {
     register_stdlib_functions(this);
     initialized_ = true;
     return MOBIUS_OK;
+}
+
+void MobiusState::addOwnedProto(Prototype* proto) {
+    std::lock_guard<std::mutex> lock(owned_protos_mutex_);
+    owned_protos_.push_back(proto);
 }
 
 int MobiusState::execString(const char* code) {
@@ -378,16 +416,18 @@ int MobiusState::execString(const char* code) {
     free_token_array(&tokens);
 
     if (parse_result.had_error) {
+        const char* src = getSourceContext();
         setError(MOBIUS_ERROR_SYNTAX, "Parse error", 
-                 "Check syntax and structure", 0, 0, NULL, source_code_);
+                 "Check syntax and structure", 0, 0, NULL, src);
         free_parse_result(&parse_result);
         return MOBIUS_ERROR_SYNTAX;
     }
 
+    const char* src = getSourceContext();
     Compiler compiler(string_pool_, this);
     Prototype* proto = compiler.compile(parse_result.statements,
                                         parse_result.count,
-                                        source_code_ ? source_code_ : "<string>");
+                                        src ? src : "<string>");
     free_parse_result(&parse_result);
 
     if (!proto) {
@@ -400,19 +440,10 @@ int MobiusState::execString(const char* code) {
         disassemble_prototype(proto);
     }
 
-    // Prototypes are owned by the state so they outlive any
-    // MobiusFunction closures that reference child prototypes.
-    owned_protos_.push_back(proto);
-
-    // Save and restore native_ctx_ so that re-entrant calls from native
-    // functions (e.g. load()) don't clobber the outer call's context.
-    NativeCallContext* saved_ctx = native_ctx_;
-    native_ctx_ = nullptr;
+    addOwnedProto(proto);
 
     MobiusVM vm(this);
     int rc = vm.execute(proto);
-
-    native_ctx_ = saved_ctx;
 
     if (rc != 0) {
         return MOBIUS_ERROR_RUNTIME;
@@ -432,10 +463,10 @@ int MobiusState::execFile(const char* filename) {
         return MOBIUS_ERROR_RUNTIME;
     }
 
-    const char* saved_source = source_code_;
-    source_code_ = filename;
+    const char* saved_source = getSourceContext();
+    setSourceContext(filename);
     int result = execString(file_result.content);
-    source_code_ = saved_source;
+    setSourceContext(saved_source);
     free_file_result(&file_result);
     return result;
 }
@@ -445,18 +476,20 @@ int MobiusState::execFile(const char* filename) {
 // ============================================================================
 
 InternalError* MobiusState::getLastError() const {
-    if (!last_error_) return NULL;
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    InternalError* err = vm ? vm->last_error_ : fallback_last_error_;
+    if (!err) return NULL;
 
     InternalError* copy = (InternalError*)malloc(sizeof(InternalError));
     if (!copy) return NULL;
 
-    copy->code = last_error_->code;
-    copy->message = last_error_->message ? mobius_strdup(last_error_->message) : NULL;
-    copy->suggestion = last_error_->suggestion ? mobius_strdup(last_error_->suggestion) : NULL;
-    copy->filename = last_error_->filename ? mobius_strdup(last_error_->filename) : NULL;
-    copy->line = last_error_->line;
-    copy->column = last_error_->column;
-    copy->function_name = last_error_->function_name ? mobius_strdup(last_error_->function_name) : NULL;
+    copy->code = err->code;
+    copy->message = err->message ? mobius_strdup(err->message) : NULL;
+    copy->suggestion = err->suggestion ? mobius_strdup(err->suggestion) : NULL;
+    copy->filename = err->filename ? mobius_strdup(err->filename) : NULL;
+    copy->line = err->line;
+    copy->column = err->column;
+    copy->function_name = err->function_name ? mobius_strdup(err->function_name) : NULL;
 
     return copy;
 }
@@ -470,16 +503,19 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
                           const char* filename) {
     clearErrorInternal();
 
-    last_error_ = (InternalError*)malloc(sizeof(InternalError));
-    if (!last_error_) return code;
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    InternalError*& err_slot = vm ? vm->last_error_ : fallback_last_error_;
 
-    last_error_->code = code;
-    last_error_->message = message ? mobius_strdup(message) : NULL;
-    last_error_->suggestion = suggestion ? mobius_strdup(suggestion) : NULL;
-    last_error_->filename = filename ? mobius_strdup(filename) : NULL;
-    last_error_->line = line;
-    last_error_->column = column;
-    last_error_->function_name = function_name ? mobius_strdup(function_name) : NULL;
+    err_slot = (InternalError*)malloc(sizeof(InternalError));
+    if (!err_slot) return code;
+
+    err_slot->code = code;
+    err_slot->message = message ? mobius_strdup(message) : NULL;
+    err_slot->suggestion = suggestion ? mobius_strdup(suggestion) : NULL;
+    err_slot->filename = filename ? mobius_strdup(filename) : NULL;
+    err_slot->line = line;
+    err_slot->column = column;
+    err_slot->function_name = function_name ? mobius_strdup(function_name) : NULL;
 
     if (error_handler_) {
         MobiusError pub_err;
@@ -538,11 +574,37 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
 // ============================================================================
 
 void MobiusState::setSourceContext(const char* source) {
-    source_code_ = source;
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    if (vm) vm->source_code_ = source;
+    else fallback_source_code_ = source;
 }
 
 const char* MobiusState::getSourceContext() const {
-    return source_code_;
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    return vm ? vm->source_code_ : fallback_source_code_;
+}
+
+// ============================================================================
+// THREAD-LOCAL VM FORWARDING
+// ============================================================================
+
+MobiusVM* MobiusState::activeVM() const {
+    return MobiusVM::t_current_vm;
+}
+
+NativeCallContext* MobiusState::nativeContext() const {
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    return vm ? vm->native_ctx_ : nullptr;
+}
+
+ExecutionContext* MobiusState::mainContext() const {
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    return vm ? vm->exec_context_ : nullptr;
+}
+
+InternalError* MobiusState::lastError() const {
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    return vm ? vm->last_error_ : fallback_last_error_;
 }
 
 // ============================================================================
@@ -563,7 +625,7 @@ extern "C" {
 MobiusState* mobius_new_state(MobiusConfig* config) {
     MobiusState* state = new (std::nothrow) MobiusState(config);
     if (!state) return NULL;
-    if (!state->mainContext() || !state->stringPool()) {
+    if (!state->stringPool()) {
         delete state;
         return NULL;
     }
@@ -572,6 +634,20 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
 
 void mobius_free_state(MobiusState* state) {
     delete state;
+}
+
+void mobius_get_metrics(MobiusState* state, MobiusMetrics* out) {
+    if (!state || !out) return;
+    MobiusMetrics& m = state->metrics();
+    size_t sc = state->stringPool()->stringCount();
+    if (sc > m.peak_interned_strings)
+        m.peak_interned_strings = sc;
+    *out = m;
+}
+
+void mobius_reset_metrics(MobiusState* state) {
+    if (!state) return;
+    state->resetMetrics();
 }
 
 int mobius_init_stdlib(MobiusState* state) {

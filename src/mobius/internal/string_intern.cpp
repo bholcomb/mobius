@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>
+#include <new>
 
 // ============================================================================
 // HASH FUNCTION (Lua-style)
@@ -46,68 +47,13 @@ bool MobiusString::operator==(const MobiusString& other) const {
 }
 
 // ============================================================================
-// STRING INTERN POOL
+// SHARD METHODS
 // ============================================================================
 
-StringInternPool::StringInternPool(size_t initial_bucket_count)
-    : string_count_(0), load_factor_(0.75f) {
-    if (initial_bucket_count == 0) {
-        initial_bucket_count = 256;
-    }
-
-    size_t count = 1;
-    while (count < initial_bucket_count) {
-        count <<= 1;
-    }
-
-    buckets_.assign(count, nullptr);
-}
-
-StringInternPool::~StringInternPool() {
-    for (MobiusString* head : buckets_) {
-        MobiusString* str = head;
-        while (str) {
-            MobiusString* next = str->next;
-            delete[] str->data;
-            delete str;
-            str = next;
-        }
-    }
-}
-
-MobiusString* StringInternPool::intern(const char* data) {
-    if (!data || buckets_.empty()) return nullptr;
-    return intern(data, strlen(data));
-}
-
-MobiusString* StringInternPool::intern(const char* data, size_t length) {
-    if (!data || buckets_.empty()) return nullptr;
-
-    uint32_t hash = compute_string_hash(data, length);
-
-    MobiusString* existing = find(data, length, hash);
-    if (existing) {
-        existing->ref_count++;
-        return existing;
-    }
-
-    return insert(data, length, hash);
-}
-
-void StringInternPool::stats(size_t* out_bucket_count, size_t* out_string_count,
-                             float* out_load_factor) const {
-    if (out_bucket_count) *out_bucket_count = buckets_.size();
-    if (out_string_count) *out_string_count = string_count_;
-    if (out_load_factor) {
-        *out_load_factor = !buckets_.empty()
-            ? (float)string_count_ / (float)buckets_.size()
-            : 0.0f;
-    }
-}
-
-MobiusString* StringInternPool::find(const char* data, size_t len, uint32_t hash) const {
-    size_t bucket = hash & (buckets_.size() - 1);
-    MobiusString* str = buckets_[bucket];
+MobiusString* StringInternPool::Shard::find(const char* data, size_t len, uint32_t hash) const {
+    if (buckets.empty()) return nullptr;
+    size_t bucket = hash & (buckets.size() - 1);
+    MobiusString* str = buckets[bucket];
 
     while (str) {
         if (str->hash == hash && str->length == len) {
@@ -131,9 +77,9 @@ MobiusString* StringInternPool::find(const char* data, size_t len, uint32_t hash
     return nullptr;
 }
 
-MobiusString* StringInternPool::insert(const char* data, size_t len, uint32_t hash) {
-    float current_load = (float)(string_count_ + 1) / (float)buckets_.size();
-    if (current_load > load_factor_) {
+MobiusString* StringInternPool::Shard::insert(const char* data, size_t len, uint32_t hash) {
+    float current_load = (float)(string_count + 1) / (float)buckets.size();
+    if (current_load > load_factor) {
         resize();
     }
 
@@ -152,23 +98,23 @@ MobiusString* StringInternPool::insert(const char* data, size_t len, uint32_t ha
     str->data = data_copy;
     str->length = len;
     str->hash = hash;
-    str->ref_count = 1;
+    str->ref_count.store(1, std::memory_order_relaxed);
     str->next = nullptr;
 
-    size_t bucket = hash & (buckets_.size() - 1);
-    str->next = buckets_[bucket];
-    buckets_[bucket] = str;
+    size_t bucket = hash & (buckets.size() - 1);
+    str->next = buckets[bucket];
+    buckets[bucket] = str;
 
-    string_count_++;
+    string_count++;
 
     return str;
 }
 
-void StringInternPool::resize() {
-    size_t new_count = buckets_.size() * 2;
+void StringInternPool::Shard::resize() {
+    size_t new_count = buckets.size() * 2;
     std::vector<MobiusString*> new_buckets(new_count, nullptr);
 
-    for (MobiusString* head : buckets_) {
+    for (MobiusString* head : buckets) {
         MobiusString* str = head;
         while (str) {
             MobiusString* next = str->next;
@@ -179,5 +125,97 @@ void StringInternPool::resize() {
         }
     }
 
-    buckets_ = std::move(new_buckets);
+    buckets = std::move(new_buckets);
+}
+
+// ============================================================================
+// STRING INTERN POOL
+// ============================================================================
+
+StringInternPool::StringInternPool(size_t initial_bucket_count) {
+    if (initial_bucket_count == 0) {
+        initial_bucket_count = 256;
+    }
+
+    size_t per_shard = initial_bucket_count / SHARD_COUNT;
+    if (per_shard == 0) per_shard = 16;
+
+    size_t count = 1;
+    while (count < per_shard) {
+        count <<= 1;
+    }
+
+    for (int i = 0; i < SHARD_COUNT; i++) {
+        shards_[i].buckets.assign(count, nullptr);
+    }
+}
+
+StringInternPool::~StringInternPool() {
+    for (int s = 0; s < SHARD_COUNT; s++) {
+        for (MobiusString* head : shards_[s].buckets) {
+            MobiusString* str = head;
+            while (str) {
+                MobiusString* next = str->next;
+                delete[] str->data;
+                delete str;
+                str = next;
+            }
+        }
+    }
+}
+
+MobiusString* StringInternPool::intern(const char* data) {
+    if (!data) return nullptr;
+    return intern(data, strlen(data));
+}
+
+MobiusString* StringInternPool::intern(const char* data, size_t length) {
+    if (!data) return nullptr;
+
+    uint32_t hash = compute_string_hash(data, length);
+    int shard_idx = shardIndex(hash);
+    Shard& shard = shards_[shard_idx];
+
+    std::lock_guard<std::mutex> lock(shard.mutex);
+
+    MobiusString* existing = shard.find(data, length, hash);
+    if (existing) {
+        existing->ref_count.fetch_add(1, std::memory_order_relaxed);
+        return existing;
+    }
+
+    return shard.insert(data, length, hash);
+}
+
+void StringInternPool::stats(size_t* out_bucket_count, size_t* out_string_count,
+                             float* out_load_factor) const {
+    size_t total_buckets = 0;
+    size_t total_strings = 0;
+    for (int i = 0; i < SHARD_COUNT; i++) {
+        total_buckets += shards_[i].buckets.size();
+        total_strings += shards_[i].string_count;
+    }
+    if (out_bucket_count) *out_bucket_count = total_buckets;
+    if (out_string_count) *out_string_count = total_strings;
+    if (out_load_factor) {
+        *out_load_factor = total_buckets > 0
+            ? (float)total_strings / (float)total_buckets
+            : 0.0f;
+    }
+}
+
+size_t StringInternPool::stringCount() const {
+    size_t total = 0;
+    for (int i = 0; i < SHARD_COUNT; i++) {
+        total += shards_[i].string_count;
+    }
+    return total;
+}
+
+size_t StringInternPool::bucketCount() const {
+    size_t total = 0;
+    for (int i = 0; i < SHARD_COUNT; i++) {
+        total += shards_[i].buckets.size();
+    }
+    return total;
 }

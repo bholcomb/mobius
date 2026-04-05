@@ -7,9 +7,11 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <atomic>
 #include <vector>
 #include <unordered_map>
 #include <string>
+#include <mutex>
 
 // ============================================================================
 // FORWARD DECLARATIONS
@@ -18,6 +20,7 @@
 class MobiusState;
 class ModuleRegistry;
 class Metamethods;
+class JobSystem;
 
 // Internal error structure with owned (heap-allocated) strings
 typedef struct InternalError {
@@ -166,80 +169,95 @@ public:
     void startRepl();
 
     // Accessors
-    ExecutionContext* mainContext() const { return main_context_; }
+    ExecutionContext* mainContext() const;
     ModuleRegistry* registry() const { return registry_; }
     StringInternPool* stringPool() const { return string_pool_; }
     const MobiusConfig& config() const { return config_; }
-    MobiusConfig& config() { return config_; }
     bool isInitialized() const { return initialized_; }
-    InternalError* lastError() const { return last_error_; }
+    InternalError* lastError() const;
     Metamethods* metamethods() const { return metamethods_; }
+    MobiusMetrics& metrics() { return metrics_; }
+    std::mutex& importMutex() { return import_mutex_; }
+    JobSystem* jobSystem() const { return job_system_; }
+    const MobiusMetrics& metrics() const { return metrics_; }
+    void resetMetrics() { memset(&metrics_, 0, sizeof(metrics_)); }
 
     // Flat global variable array — indexed by compile-time slot numbers.
+    // globals_ is pre-sized; globalSlot() is lock-free for reads.
+    // assignGlobalSlot() and map lookups are mutex-protected.
     int assignGlobalSlot(const char* name);
     Value& globalSlot(int idx) { return globals_[idx]; }
     const Value& globalSlot(int idx) const { return globals_[idx]; }
-    int globalSlotCount() const { return (int)globals_.size(); }
+    int globalSlotCount() const { return global_count_.load(std::memory_order_relaxed); }
     int findGlobalSlot(const char* name) const;
     const char* globalSlotName(int idx) const;
     void removeGlobalSlots(int from_slot);
     void setGlobalReadonly(const char* name, bool readonly);
     bool removeGlobal(const char* name);
 
-    // Active VM — set by MobiusVM during execution for callback support.
-    class MobiusVM* activeVM() const { return active_vm_; }
-    void setActiveVM(class MobiusVM* vm) { active_vm_ = vm; }
+    void addOwnedProto(struct Prototype* proto);
 
-    // Native call context — set by MobiusVM before calling a MobiusCFunction.
-    NativeCallContext* nativeContext() const { return native_ctx_; }
-    void setNativeContext(NativeCallContext* ctx) { native_ctx_ = ctx; }
+    // Active VM — returns the thread-local current VM.
+    class MobiusVM* activeVM() const;
+
+    // Native call context — accessed through the active VM.
+    NativeCallContext* nativeContext() const;
 
     // Convenience wrappers for native functions operating on the NativeCallContext.
-    // offset=0 is the top of the native stack (last argument), offset=1 is second, etc.
     inline const Value& npeek(int offset = 0) const {
-        return native_ctx_->registers[native_ctx_->top - 1 - offset];
+        NativeCallContext* ctx = nativeContext();
+        return ctx->registers[ctx->top - 1 - offset];
     }
     inline Value& npeek(int offset = 0) {
-        return native_ctx_->registers[native_ctx_->top - 1 - offset];
+        NativeCallContext* ctx = nativeContext();
+        return ctx->registers[ctx->top - 1 - offset];
     }
     inline Value npop() {
-        return native_ctx_->registers[--native_ctx_->top];
+        NativeCallContext* ctx = nativeContext();
+        return ctx->registers[--ctx->top];
     }
     inline void npush(const Value& v) {
-        native_ctx_->registers[native_ctx_->top++] = v;
+        NativeCallContext* ctx = nativeContext();
+        ctx->registers[ctx->top++] = v;
     }
     inline void npush(Value&& v) {
-        native_ctx_->registers[native_ctx_->top++] = std::move(v);
+        NativeCallContext* ctx = nativeContext();
+        ctx->registers[ctx->top++] = std::move(v);
     }
     inline int nsize() const {
-        return native_ctx_->top - native_ctx_->base;
+        NativeCallContext* ctx = nativeContext();
+        return ctx->top - ctx->base;
     }
 
 private:
     ModuleRegistry* registry_;
     StringInternPool* string_pool_;
     Metamethods* metamethods_;
+    JobSystem* job_system_;
 
-    ExecutionContext* main_context_;
-    class MobiusVM* active_vm_;       // non-null during VM execution
-    NativeCallContext* native_ctx_;   // non-null only during a native call
-
-    InternalError* last_error_;
     MobiusErrorHandler error_handler_;
     void* error_handler_userdata_;
 
     MobiusConfig config_;
+    MobiusMetrics metrics_;
     bool initialized_;
-    const char* source_code_;
 
-    // Flat global variable array — replaces Environment hash map for hot path.
+    InternalError* fallback_last_error_;
+    const char* fallback_source_code_;
+
+    // Flat global variable array — pre-sized, lock-free reads by slot index.
     std::vector<Value> globals_;
+    std::atomic<int> global_count_{0};
+    mutable std::mutex global_slot_mutex_;
     std::unordered_map<std::string, int> global_slot_map_;
 
     // Prototypes compiled by the VM are owned here so they outlive any
     // MobiusFunction objects that reference them (e.g. functions defined
     // in scripts loaded via load()).
     std::vector<struct Prototype*> owned_protos_;
+    std::mutex owned_protos_mutex_;
+
+    std::mutex import_mutex_;
 
     void clearErrorInternal();
 };
@@ -249,5 +267,6 @@ private:
 // ============================================================================
 
 void free_stack_trace(StackTrace* trace);
+void free_internal_error(InternalError* error);
 
 #endif // MOBIUS_STATE_H

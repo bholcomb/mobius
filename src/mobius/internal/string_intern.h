@@ -5,24 +5,25 @@
 #include <stdint.h>
 #include <string.h>
 #include <vector>
+#include <atomic>
+#include <mutex>
 
-// Forward declarations
 class MobiusState;
 
 struct MobiusString {
     const char* data;
     size_t length;
     uint32_t hash;
-    int ref_count;
+    std::atomic<int> ref_count;
     MobiusString* next;
 
     MobiusString* retain() {
-        ref_count++;
+        ref_count.fetch_add(1, std::memory_order_relaxed);
         return this;
     }
 
     void release() {
-        ref_count--;
+        ref_count.fetch_sub(1, std::memory_order_relaxed);
     }
 
     bool operator==(const MobiusString& other) const;
@@ -30,6 +31,8 @@ struct MobiusString {
 
 class StringInternPool {
 public:
+    static constexpr int SHARD_COUNT = 16;
+
     explicit StringInternPool(size_t initial_bucket_count = 256);
     ~StringInternPool();
 
@@ -41,17 +44,26 @@ public:
     void stats(size_t* out_bucket_count, size_t* out_string_count,
                float* out_load_factor) const;
 
-    size_t stringCount() const { return string_count_; }
-    size_t bucketCount() const { return buckets_.size(); }
+    size_t stringCount() const;
+    size_t bucketCount() const;
 
 private:
-    std::vector<MobiusString*> buckets_;
-    size_t string_count_;
-    float load_factor_;
+    struct Shard {
+        std::mutex mutex;
+        std::vector<MobiusString*> buckets;
+        size_t string_count = 0;
+        float load_factor = 0.75f;
 
-    MobiusString* find(const char* data, size_t len, uint32_t hash) const;
-    MobiusString* insert(const char* data, size_t len, uint32_t hash);
-    void resize();
+        MobiusString* find(const char* data, size_t len, uint32_t hash) const;
+        MobiusString* insert(const char* data, size_t len, uint32_t hash);
+        void resize();
+    };
+
+    Shard shards_[SHARD_COUNT];
+
+    static int shardIndex(uint32_t hash) {
+        return (int)(hash & (SHARD_COUNT - 1));
+    }
 };
 
 #endif // MOBIUS_STRING_INTERN_H

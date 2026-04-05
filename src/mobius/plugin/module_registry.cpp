@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <mutex>
 #include <libgen.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -21,7 +22,7 @@
 // ============================================================================
 
 static ModuleRegistry* global_registry = nullptr;
-static bool cleanup_registered = false;
+static std::once_flag registry_init_flag;
 
 static void cleanup_global_registry() {
     delete global_registry;
@@ -29,13 +30,10 @@ static void cleanup_global_registry() {
 }
 
 ModuleRegistry* getGlobalRegistry() {
-    if (!global_registry) {
+    std::call_once(registry_init_flag, []() {
         global_registry = new ModuleRegistry();
-        if (!cleanup_registered) {
-            atexit(cleanup_global_registry);
-            cleanup_registered = true;
-        }
-    }
+        atexit(cleanup_global_registry);
+    });
     return global_registry;
 }
 
@@ -83,10 +81,12 @@ LoadedModule* ModuleRegistry::findModule(const char* name) {
 
 void ModuleRegistry::addPluginDirectory(const char* directory) {
     if (!directory) return;
+    std::unique_lock<std::shared_mutex> lock(registry_mutex_);
     plugin_directories_.emplace_back(directory);
 }
 
 void ModuleRegistry::clearPluginDirectories() {
+    std::unique_lock<std::shared_mutex> lock(registry_mutex_);
     plugin_directories_.clear();
 }
 
@@ -184,6 +184,16 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
 Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source, MobiusState* state) {
     if (!name || !state) return nullptr;
 
+    {
+        std::shared_lock<std::shared_mutex> rlock(registry_mutex_);
+        auto it = module_tables_.find(name);
+        if (it != module_tables_.end()) {
+            return it->second;
+        }
+    }
+
+    std::unique_lock<std::shared_mutex> wlock(registry_mutex_);
+
     auto it = module_tables_.find(name);
     if (it != module_tables_.end()) {
         return it->second;
@@ -265,12 +275,13 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
                     nctx.top       = 1;
                     nctx.capacity  = 32;
 
-                    NativeCallContext* prev_nctx = state->nativeContext();
-                    state->setNativeContext(&nctx);
+                    MobiusVM* vm = MobiusVM::t_current_vm;
+                    NativeCallContext* prev_nctx = vm ? vm->native_ctx_ : nullptr;
+                    if (vm) vm->native_ctx_ = &nctx;
 
                     lm->plugin->post_init(state);
 
-                    state->setNativeContext(prev_nctx);
+                    if (vm) vm->native_ctx_ = prev_nctx;
                 }
             }
         }

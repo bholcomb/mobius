@@ -3,11 +3,16 @@
 
 #include "vm/bytecode.h"
 #include "data/value.h"
+#include "mobius/mobius.h"
 
 #include <vector>
 #include <cstdint>
 
 class MobiusState;
+class ExecutionContext;
+class FutureValue;
+struct NativeCallContext;
+struct InternalError;
 
 // ============================================================================
 // Upvalue — runtime representation of a captured variable
@@ -125,7 +130,21 @@ public:
     int callMetamethod(const Value& table_val, MobiusString* mm_name,
                        const Value& lhs, const Value& rhs, Value& out);
 
+    static thread_local MobiusVM* t_current_vm;
+
     MobiusState* state_;
+    MobiusMetrics* metrics_;
+
+    bool strict_mode_;
+    bool warn_on_conversion_;
+    MobiusOverrideBehavior override_behavior_;
+
+    NativeCallContext* native_ctx_;
+    InternalError* last_error_;
+    const char* source_code_;
+    ExecutionContext* exec_context_;
+    FutureValue* future_ = nullptr;
+
     std::vector<Value> registers_;
 
     CallInfo*  call_stack_;
@@ -141,6 +160,8 @@ public:
     CallInfo& callStackPush(Prototype* proto, uint32_t* ip, int base, int nresults) {
         call_depth_++;
         if (MOBIUS_UNLIKELY(call_depth_ >= call_stack_capacity_)) growCallStack();
+        if (MOBIUS_UNLIKELY(call_depth_ > metrics_->peak_call_depth))
+            metrics_->peak_call_depth = call_depth_;
         CallInfo& ci = call_stack_[call_depth_];
         ci.reset(proto, ip, base, nresults);
         return ci;
@@ -166,6 +187,14 @@ public:
     int run(size_t base_depth);
 
     void growCallStack();
+
+    void ensureRegisters(int needed) {
+        if (MOBIUS_UNLIKELY(needed > (int)registers_.size())) {
+            registers_.resize(needed, Value());
+            if (registers_.size() > metrics_->peak_registers)
+                metrics_->peak_registers = registers_.size();
+        }
+    }
 
 private:
     int callNative(MobiusCFunction func, int func_reg, int nargs, int nresults);

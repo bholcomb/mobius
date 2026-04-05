@@ -297,6 +297,12 @@ int Compiler::compileExpr(Expr* expr, int dest) {
             return compileTernary(&expr->as.ternary, dest);
         case EXPR_FUNCTION:
             return compileFunctionExpr(&expr->as.function_expr, dest);
+        case EXPR_SPAWN:
+            return compileSpawn(&expr->as.spawn, dest);
+        case EXPR_AWAIT:
+            return compileAwait(&expr->as.await, dest);
+        case EXPR_SHARED:
+            return compileShared(&expr->as.shared, dest);
         default:
             fprintf(stderr, "Compiler [%s]: unknown expression type %d\n",
                     current_->proto->source.c_str(), expr->type);
@@ -1435,6 +1441,9 @@ void Compiler::compileStmt(Stmt* stmt) {
             break;
         case STMT_THROW:
             compileThrowStmt(&stmt->as.throw_stmt);
+            break;
+        case STMT_YIELD:
+            emitABC(OP_YIELD, 0, 0, 0);
             break;
         default:
             fprintf(stderr, "Compiler [%s]: unknown statement type %d\n",
@@ -2818,4 +2827,46 @@ void Compiler::compileThrowStmt(ThrowStmt* stmt) {
 
     emitABC(OP_THROW, (uint8_t)reg, 0, 0);
     setFreeReg(save);
+}
+
+// OP_SPAWN A B C -- spawn function R[B] with C-1 args; result (future) into R[A]
+int Compiler::compileSpawn(SpawnExpr* expr, int dest) {
+    int base = current_->free_reg;
+    int func_reg = allocReg();
+
+    compileExpr(expr->callee, func_reg);
+
+    for (size_t i = 0; i < expr->arg_count; i++) {
+        int arg_reg = allocReg();
+        compileExpr(expr->arguments[i], arg_reg);
+    }
+
+    int nargs = (int)expr->arg_count + 1;
+
+    int result_reg = (dest >= 0) ? dest : func_reg;
+    emitABC(OP_SPAWN, (uint8_t)result_reg, (uint8_t)func_reg, (uint8_t)nargs);
+
+    setFreeReg(base);
+    if (dest < 0) {
+        result_reg = allocReg();
+        if (result_reg != func_reg) {
+            emitABC(OP_MOVE, (uint8_t)result_reg, (uint8_t)func_reg, 0);
+        }
+    }
+    return result_reg;
+}
+
+// OP_AWAIT A B -- await future in R[B], result into R[A]
+int Compiler::compileAwait(AwaitExpr* expr, int dest) {
+    int operand_reg = compileExpr(expr->operand);
+    int result_reg = (dest >= 0) ? dest : operand_reg;
+    emitABC(OP_AWAIT, (uint8_t)result_reg, (uint8_t)operand_reg, 0);
+    return result_reg;
+}
+
+// OP_SHARE A -- mark R[A] as shared (deep propagation to nested containers)
+int Compiler::compileShared(SharedExpr* expr, int dest) {
+    int result_reg = compileExpr(expr->operand, dest);
+    emitABC(OP_SHARE, (uint8_t)result_reg, 0, 0);
+    return result_reg;
 }

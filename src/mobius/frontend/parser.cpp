@@ -633,6 +633,38 @@ Expr* parse_unary(Parser* parser) {
         Expr* right = parse_unary(parser);
         return make_unary_expr(op, right);
     }
+
+    if (parser_match(parser, TOKEN_SPAWN)) {
+        Expr* callee = parse_call(parser);
+        if (!callee) return NULL;
+
+        if (callee->type != EXPR_CALL) {
+            parser_error_at_current(parser, "spawn requires a function call, e.g. 'spawn func(args)'");
+            free_expr(callee);
+            return NULL;
+        }
+
+        Expr* spawn = make_spawn_expr(callee->as.call.callee,
+                                       callee->as.call.arguments,
+                                       callee->as.call.arg_count);
+        callee->as.call.callee = NULL;
+        callee->as.call.arguments = NULL;
+        callee->as.call.arg_count = 0;
+        free_expr(callee);
+        return spawn;
+    }
+
+    if (parser_match(parser, TOKEN_AWAIT)) {
+        Expr* operand = parse_unary(parser);
+        if (!operand) return NULL;
+        return make_await_expr(operand);
+    }
+
+    if (parser_match(parser, TOKEN_SHARED)) {
+        Expr* operand = parse_unary(parser);
+        if (!operand) return NULL;
+        return make_shared_expr(operand);
+    }
     
     return parse_call(parser);
 }
@@ -1231,6 +1263,14 @@ Stmt* parse_statement(Parser* parser) {
             return NULL;
         }
         return make_throw_stmt(keyword, value);
+    }
+
+    if (parser_match(parser, TOKEN_YIELD)) {
+        Token keyword = parser_previous(parser);
+        if (!consume_statement_terminator(parser, "Expect ';' or newline after yield")) {
+            return NULL;
+        }
+        return make_yield_stmt(keyword);
     }
     
     return parse_expression_statement(parser);

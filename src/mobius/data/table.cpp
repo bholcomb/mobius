@@ -1,4 +1,5 @@
 #include "data/table.h"
+#include "data/array.h"
 #include "data/metamethods.h"
 #include "internal/string_intern.h"
 #include "state/mobius_state.h"
@@ -183,6 +184,14 @@ void Table::resize(size_t new_capacity) {
 }
 
 const Value& Table::get(const Value& key) const {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::shared_lock lock(mutex_);
+        return getUnlocked(key);
+    }
+    return getUnlocked(key);
+}
+
+const Value& Table::getUnlocked(const Value& key) const {
     if (size_ == 0) {
         if (metatable_) {
             const Value& index_method = getMetamethod(state_->metamethods()->index());
@@ -209,6 +218,14 @@ const Value& Table::get(const Value& key) const {
 }
 
 const Value& Table::getByString(MobiusString* key) const {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::shared_lock lock(mutex_);
+        return getByStringUnlocked(key);
+    }
+    return getByStringUnlocked(key);
+}
+
+const Value& Table::getByStringUnlocked(MobiusString* key) const {
     if (MOBIUS_UNLIKELY(!key)) return kNilValue;
     if (MOBIUS_UNLIKELY(size_ == 0)) {
         if (metatable_) {
@@ -250,6 +267,14 @@ const Value& Table::getByString(MobiusString* key) const {
 }
 
 bool Table::set(const Value& key, const Value& value) {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::unique_lock lock(mutex_);
+        return setUnlocked(key, value);
+    }
+    return setUnlocked(key, value);
+}
+
+bool Table::setUnlocked(const Value& key, const Value& value) {
     if (size_ * 4 >= entries_.size() * 3) {
         resize(entries_.size() * 2);
     }
@@ -276,6 +301,14 @@ bool Table::set(const Value& key, const Value& value) {
 }
 
 bool Table::setByString(MobiusString* key, const Value& value) {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::unique_lock lock(mutex_);
+        return setByStringUnlocked(key, value);
+    }
+    return setByStringUnlocked(key, value);
+}
+
+bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
     if (!key) return false;
 
     if (size_ * 4 >= entries_.size() * 3) {
@@ -331,6 +364,9 @@ bool Table::setByString(MobiusString* key, const Value& value) {
 }
 
 bool Table::hasKey(const Value& key) const {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::shared_lock lock(mutex_);
+    }
     if (size_ == 0) return false;
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
@@ -338,6 +374,14 @@ bool Table::hasKey(const Value& key) const {
 }
 
 bool Table::remove(const Value& key) {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::unique_lock lock(mutex_);
+        return removeUnlocked(key);
+    }
+    return removeUnlocked(key);
+}
+
+bool Table::removeUnlocked(const Value& key) {
     if (size_ == 0) return false;
 
     size_t h = hash_value_raw(key);
@@ -350,7 +394,6 @@ bool Table::remove(const Value& key) {
     entries_[index].value = make_nil_value();
     size_--;
 
-    // Rehash following entries to maintain probe sequence
     size_t mask = entries_.size() - 1;
     for (;;) {
         index = (index + 1) & mask;
@@ -360,7 +403,7 @@ bool Table::remove(const Value& key) {
         Value v = std::move(entries_[index].value);
         tags_[index] = TAG_EMPTY;
         size_--;
-        set(k, v);
+        setUnlocked(k, v);
     }
 
     return true;
@@ -380,9 +423,29 @@ Table* Table::copy() const {
 }
 
 void Table::forEach(const std::function<void(const Value& key, const Value& value)>& fn) const {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::shared_lock lock(mutex_);
+    }
     for (size_t i = 0; i < entries_.size(); i++) {
         if (tags_[i] != TAG_EMPTY) {
             fn(entries_[i].key, entries_[i].value);
+        }
+    }
+}
+
+void Table::markShared() {
+    if (shared_) return;
+    shared_ = true;
+    for (size_t i = 0; i < entries_.size(); i++) {
+        if (tags_[i] != TAG_EMPTY) {
+            Value& val = entries_[i].value;
+            if (val.type == VAL_ARRAY && val.as.array) {
+                val.as.array->markShared();
+                val.flags |= VAL_FLAG_SHARED;
+            } else if (val.type == VAL_TABLE && val.as.table) {
+                val.as.table->markShared();
+                val.flags |= VAL_FLAG_SHARED;
+            }
         }
     }
 }

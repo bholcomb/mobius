@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <vector>
 #include <functional>
+#include <shared_mutex>
 
 #define INITIAL_TABLE_CAPACITY 8
 
@@ -49,6 +50,10 @@ public:
 
     MobiusState* getState() const { return state_; }
 
+    void markShared();
+    bool isShared() const { return shared_; }
+    std::shared_mutex& mutex() { return mutex_; }
+
     static constexpr uint8_t TAG_EMPTY = 0x00;
 
     const std::vector<TableEntry>& entries() const { return entries_; }
@@ -56,6 +61,12 @@ public:
 
 private:
     static inline uint8_t tagFromHash(size_t h) { return 0x80 | (uint8_t)(h >> 57); }
+
+    const Value& getUnlocked(const Value& key) const;
+    const Value& getByStringUnlocked(MobiusString* key) const;
+    bool setUnlocked(const Value& key, const Value& value);
+    bool setByStringUnlocked(MobiusString* key, const Value& value);
+    bool removeUnlocked(const Value& key);
 
     void resize(size_t new_capacity);
     size_t findIndex(const Value& key, size_t hash) const;
@@ -66,6 +77,8 @@ private:
     size_t size_;
     Table* metatable_;
     MobiusState* state_;
+    bool shared_ = false;
+    mutable std::shared_mutex mutex_;
 };
 
 // Hash helpers

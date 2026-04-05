@@ -668,6 +668,19 @@ void free_expr(Expr* expr) {
             }
             if (expr->as.function_expr.body) free(expr->as.function_expr.body);
             break;
+        case EXPR_SPAWN:
+            free_expr(expr->as.spawn.callee);
+            for (size_t i = 0; i < expr->as.spawn.arg_count; i++) {
+                free_expr(expr->as.spawn.arguments[i]);
+            }
+            free(expr->as.spawn.arguments);
+            break;
+        case EXPR_AWAIT:
+            free_expr(expr->as.await.operand);
+            break;
+        case EXPR_SHARED:
+            free_expr(expr->as.shared.operand);
+            break;
     }
     free(expr);
 }
@@ -818,6 +831,8 @@ void free_stmt(Stmt* stmt) {
                 free_expr(stmt->as.throw_stmt.value);
             }
             break;
+        case STMT_YIELD:
+            break;
     }
     free(stmt);
 }
@@ -920,6 +935,19 @@ void ast_release_expr(Expr* expr) {
                     }
                     free(expr->as.function_expr.body);
                 }
+                break;
+            case EXPR_SPAWN:
+                ast_release_expr(expr->as.spawn.callee);
+                for (size_t i = 0; i < expr->as.spawn.arg_count; i++) {
+                    ast_release_expr(expr->as.spawn.arguments[i]);
+                }
+                free(expr->as.spawn.arguments);
+                break;
+            case EXPR_AWAIT:
+                ast_release_expr(expr->as.await.operand);
+                break;
+            case EXPR_SHARED:
+                ast_release_expr(expr->as.shared.operand);
                 break;
         }
         
@@ -1126,6 +1154,8 @@ void ast_release_stmt(Stmt* stmt) {
                     ast_release_expr(stmt->as.throw_stmt.value);
                 }
                 break;
+            case STMT_YIELD:
+                break;
         }
         
         free(stmt);
@@ -1308,6 +1338,49 @@ Stmt* make_throw_stmt(Token keyword, Expr* value) {
     stmt->as.throw_stmt.keyword = keyword;
     stmt->as.throw_stmt.value = value;
     return stmt;
+}
+
+Stmt* make_yield_stmt(Token keyword) {
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+
+    stmt->type = STMT_YIELD;
+    stmt->ref_count = 1;
+    stmt->as.throw_stmt.keyword = keyword;
+    stmt->as.throw_stmt.value = NULL;
+    return stmt;
+}
+
+Expr* make_spawn_expr(Expr* callee, Expr** arguments, size_t arg_count) {
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+
+    expr->type = EXPR_SPAWN;
+    expr->ref_count = 1;
+    expr->as.spawn.callee = callee;
+    expr->as.spawn.arguments = arguments;
+    expr->as.spawn.arg_count = arg_count;
+    return expr;
+}
+
+Expr* make_await_expr(Expr* operand) {
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+
+    expr->type = EXPR_AWAIT;
+    expr->ref_count = 1;
+    expr->as.await.operand = operand;
+    return expr;
+}
+
+Expr* make_shared_expr(Expr* operand) {
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+
+    expr->type = EXPR_SHARED;
+    expr->ref_count = 1;
+    expr->as.shared.operand = operand;
+    return expr;
 }
 
 // Pattern creation functions
