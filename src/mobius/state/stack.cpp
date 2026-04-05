@@ -62,7 +62,9 @@ static void fatal_type_error(const char* func, ValueType expected, ValueType act
 static bool check_strict_conversion(MobiusState* state, ValueType from, ValueType to) {
     if (from == to) return false;
 
-    if (state->config().strict_mode) {
+    bool strict = state->config().strict_mode;
+    if (state->activeVM()) strict = state->activeVM()->strict_mode_;
+    if (strict) {
         fprintf(stderr, "FATAL: Type conversion not allowed in strict mode (from %s to %s)\n",
                 value_type_name(from), value_type_name(to));
         exit(1);
@@ -222,7 +224,7 @@ static bool value_to_bool(Value* val) {
 }
 
 static const char* stack_value_to_string(Value* val) {
-    static char buffer[256];
+    static thread_local char buffer[256];
 
     switch (val->type) {
         case VAL_STRING:
@@ -796,13 +798,13 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
         child_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
     }
 
-    NativeCallContext* saved_nctx = state->nativeContext();
-    state->setNativeContext(nullptr);
+    NativeCallContext* saved_nctx = vm->native_ctx_;
+    vm->native_ctx_ = nullptr;
 
     size_t depth = vm->callStackSize() - 1;
     int rc = vm->run(depth);
 
-    state->setNativeContext(saved_nctx);
+    vm->native_ctx_ = saved_nctx;
     nctx->registers = vm->registers_.data();
     nctx->capacity = (int)vm->registers_.size();
 

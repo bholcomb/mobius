@@ -147,6 +147,10 @@ private:
     void compileTryCatchStmt(TryCatchStmt* stmt);
     void compileThrowStmt(ThrowStmt* stmt);
 
+    int compileSpawn(SpawnExpr* expr, int dest);
+    int compileAwait(AwaitExpr* expr, int dest);
+    int compileShared(SharedExpr* expr, int dest);
+
     void compileBlock(Stmt** stmts, size_t count);
 
     // --- Helpers ---

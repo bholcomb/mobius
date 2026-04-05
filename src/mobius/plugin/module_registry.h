@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <shared_mutex>
 
 class MobiusState;
 class Table;
@@ -40,6 +41,7 @@ private:
     LoadedModule* findModule(const char* name);
     PluginLoadResult loadPlugin(const char* path, MobiusState* state);
 
+    mutable std::shared_mutex registry_mutex_;
     std::vector<LoadedModule> modules_;
     std::vector<std::string> plugin_directories_;
     std::unordered_map<std::string, Table*> module_tables_;

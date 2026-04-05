@@ -1,5 +1,8 @@
 #include "data/value.h"
+#include "data/channel.h"
 #include "data/enum.h"
+#include "data/future.h"
+#include "data/array_slice.h"
 #include "data/table.h"
 #include "data/array.h"
 #include "data/function.h"
@@ -26,17 +29,16 @@ void Value::releaseRefSlow() {
         case VAL_FUNCTION:
             if (as.function) {
                 MobiusFunction* func = as.function;
-                func->ref_count--;
-                if (func->ref_count <= 0) {
-                    free(func->param_names);
+                if (func->ref_count.fetch_sub(1, std::memory_order_acq_rel) <= 1) {
+                    delete[] func->param_names;
                     if (func->body) {
                         for (size_t i = 0; i < func->body_count; i++) {
                             if (func->body[i]) ast_release_stmt(func->body[i]);
                         }
-                        free(func->body);
+                        delete[] func->body;
                     }
-                    free(func->upvalues);
-                    free(func);
+                    delete[] func->upvalues;
+                    delete func;
                 }
             }
             break;
@@ -45,16 +47,31 @@ void Value::releaseRefSlow() {
             break;
         case VAL_USERDATA:
             if (as.userdata) {
-                if (--as.userdata->ref_count <= 0) {
+                if (as.userdata->ref_count.fetch_sub(1, std::memory_order_acq_rel) <= 1) {
                     if (as.userdata->destructor && as.userdata->ptr)
                         as.userdata->destructor(as.userdata->ptr);
-                    free(as.userdata);
+                    delete as.userdata;
                 }
             }
             break;
         case VAL_ENUM:
             if (as.enum_def) {
                 as.enum_def->release();
+            }
+            break;
+        case VAL_FUTURE:
+            if (as.future) {
+                ((RefCounted*)as.future)->release();
+            }
+            break;
+        case VAL_ARRAY_SLICE:
+            if (as.array_slice) {
+                ((RefCounted*)as.array_slice)->release();
+            }
+            break;
+        case VAL_CHANNEL:
+            if (as.channel) {
+                ((RefCounted*)as.channel)->release();
             }
             break;
         default:
@@ -103,8 +120,8 @@ Value make_table_value(Table* table) {
 }
 
 Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size) {
-    UserdataObject* ud = (UserdataObject*)malloc(sizeof(UserdataObject));
-    ud->ref_count  = 1;
+    UserdataObject* ud = new UserdataObject();
+    ud->ref_count.store(1, std::memory_order_relaxed);
     ud->ptr        = ptr;
     ud->destructor = destructor;
     ud->type_name  = type_name;
@@ -229,6 +246,19 @@ void print_value(const Value& value) {
             }
             break;
         }
+        case VAL_FUTURE:
+            printf("<future %p>", (void*)value.as.future);
+            break;
+        case VAL_ARRAY_SLICE:
+            if (value.as.array_slice) {
+                printf("<slice len=%zu>", value.as.array_slice->length());
+            } else {
+                printf("<slice (null)>");
+            }
+            break;
+        case VAL_CHANNEL:
+            printf("<channel %p>", (void*)value.as.channel);
+            break;
         default:
             printf("unknown_value");
             break;
@@ -346,6 +376,9 @@ const char* value_type_name(ValueType type) {
         case VAL_TABLE: return "table";
         case VAL_USERDATA: return "userdata";
         case VAL_ENUM: return "enum";
+        case VAL_FUTURE: return "future";
+        case VAL_ARRAY_SLICE: return "array_slice";
+        case VAL_CHANNEL: return "channel";
         default: return "unknown";
     }
 }

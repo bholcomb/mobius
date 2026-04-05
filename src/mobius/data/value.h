@@ -25,8 +25,11 @@
 #endif
 
 class ArrayValue;
+class ArraySlice;
+class Channel;
 struct EnumValue;
 class EnumDefinition;
+class FutureValue;
 class Table;
 class MobiusState;
 
@@ -34,7 +37,7 @@ typedef int (*MobiusCFunction)(MobiusState* ctx, int arg_count);
 typedef void (*UserdataDestructor)(void* ptr);
 
 struct UserdataObject {
-    int          ref_count;
+    std::atomic<int> ref_count;
     void*        ptr;
     UserdataDestructor destructor;
     const char*  type_name;
@@ -48,6 +51,7 @@ struct UserdataObject {
 #define VAL_FLAG_INTERNED  0x08  // heap object is interned; skip refcount release
 #define VAL_FLAG_MARKED    0x10  // reserved: GC mark phase
 #define VAL_FLAG_FROZEN    0x20  // reserved: container contents are immutable
+#define VAL_FLAG_SHARED    0x40  // container is shared across fibers; mutations are mutex-protected
 
 enum ValueType : int8_t {
     // Non-refcounted (inline) types — must stay below VAL_STRING
@@ -64,7 +68,10 @@ enum ValueType : int8_t {
     VAL_FUNCTION,
     VAL_TABLE,
     VAL_USERDATA,
-    VAL_ENUM
+    VAL_ENUM,
+    VAL_FUTURE,
+    VAL_ARRAY_SLICE,
+    VAL_CHANNEL
 };
 
 class Value {
@@ -84,6 +91,9 @@ public:
         struct Table* table;
         UserdataObject* userdata;
         EnumDefinition* enum_def;    // VAL_ENUM — member index stored in aux
+        FutureValue* future;         // VAL_FUTURE
+        ArraySlice* array_slice;     // VAL_ARRAY_SLICE
+        Channel* channel;            // VAL_CHANNEL
 
         ValueData() : i64(0) {}
     } as;
@@ -159,6 +169,12 @@ public:
                        as.userdata->type_name == other.as.userdata->type_name;
             case VAL_ENUM:
                 return as.enum_def == other.as.enum_def && aux == other.aux;
+            case VAL_FUTURE:
+                return as.future == other.as.future;
+            case VAL_ARRAY_SLICE:
+                return as.array_slice == other.as.array_slice;
+            case VAL_CHANNEL:
+                return as.channel == other.as.channel;
             default: return false;
         }
     }
@@ -171,10 +187,13 @@ private:
         switch (type) {
             case VAL_STRING:   if (as.string) as.string->retain(); break;
             case VAL_ARRAY:    if (as.array) ((RefCounted*)as.array)->retain(); break;
-            case VAL_FUNCTION: if (as.function) as.function->ref_count++; break;
+            case VAL_FUNCTION: if (as.function) as.function->ref_count.fetch_add(1, std::memory_order_relaxed); break;
             case VAL_TABLE:    if (as.table) ((RefCounted*)as.table)->retain(); break;
-            case VAL_USERDATA: if (as.userdata) as.userdata->ref_count++; break;
+            case VAL_USERDATA: if (as.userdata) as.userdata->ref_count.fetch_add(1, std::memory_order_relaxed); break;
             case VAL_ENUM:     if (as.enum_def) ((RefCounted*)as.enum_def)->retain(); break;
+            case VAL_FUTURE:   if (as.future) ((RefCounted*)as.future)->retain(); break;
+            case VAL_ARRAY_SLICE: if (as.array_slice) ((RefCounted*)as.array_slice)->retain(); break;
+            case VAL_CHANNEL: if (as.channel) ((RefCounted*)as.channel)->retain(); break;
             default: break;
         }
     }
@@ -252,8 +271,35 @@ inline bool is_truthy(const Value& value) {
         case VAL_TABLE: return value.as.table != nullptr;
         case VAL_USERDATA: return value.as.userdata != nullptr && value.as.userdata->ptr != nullptr;
         case VAL_ENUM: return true;
+        case VAL_FUTURE: return value.as.future != nullptr;
+        case VAL_ARRAY_SLICE: return value.as.array_slice != nullptr;
+        case VAL_CHANNEL: return value.as.channel != nullptr;
         default: return false;
     }
+}
+
+inline Value make_channel_value(Channel* ch) {
+    Value value;
+    value.type = VAL_CHANNEL;
+    value.as.channel = ch;
+    if (ch) ((RefCounted*)ch)->retain();
+    return value;
+}
+
+inline Value make_array_slice_value(ArraySlice* slice) {
+    Value value;
+    value.type = VAL_ARRAY_SLICE;
+    value.as.array_slice = slice;
+    if (slice) ((RefCounted*)slice)->retain();
+    return value;
+}
+
+inline Value make_future_value(FutureValue* future) {
+    Value value;
+    value.type = VAL_FUTURE;
+    value.as.future = future;
+    if (future) ((RefCounted*)future)->retain();
+    return value;
 }
 
 MOBIUS_API void print_value(const Value& value);

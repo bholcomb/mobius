@@ -27,7 +27,10 @@ typedef enum {
     EXPR_INCREMENT,
     EXPR_DECREMENT,
     EXPR_TERNARY,
-    EXPR_FUNCTION
+    EXPR_FUNCTION,
+    EXPR_SPAWN,
+    EXPR_AWAIT,
+    EXPR_SHARED
 } ExprType;
 
 // Statement types
@@ -49,7 +52,8 @@ typedef enum {
     STMT_PRAGMA,
     STMT_FOR_IN,
     STMT_TRY_CATCH,
-    STMT_THROW
+    STMT_THROW,
+    STMT_YIELD
 } StmtType;
 
 // Expression structures
@@ -152,6 +156,23 @@ typedef struct {
     size_t body_count;
 } FunctionExpr;
 
+// spawn expression: spawn func(args...)
+typedef struct {
+    Expr* callee;
+    Expr** arguments;
+    size_t arg_count;
+} SpawnExpr;
+
+// await expression: await future_expr
+typedef struct {
+    Expr* operand;
+} AwaitExpr;
+
+// shared expression: shared container_expr
+typedef struct {
+    Expr* operand;
+} SharedExpr;
+
 // Main expression structure
 struct Expr {
     ExprType type;
@@ -173,6 +194,9 @@ struct Expr {
         IncrementExpr increment;
         TernaryExpr ternary;
         FunctionExpr function_expr;
+        SpawnExpr spawn;
+        AwaitExpr await;
+        SharedExpr shared;
     } as;
 };
 
@@ -444,6 +468,11 @@ Stmt* make_try_catch_stmt(Stmt** try_body, size_t try_body_count,
                           Token catch_var, Stmt** catch_body, size_t catch_body_count,
                           Stmt** finally_body = nullptr, size_t finally_body_count = 0);
 Stmt* make_throw_stmt(Token keyword, Expr* value);
+Stmt* make_yield_stmt(Token keyword);
+
+Expr* make_spawn_expr(Expr* callee, Expr** arguments, size_t arg_count);
+Expr* make_await_expr(Expr* operand);
+Expr* make_shared_expr(Expr* operand);
 
 // Enum helper functions
 EnumMemberDef* make_enum_member(Token name, Expr* value);

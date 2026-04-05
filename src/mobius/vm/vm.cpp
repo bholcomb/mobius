@@ -2,11 +2,14 @@
 #include "state/mobius_state.h"
 #include "data/table.h"
 #include "data/array.h"
+#include "data/array_slice.h"
 #include "data/enum.h"
 #include "data/function.h"
+#include "data/future.h"
 #include "data/metamethods.h"
 #include "plugin/module_registry.h"
 #include "internal/string_intern.h"
+#include "fiber/job_system.h"
 
 #include <cstdio>
 #include <cstring>
@@ -14,6 +17,15 @@
 #include <cstdlib>
 #include <cmath>
 #include <new>
+#include <mutex>
+#include <thread>
+#include <time.h>
+
+static uint64_t get_time_ns_vm() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
 
 // ============================================================================
 // Integer extraction helpers (duplicated from eval_arithmatic.cpp so the VM
@@ -43,17 +55,31 @@ inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
 // Constructor / Destructor
 // ============================================================================
 
+thread_local MobiusVM* MobiusVM::t_current_vm = nullptr;
+
 MobiusVM::MobiusVM(MobiusState* state)
-    : state_(state), current_ip_(nullptr),
+    : state_(state), metrics_(&state->metrics()),
+      strict_mode_(state->config().strict_mode),
+      warn_on_conversion_(state->config().warn_on_conversion),
+      override_behavior_(state->config().override_behavior),
+      native_ctx_(nullptr), last_error_(nullptr),
+      source_code_(nullptr), exec_context_(nullptr),
+      current_ip_(nullptr),
       call_depth_(0), call_stack_capacity_(VM_INITIAL_CALL_STACK)
 {
     registers_.reserve(VM_INITIAL_REGISTERS);
     call_stack_ = new CallInfo[VM_INITIAL_CALL_STACK];
     call_stack_[0].initUpvalues();
+
+    exec_context_ = new ExecutionContext(state, state->config().max_call_depth);
 }
 
 MobiusVM::~MobiusVM() {
     delete[] call_stack_;
+    delete exec_context_;
+    if (last_error_) {
+        free_internal_error(last_error_);
+    }
 }
 
 void MobiusVM::growCallStack() {
@@ -119,19 +145,19 @@ int MobiusVM::currentLine() const {
 // ============================================================================
 
 int MobiusVM::execute(Prototype* proto) {
-    int needed = proto->num_registers + 256;
-    if (needed > (int)registers_.size())
-        registers_.resize(needed, Value());
+    ensureRegisters(proto->num_registers + 256);
 
     size_t depth_before = callStackSize();
     callStackPush(proto, proto->code.data(), 0, 0);
 
-    MobiusVM* prev_vm = state_->activeVM();
-    state_->setActiveVM(this);
+    MobiusVM* prev_vm = t_current_vm;
+    t_current_vm = this;
 
+    uint64_t t0 = get_time_ns_vm();
     int rc = run(depth_before);
+    metrics_->total_execution_time_ns += get_time_ns_vm() - t0;
 
-    state_->setActiveVM(prev_vm);
+    t_current_vm = prev_vm;
 
     if (callStackSize() > depth_before) {
         callStackPop();
@@ -148,20 +174,18 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
     int args_base = caller_base + func_reg + 1;
 
     int needed = args_base + nargs + 16;
-    if (needed > (int)registers_.size()) {
-        registers_.resize(needed, Value());
-    }
+    ensureRegisters(needed);
 
     NativeCallContext nctx;
     nctx.registers = registers_.data();
     nctx.base      = args_base;
     nctx.top       = args_base + nargs;
     nctx.capacity  = (int)registers_.size();
-    state_->setNativeContext(&nctx);
+    native_ctx_ = &nctx;
 
     int rc = func(state_, nargs);
 
-    state_->setNativeContext(nullptr);
+    native_ctx_ = nullptr;
 
     if (rc < 0) return -1;
 
@@ -213,9 +237,7 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
 
     int child_base = caller.base + func_reg + 1;
     int needed = child_base + child->num_registers + 16;
-    if (needed > (int)registers_.size()) {
-        registers_.resize(needed, Value());
-    }
+    ensureRegisters(needed);
 
     CallInfo& new_ci = callStackPush(child, child->code.data(), child_base, nresults);
     if (mf->upvalues && mf->upvalue_count > 0) {
@@ -260,8 +282,7 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         int scratch = caller_base + caller_regs;
 
         int needed = scratch + 4;
-        if (needed > (int)registers_.size())
-            registers_.resize(needed, Value());
+        ensureRegisters(needed);
 
         registers_[scratch]     = lhs;
         registers_[scratch + 1] = rhs;
@@ -271,10 +292,10 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         nctx.base      = scratch;
         nctx.top       = scratch + 2;
         nctx.capacity  = (int)registers_.size();
-        state_->setNativeContext(&nctx);
+        native_ctx_ = &nctx;
 
         int rc = method.as.native_function(state_, 2);
-        state_->setNativeContext(nullptr);
+        native_ctx_ = nullptr;
 
         if (rc < 0) {
             runtimeError("Metamethod '%s' failed", mm_name->data);
@@ -305,9 +326,7 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         int scratch = caller_base + caller_num_regs;
 
         Prototype* child = mf->proto;
-        int needed = scratch + 3 + child->num_registers + 16;
-        if (needed > (int)registers_.size())
-            registers_.resize(needed, Value());
+        ensureRegisters(scratch + 3 + child->num_registers + 16);
 
         registers_[scratch]     = method;
         registers_[scratch + 1] = lhs;
@@ -495,6 +514,13 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             RA(inst) = obj.as.table->getByString(key.as.string);
         else
             RA(inst) = obj.as.table->get(key);
+    } else if (obj.type == VAL_ARRAY_SLICE && obj.as.array_slice) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array_slice->length())) {
+            RA(inst) = obj.as.array_slice->get((size_t)idx);
+        } else {
+            RA(inst) = Value();
+        }
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -533,6 +559,15 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
             obj.as.table->setByString(key.as.string, val);
         else
             obj.as.table->set(key, val);
+    } else if (obj.type == VAL_ARRAY_SLICE && obj.as.array_slice) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        if (idx >= 0 && idx < (int64_t)obj.as.array_slice->length()) {
+            obj.as.array_slice->set((size_t)idx, val);
+        } else {
+            vm->runtimeError("Array slice index %ld out of range [0, %zu)",
+                             (long)idx, obj.as.array_slice->length());
+            return -1;
+        }
     } else {
         vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
         return -1;
@@ -1191,8 +1226,8 @@ MOBIUS_FORCEINLINE static int vm_op_dec(MobiusVM* vm, VMFrame& f, uint32_t inst)
 MOBIUS_FORCEINLINE static int vm_op_typecheck(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     NumberType target = (NumberType)DECODE_B(inst);
     TypeCheckConfig tc = {
-        vm->state_->config().strict_mode,
-        vm->state_->config().warn_on_conversion
+        vm->strict_mode_,
+        vm->warn_on_conversion_
     };
     TypeConversionResult conv = validate_and_convert_value(RA(inst), target, true, tc);
     if (!conv.success) {
@@ -1200,7 +1235,7 @@ MOBIUS_FORCEINLINE static int vm_op_typecheck(MobiusVM* vm, VMFrame& f, uint32_t
         free(conv.error_message);
         return -1;
     }
-    if (conv.was_converted && vm->state_->config().warn_on_conversion) {
+    if (conv.was_converted && vm->warn_on_conversion_) {
         fprintf(stderr, "Warning: Implicit type conversion at line %d\n", vm->currentLine());
     }
     RA(inst) = conv.converted_value;
@@ -1247,6 +1282,8 @@ MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst)
         RA(inst) = make_int64_value((int64_t)val.as.table->size());
     } else if (val.type == VAL_STRING && val.as.string) {
         RA(inst) = make_int64_value((int64_t)val.as.string->length);
+    } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice) {
+        RA(inst) = make_int64_value((int64_t)val.as.array_slice->length());
     } else {
         vm->runtimeError("Attempt to get length of a %s value", value_type_name(val.type));
         return -1;
@@ -1367,10 +1404,7 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
 
         Prototype* child = mf->proto;
         int child_base = f.ci->base + a + 1;
-        int needed = child_base + child->num_registers + 16;
-        if (MOBIUS_UNLIKELY(needed > (int)vm->registers_.size())) {
-            vm->registers_.resize(needed, Value());
-        }
+        vm->ensureRegisters(child_base + child->num_registers + 16);
 
         CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
@@ -1460,10 +1494,7 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     }
     if (args != arg_buf) delete[] args;
 
-    int needed = f.ci->base + child->num_registers + 16;
-    if (needed > (int)vm->registers_.size()) {
-        vm->registers_.resize(needed, Value());
-    }
+    vm->ensureRegisters(f.ci->base + child->num_registers + 16);
     for (int i = nargs; i < child->num_registers; i++) {
         vm->registers_[f.ci->base + i] = Value();
     }
@@ -1516,16 +1547,16 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
         return -1;
     }
     Prototype* child_proto = f.proto->protos[bx];
-    MobiusFunction* mf = (MobiusFunction*)calloc(1, sizeof(MobiusFunction));
+    MobiusFunction* mf = new MobiusFunction();
     mf->name = child_proto->name.empty() ? nullptr :
                vm->state_->stringPool()->intern(child_proto->name.c_str());
     mf->param_count = child_proto->num_params;
     mf->body = nullptr;
     mf->body_count = 0;
-    mf->ref_count = 1;
+    mf->ref_count.store(1, std::memory_order_relaxed);
     mf->proto = child_proto;
     if (child_proto->num_params > 0 && !child_proto->local_vars.empty()) {
-        mf->param_names = (MobiusString**)calloc(child_proto->num_params, sizeof(MobiusString*));
+        mf->param_names = new MobiusString*[child_proto->num_params]();
         for (int i = 0; i < child_proto->num_params && i < (int)child_proto->local_vars.size(); i++) {
             mf->param_names[i] = vm->state_->stringPool()->intern(child_proto->local_vars[i].name.c_str());
         }
@@ -1534,7 +1565,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
     }
     int nupvals = (int)child_proto->upvalues.size();
     if (nupvals > 0) {
-        mf->upvalues = (Upvalue**)calloc(nupvals, sizeof(Upvalue*));
+        mf->upvalues = new Upvalue*[nupvals]();
         mf->upvalue_count = nupvals;
         for (int u = 0; u < nupvals; u++) {
             const UpvalueDesc& desc = child_proto->upvalues[u];
@@ -1555,6 +1586,8 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                     uv->location = reg_ptr;
                     uv->is_open = true;
                     f.ci->pushUpvalue(uv);
+                    if ((size_t)f.ci->upvalue_count > vm->metrics_->peak_upvalues)
+                        vm->metrics_->peak_upvalues = (size_t)f.ci->upvalue_count;
                     mf->upvalues[u] = uv;
                 }
             } else {
@@ -1729,6 +1762,8 @@ MOBIUS_FORCEINLINE static int vm_op_getenum(MobiusVM* vm, VMFrame& f, uint32_t i
 
 // ---- Import ----
 MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    std::lock_guard<std::mutex> lock(vm->state_->importMutex());
+
     const Value& mod_name_val = IS_CONSTANT(DECODE_B(inst))
         ? f.ci->proto->constants[RK_AS_CONSTANT(DECODE_B(inst))]
         : f.regs[DECODE_B(inst)];
@@ -1759,8 +1794,6 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
     // The registry owns mod_table (cached). Retain so the Values we create
     // below can safely release() when they go out of scope.
     mod_table->retain();
-
-    StringInternPool* pool = vm->state_->stringPool();
 
     if (is_global) {
         // Spread table entries into individual globals
@@ -1843,18 +1876,18 @@ MOBIUS_FORCEINLINE static int vm_op_pragma(MobiusVM* vm, VMFrame& f, uint32_t in
     const char* pragma_name = name_val.as.string->data;
     const Value& pval = RA(inst);
     if (strcmp(pragma_name, "strict_types") == 0) {
-        vm->state_->config().strict_mode = is_truthy(pval);
+        vm->strict_mode_ = is_truthy(pval);
     } else if (strcmp(pragma_name, "type_warnings") == 0) {
-        vm->state_->config().warn_on_conversion = is_truthy(pval);
+        vm->warn_on_conversion_ = is_truthy(pval);
     } else if (strcmp(pragma_name, "override_behavior") == 0) {
         if (pval.type == VAL_STRING && pval.as.string) {
             const char* v = pval.as.string->data;
             if (strcmp(v, "error") == 0)
-                vm->state_->config().override_behavior = MOBIUS_OVERRIDE_ERROR;
+                vm->override_behavior_ = MOBIUS_OVERRIDE_ERROR;
             else if (strcmp(v, "warn") == 0)
-                vm->state_->config().override_behavior = MOBIUS_OVERRIDE_WARN;
+                vm->override_behavior_ = MOBIUS_OVERRIDE_WARN;
             else if (strcmp(v, "quiet") == 0)
-                vm->state_->config().override_behavior = MOBIUS_OVERRIDE_QUIET;
+                vm->override_behavior_ = MOBIUS_OVERRIDE_QUIET;
             else {
                 vm->runtimeError("Invalid value for pragma override_behavior: '%s' "
                                  "(expected 'error', 'warn', or 'quiet')", v);
@@ -1883,6 +1916,8 @@ MOBIUS_FORCEINLINE static int vm_op_try_begin(MobiusVM* vm, VMFrame& f, uint32_t
     tb.catch_reg = a;
     tb.base = f.base;
     vm->try_stack_.push_back(tb);
+    if (vm->try_stack_.size() > vm->metrics_->peak_try_depth)
+        vm->metrics_->peak_try_depth = vm->try_stack_.size();
     return 0;
 }
 
@@ -1926,6 +1961,159 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
 }
 
 // ---- NOP ----
+// OP_SPAWN A B C -- spawn R[B] with C-1 args; R[A] = FutureValue
+MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint8_t b = DECODE_B(inst);
+    uint8_t c = DECODE_C(inst);
+    int nargs = c - 1;
+
+    Value& func_val = f.regs[b];
+
+    if (func_val.type == VAL_FUNCTION) {
+        MobiusFunction* mf = func_val.as.function;
+        if (!mf || !mf->proto) {
+            vm->runtimeError("spawn: function has no bytecode prototype");
+            return -1;
+        }
+        if (mf->upvalue_count > 0) {
+            vm->runtimeError("cannot spawn closure with captured variables; pass values as function arguments");
+            return -1;
+        }
+
+        FutureValue* future = new FutureValue();
+
+        std::vector<Value> args;
+        args.reserve(nargs);
+        for (int i = 0; i < nargs; i++) {
+            args.push_back(f.regs[b + 1 + i]);
+        }
+
+        Prototype* proto = mf->proto;
+        MobiusState* state = vm->state_;
+
+        ((RefCounted*)future)->retain();
+
+        JobDecl job;
+        job.entry = [state, proto, args_copy = std::move(args), future]() mutable {
+            MobiusVM fiber_vm(state);
+            fiber_vm.future_ = future;
+            int nargs = (int)args_copy.size();
+            int needed = proto->num_registers + nargs + 256 + 1;
+            fiber_vm.ensureRegisters(needed);
+
+            int base = 1;
+            for (int i = 0; i < nargs; i++) {
+                fiber_vm.registers_[base + i] = std::move(args_copy[i]);
+            }
+
+            MobiusVM* prev_vm = MobiusVM::t_current_vm;
+            MobiusVM::t_current_vm = &fiber_vm;
+
+            size_t depth_before = fiber_vm.callStackSize();
+            fiber_vm.callStackPush(proto, proto->code.data(), base, 2);
+
+            uint64_t t0 = get_time_ns_vm();
+            int rc = fiber_vm.run(depth_before);
+            fiber_vm.metrics_->total_execution_time_ns += get_time_ns_vm() - t0;
+
+            MobiusVM::t_current_vm = prev_vm;
+
+            if (rc == 0) {
+                future->resolve(fiber_vm.registers_[0]);
+            } else {
+                Value err;
+                if (fiber_vm.last_error_ && fiber_vm.last_error_->message) {
+                    err = make_string_value_from_cstr(state, fiber_vm.last_error_->message);
+                } else {
+                    err = make_string_value_from_cstr(state, "spawn: fiber execution failed");
+                }
+                future->reject(err);
+            }
+            ((RefCounted*)future)->release();
+        };
+
+        JobSystem* js = state->jobSystem();
+        js->submit(std::move(job));
+
+        RA(inst) = make_future_value(future);
+        return 0;
+
+    } else if (func_val.type == VAL_NATIVE_FUNCTION) {
+        vm->runtimeError("spawn: cannot spawn native functions");
+        return -1;
+    } else {
+        vm->runtimeError("spawn: expected a function, got %s", value_type_name(func_val.type));
+        return -1;
+    }
+}
+
+// OP_AWAIT A B -- R[A] = await future in R[B]
+MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint8_t b = DECODE_B(inst);
+
+    Value& future_val = f.regs[b];
+    if (future_val.type != VAL_FUTURE || !future_val.as.future) {
+        vm->runtimeError("await: expected a future value, got %s", value_type_name(future_val.type));
+        return -1;
+    }
+
+    FutureValue* future = future_val.as.future;
+
+    if (!future->isDone()) {
+        std::unique_lock<std::mutex> lock(future->mutex());
+        future->cv().wait(lock, [future]() { return future->isDone(); });
+    }
+
+    if (future->isResolved()) {
+        RA(inst) = future->result();
+    } else {
+        const Value& err = future->error();
+        if (err.type == VAL_STRING && err.as.string) {
+            vm->runtimeError("spawned fiber failed: %s", err.as.string->data);
+        } else {
+            vm->runtimeError("spawned fiber failed");
+        }
+        return -1;
+    }
+
+    return 0;
+}
+
+// OP_YIELD A -- cooperatively yield current fiber
+MOBIUS_FORCEINLINE static int vm_op_yield(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm; (void)f; (void)inst;
+    std::this_thread::yield();
+    return 0;
+}
+
+// OP_CANCEL_CHECK -- if current fiber has been cancelled, throw CancellationError
+MOBIUS_FORCEINLINE static int vm_op_cancel_check(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)f; (void)inst;
+    if (vm->future_ && vm->future_->isCancelled()) {
+        vm->runtimeError("CancellationError: fiber was cancelled");
+        return -1;
+    }
+    return 0;
+}
+
+// OP_SHARE A -- mark R[A] as shared, deeply propagating to nested containers
+MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint8_t a = DECODE_A(inst);
+    Value& val = f.regs[a];
+
+    if (val.type == VAL_ARRAY && val.as.array) {
+        val.as.array->markShared();
+        val.flags |= VAL_FLAG_SHARED;
+    } else if (val.type == VAL_TABLE && val.as.table) {
+        val.as.table->markShared();
+        val.flags |= VAL_FLAG_SHARED;
+    } else {
+        vm->runtimeError("shared: expected an array or table, got %s", value_type_name(val.type));
+        return -1;
+    }
+    return 0;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm; (void)f; (void)inst;
     return 0;
@@ -1982,6 +2170,9 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_ARRAY_PUSH,
         &&L_OP_LEN,
         &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
+        &&L_OP_SPAWN, &&L_OP_AWAIT, &&L_OP_YIELD,
+        &&L_OP_SHARE,
+        &&L_OP_CANCEL_CHECK,
         &&L_OP_NOP,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
@@ -2134,6 +2325,11 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_PRAGMA, vm_op_pragma)
     VM_HANDLER(OP_TRY_BEGIN, vm_op_try_begin)
     VM_HANDLER(OP_TRY_END, vm_op_try_end)
+    VM_HANDLER(OP_SPAWN, vm_op_spawn)
+    VM_HANDLER(OP_AWAIT, vm_op_await)
+    VM_HANDLER(OP_YIELD, vm_op_yield)
+    VM_HANDLER(OP_SHARE, vm_op_share)
+    VM_HANDLER(OP_CANCEL_CHECK, vm_op_cancel_check)
     VM_HANDLER(OP_THROW, vm_op_throw)
     VM_HANDLER(OP_NOP, vm_op_nop)
 

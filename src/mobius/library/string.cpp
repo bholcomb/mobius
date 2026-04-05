@@ -1,6 +1,7 @@
 #include "library/string.h"
 #include "data/value.h"
 #include "data/array.h"
+#include "data/array_slice.h"
 #include "state/mobius_state.h"
 
 #include <stdio.h>
@@ -24,6 +25,8 @@ int lib_len(MobiusState* state, int arg_count) {
         state->npush(make_int64_value((int64_t)arg.as.string->length));
     } else if (arg.type == VAL_ARRAY && arg.as.array) {
         state->npush(make_int64_value((int64_t)arg.as.array->length()));
+    } else if (arg.type == VAL_ARRAY_SLICE && arg.as.array_slice) {
+        state->npush(make_int64_value((int64_t)arg.as.array_slice->length()));
     } else {
         return state->error("len expects a string or array argument");
     }

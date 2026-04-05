@@ -1,0 +1,14 @@
+// Test yield keyword
+print("=== Yield Tests ===")
+
+// Basic yield should not crash
+yield
+
+var x = 0
+for (var i = 0; i < 10; i += 1) {
+    x += 1
+    yield
+}
+if (x != 10) { print("FAIL: yield in loop, got", x); exit(1) }
+
+print("=== All yield tests passed! ===")

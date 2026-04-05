@@ -93,6 +93,10 @@ typedef enum {
     TOKEN_WHEN,             // when (guard clause in switch)
     TOKEN_WHILE,            // while
     TOKEN_FINALLY,          // finally
+    TOKEN_SPAWN,            // spawn
+    TOKEN_AWAIT,            // await
+    TOKEN_YIELD,            // yield
+    TOKEN_SHARED,           // shared
 
     // Type annotation tokens
     TOKEN_TYPE_INT64,       // int64

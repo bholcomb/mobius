@@ -44,6 +44,10 @@ static const Keyword keywords[] = {
     {"when",     TOKEN_WHEN},
     {"while",    TOKEN_WHILE},
     {"finally",  TOKEN_FINALLY},
+    {"spawn",    TOKEN_SPAWN},
+    {"await",    TOKEN_AWAIT},
+    {"yield",    TOKEN_YIELD},
+    {"shared",   TOKEN_SHARED},
     
     // Type keywords
     {"int64",    TOKEN_TYPE_INT64},
