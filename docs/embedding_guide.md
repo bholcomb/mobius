@@ -30,7 +30,8 @@ and **`asInt64`** / **`asUInt64`** (and **`Float64`**) in new embedding code.
 8. [Error Handling](#error-handling)
 9. [Loading Plugins](#loading-plugins)
 10. [Multiple Interpreter Instances](#multiple-interpreter-instances)
-11. [API Reference Summary](#api-reference-summary)
+11. [Concurrency and Fibers](#concurrency-and-fibers)
+12. [API Reference Summary](#api-reference-summary)
 
 ---
 
@@ -112,6 +113,10 @@ MobiusConfig config = mobius_default_config();
 | `enable_hot_reload`  | `bool`                  | `false`      | Enable hot-reload support                   |
 | `use_vm`             | `bool`                  | `true`       | Use the bytecode VM (false = tree-walk)     |
 | `override_behavior`  | `MobiusOverrideBehavior`| `MOBIUS_OVERRIDE_ERROR` | How to handle global name conflicts |
+| `fiber_stack_size`   | `size_t`                | `131072`     | Size (bytes) of each fiber's C stack        |
+| `initial_fiber_pool_size` | `size_t`           | `16`         | Pre-allocated fibers in the pool            |
+| `max_fiber_pool_size`| `size_t`                | `1024`       | Maximum number of pooled fibers             |
+| `max_worker_threads` | `size_t`                | `4`          | Worker threads for fiber scheduling         |
 
 ### Override Behavior
 
@@ -576,6 +581,53 @@ mobius_free_state(state_b);
 
 ---
 
+## Concurrency and Fibers
+
+Mobius scripts can use `spawn`, `await`, `yield`, and `shared` to run fibers concurrently within a single `MobiusState`. Each state owns its own fiber pool and worker threads, configured via `MobiusConfig`.
+
+### Threading Model
+
+- Each `MobiusState` maintains a pool of worker threads (controlled by `max_worker_threads`).
+- When a script executes `spawn`, a fiber is acquired from the pool and scheduled on a worker.
+- The calling thread always participates as a worker for its own state.
+- All reference counting is atomic, and shared containers use reader-writer locks.
+
+### Configuration
+
+Tune concurrency by adjusting `MobiusConfig` before creating a state:
+
+```c
+MobiusConfig config = mobius_default_config();
+config.max_worker_threads = 8;
+config.initial_fiber_pool_size = 32;
+config.max_fiber_pool_size = 2048;
+config.fiber_stack_size = 256 * 1024;  // 256KB per fiber
+
+MobiusState* state = mobius_new_state(&config);
+```
+
+Configuration is immutable after `mobius_new_state()` returns.
+
+### Metrics
+
+Use the metrics API to observe runtime behavior:
+
+```c
+MobiusMetrics metrics = mobius_get_metrics(state);
+printf("Fibers spawned: %lu\n", metrics.fibers_spawned);
+printf("Jobs dispatched: %lu\n", metrics.jobs_dispatched);
+
+mobius_reset_metrics(state);  // reset counters
+```
+
+### Thread Safety
+
+- Multiple `MobiusState` instances can run in parallel with no shared mutable state.
+- Within a single state, the fiber scheduler handles concurrency automatically.
+- Native functions registered with the C API may be called from any worker thread — ensure they are thread-safe if they access shared C/C++ state.
+
+---
+
 ## API Reference Summary
 
 ### Lifecycle
@@ -666,3 +718,10 @@ mobius_free_state(state_b);
 | `mobius_add_plugin_directory(path)`     | Add a directory to the plugin search path|
 | `mobius_get_module_count(state)`        | Number of loaded modules                 |
 | `mobius_print_modules(state)`           | Print module summary to stdout           |
+
+### Metrics
+
+| Function                                | Description                              |
+|-----------------------------------------|------------------------------------------|
+| `mobius_get_metrics(state)`            | Return a `MobiusMetrics` snapshot        |
+| `mobius_reset_metrics(state)`          | Reset all metric counters to zero        |

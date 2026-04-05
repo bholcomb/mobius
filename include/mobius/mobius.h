@@ -83,12 +83,66 @@ typedef struct {
     bool   debug_mode;
     bool   enable_hot_reload;
     MobiusOverrideBehavior override_behavior;
+
+    /* -- Fiber configuration -- */
+
+    size_t fiber_stack_size;         /* Per-fiber stack size in bytes.
+                                       Default: 131072 (128 KiB). */
+
+    size_t initial_fiber_pool_size;  /* Fibers pre-allocated on first spawn.
+                                       Default: 16. Pool doubles on exhaustion. */
+
+    size_t max_fiber_pool_size;      /* Hard cap on total fibers in the pool.
+                                       Default: 256. */
+
+    int    max_worker_threads;       /* Additional OS worker threads for this state.
+                                       Default: hardware_concurrency() / 2, floor 1.
+                                       Set to 0 for single-threaded cooperative mode.
+                                       The calling thread always participates as a
+                                       worker, so total workers = this value + 1. */
 } MobiusConfig;
 
 /**
  * Return a MobiusConfig populated with sensible defaults.
  */
 MOBIUS_API MobiusConfig mobius_default_config(void);
+
+/* ====================================================================== */
+/*  Runtime Metrics                                                        */
+/* ====================================================================== */
+
+typedef struct {
+    /* VM execution high-water marks */
+    size_t   peak_call_depth;
+    size_t   peak_registers;
+    size_t   peak_upvalues;
+    size_t   peak_try_depth;
+
+    /* State-level high-water marks */
+    size_t   peak_globals;
+    size_t   peak_interned_strings;
+
+    /* Fiber/threading high-water marks (zeroed until fibers land) */
+    size_t   peak_fibers;
+    size_t   peak_worker_threads;
+    size_t   total_fibers_spawned;
+    size_t   total_jobs_executed;
+    size_t   peak_fiber_stack_bytes;
+    size_t   avg_fiber_stack_bytes;
+
+    /* Timing */
+    uint64_t total_execution_time_ns;
+} MobiusMetrics;
+
+/**
+ * Copy the current metrics snapshot into *out.
+ */
+MOBIUS_API void mobius_get_metrics(MobiusState* state, MobiusMetrics* out);
+
+/**
+ * Reset all metrics counters and high-water marks to zero.
+ */
+MOBIUS_API void mobius_reset_metrics(MobiusState* state);
 
 /* ====================================================================== */
 /*  Error handling                                                         */

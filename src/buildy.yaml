@@ -8,6 +8,7 @@ targets:
       language: cpp
       sources:
         - "mobius/data/*.cpp"
+        - "mobius/fiber/*.cpp"
         - "mobius/frontend/*.cpp"
         - "mobius/internal/*.cpp"
         - "mobius/library/*.cpp"
@@ -23,6 +24,7 @@ targets:
       flags:
         - "-fvisibility=hidden"
         - "-DMOBIUS_BUILDING"
+      libs: ["pthread"]
 
   executables:
     - name: mobius
@@ -32,6 +34,6 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius-core", "m", "dl"]
+      libs: ["mobius-core", "m", "dl", "pthread"]
       depends_on:
         targets: ["mobius-core"]
