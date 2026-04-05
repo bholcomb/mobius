@@ -18,7 +18,8 @@ trigonometric functions), see
 5. [Table Functions](#table-functions)
 6. [Type System Functions](#type-system-functions)
 7. [Utility Functions](#utility-functions)
-8. [Math Plugin Functions](#math-plugin-functions)
+8. [Fiber / Concurrency Functions](#fiber--concurrency-functions)
+9. [Math Plugin Functions](#math-plugin-functions)
 
 ---
 
@@ -467,6 +468,116 @@ print(id(a) == id(b))    // true — same array
 var c = [1, 2, 3]
 print(id(a) == id(c))    // false — different array
 ```
+
+---
+
+## Fiber / Concurrency Functions
+
+These functions work with Mobius fibers, futures, channels, and array slices. See the [Language Reference](language_reference.md#concurrency) for an overview of the concurrency model.
+
+### fiber_channel(capacity)
+
+Creates a bounded channel with the given capacity (default 1). Channels are used for message-passing between fibers.
+
+```mobius
+var ch = fiber_channel(10)
+```
+
+**Returns:** A channel value.
+
+### fiber_send(channel, value)
+
+Sends a value into the channel. Blocks if the channel is full until space is available. Returns `false` if the channel is closed.
+
+```mobius
+fiber_send(ch, 42)
+```
+
+### fiber_recv(channel)
+
+Receives a value from the channel. Blocks if the channel is empty until a value is available. Returns `nil` if the channel is closed and empty.
+
+```mobius
+var msg = fiber_recv(ch)
+```
+
+### fiber_try_send(channel, value)
+
+Non-blocking send. Returns `true` if the value was enqueued, `false` if the channel is full or closed.
+
+```mobius
+if (fiber_try_send(ch, 42)) {
+    print("sent")
+}
+```
+
+### fiber_try_recv(channel)
+
+Non-blocking receive. Returns the value if one is available, or `nil` if the channel is empty.
+
+```mobius
+var msg = fiber_try_recv(ch)
+```
+
+### fiber_close(channel)
+
+Closes the channel. Subsequent sends return `false`. Pending receivers are unblocked. Remaining buffered values can still be received.
+
+```mobius
+fiber_close(ch)
+```
+
+### fiber_cancel(future)
+
+Requests cancellation of the fiber associated with the given future. The fiber will throw a `CancellationError` at its next cancellation check point (loop back-edges, yield points).
+
+```mobius
+var f = spawn long_task()
+fiber_cancel(f)
+```
+
+### fiber_all(futures)
+
+Waits for all futures in the given array to resolve. Returns an array of results in the same order. If any future rejects with an error, the error is propagated.
+
+```mobius
+var results = fiber_all([spawn a(), spawn b(), spawn c()])
+// results == [a_result, b_result, c_result]
+```
+
+### fiber_any(futures)
+
+Waits for the first future in the array to resolve and returns its result. If a future errors, it is skipped (unless all futures error).
+
+```mobius
+var fastest = fiber_any([spawn route_a(), spawn route_b()])
+```
+
+### fiber_sleep(milliseconds)
+
+Suspends the current fiber for at least the given number of milliseconds. Other fibers can execute during this time.
+
+```mobius
+fiber_sleep(100)  // sleep for ~100ms
+```
+
+### fiber_slice(array, start, length)
+
+Creates a lightweight array slice (a view into the parent array). Reads and writes through the slice pass through to the underlying array. Useful for dividing work among fibers.
+
+```mobius
+var data = shared [1, 2, 3, 4, 5, 6]
+var first_half = fiber_slice(data, 0, 3)
+var second_half = fiber_slice(data, 3, 3)
+print(first_half[0])  // 1
+first_half[0] = 99
+print(data[0])        // 99 (write-through)
+```
+
+**Parameters:**
+- `array` — The source array (should be `shared` for concurrent access).
+- `start` — Zero-based starting index.
+- `length` — Number of elements in the slice.
 
 ---
 

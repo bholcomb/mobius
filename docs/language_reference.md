@@ -22,7 +22,8 @@ Mobius source files use the `.mob` extension.
 9. [Enums](#enums)
 10. [Modules and Imports](#modules-and-imports)
 11. [Pragmas](#pragmas)
-12. [Formal Grammar](#formal-grammar)
+12. [Concurrency](#concurrency)
+13. [Formal Grammar](#formal-grammar)
 
 ---
 
@@ -985,6 +986,110 @@ Controls what happens when a function or global is redefined:
 
 func greet() { print("hello") }
 func greet() { print("hi") }     // warning printed, but allowed
+```
+
+---
+
+## Concurrency
+
+Mobius provides fiber-based concurrency through the `spawn`, `await`, `yield`, and `shared` keywords.
+
+### Spawn and Await
+
+`spawn` launches a function call on a separate fiber and returns a **future**. `await` blocks until the future resolves and returns its value.
+
+```mobius
+func compute(n) {
+    var sum = 0
+    for (var i = 0; i < n; i += 1) { sum += i }
+    return sum
+}
+
+var f = spawn compute(1000)
+// ... do other work ...
+var result = await f  // blocks until compute() finishes
+print(result)         // 499500
+```
+
+Multiple fibers can run in parallel:
+
+```mobius
+func double(x) { return x * 2 }
+
+var a = spawn double(10)
+var b = spawn double(20)
+var c = spawn double(30)
+print(await a, await b, await c)  // 20 40 60
+```
+
+Awaiting a future that has already resolved returns the cached result immediately. Futures are single-assignment: once resolved or rejected, they never change.
+
+**Restrictions:**
+- Only functions without captured upvalues can be spawned. Pass data as arguments instead.
+- Native (C) functions cannot be spawned.
+
+### Yield
+
+The `yield` statement cooperatively yields the current fiber, allowing other fibers to run:
+
+```mobius
+for (var i = 0; i < 1000; i += 1) {
+    // do work
+    yield  // let other fibers make progress
+}
+```
+
+### Shared Containers
+
+By default, arrays and tables are **not** thread-safe. The `shared` keyword marks a container for concurrent access by adding mutex protection:
+
+```mobius
+var data = shared [0, 0, 0, 0]
+```
+
+`shared` propagates deeply — nested arrays and tables are also marked shared. All reads and writes to a shared container are automatically synchronized.
+
+### Channels
+
+Channels provide typed, bounded message-passing between fibers:
+
+```mobius
+var ch = fiber_channel(10)  // capacity 10
+
+// Producer fiber
+spawn producer(ch)
+
+// Consumer
+var msg = fiber_recv(ch)
+```
+
+See the [Standard Library Reference](stdlib_reference.md#fiber--concurrency-functions) for the full channel API.
+
+### Structured Concurrency
+
+`fiber_all` waits for an array of futures to resolve and returns all results:
+
+```mobius
+func work(id) { return id * 10 }
+
+var futures = [spawn work(1), spawn work(2), spawn work(3)]
+var results = fiber_all(futures)  // [10, 20, 30]
+```
+
+`fiber_any` returns the result of the first future to resolve.
+
+### Cancellation
+
+Spawned fibers can be cancelled via `fiber_cancel(future)`. A cancelled fiber will throw a `CancellationError` at its next cancellation check point.
+
+### Array Slices
+
+`fiber_slice(array, start, length)` creates a lightweight view into an existing array. Reads and writes through the slice affect the underlying array, making slices ideal for data-parallel decomposition:
+
+```mobius
+var data = shared [1, 2, 3, 4, 5, 6, 7, 8]
+var left  = fiber_slice(data, 0, 4)  // view of [1,2,3,4]
+var right = fiber_slice(data, 4, 4)  // view of [5,6,7,8]
 ```
 
 ---

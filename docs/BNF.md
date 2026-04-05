@@ -66,6 +66,7 @@ statement           ::= block
                       | continue_stmt
                       | import_stmt
                       | pragma_stmt
+                      | yield_stmt
                       | expr_stmt
 
 block               ::= "{" { NEWLINE | declaration } "}"
@@ -132,6 +133,8 @@ pragma_stmt         ::= "#" "pragma" IDENTIFIER pragma_value terminator
 
 pragma_value        ::= IDENTIFIER | STRING | "true" | "false"
 
+yield_stmt          ::= "yield" terminator
+
 expr_stmt           ::= expression terminator
 
 terminator          ::= ";" | NEWLINE | EOF
@@ -169,6 +172,9 @@ term                ::= factor { ( "+" | "-" ) factor }
 factor              ::= unary { ( "*" | "/" | "%" ) unary }
 
 unary               ::= ( "!" | "-" | "not" | "+" | "~" ) unary
+                      | "spawn" postfix "(" [ arg_list ] ")"
+                      | "await" unary
+                      | "shared" unary
                       | postfix
 
 postfix             ::= primary { call_tail }
@@ -243,10 +249,10 @@ ESCAPE_CHAR         ::= "n" | "t" | "r" | "\" | '"' | "'" | "0"
 ## Keywords
 
 ```
-and     break    case     continue  default  else   elif
-enum    false    for      func      if       import is
-nil     not      or       return    switch   true   var
-while
+and     await    break    case     continue  default  else   elif
+enum    false    for      func     if        import   is
+nil     not      or       return   shared    spawn    switch
+true    var      while    yield
 ```
 
 ## Operator Precedence (low to high)
