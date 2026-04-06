@@ -1,0 +1,62 @@
+// Comprehensive test of all table methods via : syntax
+print("=== Table Methods Comprehensive ===")
+
+// has_key
+var t = {name: "Alice", age: 30, active: true}
+if (!t:has_key("name")) { print("FAIL: has_key existing"); exit(1) }
+if (!t:has_key("age")) { print("FAIL: has_key age"); exit(1) }
+if (t:has_key("missing")) { print("FAIL: has_key missing"); exit(1) }
+
+// size
+if (t:size() != 3) { print("FAIL: size, got", t:size()); exit(1) }
+
+// pairs
+var p = t:pairs()
+if (p:length() != 3) { print("FAIL: pairs length, got", p:length()); exit(1) }
+var found_name = false
+var found_age = false
+for (var i = 0; i < p:length(); i++) {
+    if (p[i][0] == "name" && p[i][1] == "Alice") { found_name = true }
+    if (p[i][0] == "age" && p[i][1] == 30) { found_age = true }
+}
+if (!found_name) { print("FAIL: pairs missing name"); exit(1) }
+if (!found_age) { print("FAIL: pairs missing age"); exit(1) }
+
+// remove
+t:remove("active")
+if (t:has_key("active")) { print("FAIL: remove"); exit(1) }
+if (t:size() != 2) { print("FAIL: size after remove, got", t:size()); exit(1) }
+
+// empty table
+var empty = {}
+if (empty:size() != 0) { print("FAIL: empty size"); exit(1) }
+if (empty:has_key("x")) { print("FAIL: empty has_key"); exit(1) }
+var ep = empty:pairs()
+if (ep:length() != 0) { print("FAIL: empty pairs"); exit(1) }
+
+// method on inline table literal
+if ({a: 1, b: 2}:size() != 2) { print("FAIL: inline size"); exit(1) }
+if (!{x: 10}:has_key("x")) { print("FAIL: inline has_key"); exit(1) }
+
+// remove all keys
+var shrink = {a: 1, b: 2, c: 3}
+shrink:remove("a")
+shrink:remove("b")
+shrink:remove("c")
+if (shrink:size() != 0) { print("FAIL: remove all"); exit(1) }
+
+// methods with integer keys
+var imap = {}
+imap[1] = "one"
+imap[2] = "two"
+if (imap:size() != 2) { print("FAIL: int key size"); exit(1) }
+
+// setmetatable / getmetatable remain globals
+var mt = {["__index"] = {color: "blue"}}
+var obj = {}
+setmetatable(obj, mt)
+if (obj.color != "blue") { print("FAIL: setmetatable __index"); exit(1) }
+var got_mt = getmetatable(obj)
+if (got_mt == nil) { print("FAIL: getmetatable"); exit(1) }
+
+print("=== All table methods tests passed! ===")

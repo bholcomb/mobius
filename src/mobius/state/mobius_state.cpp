@@ -308,6 +308,12 @@ MobiusState::~MobiusState() {
     // Don't free module registry — it's a global singleton freed via atexit()
     registry_ = nullptr;
 
+    // Clear all Value containers BEFORE destroying the string pool.
+    // Value destructors release references to interned strings, so the
+    // pool must still be alive when they run.
+    for (int i = 0; i < global_count_.load(std::memory_order_relaxed); i++)
+        globals_[i] = make_nil_value();
+
     delete string_pool_;
 
     if (fallback_last_error_) {

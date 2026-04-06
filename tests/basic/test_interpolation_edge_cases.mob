@@ -1,0 +1,55 @@
+// Test string interpolation edge cases
+print("=== String Interpolation Edge Cases ===")
+
+// Basic interpolation
+var name = "world"
+var s = `hello ${name}`
+if (s != "hello world") { print("FAIL: basic interp, got", s); exit(1) }
+
+// Numeric interpolation
+var n = 42
+var s2 = `value is ${n}`
+if (s2 != "value is 42") { print("FAIL: numeric interp, got", s2); exit(1) }
+
+// Expression in interpolation
+var s3 = `sum is ${1 + 2 + 3}`
+if (s3 != "sum is 6") { print("FAIL: expr interp, got", s3); exit(1) }
+
+// Multiple interpolations
+var a = "foo"
+var b = "bar"
+var s4 = `${a} and ${b}`
+if (s4 != "foo and bar") { print("FAIL: multi interp, got", s4); exit(1) }
+
+// Interpolation with function call
+var s5 = `type: ${typeof(42)}`
+if (s5 != "type: integer") { print("FAIL: func call interp, got", s5); exit(1) }
+
+// Nested expressions
+var arr = [10, 20, 30]
+var s6 = `length: ${arr:length()}`
+if (s6 != "length: 3") { print("FAIL: method call interp, got", s6); exit(1) }
+
+// Empty interpolation body
+var empty = ""
+var s7 = `[${empty}]`
+if (s7 != "[]") { print("FAIL: empty interp, got", s7); exit(1) }
+
+// Boolean interpolation
+var s8 = `flag: ${true}`
+if (s8 != "flag: true") { print("FAIL: bool interp, got", s8); exit(1) }
+
+// Nil interpolation
+var s9 = `val: ${nil}`
+if (s9 != "val: nil") { print("FAIL: nil interp, got", s9); exit(1) }
+
+// Interpolation with ternary
+var x = 5
+var s10 = `${x > 3 ? "big" : "small"}`
+if (s10 != "big") { print("FAIL: ternary interp, got", s10); exit(1) }
+
+// No interpolation - plain backtick string
+var plain = `just text`
+if (plain != "just text") { print("FAIL: plain backtick, got", plain); exit(1) }
+
+print("=== All interpolation edge case tests passed! ===")

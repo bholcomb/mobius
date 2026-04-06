@@ -1,0 +1,106 @@
+// Test advanced metamethods: __unm, __call, __tostring, bitwise
+print("=== Advanced Metamethods ===")
+
+// __unm — unary negation
+var neg_meta = {
+    ["__unm"] = func(self, _) {
+        return {x: -self.x, y: -self.y}
+    }
+}
+var v = {x: 3, y: 4}
+setmetatable(v, neg_meta)
+var neg_v = -v
+if (neg_v.x != -3) { print("FAIL: __unm x, got", neg_v.x); exit(1) }
+if (neg_v.y != -4) { print("FAIL: __unm y, got", neg_v.y); exit(1) }
+
+// __call — make a table callable
+var callable_meta = {
+    ["__call"] = func(a, b) {
+        return a + b
+    }
+}
+var adder = {}
+setmetatable(adder, callable_meta)
+var sum = adder(10, 20)
+if (sum != 30) { print("FAIL: __call, got", sum); exit(1) }
+
+// __call with state in closure
+func make_multiplier(factor) {
+    var meta = {
+        ["__call"] = func(x) {
+            return x * factor
+        }
+    }
+    var m = {}
+    setmetatable(m, meta)
+    return m
+}
+var triple = make_multiplier(3)
+if (triple(7) != 21) { print("FAIL: __call closure, got", triple(7)); exit(1) }
+
+// __tostring — custom string conversion
+var point_meta = {
+    ["__tostring"] = func(self) {
+        return "Point(" + str(self.x) + ", " + str(self.y) + ")"
+    }
+}
+var p = {x: 10, y: 20}
+setmetatable(p, point_meta)
+var s = str(p)
+if (s != "Point(10, 20)") { print("FAIL: __tostring, got", s); exit(1) }
+
+// __tostring with print
+// (just verify no crash — output not checked by test runner)
+print("Point via print:", p)
+
+// __band — bitwise AND
+var bw_meta = {
+    ["__band"] = func(a, b) {
+        return {val: a.val & b.val}
+    },
+    ["__bor"] = func(a, b) {
+        return {val: a.val | b.val}
+    },
+    ["__bxor"] = func(a, b) {
+        return {val: a.val ^ b.val}
+    },
+    ["__bnot"] = func(self, _) {
+        return {val: ~self.val}
+    },
+    ["__shl"] = func(a, b) {
+        return {val: a.val << b.val}
+    },
+    ["__shr"] = func(a, b) {
+        return {val: a.val >> b.val}
+    }
+}
+
+var a = {val: 0xFF}
+var b = {val: 0x0F}
+setmetatable(a, bw_meta)
+setmetatable(b, bw_meta)
+
+var r_and = a & b
+if (r_and.val != 0x0F) { print("FAIL: __band, got", r_and.val); exit(1) }
+
+var r_or = a | b
+if (r_or.val != 0xFF) { print("FAIL: __bor, got", r_or.val); exit(1) }
+
+var r_xor = a ^ b
+if (r_xor.val != 0xF0) { print("FAIL: __bxor, got", r_xor.val); exit(1) }
+
+var r_bnot = ~a
+if (r_bnot.val != ~0xFF) { print("FAIL: __bnot, got", r_bnot.val); exit(1) }
+
+var c = {val: 1}
+var d = {val: 4}
+setmetatable(c, bw_meta)
+setmetatable(d, bw_meta)
+
+var r_shl = c << d
+if (r_shl.val != 16) { print("FAIL: __shl, got", r_shl.val); exit(1) }
+
+var r_shr = d >> c
+if (r_shr.val != 2) { print("FAIL: __shr, got", r_shr.val); exit(1) }
+
+print("=== All advanced metamethods tests passed! ===")

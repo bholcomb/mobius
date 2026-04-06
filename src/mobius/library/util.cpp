@@ -193,3 +193,13 @@ int lib_id(MobiusState* state, int arg_count) {
     state->npush(make_int64_value((int64_t)addr));
     return 1;
 }
+
+int lib_time(MobiusState* state, int arg_count) {
+    if (arg_count != 0) {
+        return state->error("time expects no arguments");
+    }
+    auto now = std::chrono::system_clock::now();
+    auto secs = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+    state->npush(make_int64_value((int64_t)secs));
+    return 1;
+}
