@@ -8,6 +8,10 @@ print("Benchmark model: arrays = dense integer storage, tables = string-key hash
 // ============================================================================
 // 1. Arithmetic Operations
 // ============================================================================
+func ns_to_sec(ns) {
+    return float(ns) / 1000000000.0;
+}
+
 func benchmark_arithmetic() {
     print("1. Arithmetic Operations...");
     var start = clock();
@@ -19,9 +23,10 @@ func benchmark_arithmetic() {
         result = result % 1000;
         i = i + 1;
     }
-    var duration = clock() - start;
+    var duration_ns = clock() - start;
+    var duration = ns_to_sec(duration_ns);
     print("   Time: ", duration, "s");
-    print("   Ops/sec: ", int(1000000 / duration));
+    print("   Ops/sec: ", int(1000000.0 / duration));
     return result;
 }
 
@@ -44,7 +49,7 @@ func benchmark_function_calls() {
         result = fibonacci(20);
         i = i + 1;
     }
-    var duration = clock() - start;
+    var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
     print("   Result: ", result);
     return result;
@@ -71,7 +76,7 @@ func benchmark_arrays() {
         i = i + 1;
     }
 
-    var duration = clock() - start;
+    var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
     print("   Sum: ", sum);
     return sum;
@@ -109,7 +114,7 @@ func benchmark_tables() {
         i = i + 1;
     }
 
-    var duration = clock() - start;
+    var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
     print("   Sum: ", sum);
     return sum;
@@ -132,7 +137,7 @@ func benchmark_strings() {
         i = i + 1;
     }
     
-    var duration = clock() - start;
+    var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
     print("   Final length: ", len(result));
     return result;
@@ -156,7 +161,7 @@ func benchmark_nested_loops() {
         i = i + 1;
     }
     
-    var duration = clock() - start;
+    var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
     print("   Sum: ", sum);
     return sum;
@@ -177,7 +182,7 @@ func benchmark_object_lifecycle() {
         i = i + 1;
     }
     
-    var duration = clock() - start;
+    var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
     print("   Objects created: 30000");
     return i;
@@ -211,7 +216,7 @@ func benchmark_mixed() {
         i = i + 1;
     }
     
-    var duration = clock() - start;
+    var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
     print("   Total: ", total);
     return total;
@@ -232,7 +237,7 @@ benchmark_nested_loops();
 benchmark_object_lifecycle();
 benchmark_mixed();
 
-var overall_duration = clock() - overall_start;
+var overall_duration = ns_to_sec(clock() - overall_start);
 
 print("\n=== Overall Results ===");
 print("Total time: ", overall_duration, "s");
