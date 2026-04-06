@@ -858,15 +858,16 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
         child_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
     }
 
-    NativeCallContext* saved_nctx = vm->native_ctx_;
-    vm->native_ctx_ = nullptr;
+    int saved_base = vm->native_ctx_.base;
+    int saved_top  = vm->native_ctx_.top;
 
     size_t depth = vm->callStackSize() - 1;
     int rc = vm->run(depth);
 
-    vm->native_ctx_ = saved_nctx;
     nctx->registers = vm->registers_.data();
-    nctx->capacity = (int)vm->registers_.size();
+    nctx->capacity  = (int)vm->registers_.size();
+    nctx->base = saved_base;
+    nctx->top  = saved_top;
 
     if (rc < 0) return -1;
 

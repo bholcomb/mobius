@@ -258,7 +258,7 @@ MobiusState::MobiusState(MobiusConfig* config)
       error_handler_(default_error_handler), error_handler_userdata_(nullptr),
       metrics_{}, initialized_(false),
       fallback_last_error_(nullptr), fallback_source_code_(nullptr) {
-    
+
     config_ = config ? *config : mobius_default_config();
 
     globals_.resize(4096);
@@ -286,6 +286,9 @@ MobiusState::MobiusState(MobiusConfig* config)
     defineGlobal("false", make_bool_value(false), true);
     defineGlobal("inf", make_float_value(1.0 / 0.0), true);
     defineGlobal("nan", make_float_value(0.0 / 0.0), true);
+
+    main_vm_ = new (std::nothrow) MobiusVM(this);
+    MobiusVM::t_current_vm = main_vm_;
 }
 
 MobiusState::~MobiusState() {
@@ -308,9 +311,12 @@ MobiusState::~MobiusState() {
     // Don't free module registry — it's a global singleton freed via atexit()
     registry_ = nullptr;
 
+    // Destroy main VM before the string pool — VM registers may hold
+    // string references that need the pool alive for release.
+    delete main_vm_;
+    main_vm_ = nullptr;
+
     // Clear all Value containers BEFORE destroying the string pool.
-    // Value destructors release references to interned strings, so the
-    // pool must still be alive when they run.
     for (int i = 0; i < global_count_.load(std::memory_order_relaxed); i++)
         globals_[i] = make_nil_value();
 
@@ -483,8 +489,7 @@ int MobiusState::execString(const char* code) {
 
     addOwnedProto(proto);
 
-    MobiusVM vm(this);
-    int rc = vm.execute(proto);
+    int rc = main_vm_->execute(proto);
 
     if (rc != 0) {
         return MOBIUS_ERROR_RUNTIME;
@@ -635,7 +640,9 @@ MobiusVM* MobiusState::activeVM() const {
 
 NativeCallContext* MobiusState::nativeContext() const {
     MobiusVM* vm = MobiusVM::t_current_vm;
-    return vm ? vm->native_ctx_ : nullptr;
+    if (vm) return &vm->native_ctx_;
+    if (main_vm_) return &main_vm_->native_ctx_;
+    return nullptr;
 }
 
 ExecutionContext* MobiusState::mainContext() const {
