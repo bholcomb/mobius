@@ -57,6 +57,20 @@ inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
 
 thread_local MobiusVM* MobiusVM::t_current_vm = nullptr;
 
+namespace {
+struct ScopedCurrentVM {
+    MobiusVM* prev;
+
+    explicit ScopedCurrentVM(MobiusVM* vm) : prev(MobiusVM::t_current_vm) {
+        MobiusVM::t_current_vm = vm;
+    }
+
+    ~ScopedCurrentVM() {
+        MobiusVM::t_current_vm = prev;
+    }
+};
+} // namespace
+
 MobiusVM::MobiusVM(MobiusState* state)
     : state_(state), metrics_(&state->metrics()),
       strict_mode_(state->config().strict_mode),
@@ -155,21 +169,30 @@ int MobiusVM::currentLine() const {
 int MobiusVM::execute(Prototype* proto) {
     ensureRegisters(proto->num_registers + 256);
 
-    size_t depth_before = callStackSize();
+    size_t saved_call_depth = call_depth_;
+    size_t saved_try_depth = try_stack_.size();
+    int saved_native_base = native_ctx_.base;
+    int saved_native_top = native_ctx_.top;
+
     callStackPush(proto, proto->code.data(), 0, 0);
 
-    MobiusVM* prev_vm = t_current_vm;
-    t_current_vm = this;
-
+    ScopedCurrentVM bind_vm(this);
     uint64_t t0 = get_time_ns_vm();
-    int rc = run(depth_before);
+    int rc = run(saved_call_depth + 1);
     metrics_->total_execution_time_ns += get_time_ns_vm() - t0;
 
-    t_current_vm = prev_vm;
-
-    if (callStackSize() > depth_before) {
+    try_stack_.resize(saved_try_depth);
+    while (call_depth_ > saved_call_depth) {
+        if (MOBIUS_UNLIKELY(callStackTop().upvalue_count > 0))
+            closeUpvalues(callStackTop(), 0);
         callStackPop();
     }
+
+    native_ctx_.registers = registers_.data();
+    native_ctx_.capacity  = register_capacity_;
+    native_ctx_.base      = saved_native_base;
+    native_ctx_.top       = saved_native_top;
+
     return rc;
 }
 
@@ -2227,8 +2250,7 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             std::fill(fiber_vm.type_tags_.begin() + base,
                       fiber_vm.type_tags_.begin() + base + proto->num_registers, VAL_UNKNOWN);
 
-            MobiusVM* prev_vm = MobiusVM::t_current_vm;
-            MobiusVM::t_current_vm = &fiber_vm;
+            ScopedCurrentVM bind_vm(&fiber_vm);
 
             size_t depth_before = fiber_vm.callStackSize();
             fiber_vm.callStackPush(proto, proto->code.data(), base, 2);
@@ -2236,8 +2258,6 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             uint64_t t0 = get_time_ns_vm();
             int rc = fiber_vm.run(depth_before);
             fiber_vm.metrics_->total_execution_time_ns += get_time_ns_vm() - t0;
-
-            MobiusVM::t_current_vm = prev_vm;
 
             if (rc == 0) {
                 future->resolve(fiber_vm.registers_[0]);
