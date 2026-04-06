@@ -1,0 +1,86 @@
+// Comprehensive test of for-in loops on arrays and tables
+print("=== For-In Comprehensive ===")
+
+// for-in on array: value only
+var arr = [10, 20, 30]
+var sum = 0
+for (var x in arr) {
+    sum += x
+}
+if (sum != 60) { print("FAIL: for-in array sum, got", sum); exit(1) }
+
+// for-in on array: index + value
+var indices = []
+var values = []
+for (var i, v in [100, 200, 300]) {
+    indices:push(i)
+    values:push(v)
+}
+if (indices:length() != 3) { print("FAIL: for-in i,v length"); exit(1) }
+if (indices[0] != 0 || indices[2] != 2) { print("FAIL: for-in indices"); exit(1) }
+if (values[0] != 100 || values[2] != 300) { print("FAIL: for-in values"); exit(1) }
+
+// for-in on table: key only
+var t = {a: 1, b: 2, c: 3}
+var keys = []
+for (var k in t) {
+    keys:push(k)
+}
+if (keys:length() != 3) { print("FAIL: for-in table keys length"); exit(1) }
+
+// for-in on table: key + value
+var pairs_list = []
+for (var k, v in t) {
+    pairs_list:push(k + "=" + str(v))
+}
+if (pairs_list:length() != 3) { print("FAIL: for-in table k,v length"); exit(1) }
+
+// for-in on empty array
+var count = 0
+for (var x in []) {
+    count += 1
+}
+if (count != 0) { print("FAIL: for-in empty array"); exit(1) }
+
+// for-in on empty table
+count = 0
+for (var k in {}) {
+    count += 1
+}
+if (count != 0) { print("FAIL: for-in empty table"); exit(1) }
+
+// for-in with break
+var found = -1
+for (var i, v in [5, 10, 15, 20, 25]) {
+    if (v == 15) {
+        found = i
+        break
+    }
+}
+if (found != 2) { print("FAIL: for-in break, got", found); exit(1) }
+
+// for-in with continue
+var odd_sum = 0
+for (var x in [1, 2, 3, 4, 5]) {
+    if (x % 2 == 0) { continue }
+    odd_sum += x
+}
+if (odd_sum != 9) { print("FAIL: for-in continue, got", odd_sum); exit(1) }
+
+// nested for-in
+var total = 0
+for (var row in [[1, 2], [3, 4], [5, 6]]) {
+    for (var val in row) {
+        total += val
+    }
+}
+if (total != 21) { print("FAIL: nested for-in, got", total); exit(1) }
+
+// for-in on single element
+var single = 0
+for (var x in [42]) {
+    single = x
+}
+if (single != 42) { print("FAIL: for-in single"); exit(1) }
+
+print("=== All for-in tests passed! ===")

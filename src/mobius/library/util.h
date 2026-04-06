@@ -15,5 +15,6 @@ int lib_id(MobiusState* state, int arg_count);
 int lib_isnan(MobiusState* state, int arg_count);
 int lib_isinf(MobiusState* state, int arg_count);
 int lib_isfinite(MobiusState* state, int arg_count);
+int lib_time(MobiusState* state, int arg_count);
 
 #endif // MOBIUS_LIBRARY_UTIL_H

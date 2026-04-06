@@ -1,0 +1,47 @@
+// Test isnan, isinf, isfinite, and randomseed
+print("=== Float Helper Functions ===")
+
+import "math"
+
+// isnan — produce NaN via inf - inf to avoid division-by-zero error
+var inf_val = math.exp(1000.0)
+var nan_val = inf_val - inf_val
+if (!isnan(nan_val)) { print("FAIL: isnan on NaN"); exit(1) }
+if (isnan(42.0)) { print("FAIL: isnan on normal float"); exit(1) }
+if (isnan(0)) { print("FAIL: isnan on zero"); exit(1) }
+if (isnan(1)) { print("FAIL: isnan on int"); exit(1) }
+
+// isinf
+var pos_inf = inf_val
+var neg_inf = -inf_val
+if (!isinf(pos_inf)) { print("FAIL: isinf +inf"); exit(1) }
+if (!isinf(neg_inf)) { print("FAIL: isinf -inf"); exit(1) }
+if (isinf(42.0)) { print("FAIL: isinf normal"); exit(1) }
+if (isinf(0)) { print("FAIL: isinf zero"); exit(1) }
+if (isinf(nan_val)) { print("FAIL: isinf NaN"); exit(1) }
+
+// isfinite
+if (!isfinite(42.0)) { print("FAIL: isfinite normal"); exit(1) }
+if (!isfinite(0)) { print("FAIL: isfinite zero"); exit(1) }
+if (!isfinite(-3.14)) { print("FAIL: isfinite negative"); exit(1) }
+if (isfinite(pos_inf)) { print("FAIL: isfinite +inf"); exit(1) }
+if (isfinite(neg_inf)) { print("FAIL: isfinite -inf"); exit(1) }
+if (isfinite(nan_val)) { print("FAIL: isfinite NaN"); exit(1) }
+
+// randomseed - set seed and verify reproducibility
+randomseed(12345)
+var r1 = random()
+var r2 = random()
+randomseed(12345)
+var r3 = random()
+var r4 = random()
+if (r1 != r3) { print("FAIL: randomseed reproducibility first"); exit(1) }
+if (r2 != r4) { print("FAIL: randomseed reproducibility second"); exit(1) }
+
+// randomseed with different seed gives different sequence
+randomseed(99999)
+var r5 = random()
+// Very unlikely to be the same as r1 with different seed
+// (not a hard test, but sanity check)
+
+print("=== All float helper tests passed! ===")

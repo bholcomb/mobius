@@ -1,0 +1,84 @@
+// Comprehensive test of all channel methods via : syntax
+import "fiber"
+
+print("=== Channel Methods Comprehensive ===")
+
+// Create channel via module syntax
+var ch = fiber.channel(3)
+
+// send and recv
+ch:send(10)
+ch:send(20)
+var v1 = ch:recv()
+if (v1 != 10) { print("FAIL: recv, got", v1); exit(1) }
+var v2 = ch:recv()
+if (v2 != 20) { print("FAIL: recv 2, got", v2); exit(1) }
+
+// try_send returns bool
+var ok1 = ch:try_send(100)
+if (!ok1) { print("FAIL: try_send empty channel"); exit(1) }
+var ok2 = ch:try_send(200)
+if (!ok2) { print("FAIL: try_send second"); exit(1) }
+var ok3 = ch:try_send(300)
+if (!ok3) { print("FAIL: try_send third"); exit(1) }
+// channel is full (capacity 3)
+var ok4 = ch:try_send(400)
+if (ok4) { print("FAIL: try_send full"); exit(1) }
+
+// try_recv returns {ok, value} table
+var r1 = ch:try_recv()
+if (!r1.ok) { print("FAIL: try_recv ok"); exit(1) }
+if (r1.value != 100) { print("FAIL: try_recv value, got", r1.value); exit(1) }
+
+// drain remaining
+ch:recv()
+ch:recv()
+
+// try_recv on empty channel
+var r_empty = ch:try_recv()
+if (r_empty.ok) { print("FAIL: try_recv empty should not be ok"); exit(1) }
+
+// is_closed
+if (ch:is_closed()) { print("FAIL: is_closed before close"); exit(1) }
+ch:close()
+if (!ch:is_closed()) { print("FAIL: is_closed after close"); exit(1) }
+
+// try_send on closed channel
+var ok_closed = ch:try_send(999)
+if (ok_closed) { print("FAIL: try_send closed"); exit(1) }
+
+// try_recv on closed empty channel
+var r_closed = ch:try_recv()
+if (r_closed.ok) { print("FAIL: try_recv closed empty"); exit(1) }
+
+// Channel with spawned fibers using method syntax
+var ch2 = fiber.channel(5)
+
+func producer(ch) {
+    for (var i = 0; i < 5; i++) {
+        ch:send(i * 10)
+    }
+    ch:close()
+}
+
+func consumer(ch) {
+    var results = []
+    try {
+        while (true) {
+            var val = ch:recv()
+            results:push(val)
+        }
+    } catch e {
+        // ChannelClosedError ends the loop
+    }
+    return results
+}
+
+spawn producer(ch2)
+var f = spawn consumer(ch2)
+var results = await f
+if (results:length() != 5) { print("FAIL: producer/consumer length, got", results:length()); exit(1) }
+if (results[0] != 0) { print("FAIL: results[0]"); exit(1) }
+if (results[4] != 40) { print("FAIL: results[4]"); exit(1) }
+
+print("=== All channel methods tests passed! ===")

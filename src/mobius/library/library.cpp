@@ -73,6 +73,7 @@ static const PluginFunction library_registry[] = {
     {"random",     lib_random,     0,        "Random float in [0,1), or integer in [min,max] with 1 or 2 args"},
     {"randomseed", lib_randomseed, 1,        "Seed the random number generator"},
     {"clock",      lib_clock,      0,        "Return monotonic wall-clock time in nanoseconds"},
+    {"time",       lib_time,       0,        "Return current Unix timestamp in seconds"},
     {"load",       lib_load,       1,        "Execute a Mobius script file by path"},
     {"id",         lib_id,         1,        "Return the memory address of a heap-allocated value"},
 

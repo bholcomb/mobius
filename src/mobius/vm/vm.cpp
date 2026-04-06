@@ -213,6 +213,20 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         return callNative(func_val.as.native_function, func_reg, nargs, nresults);
     }
 
+    if (func_val.type == VAL_TABLE && func_val.as.table) {
+        Value call_mm = func_val.as.table->getMetamethod(state_->metamethods()->call());
+        if (call_mm.type == VAL_NATIVE_FUNCTION) {
+            registers_[caller.base + func_reg] = call_mm;
+            return callNative(call_mm.as.native_function, func_reg, nargs, nresults);
+        }
+        if (call_mm.type == VAL_FUNCTION && call_mm.as.function) {
+            func_val = call_mm;
+        } else {
+            runtimeError("Attempt to call a table value (no __call metamethod)");
+            return -1;
+        }
+    }
+
     if (func_val.type != VAL_FUNCTION || !func_val.as.function) {
         runtimeError("Attempt to call a non-function value (type: %s)",
                      value_type_name(func_val.type));
@@ -835,6 +849,14 @@ MOBIUS_FORCEINLINE static int vm_op_unm(MobiusVM* vm, VMFrame& f, uint32_t inst)
         RA(inst) = make_int64_value(-MobiusVM::vm_extract_int64(val));
     } else if (val.type == VAL_FLOAT64) {
         RA(inst) = make_float_value(-val.as.double_val);
+    } else if (val.type == VAL_TABLE) {
+        Value out;
+        f.ci->ip = f.ip;
+        int rc = vm->callMetamethod(val, vm->state_->metamethods()->unm(), val, val, out);
+        vm->refreshFrame(f);
+        if (rc < 0) return -1;
+        if (rc == 0) { vm->runtimeError("Attempt to negate a table value: no __unm metamethod"); return -1; }
+        RA(inst) = out;
     } else {
         vm->runtimeError("Attempt to negate a %s value", value_type_name(val.type));
         return -1;
@@ -855,6 +877,28 @@ MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t i
     const Value& rhs = RKC(inst);
     if ((lhs.type != VAL_INT64 && lhs.type != VAL_UINT64) ||
         (rhs.type != VAL_INT64 && rhs.type != VAL_UINT64)) {
+        if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
+            const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+            MobiusString* mm = nullptr;
+            const char* name = nullptr;
+            switch (op) {
+                case '&': mm = vm->state_->metamethods()->band(); name = "__band"; break;
+                case '|': mm = vm->state_->metamethods()->bor();  name = "__bor";  break;
+                case '^': mm = vm->state_->metamethods()->bxor(); name = "__bxor"; break;
+                case '<': mm = vm->state_->metamethods()->shl();  name = "__shl";  break;
+                case '>': mm = vm->state_->metamethods()->shr();  name = "__shr";  break;
+            }
+            if (mm) {
+                Value out;
+                f.ci->ip = f.ip;
+                int rc = vm->callMetamethod(tbl, mm, lhs, rhs, out);
+                vm->refreshFrame(f);
+                if (rc < 0) return -1;
+                if (rc == 1) { RA(inst) = out; return 0; }
+            }
+            vm->runtimeError("Cannot apply bitwise op: no %s metamethod on table", name ? name : "?");
+            return -1;
+        }
         vm->runtimeError("Bitwise operations require integer operands");
         return -1;
     }
@@ -894,6 +938,14 @@ MOBIUS_FORCEINLINE static int vm_op_bnot(MobiusVM* vm, VMFrame& f, uint32_t inst
         RA(inst) = make_uint64_value(~MobiusVM::vm_extract_uint64(val));
     } else if (val.type == VAL_INT64) {
         RA(inst) = make_int64_value(~MobiusVM::vm_extract_int64(val));
+    } else if (val.type == VAL_TABLE) {
+        Value out;
+        f.ci->ip = f.ip;
+        int rc = vm->callMetamethod(val, vm->state_->metamethods()->bnot(), val, val, out);
+        vm->refreshFrame(f);
+        if (rc < 0) return -1;
+        if (rc == 0) { vm->runtimeError("Bitwise NOT on table: no __bnot metamethod"); return -1; }
+        RA(inst) = out;
     } else {
         vm->runtimeError("Bitwise NOT requires an integer operand");
         return -1;

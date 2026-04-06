@@ -1,5 +1,7 @@
 #include "library/core.h"
 #include "data/value.h"
+#include "data/table.h"
+#include "data/metamethods.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +20,24 @@ int lib_print(MobiusState* state, int arg_count) {
             if (str_data) {
                 fwrite(str_data, 1, arg.as.string->length, stdout);
             }
+        } else if (arg.type == VAL_TABLE && arg.as.table) {
+            Value tostr = arg.as.table->getMetamethod(state->metamethods()->tostring());
+            if (tostr.type != VAL_NIL) {
+                state->npush(tostr);
+                state->npush(arg);
+                int rc = mobius_pcall(state, 1, 1);
+                if (rc >= 0) {
+                    Value s = state->npop();
+                    if (s.type == VAL_STRING && s.as.string)
+                        fwrite(s.as.string->data, 1, s.as.string->length, stdout);
+                    else
+                        print_value(s);
+                } else {
+                    print_value(arg);
+                }
+            } else {
+                print_value(arg);
+            }
         } else {
             print_value(arg);
         }
@@ -26,7 +46,6 @@ int lib_print(MobiusState* state, int arg_count) {
     }
     printf("\n");
     
-    // Pop arguments from stack
     for (int i = 0; i < arg_count; i++) {
         state->npop();
     }
@@ -164,6 +183,19 @@ int lib_str(MobiusState* state, int arg_count) {
     }
 
     Value arg = state->npeek(0);
+
+    if (arg.type == VAL_TABLE && arg.as.table) {
+        Value tostr = arg.as.table->getMetamethod(state->metamethods()->tostring());
+        if (tostr.type != VAL_NIL) {
+            state->npop();
+            state->npush(tostr);
+            state->npush(arg);
+            int rc = mobius_pcall(state, 1, 1);
+            if (rc < 0) return -1;
+            return 1;
+        }
+    }
+
     char* temp_str = value_to_string(arg);
     Value result;
     
@@ -174,10 +206,7 @@ int lib_str(MobiusState* state, int arg_count) {
         result = make_nil_value();
     }
     
-    // Pop argument from stack
     state->npop();
-    
-    // Push result onto stack
     state->npush(result);
     
     return 1;

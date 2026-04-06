@@ -1,0 +1,96 @@
+// Test try/catch/finally/throw interactions comprehensively
+print("=== Exception Handling Comprehensive ===")
+
+// finally runs after normal try
+var finally_ran = false
+try {
+    var x = 1
+} catch err {
+    print("FAIL: should not catch"); exit(1)
+} finally {
+    finally_ran = true
+}
+if (!finally_ran) { print("FAIL: finally after normal"); exit(1) }
+
+// finally runs after catch
+var order = []
+try {
+    order:push("try")
+    throw "err"
+} catch err {
+    order:push("catch")
+} finally {
+    order:push("finally")
+}
+if (order:length() != 3) { print("FAIL: order length"); exit(1) }
+if (order[0] != "try") { print("FAIL: order[0]"); exit(1) }
+if (order[1] != "catch") { print("FAIL: order[1]"); exit(1) }
+if (order[2] != "finally") { print("FAIL: order[2]"); exit(1) }
+
+// throw with different types
+var caught_types = []
+
+try { throw 42 } catch e { caught_types:push(typeof(e)) }
+try { throw "msg" } catch e { caught_types:push(typeof(e)) }
+try { throw true } catch e { caught_types:push(typeof(e)) }
+try { throw [1,2] } catch e { caught_types:push(typeof(e)) }
+
+if (caught_types[0] != "integer") { print("FAIL: throw int type, got", caught_types[0]); exit(1) }
+if (caught_types[1] != "string") { print("FAIL: throw string type, got", caught_types[1]); exit(1) }
+if (caught_types[2] != "bool") { print("FAIL: throw bool type, got", caught_types[2]); exit(1) }
+if (caught_types[3] != "array") { print("FAIL: throw array type, got", caught_types[3]); exit(1) }
+
+// Nested try/catch
+var nested_result = nil
+try {
+    try {
+        throw "inner"
+    } catch e {
+        throw "outer: " + e
+    }
+} catch e {
+    nested_result = e
+}
+if (nested_result != "outer: inner") { print("FAIL: nested, got", nested_result); exit(1) }
+
+// Try/catch in loop
+var errors = 0
+for (var i = 0; i < 10; i++) {
+    try {
+        if (i % 3 == 0) { throw "skip" }
+    } catch e {
+        errors += 1
+    }
+}
+if (errors != 4) { print("FAIL: try in loop, got", errors); exit(1) }
+
+// Throw from deeply nested function
+func level3() { throw "deep" }
+func level2() { level3() }
+func level1() { level2() }
+
+var deep_err = nil
+try {
+    level1()
+} catch e {
+    deep_err = e
+}
+if (deep_err != "deep") { print("FAIL: deep throw, got", deep_err); exit(1) }
+
+// Code after try/catch continues
+var continued = false
+try { throw "x" } catch e { }
+continued = true
+if (!continued) { print("FAIL: continuation"); exit(1) }
+
+// throw with table value
+var tbl_err = nil
+try {
+    throw {code: 404, msg: "not found"}
+} catch e {
+    tbl_err = e
+}
+if (tbl_err.code != 404) { print("FAIL: throw table code"); exit(1) }
+if (tbl_err.msg != "not found") { print("FAIL: throw table msg"); exit(1) }
+
+print("=== All exception handling tests passed! ===")

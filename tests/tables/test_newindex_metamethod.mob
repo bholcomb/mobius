@@ -1,0 +1,39 @@
+// Test __newindex metamethod dispatch
+print("=== __newindex Metamethod Test ===")
+
+// __newindex as a redirect table: new keys go to redirect table
+var redirect = {}
+var data = {}
+var meta = {["__newindex"] = redirect}
+setmetatable(data, meta)
+
+// Writing a new key should redirect to the redirect table
+data.foo = "bar"
+if (redirect.foo != "bar") { print("FAIL: __newindex redirect, got", redirect.foo); exit(1) }
+
+// The original table should NOT have the key
+var p = data:pairs()
+var found_in_data = false
+for (var i = 0; i < p:length(); i++) {
+    if (p[i][0] == "foo") { found_in_data = true }
+}
+if (found_in_data) { print("FAIL: key should not be in data table"); exit(1) }
+
+// Writing another new key
+data.baz = 42
+if (redirect.baz != 42) { print("FAIL: __newindex redirect baz, got", redirect.baz); exit(1) }
+
+// __index + __newindex together: reads from index, writes to newindex
+var defaults = {color: "blue", size: 10}
+var writes = {}
+var obj = {}
+setmetatable(obj, {["__index"] = defaults, ["__newindex"] = writes})
+
+// Read from __index
+if (obj.color != "blue") { print("FAIL: __index read"); exit(1) }
+
+// Write new key goes to __newindex
+obj.name = "test"
+if (writes.name != "test") { print("FAIL: __newindex with __index"); exit(1) }
+
+print("=== All __newindex tests passed! ===")
