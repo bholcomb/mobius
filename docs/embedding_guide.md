@@ -628,6 +628,115 @@ mobius_reset_metrics(state);  // reset counters
 
 ---
 
+## Type Metatables
+
+Type metatables allow you to attach methods to all values of a given type.
+When a script uses the `:` method-call syntax on a value, the VM looks up
+the method name in the type's metatable. This is how the built-in array,
+table, and channel methods work.
+
+The standard library automatically registers type metatables for
+`MOBIUS_VAL_ARRAY`, `MOBIUS_VAL_TABLE`, and `MOBIUS_VAL_CHANNEL` when you
+call `mobius_init_stdlib()`. You can add your own methods to these
+metatables or create metatables for other types (e.g., `MOBIUS_VAL_STRING`,
+`MOBIUS_VAL_USERDATA`).
+
+### Reading a Type Metatable
+
+```c
+// Push the current type metatable for arrays onto the stack
+mobius_push_type_metatable(state, MOBIUS_VAL_ARRAY);
+
+if (!mobius_stack_isNil(state, -1)) {
+    // Inspect or modify the table using the normal table API
+    mobius_stack_getTableField(state, -1, "push");
+    // ... inspect the method ...
+    mobius_stack_pop(state, 1);
+}
+mobius_stack_pop(state, 1);
+```
+
+If no metatable has been set for the type, `mobius_push_type_metatable`
+pushes `nil`.
+
+### Setting a Type Metatable
+
+```c
+// Create a new table to serve as the string type metatable
+mobius_stack_pushNewTable(state, 4);
+
+// Add a native method
+mobius_register_function(state, "__temp_upper", native_string_upper);
+mobius_stack_getGlobal(state, "__temp_upper");
+mobius_stack_setTableField(state, -2, "upper");
+mobius_remove_global(state, "__temp_upper");
+
+// Pop the table and install it as the metatable for strings
+mobius_set_type_metatable(state, MOBIUS_VAL_STRING);
+```
+
+After this, scripts can call:
+
+```mobius
+var s = "hello"
+print(s:upper())    // "HELLO"
+```
+
+### Extending an Existing Type Metatable
+
+To add methods to a type that already has a metatable (e.g., adding a
+custom method to arrays):
+
+```c
+// Push the existing array metatable
+mobius_push_type_metatable(state, MOBIUS_VAL_ARRAY);
+
+// Add a new method to it
+mobius_register_function(state, "__temp_sum", native_array_sum);
+mobius_stack_getGlobal(state, "__temp_sum");
+mobius_stack_setTableField(state, -2, "sum");
+mobius_remove_global(state, "__temp_sum");
+
+// Pop and re-install (or simply pop — changes are in-place since
+// the table is a reference type)
+mobius_stack_pop(state, 1);
+```
+
+### Writing Method-Style Native Functions
+
+When a method is called via `:`, the receiver object (`self`) is passed as
+the first argument in the native call stack. A typical method implementation
+reads `self` first, then the user-provided arguments:
+
+```c
+int native_array_sum(MobiusState* state, int arg_count) {
+    // self is at position 1 on the native stack (first argument)
+    // For arrays, use the C API to iterate
+    if (!mobius_stack_isArray(state, 1))
+        return mobius_error(state, "sum() expects an array receiver");
+
+    size_t len = mobius_stack_getArrayLength(state, 1);
+    double total = 0;
+    for (size_t i = 0; i < len; i++) {
+        mobius_stack_getArrayElement(state, 1, i);
+        total += mobius_stack_asFloat64(state, -1);
+        mobius_stack_pop(state, 1);
+    }
+
+    mobius_stack_pushFloat64(state, total);
+    return 1;
+}
+```
+
+### API Functions
+
+| Function                                           | Description                                   |
+|----------------------------------------------------|-----------------------------------------------|
+| `mobius_push_type_metatable(state, type)`           | Push the metatable for a value type (or nil)  |
+| `mobius_set_type_metatable(state, type)`            | Pop top value and set as type's metatable     |
+
+---
+
 ## API Reference Summary
 
 ### Lifecycle
@@ -710,6 +819,13 @@ mobius_reset_metrics(state);  // reset counters
 | Function                                            | Description                       |
 |-----------------------------------------------------|-----------------------------------|
 | `mobius_register_function(state, name, func)`       | Register a C function as a global |
+
+### Type Metatables
+
+| Function                                            | Description                                  |
+|-----------------------------------------------------|----------------------------------------------|
+| `mobius_push_type_metatable(state, type)`            | Push a type's metatable onto the stack (or nil) |
+| `mobius_set_type_metatable(state, type)`             | Pop top and set as the metatable for a type  |
 
 ### Plugins
 

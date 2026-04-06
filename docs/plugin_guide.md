@@ -579,6 +579,13 @@ bool mobius_stack_isFunction(state, idx);
 bool mobius_stack_isUserdata(state, idx);
 ```
 
+### Type Metatables
+
+```c
+void mobius_push_type_metatable(state, type);   // push metatable (or nil)
+void mobius_set_type_metatable(state, type);     // pop and install as type metatable
+```
+
 ### Value Types Enum
 
 ```c
@@ -596,5 +603,46 @@ typedef enum {
     MOBIUS_VAL_TABLE,
     MOBIUS_VAL_USERDATA,
     MOBIUS_VAL_ENUM,
+    MOBIUS_VAL_FUTURE,
+    MOBIUS_VAL_ARRAY_SLICE,
+    MOBIUS_VAL_CHANNEL,
 } MobiusValueType;
 ```
+
+### Type Metatables
+
+Plugins can register methods on built-in value types using type metatables.
+When a script calls `obj:method(args)`, the VM looks up `"method"` in the
+type metatable for `obj`'s type. This lets you add custom methods to
+strings, arrays, userdata, or any other value type.
+
+```c
+// Push the existing metatable for a type (or nil if none set)
+mobius_push_type_metatable(state, MOBIUS_VAL_STRING);
+
+// Pop top of stack and install it as the type metatable
+mobius_set_type_metatable(state, MOBIUS_VAL_STRING);
+```
+
+A plugin's `init_plugin` or `post_init` hook is a good place to install
+type metatables:
+
+```c
+int my_post_init(MobiusState* state) {
+    // Create a metatable for userdata of our plugin's type
+    mobius_stack_pushNewTable(state, 2);
+
+    // Register methods into it
+    mobius_register_function(state, "__temp", my_userdata_method);
+    mobius_stack_getGlobal(state, "__temp");
+    mobius_stack_setTableField(state, -2, "my_method");
+    mobius_remove_global(state, "__temp");
+
+    // Install as the type metatable for userdata
+    mobius_set_type_metatable(state, MOBIUS_VAL_USERDATA);
+    return 0;
+}
+```
+
+See the [Embedding Guide](embedding_guide.md#type-metatables) for a
+complete walkthrough of reading, creating, and extending type metatables.
