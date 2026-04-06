@@ -22,7 +22,17 @@ public:
     void set(size_t index, const Value& value);
     void insert(size_t index, Value value);
     Value remove(size_t index);
-    size_t length() const;
+
+    inline size_t length() const {
+        if (MOBIUS_UNLIKELY(shared_)) {
+            std::shared_lock lock(mutex_);
+            return elements.size();
+        }
+        return elements.size();
+    }
+
+    inline const Value& unsafeGet(size_t index) const { return elements[index]; }
+
     void reserve(size_t new_capacity);
     void reverse();
 

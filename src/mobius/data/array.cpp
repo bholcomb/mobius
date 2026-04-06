@@ -83,14 +83,6 @@ Value ArrayValue::remove(size_t index) {
     return result;
 }
 
-size_t ArrayValue::length() const {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::shared_lock lock(mutex_);
-        return elements.size();
-    }
-    return elements.size();
-}
-
 void ArrayValue::reserve(size_t new_capacity) {
     if (MOBIUS_UNLIKELY(shared_)) {
         std::unique_lock lock(mutex_);

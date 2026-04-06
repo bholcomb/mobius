@@ -146,12 +146,11 @@ public:
     FutureValue* future_ = nullptr;
 
     std::vector<Value> registers_;
+    int        register_capacity_;
 
     CallInfo*  call_stack_;
     size_t     call_depth_;
     size_t     call_stack_capacity_;
-
-    uint32_t* current_ip_;
 
     CallInfo& callStackTop() { return call_stack_[call_depth_]; }
     const CallInfo& callStackTop() const { return call_stack_[call_depth_]; }
@@ -160,8 +159,6 @@ public:
     CallInfo& callStackPush(Prototype* proto, uint32_t* ip, int base, int nresults) {
         call_depth_++;
         if (MOBIUS_UNLIKELY(call_depth_ >= call_stack_capacity_)) growCallStack();
-        if (MOBIUS_UNLIKELY(call_depth_ > metrics_->peak_call_depth))
-            metrics_->peak_call_depth = call_depth_;
         CallInfo& ci = call_stack_[call_depth_];
         ci.reset(proto, ip, base, nresults);
         return ci;
@@ -189,10 +186,11 @@ public:
     void growCallStack();
 
     void ensureRegisters(int needed) {
-        if (MOBIUS_UNLIKELY(needed > (int)registers_.size())) {
+        if (MOBIUS_UNLIKELY(needed > register_capacity_)) {
             registers_.resize(needed, Value());
-            if (registers_.size() > metrics_->peak_registers)
-                metrics_->peak_registers = registers_.size();
+            register_capacity_ = (int)registers_.size();
+            if ((size_t)register_capacity_ > metrics_->peak_registers)
+                metrics_->peak_registers = register_capacity_;
         }
     }
 
