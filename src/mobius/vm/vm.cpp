@@ -62,16 +62,21 @@ MobiusVM::MobiusVM(MobiusState* state)
       strict_mode_(state->config().strict_mode),
       warn_on_conversion_(state->config().warn_on_conversion),
       override_behavior_(state->config().override_behavior),
-      native_ctx_(nullptr), last_error_(nullptr),
+      native_ctx_{}, last_error_(nullptr),
       source_code_(nullptr), exec_context_(nullptr),
       register_capacity_(0),
       call_depth_(0), call_stack_capacity_(VM_INITIAL_CALL_STACK)
 {
-    registers_.reserve(VM_INITIAL_REGISTERS);
-    type_tags_.reserve(VM_INITIAL_REGISTERS);
+    registers_.resize(VM_INITIAL_REGISTERS);
+    type_tags_.resize(VM_INITIAL_REGISTERS, VAL_UNKNOWN);
     register_capacity_ = (int)registers_.size();
     call_stack_ = new CallInfo[VM_INITIAL_CALL_STACK];
     call_stack_[0].initUpvalues();
+
+    native_ctx_.registers = registers_.data();
+    native_ctx_.base      = 0;
+    native_ctx_.top       = 0;
+    native_ctx_.capacity  = register_capacity_;
 
     exec_context_ = new ExecutionContext(state, state->config().max_call_depth);
 }
@@ -179,23 +184,27 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
     int needed = args_base + nargs + 16;
     ensureRegisters(needed);
 
-    NativeCallContext nctx;
-    nctx.registers = registers_.data();
-    nctx.base      = args_base;
-    nctx.top       = args_base + nargs;
-    nctx.capacity  = (int)registers_.size();
-    native_ctx_ = &nctx;
+    int saved_base = native_ctx_.base;
+    int saved_top  = native_ctx_.top;
+
+    native_ctx_.registers = registers_.data();
+    native_ctx_.base      = args_base;
+    native_ctx_.top       = args_base + nargs;
+    native_ctx_.capacity  = (int)registers_.size();
 
     int rc = func(state_, nargs);
 
-    native_ctx_ = nullptr;
+    int result_top = native_ctx_.top;
+
+    native_ctx_.base = saved_base;
+    native_ctx_.top  = saved_top;
 
     if (rc < 0) return -1;
 
     int dest = caller_base + func_reg;
     int n = (nresults == 0) ? rc : (nresults - 1);
     for (int i = 0; i < n; i++) {
-        if (args_base + i < nctx.top) {
+        if (args_base + i < result_top) {
             registers_[dest + i] = registers_[args_base + i];
         } else {
             registers_[dest + i] = Value();
@@ -307,21 +316,25 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         registers_[scratch]     = lhs;
         registers_[scratch + 1] = rhs;
 
-        NativeCallContext nctx;
-        nctx.registers = registers_.data();
-        nctx.base      = scratch;
-        nctx.top       = scratch + 2;
-        nctx.capacity  = (int)registers_.size();
-        native_ctx_ = &nctx;
+        int saved_base = native_ctx_.base;
+        int saved_top  = native_ctx_.top;
+
+        native_ctx_.registers = registers_.data();
+        native_ctx_.base      = scratch;
+        native_ctx_.top       = scratch + 2;
+        native_ctx_.capacity  = (int)registers_.size();
 
         int rc = method.as.native_function(state_, 2);
-        native_ctx_ = nullptr;
+
+        int result_top = native_ctx_.top;
+        native_ctx_.base = saved_base;
+        native_ctx_.top  = saved_top;
 
         if (rc < 0) {
             runtimeError("Metamethod '%s' failed", mm_name->data);
             return -1;
         }
-        if (rc > 0 && nctx.top > scratch) {
+        if (rc > 0 && result_top > scratch) {
             out = registers_[scratch];
         } else {
             out = Value();

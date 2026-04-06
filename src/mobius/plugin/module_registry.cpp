@@ -275,19 +275,27 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
 
                     Value scratch[32];
                     scratch[0] = make_table_value(mod_table);
-                    NativeCallContext nctx;
-                    nctx.registers = scratch;
-                    nctx.base      = 0;
-                    nctx.top       = 1;
-                    nctx.capacity  = 32;
-
                     MobiusVM* vm = MobiusVM::t_current_vm;
-                    NativeCallContext* prev_nctx = vm ? vm->native_ctx_ : nullptr;
-                    if (vm) vm->native_ctx_ = &nctx;
+                    if (vm) {
+                        int saved_base = vm->native_ctx_.base;
+                        int saved_top  = vm->native_ctx_.top;
+                        Value* saved_regs = vm->native_ctx_.registers;
+                        int saved_cap  = vm->native_ctx_.capacity;
 
-                    lm->plugin->post_init(state);
+                        vm->native_ctx_.registers = scratch;
+                        vm->native_ctx_.base      = 0;
+                        vm->native_ctx_.top       = 1;
+                        vm->native_ctx_.capacity  = 32;
 
-                    if (vm) vm->native_ctx_ = prev_nctx;
+                        lm->plugin->post_init(state);
+
+                        vm->native_ctx_.registers = saved_regs;
+                        vm->native_ctx_.base      = saved_base;
+                        vm->native_ctx_.top       = saved_top;
+                        vm->native_ctx_.capacity  = saved_cap;
+                    } else {
+                        lm->plugin->post_init(state);
+                    }
                 }
             }
         }

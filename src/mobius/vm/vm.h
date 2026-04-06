@@ -11,8 +11,9 @@
 class MobiusState;
 class ExecutionContext;
 class FutureValue;
-struct NativeCallContext;
 struct InternalError;
+
+#include "state/mobius_state.h"
 
 // ============================================================================
 // Upvalue — runtime representation of a captured variable
@@ -139,7 +140,7 @@ public:
     bool warn_on_conversion_;
     MobiusOverrideBehavior override_behavior_;
 
-    NativeCallContext* native_ctx_;
+    NativeCallContext native_ctx_;
     InternalError* last_error_;
     const char* source_code_;
     ExecutionContext* exec_context_;
@@ -191,6 +192,8 @@ public:
             registers_.resize(needed, Value());
             type_tags_.resize(needed, VAL_UNKNOWN);
             register_capacity_ = (int)registers_.size();
+            native_ctx_.registers = registers_.data();
+            native_ctx_.capacity  = register_capacity_;
             if ((size_t)register_capacity_ > metrics_->peak_registers)
                 metrics_->peak_registers = register_capacity_;
         }

@@ -93,8 +93,7 @@ bool Repl::processLine(const char* line) {
         disassemble_prototype(proto);
     }
 
-    MobiusVM vm(state_);
-    int rc = vm.execute(proto);
+    int rc = state_->mainVM()->execute(proto);
     delete proto;
 
     if (rc != 0) {

@@ -197,6 +197,9 @@ public:
 
     void addOwnedProto(struct Prototype* proto);
 
+    // Main VM — persistent VM owned by the state, used for the creating thread.
+    class MobiusVM* mainVM() const { return main_vm_; }
+
     // Active VM — returns the thread-local current VM.
     class MobiusVM* activeVM() const;
 
@@ -269,6 +272,8 @@ private:
     std::mutex import_mutex_;
 
     Table* type_metatables_[16] = {};
+
+    class MobiusVM* main_vm_;
 
     void clearErrorInternal();
 };
