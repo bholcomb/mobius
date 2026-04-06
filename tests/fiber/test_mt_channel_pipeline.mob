@@ -8,9 +8,9 @@ var COUNT = 50
 
 func producer(ch, n) {
     for (var i = 0; i < n; i += 1) {
-        ch.send(i)
+        ch:send(i)
     }
-    ch.close()
+    ch:close()
     return n
 }
 
@@ -18,7 +18,7 @@ func consumer(ch, results) {
     var count = 0
     try {
         while (true) {
-            var val = ch.recv()
+            var val = ch:recv()
             array_push(results, val)
             count += 1
         }

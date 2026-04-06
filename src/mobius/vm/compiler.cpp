@@ -287,6 +287,7 @@ int Compiler::compileExpr(Expr* expr, int dest) {
         case EXPR_TABLE_INDEX:
             return compileTableIndex(&expr->as.table_index, dest);
         case EXPR_TABLE_DOT:
+        case EXPR_METHOD_DOT:
             return compileTableDot(&expr->as.table_dot, dest);
         case EXPR_ENUM_ACCESS:
             return compileEnumAccess(&expr->as.enum_access, dest);
@@ -994,6 +995,7 @@ static int assignment_target_line(Expr* target) {
         case EXPR_VARIABLE:
             return target->as.variable.name.line;
         case EXPR_TABLE_DOT:
+        case EXPR_METHOD_DOT:
             return target->as.table_dot.key.line;
         case EXPR_ARRAY_INDEX:
             return assignment_target_line(target->as.array_index.array);
@@ -1122,21 +1124,27 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
     int base = current_->free_reg;
     int func_reg = allocReg();
 
-    // Compile the callee into func_reg
-    if (expr->callee->type == EXPR_TABLE_DOT) {
-        // module.func() — compile as table lookup
+    bool is_method = (expr->callee->type == EXPR_METHOD_DOT);
+
+    if (is_method) {
+        TableDotExpr* dot = &expr->callee->as.table_dot;
+        int tbl_reg = compileExpr(dot->table);
+        int ki = stringConstant(dot->key.identifier);
+        uint8_t rk_key = makeRK(ki);
+        emitABC(OP_SELF, (uint8_t)func_reg, (uint8_t)tbl_reg, rk_key);
+        setFreeReg(func_reg + 2);
+    } else if (expr->callee->type == EXPR_TABLE_DOT) {
         compileTableDot(&expr->callee->as.table_dot, func_reg);
     } else {
         compileExpr(expr->callee, func_reg);
     }
 
-    // Compile arguments into R[func_reg+1], R[func_reg+2], ...
     for (size_t i = 0; i < expr->arg_count; i++) {
         int arg_reg = allocReg();
         compileExpr(expr->arguments[i], arg_reg);
     }
 
-    int nargs = (int)expr->arg_count + 1;  // B = nargs + 1
+    int nargs = (int)expr->arg_count + 1 + (is_method ? 1 : 0);  // B = nargs + 1, +1 for self
     int nresults = 2;                       // C = nresults + 1 (1 result)
 
     emitABC(OP_CALL, (uint8_t)func_reg, (uint8_t)nargs, (uint8_t)nresults);
@@ -1167,7 +1175,16 @@ void Compiler::compileTailCall(CallExpr* expr) {
     int base = current_->free_reg;
     int func_reg = allocReg();
 
-    if (expr->callee->type == EXPR_TABLE_DOT) {
+    bool is_method = (expr->callee->type == EXPR_METHOD_DOT);
+
+    if (is_method) {
+        TableDotExpr* dot = &expr->callee->as.table_dot;
+        int tbl_reg = compileExpr(dot->table);
+        int ki = stringConstant(dot->key.identifier);
+        uint8_t rk_key = makeRK(ki);
+        emitABC(OP_SELF, (uint8_t)func_reg, (uint8_t)tbl_reg, rk_key);
+        setFreeReg(func_reg + 2);
+    } else if (expr->callee->type == EXPR_TABLE_DOT) {
         compileTableDot(&expr->callee->as.table_dot, func_reg);
     } else {
         compileExpr(expr->callee, func_reg);
@@ -1178,7 +1195,7 @@ void Compiler::compileTailCall(CallExpr* expr) {
         compileExpr(expr->arguments[i], arg_reg);
     }
 
-    int nargs = (int)expr->arg_count + 1;  // B = nargs + 1
+    int nargs = (int)expr->arg_count + 1 + (is_method ? 1 : 0);
     emitABC(OP_TAILCALL, (uint8_t)func_reg, (uint8_t)nargs, 0);
     setFreeReg(base);
 }

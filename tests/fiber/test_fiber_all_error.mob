@@ -10,8 +10,8 @@ func good_task(x) {
 
 func bad_task() {
     var ch = fiber.channel(1)
-    ch.close()
-    ch.recv()
+    ch:close()
+    ch:recv()
     return "unreachable"
 }
 

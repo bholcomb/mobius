@@ -229,9 +229,9 @@ public:
         return ctx->top - ctx->base;
     }
 
-    inline const Value& npeek_self(int arg_count) const {
+    inline const Value& npeek_self() const {
         NativeCallContext* ctx = nativeContext();
-        return ctx->registers[ctx->base + arg_count];
+        return ctx->registers[ctx->base];
     }
 
     // Type-level metatables — one per ValueType, for method dispatch on non-table values

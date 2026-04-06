@@ -23,6 +23,7 @@ typedef enum {
     EXPR_TABLE_LITERAL,
     EXPR_TABLE_INDEX,
     EXPR_TABLE_DOT,
+    EXPR_METHOD_DOT,
     EXPR_ENUM_ACCESS,
     EXPR_INCREMENT,
     EXPR_DECREMENT,
@@ -438,6 +439,7 @@ Expr* make_array_index_expr(Expr* array, Expr* index);
 Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count);
 Expr* make_table_index_expr(Expr* table, Expr* index);
 Expr* make_table_dot_expr(Expr* table, Token key);
+Expr* make_method_dot_expr(Expr* table, Token key);
 Expr* make_enum_access_expr(Token enum_name, Token member_name);
 Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token op);
 Expr* make_ternary_expr(Expr* condition, Expr* then_expr, Expr* else_expr);

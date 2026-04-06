@@ -582,11 +582,15 @@ Expr* parse_call(Parser* parser) {
             expr = make_array_index_expr(expr, index);
         } else if (parser_match(parser, TOKEN_DOT)) {
             Token key = consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'");
-            
-            // Always treat as table dot access initially
-            // The evaluator will handle enum access if the base turns out to be an enum
             expr = make_table_dot_expr(expr, key);
-        } 
+        } else if (parser_check(parser, TOKEN_COLON) &&
+                   parser->current + 2 < parser->token_count &&
+                   parser->tokens[parser->current + 1].type == TOKEN_IDENTIFIER &&
+                   parser->tokens[parser->current + 2].type == TOKEN_LEFT_PAREN) {
+            parser_advance(parser);
+            Token key = consume(parser, TOKEN_IDENTIFIER, "Expect method name after ':'");
+            expr = make_method_dot_expr(expr, key);
+        }
         // Handle postfix increment/decrement
         else if (parser_match_any(parser, 2, TOKEN_PLUS_PLUS, TOKEN_MINUS_MINUS)) {
             Token op = parser_previous(parser);
@@ -1142,11 +1146,20 @@ Stmt* parse_statement(Parser* parser) {
         // 1. identifier : (key-value pair)
         // 2. [ (computed key)
         // 3. } (empty table)
+        //
+        // Disambiguation: `{ id : id ( }` could be a table literal
+        // `{ key: func() }` or a block with a method call `{ obj:method() }`.
+        // We treat `identifier : identifier (` as a block (method call)
+        // since that is far more common. Use `["key"]: func()` for the
+        // table literal form if needed.
         if (parser_check(parser, TOKEN_RIGHT_BRACE) ||
             parser_check(parser, TOKEN_LEFT_BRACKET) ||
             (parser_check(parser, TOKEN_IDENTIFIER) && 
-             (parser->current + 1 < parser->token_count && 
-              parser->tokens[parser->current + 1].type == TOKEN_COLON))) {
+             parser->current + 1 < parser->token_count && 
+             parser->tokens[parser->current + 1].type == TOKEN_COLON &&
+             !(parser->current + 3 < parser->token_count &&
+               parser->tokens[parser->current + 2].type == TOKEN_IDENTIFIER &&
+               parser->tokens[parser->current + 3].type == TOKEN_LEFT_PAREN))) {
             is_table_literal = true;
         }
         

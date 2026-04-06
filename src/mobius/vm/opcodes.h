@@ -253,6 +253,9 @@ enum OpCode : uint8_t {
     OP_SHARE,       // A         mark R[A] as shared (deep); sets VAL_FLAG_SHARED
     OP_CANCEL_CHECK,// --        check if current fiber is cancelled; throw CancellationError if so
 
+    // -- Method dispatch --
+    OP_SELF,        // A B C     R[A+1] = R[B]; R[A] = R[B][RK(C)]  (method lookup with self)
+
     // -- Debug / sentinel --
     OP_NOP,         //           no operation (padding / breakpoint target)
 
@@ -391,6 +394,8 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"YIELD",     FMT_ABC},
         {"SHARE",     FMT_ABC},
         {"CANCEL_CHECK", FMT_ABC},
+
+        {"SELF",      FMT_ABC},
 
         {"NOP",       FMT_ABC},
     };
