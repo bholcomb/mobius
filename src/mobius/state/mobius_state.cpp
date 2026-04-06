@@ -7,7 +7,9 @@
 #include "frontend/parser.h"
 #include "frontend/token.h"
 #include "library/library.h"
+#include "library/fiber_lib.h"
 #include "internal/string_intern.h"
+#include "data/table.h"
 #include "data/metamethods.h"
 #include "plugin/module_registry.h"
 #include "fiber/job_system.h"
@@ -287,6 +289,13 @@ MobiusState::MobiusState(MobiusConfig* config)
 MobiusState::~MobiusState() {
     delete job_system_;
 
+    for (int i = 0; i < 16; i++) {
+        if (type_metatables_[i]) {
+            type_metatables_[i]->release();
+            type_metatables_[i] = nullptr;
+        }
+    }
+
     for (Prototype* p : owned_protos_) {
         delete p;
     }
@@ -302,6 +311,14 @@ MobiusState::~MobiusState() {
     if (fallback_last_error_) {
         free_internal_error(fallback_last_error_);
     }
+}
+
+void MobiusState::setTypeMetatable(ValueType t, Table* mt) {
+    if (type_metatables_[t]) {
+        type_metatables_[t]->release();
+    }
+    type_metatables_[t] = mt;
+    if (mt) mt->retain();
 }
 
 void MobiusState::clearErrorInternal() {
@@ -391,6 +408,14 @@ void MobiusState::removeGlobalSlots(int from_slot) {
 
 int MobiusState::initStdlib() {
     register_stdlib_functions(this);
+
+    Table* fiber_mod = register_fiber_module(this);
+    registry_->registerBuiltinModule("fiber", fiber_mod);
+
+    Table* channel_mt = create_channel_type_metatable(this);
+    setTypeMetatable(VAL_CHANNEL, channel_mt);
+    channel_mt->release();
+
     initialized_ = true;
     return MOBIUS_OK;
 }

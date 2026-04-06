@@ -3,10 +3,10 @@
 #include "state/mobius_state.h"
 #include "util/file_io.h"
 
-#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <chrono>
 
 // =============================================================================
 // UNIFIED UTILITY FUNCTION IMPLEMENTATIONS
@@ -64,21 +64,13 @@ int lib_random(MobiusState* state, int arg_count) {
     return state->error("random: unexpected argument count");
 }
 
-int lib_time(MobiusState* state, int arg_count) {
-    if (arg_count != 0) {
-        return state->error("time expects no arguments");
-    }
-    
-    state->npush(make_int64_value((int64_t)time(NULL)));
-    return 1;
-}
-
 int lib_clock(MobiusState* state, int arg_count) {
     if (arg_count != 0) {
         return state->error("clock expects no arguments");
     }
-    
-    state->npush(make_float_value((double)clock() / CLOCKS_PER_SEC));
+    auto now = std::chrono::steady_clock::now();
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+    state->npush(make_int64_value((int64_t)ns));
     return 1;
 }
 

@@ -1,0 +1,31 @@
+// Prove fiber cancellation works: spawn a fiber that sleeps a long time,
+// cancel it, and verify it terminates with an error.
+print("=== Cancellation Test ===")
+
+import "fiber"
+
+func long_task() {
+    fiber.sleep(60000)
+    return 42
+}
+
+var f = spawn long_task()
+
+// Give the fiber a moment to start sleeping, then cancel
+fiber.sleep(10)
+fiber.cancel(f)
+
+var caught = false
+try {
+    var result = await f
+} catch e {
+    caught = true
+}
+
+if (!caught) {
+    print("FAIL: expected CancellationError but got a result")
+    exit(1)
+}
+
+print("  Cancelled fiber correctly threw error")
+print("=== Cancellation test passed! ===")

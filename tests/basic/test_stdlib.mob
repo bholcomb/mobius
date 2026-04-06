@@ -46,7 +46,6 @@ print("\n=== Utility Functions ===");
 print("random() =", random());
 print("random(10) =", random(10));
 print("random(5, 15) =", random(5, 15));
-print("time() =", time());
 print("clock() =", clock());
 
 print("\n=== Standard Library Test Complete ===");

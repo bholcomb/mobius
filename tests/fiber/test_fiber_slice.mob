@@ -1,8 +1,10 @@
-// Test fiber_slice
+// Test fiber.slice
 print("=== Fiber Slice Tests ===")
 
+import "fiber"
+
 var arr = [10, 20, 30, 40, 50]
-var s = fiber_slice(arr, 1, 3)
+var s = fiber.slice(arr, 1, 3)
 
 if (len(s) != 3) { print("FAIL: slice length, got", len(s)); exit(1) }
 if (s[0] != 20) { print("FAIL: slice[0], got", s[0]); exit(1) }
@@ -13,4 +15,4 @@ if (s[2] != 40) { print("FAIL: slice[2], got", s[2]); exit(1) }
 s[0] = 99
 if (arr[1] != 99) { print("FAIL: slice write-through, got", arr[1]); exit(1) }
 
-print("=== All fiber_slice tests passed! ===")
+print("=== All fiber.slice tests passed! ===")

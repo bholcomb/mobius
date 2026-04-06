@@ -1,0 +1,52 @@
+// Prove array slices enable data-parallel decomposition: split an array
+// into slices, process each slice in a separate fiber, verify results.
+print("=== Slice Parallel Test ===")
+
+import "fiber"
+
+var SIZE = 200
+var data = shared []
+for (var i = 0; i < SIZE; i += 1) {
+    array_push(data, i)
+}
+
+func double_slice(s) {
+    var n = len(s)
+    for (var i = 0; i < n; i += 1) {
+        s[i] = s[i] * 2
+    }
+    return n
+}
+
+// Split into 4 slices of 50 elements
+var s1 = fiber.slice(data, 0,   50)
+var s2 = fiber.slice(data, 50,  50)
+var s3 = fiber.slice(data, 100, 50)
+var s4 = fiber.slice(data, 150, 50)
+
+// Process each slice in parallel
+var f1 = spawn double_slice(s1)
+var f2 = spawn double_slice(s2)
+var f3 = spawn double_slice(s3)
+var f4 = spawn double_slice(s4)
+
+await f1
+await f2
+await f3
+await f4
+
+// Verify the original array was modified by all fibers (write-through)
+var errors = 0
+for (var i = 0; i < SIZE; i += 1) {
+    var expected = i * 2
+    if (data[i] != expected) {
+        print("FAIL: data[", i, "] =", data[i], "expected", expected)
+        errors += 1
+        if (errors > 5) { print("... more errors"); exit(1) }
+    }
+}
+
+if (errors > 0) { exit(1) }
+
+print("  All", SIZE, "elements doubled correctly via 4 parallel slices")
+print("=== Slice parallel test passed! ===")

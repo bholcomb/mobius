@@ -35,7 +35,7 @@ print("// filelib.read('config.txt')");
 // Test utility functions
 print("\n=== Utility Functions Test ===");
 print("random() =", random());
-print("time() =", time());
+print("clock() =", clock());
 
 print("\n=== Plugin System Test Complete ===");
 print("✅ Plugin system architecture is working!");

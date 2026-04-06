@@ -1,0 +1,58 @@
+// Prove parallel execution: 4 fibers doing heavy work should finish
+// faster than doing the same work sequentially.
+print("=== Parallel Speedup Test ===")
+
+func heavy_work(n) {
+    var sum = 0
+    for (var i = 0; i < n; i += 1) {
+        sum += i * i
+    }
+    return sum
+}
+
+var WORK = 2000000
+
+// Sequential: run 4 times back-to-back
+var t0 = clock()
+var s1 = heavy_work(WORK)
+var s2 = heavy_work(WORK)
+var s3 = heavy_work(WORK)
+var s4 = heavy_work(WORK)
+var seq_ns = clock() - t0
+
+// Parallel: spawn 4 fibers
+var t1 = clock()
+var f1 = spawn heavy_work(WORK)
+var f2 = spawn heavy_work(WORK)
+var f3 = spawn heavy_work(WORK)
+var f4 = spawn heavy_work(WORK)
+var p1 = await f1
+var p2 = await f2
+var p3 = await f3
+var p4 = await f4
+var par_ns = clock() - t1
+
+// Verify correctness first
+if (p1 != s1 || p2 != s2 || p3 != s3 || p4 != s4) {
+    print("FAIL: parallel results don't match sequential")
+    print("  seq:", s1, s2, s3, s4)
+    print("  par:", p1, p2, p3, p4)
+    exit(1)
+}
+
+var seq_ms = seq_ns / 1000000
+var par_ms = par_ns / 1000000
+var speedup = seq_ns / par_ns
+
+print("  Sequential:", seq_ms, "ms")
+print("  Parallel:  ", par_ms, "ms")
+print("  Speedup:   ", speedup, "x")
+
+// With 4 workers we expect at least 1.5x speedup.
+// Anything above 1.0 proves real parallelism is happening.
+if (speedup < 1.3) {
+    print("FAIL: speedup", speedup, "x is too low — parallelism not working")
+    exit(1)
+}
+
+print("=== Parallel speedup test passed! ===")

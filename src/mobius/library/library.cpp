@@ -92,8 +92,7 @@ static const PluginFunction library_registry[] = {
     // Utility functions
     {"random",     lib_random,     0,        "Random float in [0,1), or integer in [min,max] with 1 or 2 args"},
     {"randomseed", lib_randomseed, 1,        "Seed the random number generator"},
-    {"time",       lib_time,       0,        "Return the current Unix timestamp as an integer"},
-    {"clock",      lib_clock,      0,        "Return elapsed CPU time in seconds as a float"},
+    {"clock",      lib_clock,      0,        "Return monotonic wall-clock time in nanoseconds"},
     {"load",       lib_load,       1,        "Execute a Mobius script file by path"},
     {"id",         lib_id,         1,        "Return the memory address of a heap-allocated value"},
 
@@ -101,19 +100,6 @@ static const PluginFunction library_registry[] = {
     {"isnan",      lib_isnan,      1,        "Return true if value is NaN"},
     {"isinf",      lib_isinf,      1,        "Return true if value is infinity"},
     {"isfinite",   lib_isfinite,   1,        "Return true if value is finite (not NaN or infinity)"},
-
-    // Fiber / concurrency functions
-    {"fiber_channel",  lib_fiber_channel,  SIZE_MAX, "Create a bounded channel with optional capacity"},
-    {"fiber_send",     lib_fiber_send,     2,        "Blocking send to a channel"},
-    {"fiber_recv",     lib_fiber_recv,     1,        "Blocking receive from a channel"},
-    {"fiber_try_send", lib_fiber_try_send, 2,        "Non-blocking send to a channel (returns bool)"},
-    {"fiber_try_recv", lib_fiber_try_recv, 1,        "Non-blocking receive from a channel (returns value or nil)"},
-    {"fiber_close",    lib_fiber_close,    1,        "Close a channel"},
-    {"fiber_cancel",   lib_fiber_cancel,   1,        "Cancel a spawned fiber (future)"},
-    {"fiber_all",      lib_fiber_all,      1,        "Wait for all futures in array, return results array"},
-    {"fiber_any",      lib_fiber_any,      1,        "Wait for first resolved future in array"},
-    {"fiber_sleep",    lib_fiber_sleep,    1,        "Sleep for specified milliseconds"},
-    {"fiber_slice",    lib_fiber_slice,    3,        "Create an array slice (array, start, length)"},
 
     // Sentinel
     {NULL, NULL, 0, NULL}

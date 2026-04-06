@@ -229,6 +229,15 @@ public:
         return ctx->top - ctx->base;
     }
 
+    inline const Value& npeek_self(int arg_count) const {
+        NativeCallContext* ctx = nativeContext();
+        return ctx->registers[ctx->base + arg_count];
+    }
+
+    // Type-level metatables — one per ValueType, for method dispatch on non-table values
+    Table* typeMetatable(ValueType t) const { return type_metatables_[t]; }
+    void setTypeMetatable(ValueType t, Table* mt);
+
 private:
     ModuleRegistry* registry_;
     StringInternPool* string_pool_;
@@ -258,6 +267,8 @@ private:
     std::mutex owned_protos_mutex_;
 
     std::mutex import_mutex_;
+
+    Table* type_metatables_[16] = {};
 
     void clearErrorInternal();
 };

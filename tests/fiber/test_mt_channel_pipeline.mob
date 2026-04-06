@@ -1,0 +1,52 @@
+// Prove channels work across fibers: a producer sends N messages,
+// a consumer receives them, and we verify all messages arrive.
+print("=== Channel Pipeline Test ===")
+
+import "fiber"
+
+var COUNT = 50
+
+func producer(ch, n) {
+    for (var i = 0; i < n; i += 1) {
+        ch.send(i)
+    }
+    ch.close()
+    return n
+}
+
+func consumer(ch, results) {
+    var count = 0
+    try {
+        while (true) {
+            var val = ch.recv()
+            array_push(results, val)
+            count += 1
+        }
+    } catch e {
+        // ChannelClosedError — channel drained
+    }
+    return count
+}
+
+var ch = fiber.channel(8)
+var received = shared []
+
+var fp = spawn producer(ch, COUNT)
+var fc = spawn consumer(ch, received)
+
+var sent = await fp
+var got  = await fc
+
+if (sent != COUNT) { print("FAIL: producer sent", sent); exit(1) }
+if (got != COUNT)  { print("FAIL: consumer received", got); exit(1) }
+
+// Verify all values arrived in order (FIFO channel)
+for (var i = 0; i < COUNT; i += 1) {
+    if (received[i] != i) {
+        print("FAIL: received[", i, "] =", received[i], "expected", i)
+        exit(1)
+    }
+}
+
+print("  Sent", sent, "messages, received", got, "— all in order")
+print("=== Channel pipeline test passed! ===")

@@ -3,11 +3,18 @@
 #include "data/future.h"
 #include "data/array.h"
 #include "data/array_slice.h"
+#include "data/table.h"
 #include "data/value.h"
+#include "internal/string_intern.h"
 #include "state/mobius_state.h"
+#include "vm/vm.h"
 
 #include <thread>
 #include <chrono>
+
+// ============================================================================
+// Module-level functions (accessed as fiber.channel, fiber.all, etc.)
+// ============================================================================
 
 int lib_fiber_channel(MobiusState* state, int arg_count) {
     size_t capacity = 1;
@@ -17,112 +24,22 @@ int lib_fiber_channel(MobiusState* state, int arg_count) {
         if (cap_arg.type == VAL_INT64 && cap_arg.as.i64 > 0) {
             capacity = (size_t)cap_arg.as.i64;
         } else {
-            return state->error("fiber_channel: capacity must be a positive integer");
+            return state->error("fiber.channel: capacity must be a positive integer");
         }
     }
     Channel* ch = new Channel(capacity);
     state->npush(make_channel_value(ch));
-    ch->release();
-    return 1;
-}
-
-int lib_fiber_send(MobiusState* state, int arg_count) {
-    if (arg_count != 2) return state->error("fiber_send expects 2 arguments (channel, value)");
-
-    Value val = state->npeek(0);
-    Value ch_val = state->npeek(1);
-    state->npop();
-    state->npop();
-
-    if (ch_val.type != VAL_CHANNEL || !ch_val.as.channel) {
-        return state->error("fiber_send: first argument must be a channel");
-    }
-
-    bool ok = ch_val.as.channel->send(val);
-    state->npush(make_bool_value(ok));
-    return 1;
-}
-
-int lib_fiber_recv(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("fiber_recv expects 1 argument (channel)");
-
-    Value ch_val = state->npeek(0);
-    state->npop();
-
-    if (ch_val.type != VAL_CHANNEL || !ch_val.as.channel) {
-        return state->error("fiber_recv: argument must be a channel");
-    }
-
-    Value result;
-    bool ok = ch_val.as.channel->recv(result);
-    if (ok) {
-        state->npush(result);
-    } else {
-        state->npush(make_nil_value());
-    }
-    return 1;
-}
-
-int lib_fiber_try_send(MobiusState* state, int arg_count) {
-    if (arg_count != 2) return state->error("fiber_try_send expects 2 arguments (channel, value)");
-
-    Value val = state->npeek(0);
-    Value ch_val = state->npeek(1);
-    state->npop();
-    state->npop();
-
-    if (ch_val.type != VAL_CHANNEL || !ch_val.as.channel) {
-        return state->error("fiber_try_send: first argument must be a channel");
-    }
-
-    bool ok = ch_val.as.channel->trySend(val);
-    state->npush(make_bool_value(ok));
-    return 1;
-}
-
-int lib_fiber_try_recv(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("fiber_try_recv expects 1 argument (channel)");
-
-    Value ch_val = state->npeek(0);
-    state->npop();
-
-    if (ch_val.type != VAL_CHANNEL || !ch_val.as.channel) {
-        return state->error("fiber_try_recv: argument must be a channel");
-    }
-
-    Value result;
-    bool ok = ch_val.as.channel->tryRecv(result);
-    if (ok) {
-        state->npush(result);
-    } else {
-        state->npush(make_nil_value());
-    }
-    return 1;
-}
-
-int lib_fiber_close(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("fiber_close expects 1 argument (channel)");
-
-    Value ch_val = state->npeek(0);
-    state->npop();
-
-    if (ch_val.type != VAL_CHANNEL || !ch_val.as.channel) {
-        return state->error("fiber_close: argument must be a channel");
-    }
-
-    ch_val.as.channel->close();
-    state->npush(make_nil_value());
     return 1;
 }
 
 int lib_fiber_cancel(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("fiber_cancel expects 1 argument (future)");
+    if (arg_count != 1) return state->error("fiber.cancel expects 1 argument (future)");
 
     Value fut_val = state->npeek(0);
     state->npop();
 
     if (fut_val.type != VAL_FUTURE || !fut_val.as.future) {
-        return state->error("fiber_cancel: argument must be a future");
+        return state->error("fiber.cancel: argument must be a future");
     }
 
     fut_val.as.future->cancel();
@@ -131,13 +48,13 @@ int lib_fiber_cancel(MobiusState* state, int arg_count) {
 }
 
 int lib_fiber_all(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("fiber_all expects 1 argument (array of futures)");
+    if (arg_count != 1) return state->error("fiber.all expects 1 argument (array of futures)");
 
     Value arr_val = state->npeek(0);
     state->npop();
 
     if (arr_val.type != VAL_ARRAY || !arr_val.as.array) {
-        return state->error("fiber_all: argument must be an array of futures");
+        return state->error("fiber.all: argument must be an array of futures");
     }
 
     ArrayValue* futures = arr_val.as.array;
@@ -146,7 +63,7 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
     for (size_t i = 0; i < count; i++) {
         const Value& fv = futures->get(i);
         if (fv.type != VAL_FUTURE || !fv.as.future) {
-            return state->error("fiber_all: all elements must be futures");
+            return state->error("fiber.all: all elements must be futures");
         }
     }
 
@@ -160,7 +77,7 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
         }
         if (future->isRejected()) {
             results->release();
-            return state->error("fiber_all: one or more fibers failed");
+            return state->error("fiber.all: one or more fibers failed");
         }
         results->push(future->result());
     }
@@ -170,13 +87,13 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
 }
 
 int lib_fiber_any(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("fiber_any expects 1 argument (array of futures)");
+    if (arg_count != 1) return state->error("fiber.any expects 1 argument (array of futures)");
 
     Value arr_val = state->npeek(0);
     state->npop();
 
     if (arr_val.type != VAL_ARRAY || !arr_val.as.array) {
-        return state->error("fiber_any: argument must be an array of futures");
+        return state->error("fiber.any: argument must be an array of futures");
     }
 
     ArrayValue* futures = arr_val.as.array;
@@ -189,7 +106,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
     for (size_t i = 0; i < count; i++) {
         const Value& fv = futures->get(i);
         if (fv.type != VAL_FUTURE || !fv.as.future) {
-            return state->error("fiber_any: all elements must be futures");
+            return state->error("fiber.any: all elements must be futures");
         }
     }
 
@@ -208,7 +125,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
 }
 
 int lib_fiber_sleep(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("fiber_sleep expects 1 argument (milliseconds)");
+    if (arg_count != 1) return state->error("fiber.sleep expects 1 argument (milliseconds)");
 
     Value ms_val = state->npeek(0);
     state->npop();
@@ -219,18 +136,31 @@ int lib_fiber_sleep(MobiusState* state, int arg_count) {
     } else if (ms_val.type == VAL_FLOAT64) {
         ms = (int64_t)ms_val.as.double_val;
     } else {
-        return state->error("fiber_sleep: argument must be a number (milliseconds)");
+        return state->error("fiber.sleep: argument must be a number (milliseconds)");
     }
 
     if (ms > 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        MobiusVM* vm = MobiusVM::t_current_vm;
+        FutureValue* fut = vm ? vm->future_ : nullptr;
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (fut && fut->isCancelled()) {
+                return state->error("CancellationError: fiber was cancelled");
+            }
+            auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now());
+            auto chunk = std::min(remaining, std::chrono::milliseconds(10));
+            if (chunk.count() > 0) {
+                std::this_thread::sleep_for(chunk);
+            }
+        }
     }
     state->npush(make_nil_value());
     return 1;
 }
 
 int lib_fiber_slice(MobiusState* state, int arg_count) {
-    if (arg_count != 3) return state->error("fiber_slice expects 3 arguments (array, start, length)");
+    if (arg_count != 3) return state->error("fiber.slice expects 3 arguments (array, start, length)");
 
     Value len_val = state->npeek(0);
     Value start_val = state->npeek(1);
@@ -240,10 +170,10 @@ int lib_fiber_slice(MobiusState* state, int arg_count) {
     state->npop();
 
     if (arr_val.type != VAL_ARRAY || !arr_val.as.array) {
-        return state->error("fiber_slice: first argument must be an array");
+        return state->error("fiber.slice: first argument must be an array");
     }
     if (start_val.type != VAL_INT64 || len_val.type != VAL_INT64) {
-        return state->error("fiber_slice: start and length must be integers");
+        return state->error("fiber.slice: start and length must be integers");
     }
 
     int64_t start = start_val.as.i64;
@@ -251,11 +181,134 @@ int lib_fiber_slice(MobiusState* state, int arg_count) {
     ArrayValue* arr = arr_val.as.array;
 
     if (start < 0 || length < 0 || (size_t)(start + length) > arr->length()) {
-        return state->error("fiber_slice: range out of bounds for array");
+        return state->error("fiber.slice: range out of bounds for array");
     }
 
     ArraySlice* slice = new ArraySlice(arr, (size_t)start, (size_t)length);
     state->npush(make_array_slice_value(slice));
-    slice->release();
     return 1;
+}
+
+// ============================================================================
+// Channel methods (accessed as ch.send, ch.recv, etc.)
+// Self is at registers[base + arg_count], read via state->npeek_self(arg_count)
+// ============================================================================
+
+int channel_method_send(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return state->error("ch.send expects 1 argument (value)");
+
+    const Value& self = state->npeek_self(arg_count);
+    if (self.type != VAL_CHANNEL || !self.as.channel) {
+        return state->error("ch.send: self is not a channel");
+    }
+
+    Value val = state->npeek(0);
+    state->npop();
+
+    bool ok = self.as.channel->send(val);
+    state->npush(make_bool_value(ok));
+    return 1;
+}
+
+int channel_method_recv(MobiusState* state, int arg_count) {
+    if (arg_count != 0) return state->error("ch.recv expects 0 arguments");
+
+    const Value& self = state->npeek_self(arg_count);
+    if (self.type != VAL_CHANNEL || !self.as.channel) {
+        return state->error("ch.recv: self is not a channel");
+    }
+
+    Value result;
+    bool ok = self.as.channel->recv(result);
+    if (ok) {
+        state->npush(result);
+    } else {
+        return state->error("ChannelClosedError: recv on closed and empty channel");
+    }
+    return 1;
+}
+
+int channel_method_try_send(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return state->error("ch.try_send expects 1 argument (value)");
+
+    const Value& self = state->npeek_self(arg_count);
+    if (self.type != VAL_CHANNEL || !self.as.channel) {
+        return state->error("ch.try_send: self is not a channel");
+    }
+
+    Value val = state->npeek(0);
+    state->npop();
+
+    bool ok = self.as.channel->trySend(val);
+    state->npush(make_bool_value(ok));
+    return 1;
+}
+
+int channel_method_try_recv(MobiusState* state, int arg_count) {
+    if (arg_count != 0) return state->error("ch.try_recv expects 0 arguments");
+
+    const Value& self = state->npeek_self(arg_count);
+    if (self.type != VAL_CHANNEL || !self.as.channel) {
+        return state->error("ch.try_recv: self is not a channel");
+    }
+
+    Value result;
+    bool ok = self.as.channel->tryRecv(result);
+
+    Table* tbl = new Table(state, 2);
+    tbl->setByString(state->stringPool()->intern("ok"), make_bool_value(ok));
+    tbl->setByString(state->stringPool()->intern("value"), ok ? result : make_nil_value());
+    state->npush(make_table_value(tbl));
+    return 1;
+}
+
+int channel_method_close(MobiusState* state, int arg_count) {
+    if (arg_count != 0) return state->error("ch.close expects 0 arguments");
+
+    const Value& self = state->npeek_self(arg_count);
+    if (self.type != VAL_CHANNEL || !self.as.channel) {
+        return state->error("ch.close: self is not a channel");
+    }
+
+    self.as.channel->close();
+    state->npush(make_nil_value());
+    return 1;
+}
+
+int channel_method_is_closed(MobiusState* state, int arg_count) {
+    if (arg_count != 0) return state->error("ch.is_closed expects 0 arguments");
+
+    const Value& self = state->npeek_self(arg_count);
+    if (self.type != VAL_CHANNEL || !self.as.channel) {
+        return state->error("ch.is_closed: self is not a channel");
+    }
+
+    state->npush(make_bool_value(self.as.channel->isClosed()));
+    return 1;
+}
+
+// ============================================================================
+// Module and type metatable registration
+// ============================================================================
+
+Table* register_fiber_module(MobiusState* state) {
+    Table* mod = new Table(state, 8);
+    mod->setByString(state->stringPool()->intern("channel"), make_native_function_value(lib_fiber_channel));
+    mod->setByString(state->stringPool()->intern("all"),     make_native_function_value(lib_fiber_all));
+    mod->setByString(state->stringPool()->intern("any"),     make_native_function_value(lib_fiber_any));
+    mod->setByString(state->stringPool()->intern("sleep"),   make_native_function_value(lib_fiber_sleep));
+    mod->setByString(state->stringPool()->intern("cancel"),  make_native_function_value(lib_fiber_cancel));
+    mod->setByString(state->stringPool()->intern("slice"),   make_native_function_value(lib_fiber_slice));
+    return mod;
+}
+
+Table* create_channel_type_metatable(MobiusState* state) {
+    Table* mt = new Table(state, 8);
+    mt->setByString(state->stringPool()->intern("send"),      make_native_function_value(channel_method_send));
+    mt->setByString(state->stringPool()->intern("recv"),      make_native_function_value(channel_method_recv));
+    mt->setByString(state->stringPool()->intern("try_send"),  make_native_function_value(channel_method_try_send));
+    mt->setByString(state->stringPool()->intern("try_recv"),  make_native_function_value(channel_method_try_recv));
+    mt->setByString(state->stringPool()->intern("close"),     make_native_function_value(channel_method_close));
+    mt->setByString(state->stringPool()->intern("is_closed"), make_native_function_value(channel_method_is_closed));
+    return mt;
 }

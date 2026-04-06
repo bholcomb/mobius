@@ -1,0 +1,67 @@
+// Test that fiber.sleep actually delays for the requested duration
+print("=== Fiber Sleep Timing Tests ===")
+
+import "fiber"
+
+// Test 1: sleep(50) should take at least 40ms and no more than 300ms
+var t0 = clock()
+fiber.sleep(50)
+var elapsed_ns = clock() - t0
+var elapsed_ms = elapsed_ns / 1000000
+
+if (elapsed_ms < 40) {
+    print("FAIL: sleep(50) only took", elapsed_ms, "ms — too fast")
+    exit(1)
+}
+if (elapsed_ms > 300) {
+    print("FAIL: sleep(50) took", elapsed_ms, "ms — too slow")
+    exit(1)
+}
+print("  sleep(50) took ~" + str(elapsed_ms) + "ms")
+
+// Test 2: sleep(0) should be effectively instantaneous (< 50ms)
+var t1 = clock()
+fiber.sleep(0)
+var elapsed_ns2 = clock() - t1
+var elapsed_ms2 = elapsed_ns2 / 1000000
+
+if (elapsed_ms2 > 50) {
+    print("FAIL: sleep(0) took", elapsed_ms2, "ms — should be near-instant")
+    exit(1)
+}
+print("  sleep(0) took ~" + str(elapsed_ms2) + "ms (near-instant)")
+
+// Test 3: sleep in a spawned fiber doesn't block the main fiber
+var marker = shared [0]
+
+func sleepy_worker(m) {
+    fiber.sleep(100)
+    m[0] = 1
+    return true
+}
+
+var f = spawn sleepy_worker(marker)
+
+// Main fiber should be able to do work while the spawned fiber sleeps
+var t2 = clock()
+var sum = 0
+for (var i = 0; i < 100; i += 1) {
+    sum += i
+}
+var main_elapsed_ns = clock() - t2
+var main_elapsed_ms = main_elapsed_ns / 1000000
+
+if (main_elapsed_ms > 50) {
+    print("FAIL: main fiber blocked during spawned fiber sleep (", main_elapsed_ms, "ms)")
+    exit(1)
+}
+print("  main fiber ran freely while spawned fiber slept")
+
+await f
+if (marker[0] != 1) {
+    print("FAIL: sleepy worker didn't complete")
+    exit(1)
+}
+print("  spawned fiber completed after sleep")
+
+print("=== All fiber sleep timing tests passed! ===")

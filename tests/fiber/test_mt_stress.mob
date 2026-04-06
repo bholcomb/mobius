@@ -1,0 +1,40 @@
+// Stress test: spawn many fibers, each doing real work, collect all results.
+// Proves the fiber pool, job system, and worker threads handle load correctly.
+print("=== Stress Test ===")
+
+import "fiber"
+
+var N = 64
+
+func work(id) {
+    var sum = 0
+    for (var i = 0; i < 10000; i += 1) {
+        sum += i
+    }
+    return id
+}
+
+// Spawn N fibers
+var futures = []
+for (var i = 0; i < N; i += 1) {
+    array_push(futures, spawn work(i))
+}
+
+// Collect all results
+var results = fiber.all(futures)
+
+if (len(results) != N) {
+    print("FAIL: expected", N, "results, got", len(results))
+    exit(1)
+}
+
+// Verify every fiber returned its id
+for (var i = 0; i < N; i += 1) {
+    if (results[i] != i) {
+        print("FAIL: results[", i, "] =", results[i], "expected", i)
+        exit(1)
+    }
+}
+
+print("  All", N, "fibers completed with correct results")
+print("=== Stress test passed! ===")

@@ -1,0 +1,45 @@
+// Prove shared array mutation is thread-safe: multiple fibers write to
+// distinct indices of a shared array concurrently — no corruption.
+print("=== Shared Array Concurrency Test ===")
+
+var SIZE = 100
+var data = shared []
+for (var i = 0; i < SIZE; i += 1) {
+    array_push(data, 0)
+}
+
+func fill_range(arr, start, count, value) {
+    for (var i = 0; i < count; i += 1) {
+        arr[start + i] = value
+        yield
+    }
+    return count
+}
+
+// 4 fibers each writing to their own 25-element range
+var f1 = spawn fill_range(data, 0,  25, 1)
+var f2 = spawn fill_range(data, 25, 25, 2)
+var f3 = spawn fill_range(data, 50, 25, 3)
+var f4 = spawn fill_range(data, 75, 25, 4)
+
+await f1
+await f2
+await f3
+await f4
+
+// Verify every element was set correctly
+for (var i = 0; i < 25; i += 1) {
+    if (data[i] != 1) { print("FAIL: data[", i, "] =", data[i], "expected 1"); exit(1) }
+}
+for (var i = 25; i < 50; i += 1) {
+    if (data[i] != 2) { print("FAIL: data[", i, "] =", data[i], "expected 2"); exit(1) }
+}
+for (var i = 50; i < 75; i += 1) {
+    if (data[i] != 3) { print("FAIL: data[", i, "] =", data[i], "expected 3"); exit(1) }
+}
+for (var i = 75; i < 100; i += 1) {
+    if (data[i] != 4) { print("FAIL: data[", i, "] =", data[i], "expected 4"); exit(1) }
+}
+
+print("  All", SIZE, "elements verified correct")
+print("=== Shared array concurrency test passed! ===")
