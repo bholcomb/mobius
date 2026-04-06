@@ -30,6 +30,7 @@ public:
     ModuleRegistry& operator=(const ModuleRegistry&) = delete;
 
     Table* resolveModule(const char* name, const char* caller_source, MobiusState* state);
+    void registerBuiltinModule(const char* name, Table* module_table);
 
     void addPluginDirectory(const char* directory);
     void clearPluginDirectories();

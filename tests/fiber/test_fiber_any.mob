@@ -1,0 +1,57 @@
+// Test fiber.any — returns the result of the first resolved future
+print("=== Fiber Any Tests ===")
+
+import "fiber"
+
+// Test 1: fiber.any with one fast and two slow futures
+func fast() {
+    return "fast"
+}
+
+func slow() {
+    fiber.sleep(500)
+    return "slow"
+}
+
+var futures = [spawn slow(), spawn slow(), spawn fast()]
+var result = fiber.any(futures)
+
+if (result != "fast") {
+    print("FAIL: fiber.any should return 'fast', got", result)
+    exit(1)
+}
+print("  fiber.any picked the first resolved future")
+
+// Test 2: fiber.any with a single future
+var single = [spawn fast()]
+var r2 = fiber.any(single)
+if (r2 != "fast") {
+    print("FAIL: fiber.any single future, got", r2)
+    exit(1)
+}
+print("  fiber.any works with a single future")
+
+// Test 3: fiber.any with empty array returns nil
+var r3 = fiber.any([])
+if (r3 != nil) {
+    print("FAIL: fiber.any empty should return nil, got", r3)
+    exit(1)
+}
+print("  fiber.any returns nil for empty array")
+
+// Test 4: fiber.any with multiple fast futures — all valid
+func make_val(x) {
+    return x * 10
+}
+
+var many = [spawn make_val(1), spawn make_val(2), spawn make_val(3)]
+var r4 = fiber.any(many)
+
+// Any one of 10, 20, 30 is valid
+if (r4 != 10 && r4 != 20 && r4 != 30) {
+    print("FAIL: fiber.any returned unexpected value", r4)
+    exit(1)
+}
+print("  fiber.any returns a valid result from multiple completions")
+
+print("=== All fiber.any tests passed! ===")

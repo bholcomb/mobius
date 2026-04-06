@@ -52,6 +52,7 @@ struct UserdataObject {
 #define VAL_FLAG_MARKED    0x10  // reserved: GC mark phase
 #define VAL_FLAG_FROZEN    0x20  // reserved: container contents are immutable
 #define VAL_FLAG_SHARED    0x40  // container is shared across fibers; mutations are mutex-protected
+#define VAL_FLAG_METHOD    0x80  // transient: function resolved from type metatable, expects hidden self
 
 enum ValueType : int8_t {
     // Non-refcounted (inline) types — must stay below VAL_STRING

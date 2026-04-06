@@ -1,16 +1,18 @@
-// Test fiber_all
+// Test fiber.all
 print("=== Fiber All Tests ===")
+
+import "fiber"
 
 func double(x) {
     return x * 2
 }
 
 var futures = [spawn double(1), spawn double(2), spawn double(3)]
-var results = fiber_all(futures)
+var results = fiber.all(futures)
 
-if (len(results) != 3) { print("FAIL: fiber_all length"); exit(1) }
-if (results[0] != 2) { print("FAIL: fiber_all[0], got", results[0]); exit(1) }
-if (results[1] != 4) { print("FAIL: fiber_all[1], got", results[1]); exit(1) }
-if (results[2] != 6) { print("FAIL: fiber_all[2], got", results[2]); exit(1) }
+if (len(results) != 3) { print("FAIL: fiber.all length"); exit(1) }
+if (results[0] != 2) { print("FAIL: fiber.all[0], got", results[0]); exit(1) }
+if (results[1] != 4) { print("FAIL: fiber.all[1], got", results[1]); exit(1) }
+if (results[2] != 6) { print("FAIL: fiber.all[2], got", results[2]); exit(1) }
 
-print("=== All fiber_all tests passed! ===")
+print("=== All fiber.all tests passed! ===")

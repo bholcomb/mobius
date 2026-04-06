@@ -1,0 +1,79 @@
+// Test exception propagation through await
+print("=== Fiber Exception Propagation Tests ===")
+
+import "fiber"
+
+// Test 1: await on a fiber that errors should throw in the caller
+func will_error() {
+    var ch = fiber.channel(1)
+    ch.close()
+    ch.recv()
+    return "unreachable"
+}
+
+var f = spawn will_error()
+
+var caught = false
+try {
+    var result = await f
+    print("FAIL: await should have thrown, got", result)
+    exit(1)
+} catch e {
+    caught = true
+}
+
+if (!caught) {
+    print("FAIL: expected exception from await on failed fiber")
+    exit(1)
+}
+print("  await correctly propagates exception from failed fiber")
+
+// Test 2: await on a successful fiber does not throw
+func will_succeed() {
+    return 99
+}
+
+var f2 = spawn will_succeed()
+var threw = false
+var val = nil
+try {
+    val = await f2
+} catch e {
+    threw = true
+}
+
+if (threw) {
+    print("FAIL: await on successful fiber should not throw")
+    exit(1)
+}
+if (val != 99) {
+    print("FAIL: expected 99 from successful fiber, got", val)
+    exit(1)
+}
+print("  await on successful fiber returns result normally")
+
+// Test 3: multiple failing fibers — each await catches independently
+func fail_with_delay() {
+    fiber.sleep(10)
+    var ch = fiber.channel(1)
+    ch.close()
+    ch.recv()
+    return "unreachable"
+}
+
+var f3 = spawn fail_with_delay()
+var f4 = spawn fail_with_delay()
+
+var caught3 = false
+var caught4 = false
+
+try { await f3 } catch e { caught3 = true }
+try { await f4 } catch e { caught4 = true }
+
+if (!caught3 || !caught4) {
+    print("FAIL: both awaits should have caught exceptions, got", caught3, caught4)
+    exit(1)
+}
+print("  multiple failing fibers propagate exceptions independently")
+
+print("=== All fiber exception propagation tests passed! ===")

@@ -1,13 +1,15 @@
-// Test fiber_sleep
+// Test fiber.sleep
 print("=== Fiber Sleep Tests ===")
 
-// fiber_sleep(0) should be a no-op
-fiber_sleep(0)
+import "fiber"
 
-// fiber_sleep(1) should complete without error
-fiber_sleep(1)
+// fiber.sleep(0) should be a no-op
+fiber.sleep(0)
+
+// fiber.sleep(1) should complete without error
+fiber.sleep(1)
 
 // Negative values should be treated as no-op
-fiber_sleep(-1)
+fiber.sleep(-1)
 
-print("=== All fiber_sleep tests passed! ===")
+print("=== All fiber.sleep tests passed! ===")

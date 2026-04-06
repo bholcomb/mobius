@@ -79,6 +79,12 @@ LoadedModule* ModuleRegistry::findModule(const char* name) {
     return nullptr;
 }
 
+void ModuleRegistry::registerBuiltinModule(const char* name, Table* module_table) {
+    if (!name || !module_table) return;
+    std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+    module_tables_[name] = module_table;
+}
+
 void ModuleRegistry::addPluginDirectory(const char* directory) {
     if (!directory) return;
     std::unique_lock<std::shared_mutex> lock(registry_mutex_);

@@ -536,6 +536,16 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             return -1;
         }
     } else {
+        Table* mt = vm->state_->typeMetatable(obj.type);
+        if (mt && key.type == VAL_STRING) {
+            const Value& method = mt->getByString(key.as.string);
+            if (method.type != VAL_NIL) {
+                RA(inst) = method;
+                RA(inst).flags |= VAL_FLAG_METHOD;
+                vm->pushMethodSelf(obj);
+                return 0;
+            }
+        }
         vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
@@ -1372,6 +1382,16 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
             return -1;
         }
     } else {
+        Table* mt = vm->state_->typeMetatable(obj.type);
+        if (mt && key.type == VAL_STRING) {
+            const Value& method = mt->getByString(key.as.string);
+            if (method.type != VAL_NIL) {
+                f.regs[a] = method;
+                f.regs[a].flags |= VAL_FLAG_METHOD;
+                vm->pushMethodSelf(obj);
+                return 0;
+            }
+        }
         vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
@@ -1387,6 +1407,13 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
     f.ci->ip = f.ip;
 
     Value& func_val = f.regs[a];
+
+    Value method_self;
+    bool is_method = (func_val.flags & VAL_FLAG_METHOD) != 0;
+    if (MOBIUS_UNLIKELY(is_method)) {
+        func_val.flags &= ~VAL_FLAG_METHOD;
+        method_self = vm->popMethodSelf();
+    }
 
     // Fast path: Mobius function call — inlined to avoid callFunction overhead
     if (MOBIUS_LIKELY(func_val.type == VAL_FUNCTION && func_val.as.function)) {
@@ -1406,6 +1433,10 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
         int child_base = f.ci->base + a + 1;
         vm->ensureRegisters(child_base + child->num_registers + 16);
 
+        if (MOBIUS_UNLIKELY(is_method)) {
+            vm->registers_[f.ci->base + a + 1 + nargs] = method_self;
+        }
+
         CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
             new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
@@ -1415,7 +1446,13 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
         return 0;
     }
 
-    // Slow path: native function or error
+    // Slow path: native function or error — write self before callFunction
+    if (MOBIUS_UNLIKELY(is_method)) {
+        int self_abs = f.ci->base + a + 1 + nargs;
+        vm->ensureRegisters(self_abs + 16);
+        vm->registers_[self_abs] = method_self;
+    }
+
     int rc = vm->callFunction(*f.ci, a, nargs, c);
     if (rc < 0) return -1;
     if (rc == 1) {
@@ -2207,6 +2244,7 @@ int MobiusVM::run(size_t base_depth) {
                         closeUpvalues(callStackTop(), 0);                 \
                     callStackPop();                                       \
                 }                                                        \
+                method_self_top_ = 0;                                    \
                 InternalError* _ie = state_->getLastError();              \
                 const char* err = _ie ? _ie->message : nullptr;          \
                 if (err) {                                               \

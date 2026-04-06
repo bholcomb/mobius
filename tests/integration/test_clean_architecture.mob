@@ -21,7 +21,7 @@ print("len(text) =", len(text));
 print("upper(text) =", upper(text));
 
 print("random() =", random());
-print("time() =", time());
+print("clock() =", clock());
 
 import "math";
 

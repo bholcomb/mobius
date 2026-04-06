@@ -147,6 +147,12 @@ public:
 
     std::vector<Value> registers_;
 
+    Value method_self_stack_[8];
+    int method_self_top_ = 0;
+
+    void pushMethodSelf(const Value& v) { method_self_stack_[method_self_top_++] = v; }
+    Value popMethodSelf() { return method_self_stack_[--method_self_top_]; }
+
     CallInfo*  call_stack_;
     size_t     call_depth_;
     size_t     call_stack_capacity_;

@@ -1,0 +1,39 @@
+// Prove shared table mutation is thread-safe: multiple fibers write to
+// different keys of a shared table concurrently.
+print("=== Shared Table Concurrency Test ===")
+
+var results = shared {}
+
+func compute_and_store(tbl, key, n) {
+    var sum = 0
+    for (var i = 1; i <= n; i += 1) {
+        sum += i
+    }
+    tbl[key] = sum
+    return sum
+}
+
+var f1 = spawn compute_and_store(results, "a", 100)
+var f2 = spawn compute_and_store(results, "b", 200)
+var f3 = spawn compute_and_store(results, "c", 300)
+var f4 = spawn compute_and_store(results, "d", 400)
+
+var r1 = await f1
+var r2 = await f2
+var r3 = await f3
+var r4 = await f4
+
+// Verify futures returned correct values
+if (r1 != 5050)  { print("FAIL: f1 returned", r1); exit(1) }
+if (r2 != 20100) { print("FAIL: f2 returned", r2); exit(1) }
+if (r3 != 45150) { print("FAIL: f3 returned", r3); exit(1) }
+if (r4 != 80200) { print("FAIL: f4 returned", r4); exit(1) }
+
+// Verify the shared table was written correctly by each fiber
+if (results["a"] != 5050)  { print("FAIL: results.a =", results["a"]); exit(1) }
+if (results["b"] != 20100) { print("FAIL: results.b =", results["b"]); exit(1) }
+if (results["c"] != 45150) { print("FAIL: results.c =", results["c"]); exit(1) }
+if (results["d"] != 80200) { print("FAIL: results.d =", results["d"]); exit(1) }
+
+print("  All 4 table entries verified correct")
+print("=== Shared table concurrency test passed! ===")
