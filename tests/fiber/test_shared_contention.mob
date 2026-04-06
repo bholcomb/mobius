@@ -1,0 +1,126 @@
+// Test: multiple fibers accessing shared containers concurrently
+// Verifies mutex protection prevents corruption (no crashes, consistent state)
+print("=== Shared Contention Tests ===")
+
+import "fiber"
+
+// Test 1: shared array — 4 fibers writing DIFFERENT values to the same slot
+// Last writer wins, but no crash or corruption
+var arr = shared [0]
+
+func write_slot(arr, idx, value, times) {
+    for (var i = 0; i < times; i += 1) {
+        arr[idx] = value
+    }
+    return value
+}
+
+var ITERS = 200
+var f1 = spawn write_slot(arr, 0, 1, ITERS)
+var f2 = spawn write_slot(arr, 0, 2, ITERS)
+var f3 = spawn write_slot(arr, 0, 3, ITERS)
+var f4 = spawn write_slot(arr, 0, 4, ITERS)
+
+await f1
+await f2
+await f3
+await f4
+
+// After all fibers complete, the slot holds one of the written values
+if (arr[0] < 1 || arr[0] > 4) {
+    print("FAIL: arr[0] =", arr[0], "expected 1-4")
+    exit(1)
+}
+print("  4 fibers writing same slot: final value =", arr[0], "(no corruption)")
+
+// Test 2: shared table — 4 fibers writing to the same key, no crash
+var tbl = shared { val: 0 }
+
+func write_key(t, value, times) {
+    for (var i = 0; i < times; i += 1) {
+        t.val = value
+    }
+    return value
+}
+
+var g1 = spawn write_key(tbl, 10, ITERS)
+var g2 = spawn write_key(tbl, 20, ITERS)
+var g3 = spawn write_key(tbl, 30, ITERS)
+var g4 = spawn write_key(tbl, 40, ITERS)
+
+await g1
+await g2
+await g3
+await g4
+
+if (tbl.val != 10 && tbl.val != 20 && tbl.val != 30 && tbl.val != 40) {
+    print("FAIL: tbl.val =", tbl.val, "expected one of 10,20,30,40")
+    exit(1)
+}
+print("  4 fibers writing same key: final value =", tbl.val, "(no corruption)")
+
+// Test 3: shared array — parallel push (all fibers push to same array)
+// Total items must equal the sum of all pushes
+var results = shared []
+
+func push_values(arr, start, count) {
+    for (var i = 0; i < count; i += 1) {
+        array_push(arr, start + i)
+    }
+    return count
+}
+
+var h1 = spawn push_values(results, 0, 25)
+var h2 = spawn push_values(results, 100, 25)
+var h3 = spawn push_values(results, 200, 25)
+var h4 = spawn push_values(results, 300, 25)
+
+await h1
+await h2
+await h3
+await h4
+
+if (len(results) != 100) {
+    print("FAIL: results length =", len(results), "expected 100")
+    exit(1)
+}
+print("  4 fibers pushing to same array: length =", len(results))
+
+// Test 4: disjoint index writes remain correct under contention
+var data = shared []
+for (var i = 0; i < 40; i += 1) {
+    array_push(data, 0)
+}
+
+func fill_range(arr, start, count, value) {
+    for (var i = 0; i < count; i += 1) {
+        arr[start + i] = value
+    }
+    return count
+}
+
+var j1 = spawn fill_range(data, 0,  10, 1)
+var j2 = spawn fill_range(data, 10, 10, 2)
+var j3 = spawn fill_range(data, 20, 10, 3)
+var j4 = spawn fill_range(data, 30, 10, 4)
+
+await j1
+await j2
+await j3
+await j4
+
+for (var i = 0; i < 10; i += 1) {
+    if (data[i] != 1) { print("FAIL: data[", i, "] =", data[i]); exit(1) }
+}
+for (var i = 10; i < 20; i += 1) {
+    if (data[i] != 2) { print("FAIL: data[", i, "] =", data[i]); exit(1) }
+}
+for (var i = 20; i < 30; i += 1) {
+    if (data[i] != 3) { print("FAIL: data[", i, "] =", data[i]); exit(1) }
+}
+for (var i = 30; i < 40; i += 1) {
+    if (data[i] != 4) { print("FAIL: data[", i, "] =", data[i]); exit(1) }
+}
+print("  disjoint range writes correct under concurrent access")
+
+print("=== All shared contention tests passed! ===")

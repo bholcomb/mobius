@@ -1,0 +1,105 @@
+// Test: interaction between cancel and channel operations
+// Note: fiber.cancel sets a flag that fiber.sleep checks periodically.
+// Channel send/recv block on condition variables and are NOT interrupted
+// by cancel alone — you must close the channel to unblock them.
+print("=== Cancel + Channel Tests ===")
+
+import "fiber"
+
+// Test 1: cancel a fiber blocked on recv — close the channel to unblock it
+var ch1 = fiber.channel(1)
+
+func recv_worker(ch) {
+    var v = ch:recv()
+    return v
+}
+
+var f1 = spawn recv_worker(ch1)
+fiber.sleep(20)
+fiber.cancel(f1)
+ch1:close()
+
+var caught1 = false
+try {
+    await f1
+} catch e {
+    caught1 = true
+}
+
+if (!caught1) {
+    print("FAIL: cancelled recv worker should error on await")
+    exit(1)
+}
+print("  cancel + close unblocks recv worker")
+
+// Test 2: cancel a fiber that uses sleep between channel ops
+var ch2 = fiber.channel(5)
+
+func sleep_and_send(ch) {
+    for (var i = 0; i < 100; i += 1) {
+        fiber.sleep(10)
+        ch:send(i)
+    }
+    return "done"
+}
+
+var f2 = spawn sleep_and_send(ch2)
+fiber.sleep(50)
+fiber.cancel(f2)
+
+var caught2 = false
+try {
+    await f2
+} catch e {
+    caught2 = true
+}
+
+if (!caught2) {
+    print("FAIL: cancelled sleep-and-send fiber should throw on await")
+    exit(1)
+}
+
+// Drain whatever was sent before cancellation
+var drain_count = 0
+while (true) {
+    var r = ch2:try_recv()
+    if (!r.ok) {
+        break
+    }
+    drain_count += 1
+}
+
+if (drain_count < 1) {
+    print("FAIL: expected at least 1 item sent before cancel, got", drain_count)
+    exit(1)
+}
+print("  cancel interrupts sleep-and-send, drained", drain_count, "items")
+
+// Test 3: cancel does not affect channel data integrity
+var ch3 = fiber.channel(10)
+
+func reliable_producer(ch, n) {
+    for (var i = 0; i < n; i += 1) {
+        ch:send(i)
+    }
+    return n
+}
+
+var f3 = spawn reliable_producer(ch3, 5)
+var sent = await f3
+fiber.cancel(f3)
+
+var received = []
+for (var i = 0; i < 5; i += 1) {
+    array_push(received, ch3:recv())
+}
+
+for (var i = 0; i < 5; i += 1) {
+    if (received[i] != i) {
+        print("FAIL: received[", i, "] =", received[i], "expected", i)
+        exit(1)
+    }
+}
+print("  cancel after completion preserves channel data integrity")
+
+print("=== All cancel + channel tests passed! ===")

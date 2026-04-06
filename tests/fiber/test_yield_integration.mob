@@ -1,0 +1,85 @@
+// Test: yield combined with channels, await, and multiple fibers
+print("=== Yield Integration Tests ===")
+
+import "fiber"
+
+// Test 1: yield in producer/consumer pipeline
+var ch = fiber.channel(2)
+
+func yielding_producer(ch, count) {
+    for (var i = 0; i < count; i += 1) {
+        ch:send(i)
+        yield
+    }
+    ch:close()
+    return count
+}
+
+func yielding_consumer(ch) {
+    var sum = 0
+    try {
+        while (true) {
+            var v = ch:recv()
+            sum += v
+            yield
+        }
+    } catch e {
+        // channel closed
+    }
+    return sum
+}
+
+var fp = spawn yielding_producer(ch, 10)
+var fc = spawn yielding_consumer(ch)
+
+var sent = await fp
+var total = await fc
+
+if (sent != 10) { print("FAIL: producer sent", sent); exit(1) }
+if (total != 45) { print("FAIL: consumer sum =", total, "expected 45"); exit(1) }
+print("  yield in producer/consumer pipeline: sum =", total)
+
+// Test 2: yield interleaving between fibers modifying shared state
+var log = shared []
+
+func worker(id, arr, count) {
+    for (var i = 0; i < count; i += 1) {
+        array_push(arr, id)
+        yield
+    }
+    return count
+}
+
+var w1 = spawn worker(1, log, 5)
+var w2 = spawn worker(2, log, 5)
+
+await w1
+await w2
+
+if (len(log) != 10) {
+    print("FAIL: log length =", len(log), "expected 10")
+    exit(1)
+}
+print("  yield interleaving: log has", len(log), "entries")
+
+// Test 3: yield inside a computation with await at the end
+func compute_with_yields(n) {
+    var sum = 0
+    for (var i = 0; i < n; i += 1) {
+        sum += i
+        if (i % 3 == 0) {
+            yield
+        }
+    }
+    return sum
+}
+
+var f3 = spawn compute_with_yields(100)
+var r3 = await f3
+if (r3 != 4950) {
+    print("FAIL: compute_with_yields(100) =", r3, "expected 4950")
+    exit(1)
+}
+print("  yield inside computation: sum(0..99) =", r3)
+
+print("=== All yield integration tests passed! ===")
