@@ -24,7 +24,7 @@ print("  fiber.all with single future works")
 // Test 3: fiber.all with 20 futures
 var futures = []
 for (var i = 0; i < 20; i += 1) {
-    array_push(futures, spawn make_val(i))
+    futures:push(spawn make_val(i))
 }
 
 var r3 = fiber.all(futures)

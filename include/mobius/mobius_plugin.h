@@ -68,7 +68,10 @@ typedef enum {
     MOBIUS_VAL_NATIVE_FUNCTION,
     MOBIUS_VAL_TABLE,
     MOBIUS_VAL_USERDATA,
-    MOBIUS_VAL_ENUM
+    MOBIUS_VAL_ENUM,
+    MOBIUS_VAL_FUTURE,
+    MOBIUS_VAL_ARRAY_SLICE,
+    MOBIUS_VAL_CHANNEL
 } MobiusValueType;
 
 /* ====================================================================== */
@@ -220,6 +223,32 @@ MOBIUS_API void   mobius_stack_arrayPush(MobiusState* state, int array_idx);
 MOBIUS_API void   mobius_stack_arrayPop(MobiusState* state, int array_idx);
 MOBIUS_API void   mobius_stack_arrayInsert(MobiusState* state, int array_idx, size_t element_idx);
 MOBIUS_API void   mobius_stack_arrayRemove(MobiusState* state, int array_idx, size_t element_idx);
+
+/* ====================================================================== */
+/*  Type metatables                                                        */
+/* ====================================================================== */
+
+/**
+ * Push the type metatable for the given value type onto the stack.
+ * If no metatable has been set for this type, pushes nil.
+ *
+ * The pushed table is a regular table — use the normal table API
+ * (mobius_stack_setTableField, etc.) to add or inspect methods.
+ */
+MOBIUS_API void mobius_push_type_metatable(MobiusState* state,
+                                          MobiusValueType type);
+
+/**
+ * Pop the top of the stack and set it as the type metatable for the given
+ * value type.  The value must be a table (or nil to clear the metatable).
+ *
+ * Methods stored in this table are accessible from scripts via the ':'
+ * method-call syntax on values of the corresponding type.  For example,
+ * setting a metatable for MOBIUS_VAL_STRING with a key "upper" allows
+ * scripts to write:  var s = "hello"; print(s:upper())
+ */
+MOBIUS_API void mobius_set_type_metatable(MobiusState* state,
+                                         MobiusValueType type);
 
 /* ====================================================================== */
 /*  Register a native C function as a global                               */

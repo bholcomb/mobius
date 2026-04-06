@@ -19,7 +19,7 @@ func consumer(ch, results) {
     try {
         while (true) {
             var val = ch:recv()
-            array_push(results, val)
+            results:push(val)
             count += 1
         }
     } catch e {

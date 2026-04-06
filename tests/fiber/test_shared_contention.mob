@@ -65,7 +65,7 @@ var results = shared []
 
 func push_values(arr, start, count) {
     for (var i = 0; i < count; i += 1) {
-        array_push(arr, start + i)
+        arr:push(start + i)
     }
     return count
 }
@@ -89,7 +89,7 @@ print("  4 fibers pushing to same array: length =", len(results))
 // Test 4: disjoint index writes remain correct under contention
 var data = shared []
 for (var i = 0; i < 40; i += 1) {
-    array_push(data, 0)
+    data:push(0)
 }
 
 func fill_range(arr, start, count, value) {

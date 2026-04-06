@@ -3,26 +3,30 @@
 
 #include "library/library.h"
 
-// =============================================================================
-// ARRAY FUNCTIONS (array_create, array_push, array_pop, etc)
-// =============================================================================
+class Table;
 
+// Global: array_create(capacity [, fill_value])
 int lib_array_create(MobiusState* state, int arg_count);
-int lib_array_push(MobiusState* state, int arg_count);
-int lib_array_pop(MobiusState* state, int arg_count);
-int lib_array_get(MobiusState* state, int arg_count);
-int lib_array_set(MobiusState* state, int arg_count);
-int lib_array_length(MobiusState* state, int arg_count);
-int lib_array_slice(MobiusState* state, int arg_count);
-int lib_array_concat(MobiusState* state, int arg_count);
-int lib_array_reverse(MobiusState* state, int arg_count);
-int lib_array_find(MobiusState* state, int arg_count);
-int lib_array_sort(MobiusState* state, int arg_count);
-int lib_array_map(MobiusState* state, int arg_count);
-int lib_array_filter(MobiusState* state, int arg_count);
-int lib_array_reduce(MobiusState* state, int arg_count);
-int lib_array_foreach(MobiusState* state, int arg_count);
-int lib_array_any(MobiusState* state, int arg_count);
-int lib_array_all(MobiusState* state, int arg_count);
+
+// Method-style natives (called via arr:method() with self at base)
+int array_method_push(MobiusState* state, int arg_count);
+int array_method_pop(MobiusState* state, int arg_count);
+int array_method_get(MobiusState* state, int arg_count);
+int array_method_set(MobiusState* state, int arg_count);
+int array_method_length(MobiusState* state, int arg_count);
+int array_method_slice(MobiusState* state, int arg_count);
+int array_method_concat(MobiusState* state, int arg_count);
+int array_method_reverse(MobiusState* state, int arg_count);
+int array_method_find(MobiusState* state, int arg_count);
+int array_method_sort(MobiusState* state, int arg_count);
+int array_method_map(MobiusState* state, int arg_count);
+int array_method_filter(MobiusState* state, int arg_count);
+int array_method_reduce(MobiusState* state, int arg_count);
+int array_method_foreach(MobiusState* state, int arg_count);
+int array_method_any(MobiusState* state, int arg_count);
+int array_method_all(MobiusState* state, int arg_count);
+
+// Type metatable builder
+Table* create_array_type_metatable(MobiusState* state);
 
 #endif // MOBIUS_LIBRARY_ARRAY_H

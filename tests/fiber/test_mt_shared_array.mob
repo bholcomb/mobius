@@ -5,7 +5,7 @@ print("=== Shared Array Concurrency Test ===")
 var SIZE = 100
 var data = shared []
 for (var i = 0; i < SIZE; i += 1) {
-    array_push(data, 0)
+    data:push(0)
 }
 
 func fill_range(arr, start, count, value) {

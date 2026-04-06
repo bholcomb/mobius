@@ -1,5 +1,5 @@
-var evens = array_filter([1, 2, 3, 4], func(x, i) { return x % 2 == 0; });
-print("filter done, len:", array_length(evens));
+var evens = [1, 2, 3, 4]:filter(func(x, i) { return x % 2 == 0; });
+print("filter done, len:", evens:length());
 
 // Simple operations after filter
 var a = 10;

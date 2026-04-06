@@ -1,18 +1,18 @@
-var evens = array_filter([1, 2, 3, 4, 5, 6], func(x, i) { return x % 2 == 0; });
+var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0; });
 print("evens:", evens[0], evens[1], evens[2]);
-print("len:", array_length(evens));
+print("len:", evens:length());
 
-var sum = array_reduce([1, 2, 3, 4, 5], func(acc, x) { return acc + x; }, 0);
+var sum = [1, 2, 3, 4, 5]:reduce(func(acc, x) { return acc + x; }, 0);
 print("sum:", sum);
 
 var count = 0;
-array_foreach([10, 20, 30], func(x, i) { count = count + 1; });
+[10, 20, 30]:foreach(func(x, i) { count = count + 1; });
 print("count:", count);
 
-var has_big = array_any([1, 2, 100, 3], func(x) { return x > 50; });
+var has_big = [1, 2, 100, 3]:any(func(x) { return x > 50; });
 print("has_big:", has_big);
 
-var all_pos = array_all([1, 2, 3], func(x) { return x > 0; });
+var all_pos = [1, 2, 3]:all(func(x) { return x > 0; });
 print("all_pos:", all_pos);
 
 print("done");

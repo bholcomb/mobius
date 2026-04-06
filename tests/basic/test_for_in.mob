@@ -45,7 +45,7 @@ if (total != 9) { print("FAIL: nested for-in 3x3, got", total); exit(1) }
 // for-in collecting values into array
 var collected = []
 for (var x in range(5)) {
-    array_push(collected, x * x)
+    collected:push(x * x)
 }
 if (len(collected) != 5) { print("FAIL: collected len, got", len(collected)); exit(1) }
 if (collected[0] != 0) { print("FAIL: collected[0]"); exit(1) }
@@ -97,7 +97,7 @@ func countdown(from) {
 
 var down = []
 for (var x in countdown(3)) {
-    array_push(down, x)
+    down:push(x)
 }
 if (len(down) != 4) { print("FAIL: countdown len, got", len(down)); exit(1) }
 if (down[0] != 3) { print("FAIL: countdown[0]"); exit(1) }

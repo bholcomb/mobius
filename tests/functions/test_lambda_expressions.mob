@@ -55,7 +55,7 @@ if (math_ops.cube(3) != 27) { print("FAIL: lambda in table cube"); exit(1) }
 func transform(arr, f) {
     var result = []
     for (var i = 0; i < len(arr); i += 1) {
-        array_push(result, f(arr[i]))
+        result:push(f(arr[i]))
     }
     return result
 }

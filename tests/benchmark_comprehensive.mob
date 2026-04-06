@@ -84,7 +84,7 @@ func build_table_keys(count) {
     var keys = array_create(count);
     var i = 0;
     while (i < count) {
-        array_push(keys, concat("key_", str(i)));
+        keys:push(concat("key_", str(i)));
         i = i + 1;
     }
     return keys;
@@ -198,7 +198,7 @@ func benchmark_mixed() {
             value: i * 2,
             name: concat("item_", str(i))
         };
-        array_push(data, record);
+        data:push(record);
         i = i + 1;
     }
     
@@ -206,7 +206,7 @@ func benchmark_mixed() {
     var total = 0;
     i = 0;
     while (i < 1000) {
-        var record = array_get(data, i);
+        var record = data:get(i);
         total = total + record.value;
         i = i + 1;
     }

@@ -44,7 +44,7 @@ var log = shared []
 
 func worker(id, arr, count) {
     for (var i = 0; i < count; i += 1) {
-        array_push(arr, id)
+        arr:push(id)
         yield
     }
     return count

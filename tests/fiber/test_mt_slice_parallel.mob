@@ -7,7 +7,7 @@ import "fiber"
 var SIZE = 200
 var data = shared []
 for (var i = 0; i < SIZE; i += 1) {
-    array_push(data, i)
+    data:push(i)
 }
 
 func double_slice(s) {

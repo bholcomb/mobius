@@ -22,8 +22,8 @@ var clear_color = [0.45, 0.55, 0.60, 1.0];
 var plot_data_x = [];
 var plot_data_y = [];
 for (var i = 0; i < 100; i = i + 1) {
-    array_push(plot_data_x, i * 0.1);
-    array_push(plot_data_y, sin(i * 0.1) * cos(i * 0.05));
+    plot_data_x:push(i * 0.1);
+    plot_data_y:push(sin(i * 0.1) * cos(i * 0.05));
 }
 
 // Main render loop
@@ -31,7 +31,7 @@ var running = true;
 while (running) {
     // Handle SDL events
     var events = sdl_poll_events();
-    for (var i = 0; i < array_length(events); i = i + 1) {
+    for (var i = 0; i < events:length(); i = i + 1) {
         var event = events[i];
         if (event.type == "quit") {
             running = false;
@@ -95,11 +95,11 @@ while (running) {
                 
                 // Add real-time data point
                 var time = get_time();
-                array_push(plot_data_x, time);
-                array_push(plot_data_y, sin(time) * cos(time * 0.5));
+                plot_data_x:push(time);
+                plot_data_y:push(sin(time) * cos(time * 0.5));
                 
                 // Keep only last 100 points
-                if (array_length(plot_data_x) > 100) {
+                if (plot_data_x:length() > 100) {
                     array_shift(plot_data_x);
                     array_shift(plot_data_y);
                 }
@@ -152,7 +152,7 @@ func render_rotating_triangle(rotation) {
     
     // Render triangle
     gl_begin("TRIANGLES");
-    for (var i = 0; i < array_length(vertices); i = i + 6) {
+    for (var i = 0; i < vertices:length(); i = i + 6) {
         gl_color3f(vertices[i+3], vertices[i+4], vertices[i+5]);
         gl_vertex3f(vertices[i], vertices[i+1], vertices[i+2]);
     }
@@ -164,7 +164,7 @@ func render_rotating_triangle(rotation) {
 func generate_random_data(count) {
     var data = [];
     for (var i = 0; i < count; i = i + 1) {
-        array_push(data, random() * 100.0);
+        data:push(random() * 100.0);
     }
     return data;
 }

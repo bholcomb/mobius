@@ -6,7 +6,7 @@ var data = {name: "Alice", age: 30, city: "New York"};
 print("Original table:", data);
 
 // Get pairs
-var all_pairs = pairs(data);
+var all_pairs = data:pairs();
 print("Pairs result:", all_pairs);
 
 // Test iteration through pairs
@@ -21,7 +21,7 @@ for (var i = 0; i < len(all_pairs); i = i + 1) {
 // Test with array-style table
 var fruits = {"apple", "banana", "cherry"};
 print("\nArray-style table:", fruits);
-var fruit_pairs = pairs(fruits);
+var fruit_pairs = fruits:pairs();
 print("Fruit pairs:");
 for (var i = 0; i < len(fruit_pairs); i = i + 1) {
     var pair = fruit_pairs[i];
