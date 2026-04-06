@@ -1,0 +1,75 @@
+// Test: close a channel while another fiber is blocked on recv or send
+print("=== Close While Blocked Tests ===")
+
+import "fiber"
+
+// Test 1: close while blocked on recv — recv should unblock and error
+var ch1 = fiber.channel(1)
+
+func blocking_recv(ch) {
+    var v = ch:recv()
+    return v
+}
+
+var f1 = spawn blocking_recv(ch1)
+fiber.sleep(20)
+ch1:close()
+
+var caught1 = false
+try {
+    var r = await f1
+} catch e {
+    caught1 = true
+}
+
+if (!caught1) {
+    print("FAIL: recv on closed empty channel should error")
+    exit(1)
+}
+print("  close unblocks a waiting recv")
+
+// Test 2: close while blocked on send (full channel) — send should unblock
+var ch2 = fiber.channel(1)
+ch2:send("fill")
+
+func blocking_send(ch) {
+    var ok = ch:send("blocked")
+    return ok
+}
+
+var f2 = spawn blocking_send(ch2)
+fiber.sleep(20)
+ch2:close()
+
+var r2 = await f2
+if (r2 != false) {
+    print("FAIL: send on closed channel should return false, got", r2)
+    exit(1)
+}
+print("  close unblocks a waiting send")
+
+// Test 3: close with data still in buffer — recv drains remaining, then errors
+var ch3 = fiber.channel(3)
+ch3:send(10)
+ch3:send(20)
+ch3:close()
+
+var v1 = ch3:recv()
+var v2 = ch3:recv()
+if (v1 != 10) { print("FAIL: drain after close got", v1, "expected 10"); exit(1) }
+if (v2 != 20) { print("FAIL: drain after close got", v2, "expected 20"); exit(1) }
+
+var caught3 = false
+try {
+    ch3:recv()
+} catch e {
+    caught3 = true
+}
+
+if (!caught3) {
+    print("FAIL: recv on closed empty channel should throw")
+    exit(1)
+}
+print("  closed channel drains remaining items, then errors on empty")
+
+print("=== All close-while-blocked tests passed! ===")

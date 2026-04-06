@@ -1,0 +1,62 @@
+// Test cancellation edge cases: cancel after completion, double cancel
+print("=== Cancel Edge Case Tests ===")
+
+import "fiber"
+
+// Test 1: cancel after fiber has already completed — should be harmless
+func quick_task() {
+    return 42
+}
+
+var f1 = spawn quick_task()
+var r1 = await f1
+fiber.cancel(f1)
+
+if (r1 != 42) {
+    print("FAIL: cancel after completion changed result, got", r1)
+    exit(1)
+}
+print("  cancel after completion is harmless")
+
+// Test 2: double cancel — should not crash
+func slow_task() {
+    fiber.sleep(60000)
+    return "unreachable"
+}
+
+var f2 = spawn slow_task()
+fiber.sleep(10)
+fiber.cancel(f2)
+fiber.cancel(f2)
+
+var caught = false
+try {
+    await f2
+} catch e {
+    caught = true
+}
+
+if (!caught) {
+    print("FAIL: double-cancelled fiber should still throw on await")
+    exit(1)
+}
+print("  double cancel does not crash")
+
+// Test 3: cancel a fiber that hasn't started yet (immediate cancel)
+var f3 = spawn slow_task()
+fiber.cancel(f3)
+
+var caught3 = false
+try {
+    await f3
+} catch e {
+    caught3 = true
+}
+
+if (!caught3) {
+    print("FAIL: immediate cancel should cause await to throw")
+    exit(1)
+}
+print("  immediate cancel before fiber runs works")
+
+print("=== All cancel edge case tests passed! ===")

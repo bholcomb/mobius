@@ -1,0 +1,84 @@
+// Test: ch:try_send / ch:try_recv under concurrent load
+print("=== Concurrent Try Send/Recv Tests ===")
+
+import "fiber"
+
+// Test 1: multiple producers try_send to a bounded channel, count successes
+var ch = fiber.channel(10)
+
+func try_producer(ch, count) {
+    var sent = 0
+    for (var i = 0; i < count; i += 1) {
+        if (ch:try_send(i)) {
+            sent += 1
+        }
+    }
+    return sent
+}
+
+var p1 = spawn try_producer(ch, 20)
+var p2 = spawn try_producer(ch, 20)
+var p3 = spawn try_producer(ch, 20)
+
+var s1 = await p1
+var s2 = await p2
+var s3 = await p3
+
+var total_sent = s1 + s2 + s3
+// Channel capacity is 10, and nobody is draining. At most 10 sends succeed.
+if (total_sent < 1 || total_sent > 10) {
+    print("FAIL: total_sent =", total_sent, "expected 1-10 for capacity-10 channel")
+    exit(1)
+}
+print("  3 producers try_sent", total_sent, "items into capacity-10 channel")
+
+// Test 2: concurrent try_recv drains items
+var ch2 = fiber.channel(20)
+for (var i = 0; i < 20; i += 1) {
+    ch2:send(i)
+}
+
+func try_consumer(ch) {
+    var received = 0
+    while (true) {
+        var r = ch:try_recv()
+        if (!r.ok) {
+            return received
+        }
+        received += 1
+    }
+}
+
+var c1 = spawn try_consumer(ch2)
+var c2 = spawn try_consumer(ch2)
+
+var r1 = await c1
+var r2 = await c2
+
+var total_recv = r1 + r2
+if (total_recv != 20) {
+    print("FAIL: total_recv =", total_recv, "expected 20")
+    exit(1)
+}
+print("  2 consumers try_recv'd all 20 items (", r1, "+", r2, ")")
+
+// Test 3: try_send on a closed channel returns false
+var ch3 = fiber.channel(5)
+ch3:close()
+
+var ok = ch3:try_send(42)
+if (ok) {
+    print("FAIL: try_send on closed channel should return false")
+    exit(1)
+}
+print("  try_send on closed channel returns false")
+
+// Test 4: try_recv on a closed empty channel returns {ok: false}
+var r4 = ch3:try_recv()
+if (r4.ok) {
+    print("FAIL: try_recv on closed empty channel should return ok=false")
+    exit(1)
+}
+print("  try_recv on closed empty channel returns ok=false")
+
+print("=== All concurrent try tests passed! ===")

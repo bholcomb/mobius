@@ -1,0 +1,90 @@
+// Test: spawn inside spawn — nested concurrency with inner await and fiber.all
+print("=== Nested Concurrency Tests ===")
+
+import "fiber"
+
+// Test 1: spawn inside spawn with inner await
+func inner_work(x) {
+    return x * 10
+}
+
+func outer_work(x) {
+    var f = spawn inner_work(x)
+    var r = await f
+    return r + 1
+}
+
+var f1 = spawn outer_work(5)
+var r1 = await f1
+if (r1 != 51) {
+    print("FAIL: nested spawn, got", r1, "expected 51")
+    exit(1)
+}
+print("  nested spawn + await works")
+
+// Test 2: fiber.all inside a spawned fiber
+func parallel_sum() {
+    func compute(n) {
+        return n * n
+    }
+
+    var futures = [spawn compute(1), spawn compute(2), spawn compute(3), spawn compute(4)]
+    var results = fiber.all(futures)
+
+    var sum = 0
+    for (var i = 0; i < len(results); i += 1) {
+        sum += results[i]
+    }
+    return sum
+}
+
+var f2 = spawn parallel_sum()
+var r2 = await f2
+if (r2 != 30) {
+    print("FAIL: fiber.all inside spawn, got", r2, "expected 30 (1+4+9+16)")
+    exit(1)
+}
+print("  fiber.all inside a spawned fiber works")
+
+// Test 3: two levels deep — spawn → spawn → spawn
+func level2(x) {
+    return x + 100
+}
+
+func level1(x) {
+    var f = spawn level2(x)
+    return await f
+}
+
+func level0(x) {
+    var f = spawn level1(x)
+    return await f
+}
+
+var f3 = spawn level0(7)
+var r3 = await f3
+if (r3 != 107) {
+    print("FAIL: 3-level nesting, got", r3, "expected 107")
+    exit(1)
+}
+print("  3-level spawn nesting works")
+
+// Test 4: multiple concurrent outer fibers each doing inner spawns
+func fanout(base) {
+    var a = spawn inner_work(base)
+    var b = spawn inner_work(base + 1)
+    return await a + await b
+}
+
+var g1 = spawn fanout(1)
+var g2 = spawn fanout(3)
+var g3 = spawn fanout(5)
+
+var results = fiber.all([g1, g2, g3])
+// fanout(1) = 10+20=30, fanout(3) = 30+40=70, fanout(5) = 50+60=110
+if (results[0] != 30) { print("FAIL: fanout(1) =", results[0]); exit(1) }
+if (results[1] != 70) { print("FAIL: fanout(3) =", results[1]); exit(1) }
+if (results[2] != 110) { print("FAIL: fanout(5) =", results[2]); exit(1) }
+print("  concurrent outer fibers with inner spawns all correct")
+
+print("=== All nested concurrency tests passed! ===")

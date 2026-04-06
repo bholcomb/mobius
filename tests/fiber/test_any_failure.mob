@@ -1,0 +1,64 @@
+// Test: fiber.any behavior when futures fail
+print("=== Fiber Any Failure Tests ===")
+
+import "fiber"
+
+// Test 1: fiber.any with one fast success and one slow failure — picks the success
+func fast_success() {
+    return "ok"
+}
+
+func slow_failure() {
+    fiber.sleep(200)
+    var ch = fiber.channel(1)
+    ch:close()
+    ch:recv()
+    return "unreachable"
+}
+
+var r1 = fiber.any([spawn slow_failure(), spawn fast_success()])
+if (r1 != "ok") {
+    print("FAIL: fiber.any should pick fast success, got", r1)
+    exit(1)
+}
+print("  fiber.any picks success over pending failure")
+
+// Test 2: fiber.any with fast failure and slow success
+// fiber.any skips rejected futures and waits for a resolved one
+func fast_failure() {
+    var ch = fiber.channel(1)
+    ch:close()
+    ch:recv()
+    return "unreachable"
+}
+
+func slow_success() {
+    fiber.sleep(50)
+    return "delayed_ok"
+}
+
+var r2 = fiber.any([spawn fast_failure(), spawn slow_success()])
+if (r2 != "delayed_ok") {
+    print("FAIL: fiber.any should skip rejected and pick success, got", r2)
+    exit(1)
+}
+print("  fiber.any skips rejected futures, picks first resolved")
+
+// Test 3: fiber.any with multiple successes at different speeds
+func returns(val) {
+    return val
+}
+
+func delayed_returns(val) {
+    fiber.sleep(50)
+    return val
+}
+
+var r3 = fiber.any([spawn delayed_returns("slow"), spawn returns("fast")])
+if (r3 != "fast") {
+    print("FAIL: fiber.any should pick 'fast', got", r3)
+    exit(1)
+}
+print("  fiber.any correctly picks fastest of multiple successes")
+
+print("=== All fiber.any failure tests passed! ===")
