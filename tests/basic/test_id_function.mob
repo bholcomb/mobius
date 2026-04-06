@@ -1,0 +1,26 @@
+print("=== id() Function ===")
+
+// Heap-allocated values have non-zero ids
+var arr = [1, 2, 3]
+if (id(arr) == 0) { print("FAIL: array id should be non-zero"); exit(1) }
+
+var tbl = {x: 1}
+if (id(tbl) == 0) { print("FAIL: table id should be non-zero"); exit(1) }
+
+func foo() { return 1 }
+if (id(foo) == 0) { print("FAIL: function id should be non-zero"); exit(1) }
+
+// Same reference => same id
+var b = arr
+if (id(arr) != id(b)) { print("FAIL: alias should share id"); exit(1) }
+
+// Different objects with same contents => different ids
+var c = [1, 2, 3]
+if (id(arr) == id(c)) { print("FAIL: distinct arrays should have different ids"); exit(1) }
+
+// Value types return 0
+if (id(42) != 0) { print("FAIL: integer id should be 0"); exit(1) }
+if (id(true) != 0) { print("FAIL: bool id should be 0"); exit(1) }
+if (id(nil) != 0) { print("FAIL: nil id should be 0"); exit(1) }
+
+print("=== All id() tests passed! ===")
