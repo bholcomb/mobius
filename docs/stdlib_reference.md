@@ -1,7 +1,19 @@
 # Mobius Standard Library Reference
 
 These functions are available in every Mobius script after the host
-application calls `mobius_init_stdlib()`. No `import` statement is needed.
+application calls `mobius_init_stdlib()`. No `import` statement is needed
+(except for the `fiber` module — see below).
+
+Mobius uses a **dual-syntax** convention inspired by Lua:
+
+- **`.`** (dot) accesses fields, module namespaces, and table keys — no
+  implicit `self` is passed.
+- **`:`** (colon) calls a method, implicitly passing the object as the
+  first argument (`self`).
+
+Array, table, and channel operations use the `:` method syntax. Global
+utility functions like `len`, `setmetatable`, and `array_create` remain
+as plain function calls.
 
 For functions provided by **plugins** (such as the `math` plugin's
 trigonometric functions), see
@@ -225,136 +237,222 @@ contains("Hello World", "xyz")      // false
 
 ## Array Functions
 
-### array_create(capacity?) -> array
+Arrays support both global functions and method syntax using `:`.
 
-Create a new empty array. An optional capacity hint can be provided.
+### Global: array_create(capacity [, fill_value]) -> array
+
+Create a new array with the given capacity. If `fill_value` is provided,
+the array is pre-filled with that many copies of the value.
 
 ```mobius
-var arr = array_create()      // empty array
-var arr = array_create(100)   // pre-allocated for 100 elements
+var arr = array_create(100)           // empty array, capacity for 100
+var grid = array_create(10, 0)        // [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 ```
 
-### array_push(arr, value)
+### arr:push(value)
 
 Append a value to the end of an array.
 
 ```mobius
 var arr = []
-array_push(arr, 10)
-array_push(arr, 20)
+arr:push(10)
+arr:push(20)
 // arr is now [10, 20]
 ```
 
-### array_pop(arr) -> value
+### arr:pop() -> value
 
-Remove and return the last element. Errors if the array is empty.
+Remove and return the last element. Returns `nil` if the array is empty.
 
 ```mobius
 var arr = [1, 2, 3]
-var last = array_pop(arr)    // 3; arr is now [1, 2]
+var last = arr:pop()    // 3; arr is now [1, 2]
 ```
 
-### array_get(arr, index) -> value
+### arr:get(index) -> value
 
-Return the element at the given zero-based index.
+Return the element at the given zero-based index, or `nil` if out of bounds.
 
 ```mobius
 var arr = [10, 20, 30]
-array_get(arr, 1)    // 20
+arr:get(1)    // 20
 ```
 
 Note: You can also use bracket syntax: `arr[1]`.
 
-### array_set(arr, index, value)
+### arr:set(index, value)
 
-Set the element at the given zero-based index.
+Set the element at the given zero-based index. Errors if out of bounds.
 
 ```mobius
 var arr = [10, 20, 30]
-array_set(arr, 1, 99)    // arr is now [10, 99, 30]
+arr:set(1, 99)    // arr is now [10, 99, 30]
 ```
 
 Note: You can also use bracket assignment: `arr[1] = 99`.
 
-### array_length(arr) -> integer
+### arr:length() -> integer
 
 Return the number of elements in the array.
 
 ```mobius
-array_length([1, 2, 3, 4])    // 4
-array_length([])               // 0
+[1, 2, 3, 4]:length()    // 4
+[]:length()               // 0
 ```
 
-### array_slice(arr, start, end) -> array
+### arr:slice(start, end) -> array
 
 Return a new array containing elements from `start` (inclusive) to `end`
 (exclusive).
 
 ```mobius
 var arr = [1, 2, 3, 4, 5]
-array_slice(arr, 1, 4)    // [2, 3, 4]
-array_slice(arr, 0, 2)    // [1, 2]
+arr:slice(1, 4)    // [2, 3, 4]
+arr:slice(0, 2)    // [1, 2]
 ```
 
-### array_concat(a, b) -> array
+### arr:concat(other, ...) -> array
 
-Return a new array that is the concatenation of `a` and `b`.
+Return a new array that is the concatenation of `arr` with one or more
+other arrays.
 
 ```mobius
-array_concat([1, 2], [3, 4])    // [1, 2, 3, 4]
+[1, 2]:concat([3, 4])    // [1, 2, 3, 4]
 ```
 
-### array_reverse(arr) -> array
+### arr:reverse() -> array
 
-Return a new array with elements in reverse order. The original is unchanged.
+Reverse the array in-place and return it.
 
 ```mobius
-array_reverse([1, 2, 3])    // [3, 2, 1]
+var arr = [1, 2, 3]
+arr:reverse()    // arr is now [3, 2, 1]
 ```
 
-### array_find(arr, value) -> integer
+### arr:find(value) -> integer
 
 Return the index of the first occurrence of `value`, or `-1` if not found.
 
 ```mobius
-array_find([10, 20, 30], 20)    // 1
-array_find([10, 20, 30], 99)    // -1
+[10, 20, 30]:find(20)    // 1
+[10, 20, 30]:find(99)    // -1
+```
+
+### arr:sort([comparator]) -> array
+
+Sort the array in-place and return it. Without a comparator, uses default
+ordering (numeric or string). With a comparator function, calls it with
+two elements and expects a truthy return to indicate the first should come
+before the second.
+
+```mobius
+var nums = [3, 1, 4, 1, 5]
+nums:sort()                                      // [1, 1, 3, 4, 5]
+nums:sort(func(a, b) { return a > b; })          // [5, 4, 3, 1, 1]
+```
+
+### arr:map(fn) -> array
+
+Apply `fn(element, index)` to each element and return a new array of results.
+
+```mobius
+[1, 2, 3]:map(func(x, i) { return x * 2; })    // [2, 4, 6]
+```
+
+### arr:filter(fn) -> array
+
+Return a new array containing only elements for which `fn(element, index)`
+returns a truthy value.
+
+```mobius
+[1, 2, 3, 4, 5]:filter(func(x, i) { return x % 2 == 0; })    // [2, 4]
+```
+
+### arr:reduce(fn, initial) -> value
+
+Fold the array to a single value by applying `fn(accumulator, element)` for
+each element, starting with `initial`.
+
+```mobius
+[1, 2, 3, 4]:reduce(func(acc, x) { return acc + x; }, 0)    // 10
+```
+
+### arr:foreach(fn)
+
+Call `fn(element, index)` for each element. Returns nothing (side effects
+only).
+
+```mobius
+["a", "b", "c"]:foreach(func(x, i) {
+    print(i, ":", x)
+})
+```
+
+### arr:any(fn) -> bool
+
+Return `true` if `fn(element)` returns a truthy value for at least one
+element.
+
+```mobius
+[1, 2, 100, 3]:any(func(x) { return x > 50; })    // true
+```
+
+### arr:all(fn) -> bool
+
+Return `true` if `fn(element)` returns a truthy value for every element.
+
+```mobius
+[2, 4, 6]:all(func(x) { return x % 2 == 0; })    // true
 ```
 
 ---
 
 ## Table Functions
 
-### table_remove(table, key)
+Tables support both global functions and method syntax using `:`.
+
+### tbl:remove(key)
 
 Remove a key and its associated value from a table.
 
 ```mobius
 var t = {name: "Alice", age: 30}
-table_remove(t, "age")
-print(table_has_key(t, "age"))    // false
+t:remove("age")
+print(t:has_key("age"))    // false
 ```
 
-### table_has_key(table, key) -> bool
+### tbl:has_key(key) -> bool
 
 Return `true` if the table contains the given key.
 
 ```mobius
 var t = {name: "Alice"}
-table_has_key(t, "name")    // true
-table_has_key(t, "age")     // false
+t:has_key("name")    // true
+t:has_key("age")     // false
 ```
 
-### table_size(table) -> integer
+### tbl:size() -> integer
 
 Return the number of key-value pairs in the table.
 
 ```mobius
-table_size({a: 1, b: 2, c: 3})    // 3
-table_size({})                     // 0
+{a: 1, b: 2, c: 3}:size()    // 3
+{}:size()                     // 0
 ```
 
-### setmetatable(table, metatable)
+### tbl:pairs() -> array
+
+Return an array of `[key, value]` pairs from the table. Useful for iteration.
+
+```mobius
+var t = {name: "Alice", age: 30}
+var p = t:pairs()
+for (var i = 0; i < len(p); i++) {
+    print("Key:", p[i][0], "Value:", p[i][1])
+}
+```
+
+### Global: setmetatable(table, metatable)
 
 Set the metatable for a table. The metatable controls fallback behavior for
 missing keys (`__index`) and operator overloading (`__add`, `__sub`, etc.).
@@ -367,24 +465,12 @@ setmetatable(obj, meta)
 print(obj.color)    // "blue" (from defaults via __index)
 ```
 
-### getmetatable(table) -> table | nil
+### Global: getmetatable(table) -> table | nil
 
 Return the metatable of a table, or `nil` if none is set.
 
 ```mobius
 var mt = getmetatable(obj)
-```
-
-### pairs(table) -> array
-
-Return an array of `[key, value]` pairs from the table. Useful for iteration.
-
-```mobius
-var t = {name: "Alice", age: 30}
-var p = pairs(t)
-for (var i = 0; i < len(p); i++) {
-    print("Key:", p[i][0], "Value:", p[i][1])
-}
 ```
 
 ---
@@ -475,56 +561,55 @@ print(id(a) == id(c))    // false — different array
 
 These functions work with Mobius fibers, futures, channels, and array slices. See the [Language Reference](language_reference.md#concurrency) for an overview of the concurrency model.
 
-### fiber_channel(capacity)
+Channels are accessed via the `fiber` module and support method syntax using `:`.
 
-Creates a bounded channel with the given capacity (default 1). Channels are used for message-passing between fibers.
+### Creating Channels
 
 ```mobius
-var ch = fiber_channel(10)
+import "fiber"
+var ch = fiber.channel(10)    // bounded channel with capacity 10
 ```
 
-**Returns:** A channel value.
-
-### fiber_send(channel, value)
+### ch:send(value)
 
 Sends a value into the channel. Blocks if the channel is full until space is available. Returns `false` if the channel is closed.
 
 ```mobius
-fiber_send(ch, 42)
+ch:send(42)
 ```
 
-### fiber_recv(channel)
+### ch:recv() -> value
 
 Receives a value from the channel. Blocks if the channel is empty until a value is available. Returns `nil` if the channel is closed and empty.
 
 ```mobius
-var msg = fiber_recv(ch)
+var msg = ch:recv()
 ```
 
-### fiber_try_send(channel, value)
+### ch:try_send(value) -> bool
 
 Non-blocking send. Returns `true` if the value was enqueued, `false` if the channel is full or closed.
 
 ```mobius
-if (fiber_try_send(ch, 42)) {
+if (ch:try_send(42)) {
     print("sent")
 }
 ```
 
-### fiber_try_recv(channel)
+### ch:try_recv() -> value
 
 Non-blocking receive. Returns the value if one is available, or `nil` if the channel is empty.
 
 ```mobius
-var msg = fiber_try_recv(ch)
+var msg = ch:try_recv()
 ```
 
-### fiber_close(channel)
+### ch:close()
 
 Closes the channel. Subsequent sends return `false`. Pending receivers are unblocked. Remaining buffered values can still be received.
 
 ```mobius
-fiber_close(ch)
+ch:close()
 ```
 
 ### fiber_cancel(future)

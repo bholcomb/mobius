@@ -222,7 +222,7 @@ var nothing = nil
 | 10   | `+` `-`                       | left  | Addition / subtraction |
 | 11   | `*` `/` `%`                   | left  | Multiply / divide / mod|
 | 12   | `!` `-` `not` `+` `~`        | right | Unary                  |
-| 13   | `()` `[]` `.` `++` `--`      | left  | Call / index / postfix |
+| 13   | `()` `[]` `.` `:` `++` `--`  | left  | Call / index / method / postfix |
 
 ### Arithmetic
 
@@ -310,6 +310,39 @@ The `+` operator concatenates when either operand is a string:
 ```mobius
 "Hello" + " " + "World"   // "Hello World"
 "Count: " + 42            // "Count: 42"
+```
+
+### Method Calls (`:` syntax)
+
+Mobius uses a dual-syntax convention inspired by Lua:
+
+- **`.`** (dot) accesses fields, module namespaces, and table keys. No
+  implicit argument is passed.
+- **`:`** (colon) performs a method call, automatically passing the
+  receiver object as `self` (the first argument to the function).
+
+```mobius
+// Dot syntax — field/module access
+var name = person.name
+var result = math.sin(3.14)
+
+// Colon syntax — method call (self is implicit)
+var arr = [3, 1, 2]
+arr:sort()                  // equivalent to sort(arr)
+arr:push(4)                 // equivalent to push(arr, 4)
+print(arr:length())         // 4
+```
+
+The `:` syntax works on any value that has a type metatable. The built-in
+standard library registers type metatables for arrays, tables, and channels,
+giving them methods out of the box. You can also set type metatables from
+C/C++ code — see the [Embedding Guide](embedding_guide.md#type-metatables).
+
+Method calls can be chained:
+
+```mobius
+var evens = [1, 2, 3, 4, 5]:filter(func(x, i) { return x % 2 == 0; })
+print(evens:length())    // 2
 ```
 
 ---
@@ -659,39 +692,50 @@ var matrix = [[1, 2], [3, 4]]
 print(matrix[1][0])    // 3
 ```
 
-### Array Functions
+### Array Methods
 
-| Function                        | Description                                      |
-|---------------------------------|--------------------------------------------------|
-| `array_create(capacity)`        | Create a new empty array with optional capacity  |
-| `array_push(arr, value)`        | Append a value to the end                        |
-| `array_pop(arr)`                | Remove and return the last element               |
-| `array_get(arr, index)`         | Get element at index                             |
-| `array_set(arr, index, value)`  | Set element at index                             |
-| `array_length(arr)`             | Return the number of elements                    |
-| `array_slice(arr, start, end)`  | Return a sub-array from start to end (exclusive) |
-| `array_concat(a, b)`           | Return a new array combining a and b             |
-| `array_reverse(arr)`            | Return a reversed copy                           |
-| `array_find(arr, value)`        | Return the index of value, or -1 if not found    |
-| `len(arr)`                      | Also works for arrays (same as `array_length`)   |
+Array operations use the `:` method-call syntax. The only global array
+function is `array_create(capacity [, fill_value])`.
+
+| Method                    | Description                                         |
+|---------------------------|-----------------------------------------------------|
+| `arr:push(value)`         | Append a value to the end                           |
+| `arr:pop()`               | Remove and return the last element                  |
+| `arr:get(index)`          | Get element at index                                |
+| `arr:set(index, value)`   | Set element at index                                |
+| `arr:length()`            | Return the number of elements                       |
+| `arr:slice(start, end)`   | Return a sub-array from start to end (exclusive)    |
+| `arr:concat(other)`       | Return a new array combining arr and other          |
+| `arr:reverse()`           | Reverse in-place and return                         |
+| `arr:find(value)`         | Return the index of value, or -1 if not found       |
+| `arr:sort([cmp])`         | Sort in-place (optional comparator function)        |
+| `arr:map(fn)`             | Apply fn(element, index) and return new array       |
+| `arr:filter(fn)`          | Return new array of elements where fn returns true  |
+| `arr:reduce(fn, init)`    | Fold to a single value                              |
+| `arr:foreach(fn)`         | Call fn(element, index) for each element            |
+| `arr:any(fn)`             | True if fn returns true for any element             |
+| `arr:all(fn)`             | True if fn returns true for every element           |
+| `len(arr)`                | Global function; also works for arrays and strings  |
 
 ```mobius
 var arr = array_create(10)
-array_push(arr, "first")
-array_push(arr, "second")
-array_push(arr, "third")
+arr:push("first")
+arr:push("second")
+arr:push("third")
 
-print(array_length(arr))           // 3
-print(array_find(arr, "second"))   // 1
+print(arr:length())            // 3
+print(arr:find("second"))      // 1
 
-var last = array_pop(arr)
-print(last)                        // "third"
+var last = arr:pop()
+print(last)                    // "third"
 
-var rev = array_reverse([1, 2, 3])
-print(rev)                         // [3, 2, 1]
+[1, 2, 3]:reverse()           // [3, 2, 1]
 
-var combined = array_concat([1, 2], [3, 4])
-print(combined)                    // [1, 2, 3, 4]
+[1, 2]:concat([3, 4])         // [1, 2, 3, 4]
+
+[1, 2, 3]:map(func(x, i) { return x * 10; })     // [10, 20, 30]
+[1, 2, 3, 4]:filter(func(x, i) { return x > 2; })  // [3, 4]
+[1, 2, 3]:reduce(func(acc, x) { return acc + x; }, 0)  // 6
 ```
 
 ---
@@ -730,30 +774,33 @@ print(person["age"])     // 30
 person.city = "Boston"
 ```
 
-### Table Functions
+### Table Methods
 
-| Function                            | Description                                |
-|-------------------------------------|--------------------------------------------|
-| `table_remove(t, key)`              | Remove a key                               |
-| `table_has_key(t, key)`             | Return `true` if the key exists            |
-| `table_size(t)`                     | Return the number of entries               |
-| `pairs(t)`                          | Return an array of `[key, value]` pairs    |
+Table operations use the `:` method-call syntax. `setmetatable`,
+`getmetatable`, and `len` remain global functions.
+
+| Method                 | Description                                |
+|------------------------|--------------------------------------------|
+| `tbl:remove(key)`      | Remove a key                               |
+| `tbl:has_key(key)`     | Return `true` if the key exists            |
+| `tbl:size()`           | Return the number of entries               |
+| `tbl:pairs()`          | Return an array of `[key, value]` pairs    |
 
 ```mobius
 var config = {}
 config["debug"] = true
 config["version"] = "1.0"
 
-print(table_has_key(config, "debug"))    // true
-print(table_size(config))               // 2
+print(config:has_key("debug"))    // true
+print(config:size())              // 2
 
-var all = pairs(config)
+var all = config:pairs()
 for (var i = 0; i < len(all); i++) {
     var pair = all[i]
     print("Key:", pair[0], "Value:", pair[1])
 }
 
-table_remove(config, "debug")
+config:remove("debug")
 ```
 
 ### Metatables
@@ -1051,17 +1098,28 @@ var data = shared [0, 0, 0, 0]
 
 ### Channels
 
-Channels provide typed, bounded message-passing between fibers:
+Channels provide typed, bounded message-passing between fibers. They are
+created via the `fiber` module and use the `:` method-call syntax:
 
 ```mobius
-var ch = fiber_channel(10)  // capacity 10
+import "fiber"
+
+var ch = fiber.channel(10)  // bounded channel with capacity 10
 
 // Producer fiber
+func producer(ch) {
+    ch:send(42)
+    ch:close()
+}
 spawn producer(ch)
 
 // Consumer
-var msg = fiber_recv(ch)
+var msg = ch:recv()
+print(msg)    // 42
 ```
+
+Channel methods: `ch:send(value)`, `ch:recv()`, `ch:try_send(value)`,
+`ch:try_recv()`, `ch:close()`.
 
 See the [Standard Library Reference](stdlib_reference.md#fiber--concurrency-functions) for the full channel API.
 
