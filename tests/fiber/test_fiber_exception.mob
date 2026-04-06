@@ -6,8 +6,8 @@ import "fiber"
 // Test 1: await on a fiber that errors should throw in the caller
 func will_error() {
     var ch = fiber.channel(1)
-    ch.close()
-    ch.recv()
+    ch:close()
+    ch:recv()
     return "unreachable"
 }
 
@@ -56,8 +56,8 @@ print("  await on successful fiber returns result normally")
 func fail_with_delay() {
     fiber.sleep(10)
     var ch = fiber.channel(1)
-    ch.close()
-    ch.recv()
+    ch:close()
+    ch:recv()
     return "unreachable"
 }
 

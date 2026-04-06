@@ -190,36 +190,44 @@ int lib_fiber_slice(MobiusState* state, int arg_count) {
 }
 
 // ============================================================================
-// Channel methods (accessed as ch.send, ch.recv, etc.)
-// Self is at registers[base + arg_count], read via state->npeek_self(arg_count)
+// Channel methods (accessed via ':' syntax, e.g. ch:send(42))
+// Self is the first argument at registers[base], read via state->npeek_self()
+// arg_count includes self, so ch:send(42) has arg_count=2, ch:recv() has arg_count=1
 // ============================================================================
 
-int channel_method_send(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("ch.send expects 1 argument (value)");
-
-    const Value& self = state->npeek_self(arg_count);
+static Channel* extract_channel_self(MobiusState* state, const char* err_msg) {
+    const Value& self = state->npeek_self();
     if (self.type != VAL_CHANNEL || !self.as.channel) {
-        return state->error("ch.send: self is not a channel");
+        state->error(err_msg);
+        return nullptr;
     }
+    return self.as.channel;
+}
 
-    Value val = state->npeek(0);
+int channel_method_send(MobiusState* state, int arg_count) {
+    if (arg_count != 2) return state->error("ch:send expects 1 argument (value)");
+
+    Channel* ch = extract_channel_self(state, "ch:send: self is not a channel");
+    if (!ch) return -1;
+
+    Value val = state->npop();
     state->npop();
 
-    bool ok = self.as.channel->send(val);
+    bool ok = ch->send(val);
     state->npush(make_bool_value(ok));
     return 1;
 }
 
 int channel_method_recv(MobiusState* state, int arg_count) {
-    if (arg_count != 0) return state->error("ch.recv expects 0 arguments");
+    if (arg_count != 1) return state->error("ch:recv expects 0 arguments");
 
-    const Value& self = state->npeek_self(arg_count);
-    if (self.type != VAL_CHANNEL || !self.as.channel) {
-        return state->error("ch.recv: self is not a channel");
-    }
+    Channel* ch = extract_channel_self(state, "ch:recv: self is not a channel");
+    if (!ch) return -1;
+
+    state->npop();
 
     Value result;
-    bool ok = self.as.channel->recv(result);
+    bool ok = ch->recv(result);
     if (ok) {
         state->npush(result);
     } else {
@@ -229,31 +237,29 @@ int channel_method_recv(MobiusState* state, int arg_count) {
 }
 
 int channel_method_try_send(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return state->error("ch.try_send expects 1 argument (value)");
+    if (arg_count != 2) return state->error("ch:try_send expects 1 argument (value)");
 
-    const Value& self = state->npeek_self(arg_count);
-    if (self.type != VAL_CHANNEL || !self.as.channel) {
-        return state->error("ch.try_send: self is not a channel");
-    }
+    Channel* ch = extract_channel_self(state, "ch:try_send: self is not a channel");
+    if (!ch) return -1;
 
-    Value val = state->npeek(0);
+    Value val = state->npop();
     state->npop();
 
-    bool ok = self.as.channel->trySend(val);
+    bool ok = ch->trySend(val);
     state->npush(make_bool_value(ok));
     return 1;
 }
 
 int channel_method_try_recv(MobiusState* state, int arg_count) {
-    if (arg_count != 0) return state->error("ch.try_recv expects 0 arguments");
+    if (arg_count != 1) return state->error("ch:try_recv expects 0 arguments");
 
-    const Value& self = state->npeek_self(arg_count);
-    if (self.type != VAL_CHANNEL || !self.as.channel) {
-        return state->error("ch.try_recv: self is not a channel");
-    }
+    Channel* ch = extract_channel_self(state, "ch:try_recv: self is not a channel");
+    if (!ch) return -1;
+
+    state->npop();
 
     Value result;
-    bool ok = self.as.channel->tryRecv(result);
+    bool ok = ch->tryRecv(result);
 
     Table* tbl = new Table(state, 2);
     tbl->setByString(state->stringPool()->intern("ok"), make_bool_value(ok));
@@ -263,27 +269,26 @@ int channel_method_try_recv(MobiusState* state, int arg_count) {
 }
 
 int channel_method_close(MobiusState* state, int arg_count) {
-    if (arg_count != 0) return state->error("ch.close expects 0 arguments");
+    if (arg_count != 1) return state->error("ch:close expects 0 arguments");
 
-    const Value& self = state->npeek_self(arg_count);
-    if (self.type != VAL_CHANNEL || !self.as.channel) {
-        return state->error("ch.close: self is not a channel");
-    }
+    Channel* ch = extract_channel_self(state, "ch:close: self is not a channel");
+    if (!ch) return -1;
 
-    self.as.channel->close();
+    ch->close();
+    state->npop();
     state->npush(make_nil_value());
     return 1;
 }
 
 int channel_method_is_closed(MobiusState* state, int arg_count) {
-    if (arg_count != 0) return state->error("ch.is_closed expects 0 arguments");
+    if (arg_count != 1) return state->error("ch:is_closed expects 0 arguments");
 
-    const Value& self = state->npeek_self(arg_count);
-    if (self.type != VAL_CHANNEL || !self.as.channel) {
-        return state->error("ch.is_closed: self is not a channel");
-    }
+    Channel* ch = extract_channel_self(state, "ch:is_closed: self is not a channel");
+    if (!ch) return -1;
 
-    state->npush(make_bool_value(self.as.channel->isClosed()));
+    bool closed = ch->isClosed();
+    state->npop();
+    state->npush(make_bool_value(closed));
     return 1;
 }
 

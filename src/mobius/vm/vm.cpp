@@ -536,16 +536,6 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             return -1;
         }
     } else {
-        Table* mt = vm->state_->typeMetatable(obj.type);
-        if (mt && key.type == VAL_STRING) {
-            const Value& method = mt->getByString(key.as.string);
-            if (method.type != VAL_NIL) {
-                RA(inst) = method;
-                RA(inst).flags |= VAL_FLAG_METHOD;
-                vm->pushMethodSelf(obj);
-                return 0;
-            }
-        }
         vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
@@ -580,6 +570,34 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
         }
     } else {
         vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
+        return -1;
+    }
+    return 0;
+}
+
+// ---- Method self (OP_SELF) ----
+MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    int a = DECODE_A(inst);
+    const Value& obj = RB(inst);
+    const Value& key = RKC(inst);
+
+    f.regs[a + 1] = obj;
+
+    if (obj.type == VAL_TABLE && obj.as.table) {
+        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+            f.regs[a] = obj.as.table->getByString(key.as.string);
+        else
+            f.regs[a] = obj.as.table->get(key);
+    } else {
+        Table* mt = vm->state_->typeMetatable(obj.type);
+        if (mt && key.type == VAL_STRING) {
+            const Value& method = mt->getByString(key.as.string);
+            if (method.type != VAL_NIL) {
+                f.regs[a] = method;
+                return 0;
+            }
+        }
+        vm->runtimeError("Attempt to call method on a %s value", value_type_name(obj.type));
         return -1;
     }
     return 0;
@@ -1382,16 +1400,6 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
             return -1;
         }
     } else {
-        Table* mt = vm->state_->typeMetatable(obj.type);
-        if (mt && key.type == VAL_STRING) {
-            const Value& method = mt->getByString(key.as.string);
-            if (method.type != VAL_NIL) {
-                f.regs[a] = method;
-                f.regs[a].flags |= VAL_FLAG_METHOD;
-                vm->pushMethodSelf(obj);
-                return 0;
-            }
-        }
         vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
@@ -1408,14 +1416,6 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
 
     Value& func_val = f.regs[a];
 
-    Value method_self;
-    bool is_method = (func_val.flags & VAL_FLAG_METHOD) != 0;
-    if (MOBIUS_UNLIKELY(is_method)) {
-        func_val.flags &= ~VAL_FLAG_METHOD;
-        method_self = vm->popMethodSelf();
-    }
-
-    // Fast path: Mobius function call — inlined to avoid callFunction overhead
     if (MOBIUS_LIKELY(func_val.type == VAL_FUNCTION && func_val.as.function)) {
         MobiusFunction* mf = func_val.as.function;
         if (MOBIUS_UNLIKELY(!mf->proto)) {
@@ -1433,10 +1433,6 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
         int child_base = f.ci->base + a + 1;
         vm->ensureRegisters(child_base + child->num_registers + 16);
 
-        if (MOBIUS_UNLIKELY(is_method)) {
-            vm->registers_[f.ci->base + a + 1 + nargs] = method_self;
-        }
-
         CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
             new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
@@ -1444,13 +1440,6 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
 
         vm->refreshFrame(f);
         return 0;
-    }
-
-    // Slow path: native function or error — write self before callFunction
-    if (MOBIUS_UNLIKELY(is_method)) {
-        int self_abs = f.ci->base + a + 1 + nargs;
-        vm->ensureRegisters(self_abs + 16);
-        vm->registers_[self_abs] = method_self;
     }
 
     int rc = vm->callFunction(*f.ci, a, nargs, c);
@@ -1477,7 +1466,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uin
     return vm_op_call(vm, f, inst2);
 }
 
-MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t inst, size_t base_depth) {
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
     int nargs = b - 1;
@@ -1488,12 +1477,21 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
         f.ci->ip = f.ip;
         int rc = vm->callFunction(*f.ci, a, nargs, f.ci->nresults);
         if (rc < 0) return -1;
-        if (rc == 1) {
-            vm->refreshFrame(f);
-        } else {
-            f.regs = vm->registers_.data() + f.base;
-            f.ci = &vm->callStackTop();
+
+        if (vm->callStackSize() <= base_depth) return 1;
+        if (MOBIUS_UNLIKELY(f.ci->upvalue_count > 0)) vm->closeUpvalues(*f.ci, 0);
+        int ret_base = f.ci->base;
+        int ret_nresults = f.ci->nresults;
+        vm->callStackPop();
+        int func_reg_abs = ret_base - 1;
+        if (ret_nresults != 0) {
+            int to_copy = ret_nresults - 1;
+            for (int i = 0; i < to_copy; i++) {
+                vm->registers_[func_reg_abs + i] = vm->registers_[ret_base + a + i];
+            }
         }
+        if (vm->callStackSize() <= base_depth) return 1;
+        vm->refreshFrame(f);
         return 0;
     }
 
@@ -2210,6 +2208,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_SPAWN, &&L_OP_AWAIT, &&L_OP_YIELD,
         &&L_OP_SHARE,
         &&L_OP_CANCEL_CHECK,
+        &&L_OP_SELF,
         &&L_OP_NOP,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
@@ -2244,7 +2243,6 @@ int MobiusVM::run(size_t base_depth) {
                         closeUpvalues(callStackTop(), 0);                 \
                     callStackPop();                                       \
                 }                                                        \
-                method_self_top_ = 0;                                    \
                 InternalError* _ie = state_->getLastError();              \
                 const char* err = _ie ? _ie->message : nullptr;          \
                 if (err) {                                               \
@@ -2344,7 +2342,35 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_ARRAY_PUSH, vm_op_array_push)
 
     VM_HANDLER(OP_CALL, vm_op_call)
-    VM_HANDLER(OP_TAILCALL, vm_op_tailcall)
+
+    VM_CASE(OP_TAILCALL) {
+        int rc = vm_op_tailcall(this, f, inst, base_depth);
+        if (MOBIUS_UNLIKELY(rc < 0)) {
+            if (!try_stack_.empty()) {
+                TryBlock& _tb = try_stack_.back();
+                while (callStackSize() > _tb.call_stack_depth) {
+                    if (callStackTop().upvalue_count > 0)
+                        closeUpvalues(callStackTop(), 0);
+                    callStackPop();
+                }
+                InternalError* _ie = state_->getLastError();
+                const char* err = _ie ? _ie->message : nullptr;
+                if (err) {
+                    registers_[_tb.base + _tb.catch_reg] =
+                        make_string_value_from_cstr(state_, err);
+                } else {
+                    registers_[_tb.base + _tb.catch_reg] = make_nil_value();
+                }
+                callStackTop().ip = _tb.catch_ip;
+                try_stack_.pop_back();
+                refreshFrame(f);
+                VM_NEXT();
+            }
+            return -1;
+        }
+        if (rc == 1) return 0;
+        VM_NEXT();
+    }
 
     VM_CASE(OP_RETURN) {
         int rc = vm_op_return(this, f, inst, base_depth);
@@ -2369,6 +2395,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_SHARE, vm_op_share)
     VM_HANDLER(OP_CANCEL_CHECK, vm_op_cancel_check)
     VM_HANDLER(OP_THROW, vm_op_throw)
+    VM_HANDLER(OP_SELF, vm_op_self)
     VM_HANDLER(OP_NOP, vm_op_nop)
 
     VM_DEFAULT()

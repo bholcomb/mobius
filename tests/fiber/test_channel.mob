@@ -8,48 +8,48 @@ var ch = fiber.channel(3)
 if (typeof(ch) != "channel") { print("FAIL: channel type, got", typeof(ch)); exit(1) }
 
 // Non-blocking send/recv
-var sent = ch.try_send(42)
+var sent = ch:try_send(42)
 if (!sent) { print("FAIL: try_send should succeed"); exit(1) }
 
-var r = ch.try_recv()
+var r = ch:try_recv()
 if (!r.ok) { print("FAIL: try_recv should succeed"); exit(1) }
 if (r.value != 42) { print("FAIL: try_recv value, got", r.value); exit(1) }
 
 // Empty recv returns {ok: false}
-var empty = ch.try_recv()
+var empty = ch:try_recv()
 if (empty.ok) { print("FAIL: empty try_recv should have ok=false"); exit(1) }
 
 // nil is a valid channel value
-ch.try_send(nil)
-var rnil = ch.try_recv()
+ch:try_send(nil)
+var rnil = ch:try_recv()
 if (!rnil.ok) { print("FAIL: nil send/recv should succeed"); exit(1) }
 if (rnil.value != nil) { print("FAIL: nil value should be nil, got", rnil.value); exit(1) }
 
 // Multiple sends
-ch.try_send(10)
-ch.try_send(20)
-ch.try_send(30)
+ch:try_send(10)
+ch:try_send(20)
+ch:try_send(30)
 
 // Channel full - should fail
-var overflow = ch.try_send(40)
+var overflow = ch:try_send(40)
 if (overflow) { print("FAIL: full channel try_send should return false"); exit(1) }
 
 // Drain
-var d1 = ch.try_recv()
-var d2 = ch.try_recv()
-var d3 = ch.try_recv()
+var d1 = ch:try_recv()
+var d2 = ch:try_recv()
+var d3 = ch:try_recv()
 if (d1.value != 10) { print("FAIL: drain 1, got", d1.value); exit(1) }
 if (d2.value != 20) { print("FAIL: drain 2, got", d2.value); exit(1) }
 if (d3.value != 30) { print("FAIL: drain 3, got", d3.value); exit(1) }
 
 // Close
-ch.close()
-if (!ch.is_closed()) { print("FAIL: channel should be closed"); exit(1) }
+ch:close()
+if (!ch:is_closed()) { print("FAIL: channel should be closed"); exit(1) }
 
 // recv on closed+empty channel throws
 var threw = false
 try {
-    ch.recv()
+    ch:recv()
 } catch e {
     threw = true
 }

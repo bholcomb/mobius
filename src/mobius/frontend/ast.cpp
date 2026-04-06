@@ -142,6 +142,17 @@ Expr* make_table_dot_expr(Expr* table, Token key) {
     return expr;
 }
 
+Expr* make_method_dot_expr(Expr* table, Token key) {
+    Expr* expr = calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+    
+    expr->type = EXPR_METHOD_DOT;
+    expr->ref_count = 1;
+    expr->as.table_dot.table = table;
+    expr->as.table_dot.key = copy_token(&key);
+    return expr;
+}
+
 Expr* make_enum_access_expr(Token enum_name, Token member_name) {
     Expr* expr = calloc(1, sizeof(Expr));
     if (!expr) return NULL;
@@ -433,6 +444,11 @@ void print_expr(Expr* expr) {
             print_expr(expr->as.table_dot.table);
             printf(".%s)", expr->as.table_dot.key.identifier ? expr->as.table_dot.key.identifier : "unknown");
             break;
+        case EXPR_METHOD_DOT:
+            printf("(method ");
+            print_expr(expr->as.table_dot.table);
+            printf(":%s)", expr->as.table_dot.key.identifier ? expr->as.table_dot.key.identifier : "unknown");
+            break;
         case EXPR_ENUM_ACCESS:
             printf("(enum %s.%s)", 
                    expr->as.enum_access.enum_name.identifier ? expr->as.enum_access.enum_name.identifier : "unknown",
@@ -648,6 +664,7 @@ void free_expr(Expr* expr) {
             free_expr(expr->as.table_index.index);
             break;
         case EXPR_TABLE_DOT:
+        case EXPR_METHOD_DOT:
             free_expr(expr->as.table_dot.table);
             break;
         case EXPR_ENUM_ACCESS:
@@ -906,8 +923,8 @@ void ast_release_expr(Expr* expr) {
                 ast_release_expr(expr->as.table_index.index);
                 break;
             case EXPR_TABLE_DOT:
+            case EXPR_METHOD_DOT:
                 ast_release_expr(expr->as.table_dot.table);
-                // Free the copied token identifier
                 free_token(&expr->as.table_dot.key);
                 break;
             case EXPR_ENUM_ACCESS:
