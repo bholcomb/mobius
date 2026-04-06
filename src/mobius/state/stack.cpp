@@ -16,11 +16,12 @@
 // INTERNAL HELPERS
 // ============================================================================
 
-// Retrieve the active NativeCallContext.  Fatal if called outside a native call.
+// Retrieve the active NativeCallContext. Fatal if the state has no usable VM
+// context (for example, if state construction failed).
 static NativeCallContext* get_nctx(MobiusState* state) {
     NativeCallContext* nctx = state->nativeContext();
     if (!nctx) {
-        fprintf(stderr, "FATAL: mobius_stack_* called outside a native function call\n");
+        fprintf(stderr, "FATAL: mobius_stack_* called without an available VM context\n");
         exit(1);
     }
     return nctx;
@@ -841,8 +842,7 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     int pcall_base = caller_top;
     int child_base = pcall_base + 1;
     int needed = child_base + child_proto->num_registers + 16;
-    if (needed > (int)vm->registers_.size())
-        vm->registers_.resize(needed, Value());
+    vm->ensureRegisters(needed);
 
     vm->registers_[pcall_base] = func_val;
     for (int i = 0; i < safe_nargs; i++) {

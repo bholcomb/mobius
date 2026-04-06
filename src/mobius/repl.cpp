@@ -1,10 +1,5 @@
 #include "repl.h"
 #include "state/mobius_state.h"
-#include "frontend/scanner.h"
-#include "frontend/parser.h"
-#include "vm/compiler.h"
-#include "vm/vm.h"
-
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -61,40 +56,11 @@ bool Repl::processLine(const char* line) {
 
     const char* source = needs_semicolon && modified_line ? modified_line : line;
 
-    TokenArray tokens = scan_source(source, state_->stringPool());
-    if (tokens.count == 0) {
-        printf("No tokens found\n");
-        free(modified_line);
-        return true;
-    }
-
-    ParseResult parse_result = parse(state_, tokens);
-    if (parse_result.had_error) {
-        printf("Parse error in input\n");
-        free_parse_result(&parse_result);
-        free_token_array(&tokens);
-        free(modified_line);
-        return true;
-    }
-
-    Compiler compiler(state_->stringPool(), state_);
-    Prototype* proto = compiler.compile(parse_result.statements,
-                                        parse_result.count, "<repl>");
-    free_parse_result(&parse_result);
-    free_token_array(&tokens);
+    const char* saved_source = state_->getSourceContext();
+    state_->setSourceContext("<repl>");
+    int rc = state_->execString(source);
+    state_->setSourceContext(saved_source);
     free(modified_line);
-
-    if (!proto) {
-        printf("Bytecode compilation failed\n");
-        return true;
-    }
-
-    if (state_->config().debug_mode) {
-        disassemble_prototype(proto);
-    }
-
-    int rc = state_->mainVM()->execute(proto);
-    delete proto;
 
     if (rc != 0) {
         InternalError* err = state_->lastError();

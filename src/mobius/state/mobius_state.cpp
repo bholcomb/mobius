@@ -252,6 +252,11 @@ void free_internal_error(InternalError* error) {
 
 static void default_error_handler(MobiusState* state, const MobiusError* error, void* userdata);
 
+static MOBIUS_FORCEINLINE MobiusVM* executing_vm_for_state(const MobiusState* state) {
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    return (vm && vm->state_ == state) ? vm : nullptr;
+}
+
 MobiusState::MobiusState(MobiusConfig* config)
     : registry_(nullptr), string_pool_(nullptr),
       metamethods_(nullptr), job_system_(nullptr),
@@ -288,7 +293,6 @@ MobiusState::MobiusState(MobiusConfig* config)
     defineGlobal("nan", make_float_value(0.0 / 0.0), true);
 
     main_vm_ = new (std::nothrow) MobiusVM(this);
-    MobiusVM::t_current_vm = main_vm_;
 }
 
 MobiusState::~MobiusState() {
@@ -336,7 +340,7 @@ void MobiusState::setTypeMetatable(ValueType t, Table* mt) {
 }
 
 void MobiusState::clearErrorInternal() {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = boundVM();
     InternalError*& err = vm ? vm->last_error_ : fallback_last_error_;
     if (err) {
         free_internal_error(err);
@@ -522,7 +526,7 @@ int MobiusState::execFile(const char* filename) {
 // ============================================================================
 
 InternalError* MobiusState::getLastError() const {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = boundVM();
     InternalError* err = vm ? vm->last_error_ : fallback_last_error_;
     if (!err) return NULL;
 
@@ -549,7 +553,7 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
                           const char* filename) {
     clearErrorInternal();
 
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = boundVM();
     InternalError*& err_slot = vm ? vm->last_error_ : fallback_last_error_;
 
     err_slot = (InternalError*)malloc(sizeof(InternalError));
@@ -620,13 +624,13 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
 // ============================================================================
 
 void MobiusState::setSourceContext(const char* source) {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = boundVM();
     if (vm) vm->source_code_ = source;
     else fallback_source_code_ = source;
 }
 
 const char* MobiusState::getSourceContext() const {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = boundVM();
     return vm ? vm->source_code_ : fallback_source_code_;
 }
 
@@ -635,23 +639,26 @@ const char* MobiusState::getSourceContext() const {
 // ============================================================================
 
 MobiusVM* MobiusState::activeVM() const {
-    return MobiusVM::t_current_vm;
+    return executing_vm_for_state(this);
+}
+
+MobiusVM* MobiusState::boundVM() const {
+    MobiusVM* vm = activeVM();
+    return vm ? vm : main_vm_;
 }
 
 NativeCallContext* MobiusState::nativeContext() const {
-    MobiusVM* vm = MobiusVM::t_current_vm;
-    if (vm) return &vm->native_ctx_;
-    if (main_vm_) return &main_vm_->native_ctx_;
-    return nullptr;
+    MobiusVM* vm = boundVM();
+    return vm ? &vm->native_ctx_ : nullptr;
 }
 
 ExecutionContext* MobiusState::mainContext() const {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = boundVM();
     return vm ? vm->exec_context_ : nullptr;
 }
 
 InternalError* MobiusState::lastError() const {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = boundVM();
     return vm ? vm->last_error_ : fallback_last_error_;
 }
 

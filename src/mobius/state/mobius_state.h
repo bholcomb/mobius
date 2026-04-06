@@ -197,13 +197,12 @@ public:
 
     void addOwnedProto(struct Prototype* proto);
 
-    // Main VM — persistent VM owned by the state, used for the creating thread.
-    class MobiusVM* mainVM() const { return main_vm_; }
-
-    // Active VM — returns the thread-local current VM.
+    // Active VM — returns the currently executing VM for this state, or nullptr
+    // if this state is not currently executing on the thread.
     class MobiusVM* activeVM() const;
 
-    // Native call context — accessed through the active VM.
+    // Native call context — resolved from the active VM for this state, falling
+    // back to the state's persistent main VM for host-side stack operations.
     NativeCallContext* nativeContext() const;
 
     // Convenience wrappers for native functions operating on the NativeCallContext.
@@ -242,6 +241,8 @@ public:
     void setTypeMetatable(ValueType t, Table* mt);
 
 private:
+    class MobiusVM* boundVM() const;
+
     ModuleRegistry* registry_;
     StringInternPool* string_pool_;
     Metamethods* metamethods_;
