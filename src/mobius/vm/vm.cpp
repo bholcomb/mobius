@@ -64,10 +64,11 @@ MobiusVM::MobiusVM(MobiusState* state)
       override_behavior_(state->config().override_behavior),
       native_ctx_(nullptr), last_error_(nullptr),
       source_code_(nullptr), exec_context_(nullptr),
-      current_ip_(nullptr),
+      register_capacity_(0),
       call_depth_(0), call_stack_capacity_(VM_INITIAL_CALL_STACK)
 {
     registers_.reserve(VM_INITIAL_REGISTERS);
+    register_capacity_ = (int)registers_.size();
     call_stack_ = new CallInfo[VM_INITIAL_CALL_STACK];
     call_stack_[0].initUpvalues();
 
@@ -111,6 +112,8 @@ void MobiusVM::growCallStack() {
     delete[] call_stack_;
     call_stack_ = new_stack;
     call_stack_capacity_ = new_cap;
+    if (call_depth_ > metrics_->peak_call_depth)
+        metrics_->peak_call_depth = call_depth_;
 }
 
 // ============================================================================
@@ -133,8 +136,7 @@ void MobiusVM::runtimeError(const char* fmt, ...) {
 
 int MobiusVM::currentLine() const {
     const CallInfo& ci = callStackTop();
-    const uint32_t* ip = current_ip_ ? current_ip_ : ci.ip;
-    int pc = (int)(ip - ci.proto->code.data()) - 1;
+    int pc = (int)(ci.ip - ci.proto->code.data()) - 1;
     if (pc >= 0 && pc < (int)ci.proto->line_info.size())
         return ci.proto->line_info[pc];
     return 0;
@@ -398,6 +400,9 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
 // Handlers that need REFRESH_FRAME (after calls) call vm->refreshFrame(f).
 // ============================================================================
 
+// Sync IP for error reporting and invoke runtimeError
+#define VM_ERROR(vm, f, ...) do { f.ci->ip = f.ip; vm->runtimeError(__VA_ARGS__); } while(0)
+
 // Accessors matching the old macros, now operating on VMFrame
 #define RA(inst)  f.regs[DECODE_A(inst)]
 #define RB(inst)  f.regs[DECODE_B(inst)]
@@ -453,7 +458,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t
     int slot = DECODE_Bx(inst);
     const Value& gv = vm->state_->globalSlot(slot);
     if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
-        vm->runtimeError("Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
         return -1;
     }
     RA(inst) = gv;
@@ -464,7 +469,7 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
     int slot = DECODE_Bx(inst);
     Value& gv = vm->state_->globalSlot(slot);
     if (MOBIUS_UNLIKELY(gv.flags & VAL_FLAG_READONLY)) {
-        vm->runtimeError("Cannot assign to read-only variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Cannot assign to read-only variable '%s'", vm->state_->globalSlotName(slot));
         return -1;
     }
     gv = RA(inst);
@@ -501,14 +506,14 @@ MOBIUS_FORCEINLINE static int vm_op_setupval(MobiusVM* vm, VMFrame& f, uint32_t 
 
 MOBIUS_FORCEINLINE static int vm_op_newtable(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Table* tbl = new (std::nothrow) Table(vm->state_, DECODE_C(inst));
-    if (!tbl) { vm->runtimeError("Failed to allocate table"); return -1; }
+    if (!tbl) { VM_ERROR(vm, f, "Failed to allocate table"); return -1; }
     RA(inst) = make_table_value(tbl);
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_newarray(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     ArrayValue* arr = new (std::nothrow) ArrayValue(DECODE_B(inst));
-    if (!arr) { vm->runtimeError("Failed to allocate array"); return -1; }
+    if (!arr) { VM_ERROR(vm, f, "Failed to allocate array"); return -1; }
     RA(inst) = make_array_value(arr);
     return 0;
 }
@@ -517,9 +522,10 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
     const Value& obj = RB(inst);
     const Value& key = RKC(inst);
     if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+        ArrayValue* arr = obj.as.array;
         int64_t idx = MobiusVM::vm_extract_int64(key);
-        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array->length())) {
-            RA(inst) = obj.as.array->get((size_t)idx);
+        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
+            RA(inst) = arr->isShared() ? arr->get((size_t)idx) : arr->unsafeGet((size_t)idx);
         } else {
             RA(inst) = Value();
         }
@@ -546,11 +552,11 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
                 RA(inst) = Value();
             }
         } else {
-            vm->runtimeError("String index must be an integer");
+            VM_ERROR(vm, f, "String index must be an integer");
             return -1;
         }
     } else {
-        vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
+        VM_ERROR(vm, f, "Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
     return 0;
@@ -578,12 +584,12 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
         if (idx >= 0 && idx < (int64_t)obj.as.array_slice->length()) {
             obj.as.array_slice->set((size_t)idx, val);
         } else {
-            vm->runtimeError("Array slice index %ld out of range [0, %zu)",
+            VM_ERROR(vm, f, "Array slice index %ld out of range [0, %zu)",
                              (long)idx, obj.as.array_slice->length());
             return -1;
         }
     } else {
-        vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
+        VM_ERROR(vm, f, "Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
     return 0;
@@ -619,7 +625,7 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         }
     }
 
-    vm->runtimeError("Attempt to call method on a %s value", value_type_name(obj.type));
+    VM_ERROR(vm, f, "Attempt to call method on a %s value", value_type_name(obj.type));
     return -1;
 }
 
@@ -631,7 +637,7 @@ MOBIUS_FORCEINLINE static int vm_op_array_push(MobiusVM* vm, VMFrame& f, uint32_
     if (MOBIUS_LIKELY(arr_val.type == VAL_ARRAY && arr_val.as.array)) {
         arr_val.as.array->push(val);
     } else {
-        vm->runtimeError("OP_ARRAY_PUSH applied to non-array (%s)", value_type_name(arr_val.type));
+        VM_ERROR(vm, f, "OP_ARRAY_PUSH applied to non-array (%s)", value_type_name(arr_val.type));
         return -1;
     }
     return 0;
@@ -680,10 +686,10 @@ MOBIUS_FORCEINLINE static int vm_op_add(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->add(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Cannot add: no __add metamethod on table"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Cannot add: no __add metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        vm->runtimeError("Cannot add these types");
+        VM_ERROR(vm, f, "Cannot add these types");
         return -1;
     }
     return 0;
@@ -717,10 +723,10 @@ MOBIUS_FORCEINLINE static int vm_op_sub(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->sub(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Cannot subtract: no __sub metamethod on table"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Cannot subtract: no __sub metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        vm->runtimeError("Cannot subtract these types");
+        VM_ERROR(vm, f, "Cannot subtract these types");
         return -1;
     }
     return 0;
@@ -754,10 +760,10 @@ MOBIUS_FORCEINLINE static int vm_op_mul(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->mul(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Cannot multiply: no __mul metamethod on table"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Cannot multiply: no __mul metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        vm->runtimeError("Cannot multiply these types");
+        VM_ERROR(vm, f, "Cannot multiply these types");
         return -1;
     }
     return 0;
@@ -768,7 +774,7 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
     const Value& rhs = RKC(inst);
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
-        if (MOBIUS_UNLIKELY(rv == 0)) { vm->runtimeError("Division by zero"); return -1; }
+        if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
         Value& dst = RA(inst);
         dst.as.i64 = lhs.as.i64 / rv;
         dst.type = VAL_INT64; dst.flags = 0;
@@ -779,12 +785,12 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->div(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Cannot divide: no __div metamethod on table"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Cannot divide: no __div metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
         double lv = MobiusVM::vm_extract_double(lhs);
         double rv = MobiusVM::vm_extract_double(rhs);
-        if (rv == 0.0) { vm->runtimeError("Division by zero"); return -1; }
+        if (rv == 0.0) { VM_ERROR(vm, f, "Division by zero"); return -1; }
         Value& dst = RA(inst);
         dst.as.double_val = lv / rv;
         dst.type = VAL_FLOAT64; dst.flags = 0;
@@ -797,7 +803,7 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
     const Value& rhs = RKC(inst);
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
-        if (MOBIUS_UNLIKELY(rv == 0)) { vm->runtimeError("Modulo by zero"); return -1; }
+        if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
         Value& dst = RA(inst);
         dst.as.i64 = lhs.as.i64 % rv;
         dst.type = VAL_INT64; dst.flags = 0;
@@ -806,24 +812,24 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
         if (MobiusVM::vm_use_unsigned(lhs, rhs)) {
             uint64_t lv = MobiusVM::vm_extract_uint64(lhs);
             uint64_t rv = MobiusVM::vm_extract_uint64(rhs);
-            if (rv == 0) { vm->runtimeError("Modulo by zero"); return -1; }
+            if (rv == 0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
             RA(inst) = make_uint64_value(lv % rv);
         } else {
             int64_t lv = MobiusVM::vm_extract_int64(lhs);
             int64_t rv = MobiusVM::vm_extract_int64(rhs);
-            if (rv == 0) { vm->runtimeError("Modulo by zero"); return -1; }
+            if (rv == 0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
             RA(inst) = make_int64_value(lv % rv);
         }
     } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
         double rv = rhs.as.double_val;
-        if (rv == 0.0) { vm->runtimeError("Modulo by zero"); return -1; }
+        if (rv == 0.0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
         Value& dst = RA(inst);
         dst.as.double_val = fmod(lhs.as.double_val, rv);
         dst.type = VAL_FLOAT64; dst.flags = 0;
     } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
         double lv = MobiusVM::vm_extract_double(lhs);
         double rv = MobiusVM::vm_extract_double(rhs);
-        if (rv == 0.0) { vm->runtimeError("Modulo by zero"); return -1; }
+        if (rv == 0.0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
         Value& dst = RA(inst);
         dst.as.double_val = fmod(lv, rv);
         dst.type = VAL_FLOAT64; dst.flags = 0;
@@ -834,10 +840,10 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->mod(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Cannot modulo: no __mod metamethod on table"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Cannot modulo: no __mod metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        vm->runtimeError("Cannot modulo these types");
+        VM_ERROR(vm, f, "Cannot modulo these types");
         return -1;
     }
     return 0;
@@ -855,10 +861,10 @@ MOBIUS_FORCEINLINE static int vm_op_unm(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int rc = vm->callMetamethod(val, vm->state_->metamethods()->unm(), val, val, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Attempt to negate a table value: no __unm metamethod"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Attempt to negate a table value: no __unm metamethod"); return -1; }
         RA(inst) = out;
     } else {
-        vm->runtimeError("Attempt to negate a %s value", value_type_name(val.type));
+        VM_ERROR(vm, f, "Attempt to negate a %s value", value_type_name(val.type));
         return -1;
     }
     return 0;
@@ -896,10 +902,10 @@ MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t i
                 if (rc < 0) return -1;
                 if (rc == 1) { RA(inst) = out; return 0; }
             }
-            vm->runtimeError("Cannot apply bitwise op: no %s metamethod on table", name ? name : "?");
+            VM_ERROR(vm, f, "Cannot apply bitwise op: no %s metamethod on table", name ? name : "?");
             return -1;
         }
-        vm->runtimeError("Bitwise operations require integer operands");
+        VM_ERROR(vm, f, "Bitwise operations require integer operands");
         return -1;
     }
     if (MobiusVM::vm_use_unsigned(lhs, rhs)) {
@@ -944,10 +950,10 @@ MOBIUS_FORCEINLINE static int vm_op_bnot(MobiusVM* vm, VMFrame& f, uint32_t inst
         int rc = vm->callMetamethod(val, vm->state_->metamethods()->bnot(), val, val, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Bitwise NOT on table: no __bnot metamethod"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Bitwise NOT on table: no __bnot metamethod"); return -1; }
         RA(inst) = out;
     } else {
-        vm->runtimeError("Bitwise NOT requires an integer operand");
+        VM_ERROR(vm, f, "Bitwise NOT requires an integer operand");
         return -1;
     }
     return 0;
@@ -1000,10 +1006,10 @@ MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) 
         int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->lt(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Cannot compare: no __lt metamethod on table"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Cannot compare: no __lt metamethod on table"); return -1; }
         lt = is_truthy(out);
     } else {
-        vm->runtimeError("Cannot compare incompatible types");
+        VM_ERROR(vm, f, "Cannot compare incompatible types");
         return -1;
     }
     if (lt != (a != 0)) f.ip++;
@@ -1035,10 +1041,10 @@ MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) 
         int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->le(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { vm->runtimeError("Cannot compare: no __le metamethod on table"); return -1; }
+        if (rc == 0) { VM_ERROR(vm, f, "Cannot compare: no __le metamethod on table"); return -1; }
         le = is_truthy(out);
     } else {
-        vm->runtimeError("Cannot compare incompatible types");
+        VM_ERROR(vm, f, "Cannot compare incompatible types");
         return -1;
     }
     if (le != (a != 0)) f.ip++;
@@ -1055,7 +1061,7 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     if (lhs.type == VAL_INT64) result = lhs.as.i64 cmp_op imm; \
     else if (lhs.type == VAL_UINT64) result = (imm < 0) ? (0 cmp_op 1) : lhs.as.u64 cmp_op (uint64_t)imm; \
     else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val cmp_op (double)imm; \
-    else { vm->runtimeError(err_msg " requires numeric operand"); return -1; } \
+    else { VM_ERROR(vm, f, err_msg " requires numeric operand"); return -1; } \
     if (result) f.ip++; \
     return 0; \
 }
@@ -1157,7 +1163,7 @@ MOBIUS_FORCEINLINE static int vm_op_mul_ff(MobiusVM* vm, VMFrame& f, uint32_t in
 }
 MOBIUS_FORCEINLINE static int vm_op_mod_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int64_t rv = RKC(inst).as.i64;
-    if (MOBIUS_UNLIKELY(rv == 0)) { vm->runtimeError("Modulo by zero"); return -1; }
+    if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
     Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 % rv;
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
@@ -1174,7 +1180,7 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     const Value& src = f.regs[DECODE_B(inst)]; \
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) { \
         int64_t k; memcpy(&k, &raw, 8); \
-        if (is_mod && MOBIUS_UNLIKELY(k == 0)) { vm->runtimeError(#name ": division/modulo by zero"); return -1; } \
+        if (is_mod && MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, #name ": division/modulo by zero"); return -1; } \
         dst.as.i64 = src.as.i64 op_char k; \
         dst.type = VAL_INT64; dst.flags = 0; \
     } else if (!is_mod && tag == VAL_FLOAT64 && src.type == VAL_FLOAT64) { \
@@ -1186,7 +1192,7 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
         double kv; \
         if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); kv = (double)k; } \
         else { memcpy(&kv, &raw, 8); } \
-        if (is_mod && kv == 0.0) { vm->runtimeError(#name ": division/modulo by zero"); return -1; } \
+        if (is_mod && kv == 0.0) { VM_ERROR(vm, f, #name ": division/modulo by zero"); return -1; } \
         dst.as.double_val = is_mod ? fmod(sv, kv) : (sv op_char kv); \
         dst.type = VAL_FLOAT64; dst.flags = 0; \
     } \
@@ -1206,7 +1212,7 @@ MOBIUS_FORCEINLINE static int vm_op_divk(MobiusVM* vm, VMFrame& f, uint32_t inst
     const Value& src = f.regs[DECODE_B(inst)];
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
-        if (MOBIUS_UNLIKELY(k == 0)) { vm->runtimeError("Division by zero"); return -1; }
+        if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
         dst.as.i64 = src.as.i64 / k;
         dst.type = VAL_INT64; dst.flags = 0;
     } else {
@@ -1214,7 +1220,7 @@ MOBIUS_FORCEINLINE static int vm_op_divk(MobiusVM* vm, VMFrame& f, uint32_t inst
         double kv;
         if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); kv = (double)k; }
         else { memcpy(&kv, &raw, 8); }
-        if (kv == 0.0) { vm->runtimeError("Division by zero"); return -1; }
+        if (kv == 0.0) { VM_ERROR(vm, f, "Division by zero"); return -1; }
         dst.as.double_val = sv / kv;
         dst.type = VAL_FLOAT64; dst.flags = 0;
     }
@@ -1228,7 +1234,7 @@ MOBIUS_FORCEINLINE static int vm_op_modk(MobiusVM* vm, VMFrame& f, uint32_t inst
     const Value& src = f.regs[DECODE_B(inst)];
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
-        if (MOBIUS_UNLIKELY(k == 0)) { vm->runtimeError("Modulo by zero"); return -1; }
+        if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
         dst.as.i64 = src.as.i64 % k;
         dst.type = VAL_INT64; dst.flags = 0;
     } else {
@@ -1236,7 +1242,7 @@ MOBIUS_FORCEINLINE static int vm_op_modk(MobiusVM* vm, VMFrame& f, uint32_t inst
         double kv;
         if (tag == VAL_INT64) { int64_t k; memcpy(&k, &raw, 8); kv = (double)k; }
         else { memcpy(&kv, &raw, 8); }
-        if (kv == 0.0) { vm->runtimeError("Modulo by zero"); return -1; }
+        if (kv == 0.0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
         dst.as.double_val = fmod(sv, kv);
         dst.type = VAL_FLOAT64; dst.flags = 0;
     }
@@ -1251,12 +1257,12 @@ MOBIUS_FORCEINLINE static int vm_op_modk(MobiusVM* vm, VMFrame& f, uint32_t inst
 MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     int a = DECODE_A(inst); \
     int imm = DECODE_sBx(inst); \
-    if (check_zero && MOBIUS_UNLIKELY(imm == 0)) { vm->runtimeError("Division by zero"); return -1; } \
+    if (check_zero && MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; } \
     Value& val = f.regs[a]; \
     if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 op_char##= imm; } \
     else if (val.type == VAL_UINT64) val.as.u64 op_char##= (uint64_t)(int64_t)imm; \
     else if (val.type == VAL_FLOAT64) val.as.double_val op_char##= imm; \
-    else { vm->runtimeError(err_msg " requires numeric operand"); return -1; } \
+    else { VM_ERROR(vm, f, err_msg " requires numeric operand"); return -1; } \
     return 0; \
 }
 
@@ -1270,12 +1276,12 @@ VM_ARITH_IMM(vm_op_divi, /, "DIVI", true)
 MOBIUS_FORCEINLINE static int vm_op_modi(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int imm = DECODE_sBx(inst);
-    if (MOBIUS_UNLIKELY(imm == 0)) { vm->runtimeError("Modulo by zero"); return -1; }
+    if (MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
     Value& val = f.regs[a];
     if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 %= imm; }
     else if (val.type == VAL_UINT64) val.as.u64 %= (uint64_t)(int64_t)imm;
     else if (val.type == VAL_FLOAT64) val.as.double_val = fmod(val.as.double_val, (double)imm);
-    else { vm->runtimeError("MODI requires numeric operand"); return -1; }
+    else { VM_ERROR(vm, f, "MODI requires numeric operand"); return -1; }
     return 0;
 }
 
@@ -1291,19 +1297,19 @@ MOBIUS_FORCEINLINE static int vm_op_jmp(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 MOBIUS_FORCEINLINE static int vm_op_inc(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& val = RB(inst);
-    if (val.type != VAL_INT64) { vm->runtimeError("Increment requires an integer operand"); return -1; }
+    if (val.type != VAL_INT64) { VM_ERROR(vm, f, "Increment requires an integer operand"); return -1; }
     bool success;
     RA(inst) = increment_integer(val, true, &success);
-    if (!success) { vm->runtimeError("Failed to increment value"); return -1; }
+    if (!success) { VM_ERROR(vm, f, "Failed to increment value"); return -1; }
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_dec(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& val = RB(inst);
-    if (val.type != VAL_INT64) { vm->runtimeError("Decrement requires an integer operand"); return -1; }
+    if (val.type != VAL_INT64) { VM_ERROR(vm, f, "Decrement requires an integer operand"); return -1; }
     bool success;
     RA(inst) = increment_integer(val, false, &success);
-    if (!success) { vm->runtimeError("Failed to decrement value"); return -1; }
+    if (!success) { VM_ERROR(vm, f, "Failed to decrement value"); return -1; }
     return 0;
 }
 
@@ -1317,7 +1323,7 @@ MOBIUS_FORCEINLINE static int vm_op_typecheck(MobiusVM* vm, VMFrame& f, uint32_t
     };
     TypeConversionResult conv = validate_and_convert_value(RA(inst), target, true, tc);
     if (!conv.success) {
-        vm->runtimeError("%s", conv.error_message ? conv.error_message : "Type validation failed");
+        VM_ERROR(vm, f, "%s", conv.error_message ? conv.error_message : "Type validation failed");
         free(conv.error_message);
         return -1;
     }
@@ -1371,7 +1377,7 @@ MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst)
     } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice) {
         RA(inst) = make_int64_value((int64_t)val.as.array_slice->length());
     } else {
-        vm->runtimeError("Attempt to get length of a %s value", value_type_name(val.type));
+        VM_ERROR(vm, f, "Attempt to get length of a %s value", value_type_name(val.type));
         return -1;
     }
     return 0;
@@ -1413,7 +1419,7 @@ MOBIUS_FORCEINLINE static int vm_op_move_addi(MobiusVM* vm, VMFrame& f, uint32_t
     if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 += imm; }
     else if (val.type == VAL_UINT64) val.as.u64 += (uint64_t)(int64_t)imm;
     else if (val.type == VAL_FLOAT64) val.as.double_val += imm;
-    else { vm->runtimeError("ADDI requires numeric operand"); return -1; }
+    else { VM_ERROR(vm, f, "ADDI requires numeric operand"); return -1; }
     return 0;
 }
 
@@ -1422,7 +1428,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
     int slot = DECODE_Bx(inst);
     const Value& gv = vm->state_->globalSlot(slot);
     if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
-        vm->runtimeError("Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
         return -1;
     }
     f.regs[a] = gv;
@@ -1433,9 +1439,10 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
         : f.regs[c2];
     const Value& obj = f.regs[a];
     if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+        ArrayValue* arr = obj.as.array;
         int64_t idx = MobiusVM::vm_extract_int64(key);
-        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array->length()))
-            f.regs[a] = obj.as.array->get((size_t)idx);
+        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length()))
+            f.regs[a] = arr->isShared() ? arr->get((size_t)idx) : arr->unsafeGet((size_t)idx);
         else
             f.regs[a] = Value();
     } else if (obj.type == VAL_TABLE && obj.as.table) {
@@ -1454,11 +1461,11 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
                 f.regs[a] = Value();
             }
         } else {
-            vm->runtimeError("String index must be an integer");
+            VM_ERROR(vm, f, "String index must be an integer");
             return -1;
         }
     } else {
-        vm->runtimeError("Attempt to index a %s value", value_type_name(obj.type));
+        VM_ERROR(vm, f, "Attempt to index a %s value", value_type_name(obj.type));
         return -1;
     }
     return 0;
@@ -1477,12 +1484,12 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
     if (MOBIUS_LIKELY(func_val.type == VAL_FUNCTION && func_val.as.function)) {
         MobiusFunction* mf = func_val.as.function;
         if (MOBIUS_UNLIKELY(!mf->proto)) {
-            vm->runtimeError("Function '%s' has no bytecode prototype",
+            VM_ERROR(vm, f, "Function '%s' has no bytecode prototype",
                              mf->name ? mf->name->data : "anonymous");
             return -1;
         }
         if (MOBIUS_UNLIKELY((int)mf->param_count != nargs)) {
-            vm->runtimeError("Function '%s' expects %zu arguments but got %d",
+            VM_ERROR(vm, f, "Function '%s' expects %zu arguments but got %d",
                              mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
             return -1;
         }
@@ -1516,7 +1523,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uin
     int slot = DECODE_Bx(inst);
     const Value& gv = vm->state_->globalSlot(slot);
     if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
-        vm->runtimeError("Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
         return -1;
     }
     f.regs[a] = gv;
@@ -1554,19 +1561,19 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     }
 
     if (func_val.type != VAL_FUNCTION || !func_val.as.function) {
-        vm->runtimeError("Attempt to call a non-function value (type: %s)",
+        VM_ERROR(vm, f, "Attempt to call a non-function value (type: %s)",
                          value_type_name(func_val.type));
         return -1;
     }
 
     MobiusFunction* mf = func_val.as.function;
     if (!mf->proto) {
-        vm->runtimeError("Function '%s' has no bytecode prototype",
+        VM_ERROR(vm, f, "Function '%s' has no bytecode prototype",
                          mf->name ? mf->name->data : "anonymous");
         return -1;
     }
     if ((int)mf->param_count != nargs) {
-        vm->runtimeError("Function '%s' expects %zu arguments but got %d",
+        VM_ERROR(vm, f, "Function '%s' expects %zu arguments but got %d",
                          mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
         return -1;
     }
@@ -1636,7 +1643,7 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
 MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint16_t bx = DECODE_Bx(inst);
     if (bx >= f.proto->protos.size()) {
-        vm->runtimeError("Invalid prototype index %d", bx);
+        VM_ERROR(vm, f, "Invalid prototype index %d", bx);
         return -1;
     }
     Prototype* child_proto = f.proto->protos[bx];
@@ -1788,7 +1795,7 @@ MOBIUS_FORCEINLINE static int vm_op_newenum(MobiusVM* vm, VMFrame& f, uint32_t i
     const char* enum_name = (name_val.type == VAL_STRING && name_val.as.string)
                             ? name_val.as.string->data : "unknown";
     EnumDefinition* edef = new (std::nothrow) EnumDefinition(enum_name, NUM_INT64);
-    if (!edef) { vm->runtimeError("Failed to allocate enum"); return -1; }
+    if (!edef) { VM_ERROR(vm, f, "Failed to allocate enum"); return -1; }
     RA(inst) = Value::makeEnum(edef, -1);
     edef->release();
     return 0;
@@ -1797,7 +1804,7 @@ MOBIUS_FORCEINLINE static int vm_op_newenum(MobiusVM* vm, VMFrame& f, uint32_t i
 MOBIUS_FORCEINLINE static int vm_op_enumval(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& enum_val = RA(inst);
     if (enum_val.type != VAL_ENUM || !enum_val.as.enum_def) {
-        vm->runtimeError("ENUMVAL: target is not an enum definition");
+        VM_ERROR(vm, f, "ENUMVAL: target is not an enum definition");
         return -1;
     }
     EnumDefinition* edef = enum_val.as.enum_def;
@@ -1812,7 +1819,7 @@ MOBIUS_FORCEINLINE static int vm_op_enumval(MobiusVM* vm, VMFrame& f, uint32_t i
         ? f.proto->constants[RK_AS_CONSTANT(c)]
         : f.regs[c];
     if (name_const.type != VAL_STRING || !name_const.as.string) {
-        vm->runtimeError("ENUMVAL: member name must be a string");
+        VM_ERROR(vm, f, "ENUMVAL: member name must be a string");
         return -1;
     }
     const char* member_name = name_const.as.string->data;
@@ -1828,7 +1835,7 @@ MOBIUS_FORCEINLINE static int vm_op_enumval(MobiusVM* vm, VMFrame& f, uint32_t i
 MOBIUS_FORCEINLINE static int vm_op_getenum(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& enum_val = RB(inst);
     if (enum_val.type != VAL_ENUM || !enum_val.as.enum_def) {
-        vm->runtimeError("GETENUM: target is not an enum definition");
+        VM_ERROR(vm, f, "GETENUM: target is not an enum definition");
         return -1;
     }
     EnumDefinition* edef = enum_val.as.enum_def;
@@ -1838,14 +1845,14 @@ MOBIUS_FORCEINLINE static int vm_op_getenum(MobiusVM* vm, VMFrame& f, uint32_t i
         ? f.proto->constants[RK_AS_CONSTANT(c)]
         : f.regs[c];
     if (name_const.type != VAL_STRING || !name_const.as.string) {
-        vm->runtimeError("GETENUM: member name must be a string");
+        VM_ERROR(vm, f, "GETENUM: member name must be a string");
         return -1;
     }
     const char* member_name = name_const.as.string->data;
 
     const EnumMember* member = edef->findMember(member_name);
     if (!member) {
-        vm->runtimeError("Invalid enum member '%s' on enum '%s'",
+        VM_ERROR(vm, f, "Invalid enum member '%s' on enum '%s'",
                          member_name, edef->name().c_str());
         return -1;
     }
@@ -1864,10 +1871,10 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         ? f.ci->proto->constants[RK_AS_CONSTANT(DECODE_C(inst))]
         : f.regs[DECODE_C(inst)];
     if (mod_name_val.type != VAL_STRING || !mod_name_val.as.string) {
-        vm->runtimeError("IMPORT: invalid module name"); return -1;
+        VM_ERROR(vm, f, "IMPORT: invalid module name"); return -1;
     }
     if (alias_val.type != VAL_STRING || !alias_val.as.string) {
-        vm->runtimeError("IMPORT: invalid alias"); return -1;
+        VM_ERROR(vm, f, "IMPORT: invalid alias"); return -1;
     }
     const char* module_name = mod_name_val.as.string->data;
     const char* alias_name  = alias_val.as.string->data;
@@ -1875,12 +1882,12 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
     bool is_global = (strcmp(alias_name, "_GLOBAL") == 0);
 
     ModuleRegistry* registry = getGlobalRegistry();
-    if (!registry) { vm->runtimeError("Module registry not initialized"); return -1; }
+    if (!registry) { VM_ERROR(vm, f, "Module registry not initialized"); return -1; }
 
     const char* caller_source = f.ci->proto->source.c_str();
     Table* mod_table = registry->resolveModule(module_name, caller_source, vm->state_);
     if (!mod_table) {
-        vm->runtimeError("Import failed - module '%s' not found", module_name);
+        VM_ERROR(vm, f, "Import failed - module '%s' not found", module_name);
         return -1;
     }
 
@@ -1917,12 +1924,12 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         if (first_exists && vm->state_->globalSlot(ns_slot).type == VAL_TABLE) {
             cur_table = vm->state_->globalSlot(ns_slot).as.table;
         } else if (first_exists) {
-            vm->runtimeError("Cannot create nested namespace '%s': '%s' is not a table",
+            VM_ERROR(vm, f, "Cannot create nested namespace '%s': '%s' is not a table",
                              alias_name, components[0]);
             return -1;
         } else {
             cur_table = new (std::nothrow) Table(vm->state_, 16);
-            if (!cur_table) { vm->runtimeError("Failed to create namespace table"); return -1; }
+            if (!cur_table) { VM_ERROR(vm, f, "Failed to create namespace table"); return -1; }
             Value tval = make_table_value(cur_table);
             tval.flags |= VAL_FLAG_DEFINED;
             int s = vm->state_->assignGlobalSlot(components[0]);
@@ -1937,7 +1944,7 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
                 cur_table = next.as.table;
             } else {
                 Table* sub = new (std::nothrow) Table(vm->state_, 16);
-                if (!sub) { vm->runtimeError("Failed to create nested namespace table"); return -1; }
+                if (!sub) { VM_ERROR(vm, f, "Failed to create nested namespace table"); return -1; }
                 cur_table->set(key, make_table_value(sub));
                 cur_table = sub;
             }
@@ -1964,7 +1971,7 @@ MOBIUS_FORCEINLINE static int vm_op_pragma(MobiusVM* vm, VMFrame& f, uint32_t in
     uint16_t bx = DECODE_Bx(inst);
     const Value& name_val = f.proto->constants[bx];
     if (name_val.type != VAL_STRING || !name_val.as.string) {
-        vm->runtimeError("PRAGMA: invalid pragma name"); return -1;
+        VM_ERROR(vm, f, "PRAGMA: invalid pragma name"); return -1;
     }
     const char* pragma_name = name_val.as.string->data;
     const Value& pval = RA(inst);
@@ -1982,17 +1989,17 @@ MOBIUS_FORCEINLINE static int vm_op_pragma(MobiusVM* vm, VMFrame& f, uint32_t in
             else if (strcmp(v, "quiet") == 0)
                 vm->override_behavior_ = MOBIUS_OVERRIDE_QUIET;
             else {
-                vm->runtimeError("Invalid value for pragma override_behavior: '%s' "
+                VM_ERROR(vm, f, "Invalid value for pragma override_behavior: '%s' "
                                  "(expected 'error', 'warn', or 'quiet')", v);
                 return -1;
             }
         } else {
-            vm->runtimeError("Invalid value for pragma override_behavior "
+            VM_ERROR(vm, f, "Invalid value for pragma override_behavior "
                              "(expected 'error', 'warn', or 'quiet')");
             return -1;
         }
     } else {
-        vm->runtimeError("Unknown pragma: '%s'", pragma_name);
+        VM_ERROR(vm, f, "Unknown pragma: '%s'", pragma_name);
         return -1;
     }
     return 0;
@@ -2028,9 +2035,9 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
 
     if (vm->try_stack_.empty()) {
         if (thrown_value.type == VAL_STRING && thrown_value.as.string) {
-            vm->runtimeError("%s", thrown_value.as.string->data);
+            VM_ERROR(vm, f, "%s", thrown_value.as.string->data);
         } else {
-            vm->runtimeError("Uncaught exception");
+            VM_ERROR(vm, f, "Uncaught exception");
         }
         return -1;
     }
@@ -2065,11 +2072,11 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
     if (func_val.type == VAL_FUNCTION) {
         MobiusFunction* mf = func_val.as.function;
         if (!mf || !mf->proto) {
-            vm->runtimeError("spawn: function has no bytecode prototype");
+            VM_ERROR(vm, f, "spawn: function has no bytecode prototype");
             return -1;
         }
         if (mf->upvalue_count > 0) {
-            vm->runtimeError("cannot spawn closure with captured variables; pass values as function arguments");
+            VM_ERROR(vm, f, "cannot spawn closure with captured variables; pass values as function arguments");
             return -1;
         }
 
@@ -2132,10 +2139,10 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
         return 0;
 
     } else if (func_val.type == VAL_NATIVE_FUNCTION) {
-        vm->runtimeError("spawn: cannot spawn native functions");
+        VM_ERROR(vm, f, "spawn: cannot spawn native functions");
         return -1;
     } else {
-        vm->runtimeError("spawn: expected a function, got %s", value_type_name(func_val.type));
+        VM_ERROR(vm, f, "spawn: expected a function, got %s", value_type_name(func_val.type));
         return -1;
     }
 }
@@ -2146,7 +2153,7 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
 
     Value& future_val = f.regs[b];
     if (future_val.type != VAL_FUTURE || !future_val.as.future) {
-        vm->runtimeError("await: expected a future value, got %s", value_type_name(future_val.type));
+        VM_ERROR(vm, f, "await: expected a future value, got %s", value_type_name(future_val.type));
         return -1;
     }
 
@@ -2162,9 +2169,9 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
     } else {
         const Value& err = future->error();
         if (err.type == VAL_STRING && err.as.string) {
-            vm->runtimeError("spawned fiber failed: %s", err.as.string->data);
+            VM_ERROR(vm, f, "spawned fiber failed: %s", err.as.string->data);
         } else {
-            vm->runtimeError("spawned fiber failed");
+            VM_ERROR(vm, f, "spawned fiber failed");
         }
         return -1;
     }
@@ -2183,7 +2190,7 @@ MOBIUS_FORCEINLINE static int vm_op_yield(MobiusVM* vm, VMFrame& f, uint32_t ins
 MOBIUS_FORCEINLINE static int vm_op_cancel_check(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)f; (void)inst;
     if (vm->future_ && vm->future_->isCancelled()) {
-        vm->runtimeError("CancellationError: fiber was cancelled");
+        VM_ERROR(vm, f, "CancellationError: fiber was cancelled");
         return -1;
     }
     return 0;
@@ -2201,7 +2208,7 @@ MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t ins
         val.as.table->markShared();
         val.flags |= VAL_FLAG_SHARED;
     } else {
-        vm->runtimeError("shared: expected an array or table, got %s", value_type_name(val.type));
+        VM_ERROR(vm, f, "shared: expected an array or table, got %s", value_type_name(val.type));
         return -1;
     }
     return 0;
@@ -2272,7 +2279,7 @@ int MobiusVM::run(size_t base_depth) {
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
                   "dispatch_table must match OpCode enum");
 
-    #define VM_DISPATCH() do { inst = *f.ip++; current_ip_ = f.ip; goto *dispatch_table[DECODE_OP(inst)]; } while(0)
+    #define VM_DISPATCH() do { inst = *f.ip++; goto *dispatch_table[DECODE_OP(inst)]; } while(0)
     #define VM_CASE(op) L_##op:
     #define VM_NEXT() VM_DISPATCH()
     #define VM_DEFAULT() L_VM_DEFAULT:
@@ -2280,7 +2287,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_DISPATCH();
 
 #else
-    #define VM_DISPATCH() for(;;) { inst = *f.ip++; current_ip_ = f.ip; switch(DECODE_OP(inst)) {
+    #define VM_DISPATCH() for(;;) { inst = *f.ip++; switch(DECODE_OP(inst)) {
     #define VM_CASE(op) case op:
     #define VM_NEXT() break
     #define VM_DEFAULT() default:
@@ -2457,6 +2464,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_NOP, vm_op_nop)
 
     VM_DEFAULT()
+        f.ci->ip = f.ip;
         runtimeError("Unknown opcode %d", DECODE_OP(inst));
         return -1;
 
