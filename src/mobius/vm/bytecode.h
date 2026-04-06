@@ -50,6 +50,7 @@ struct Prototype {
     int num_params   = 0;   // declared parameter count
     int num_registers = 2;  // max registers needed (locals + temporaries)
     bool is_vararg   = false;
+    ValueType return_type = VAL_UNKNOWN;  // inferred from return statements
 
     // -- Debug information --
     // One entry per instruction in `code`, recording the source line.

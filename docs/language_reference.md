@@ -1,9 +1,10 @@
 # Mobius Language Reference
 
-Mobius is a dynamically typed scripting language designed for easy embedding in
-C and C++ applications. It draws inspiration from Lua while adding features
-like optional type annotations, enums, a rich `switch` statement with pattern
-matching, and a familiar C-style syntax.
+Mobius is a type-inferred scripting language designed for easy embedding in
+C and C++ applications. Variables are type-locked — their type is inferred
+from the first non-nil assignment and cannot change. Mobius draws inspiration
+from Lua while adding features like type locking, enums, a rich `switch`
+statement with pattern matching, and a familiar C-style syntax.
 
 Mobius source files use the `.mob` extension.
 
@@ -120,11 +121,74 @@ var name = "Alice"
 var uninitialized       // nil
 ```
 
+### Type Locking
+
+A variable's type is **locked** at its first non-nil assignment and cannot
+change. The type is inferred automatically from the initializer — no
+explicit type syntax is required.
+
+```mobius
+var x = 42          // x is locked to integer
+var s = "hello"     // s is locked to string
+var t = {}          // t is locked to table
+
+x = 99              // OK — integer to integer
+x = nil             // OK — nil is always valid
+x = "oops"          // ERROR: cannot assign string to variable of type integer
+```
+
+**Rules:**
+
+- The type is inferred from the initializer expression. Literals, arithmetic
+  results, array/table literals, and function return values (when the function
+  is defined before the call site) are all inferred at compile time.
+- `nil` is a valid value for any variable regardless of its locked type. A
+  variable locked to `integer` can hold `nil` (meaning "no value") or an
+  integer.
+- `var x = nil` and `var x` (no initializer) create a variable whose type is
+  not yet determined. The type locks on the first non-nil assignment.
+- All non-nil return paths in a function must agree on type. Returning
+  different non-nil types from different branches is a compile error.
+- To convert between types, use the `int()`, `float()`, or `str()` functions
+  and store the result in a new variable.
+
+```mobius
+// Type locks on first non-nil assignment
+var v = nil
+v = 42              // v is now locked to integer
+v = 99              // OK
+v = nil             // OK — nil is always valid
+v = "hello"         // ERROR: cannot assign string to variable of type integer
+
+// Conversions go into new variables
+var n = 42
+var s = str(n)      // s is locked to string — new variable, no conflict
+
+// Function return type consistency
+func find(arr, target) {
+    for (var i = 0; i < arr:length(); i++) {
+        if (arr[i] == target) { return i }   // integer
+    }
+    return nil                               // OK — nil is compatible
+}
+
+// COMPILE ERROR: inconsistent return types
+// func bad(flag) {
+//     if (flag) { return 42 }       // integer
+//     else { return "hello" }       // string — mismatch!
+// }
+```
+
+Type locking enables the compiler to emit specialized opcodes for arithmetic
+and comparisons when both operand types are known, eliminating runtime type
+checks on the hot path.
+
 ### Optional Type Annotations
 
 You can annotate a variable with **`int64`**, **`uint64`**, or **`float64`**.
 When `#pragma strict_types` is enabled, the interpreter enforces these at
-runtime.
+runtime. Type annotations work alongside type locking — an annotated variable
+is locked to the annotated type.
 
 ```mobius
 var age: int64 = 25
@@ -145,15 +209,16 @@ Optional `: type` annotations on variables accept only **`int64`**, **`uint64`**
 
 ### Type Conversions
 
-Use the built-in conversion functions:
+Use the built-in conversion functions. Since variables are type-locked, store
+the converted result in a new variable rather than reassigning:
 
 ```mobius
 var x = 42
-str(x)       // "42"
-float(x)     // 42.0
+var xs = str(x)      // "42" — new string variable
+var xf = float(x)    // 42.0 — new float variable
 
 var y = 3.14
-int(y)       // 3
+var yi = int(y)      // 3 — new integer variable
 
 typeof(x)    // "int64"
 typeof("hi") // "string"

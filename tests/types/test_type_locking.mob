@@ -1,0 +1,129 @@
+// Test type-locked variables
+// Variables lock to their first non-nil type and cannot change
+
+print("=== Type Locking Tests ===")
+
+// 1. Integer locking
+var x = 42
+x = 99
+x = -1
+x = 0
+print("1. Integer locking: ", x)
+
+// 2. Float locking
+var f = 3.14
+f = 2.718
+f = 0.0
+print("2. Float locking: ", f)
+
+// 3. String locking
+var s = "hello"
+s = "world"
+s = ""
+print("3. String locking: ", s)
+
+// 4. Bool locking
+var b = true
+b = false
+b = true
+print("4. Bool locking: ", b)
+
+// 5. Array locking
+var arr = [1, 2, 3]
+arr = [4, 5]
+arr = []
+print("5. Array locking: ", arr)
+
+// 6. Table locking
+var tbl = {x: 1}
+tbl = {y: 2}
+tbl = {}
+print("6. Table locking: ", tbl)
+
+// 7. Nil is always valid for any locked type
+var n = 42
+n = nil
+n = 100
+print("7. Nil assignment: ", n)
+
+// 8. Uninitialized vars start as VAL_UNKNOWN, lock on first non-nil
+func test_deferred_lock() {
+    var v = nil
+    v = 42
+    v = 99
+    v = nil
+    v = 100
+    print("8. Deferred lock: ", v)
+}
+test_deferred_lock()
+
+// 9. Type locking with arithmetic
+func test_arith_locking() {
+    var a = 10
+    var b = 20
+    var c = a + b
+    c = c * 2
+    c = c - 5
+    print("9. Arithmetic locking: ", c)
+}
+test_arith_locking()
+
+// 10. For loop variables are int64
+func test_for_loop_typing() {
+    var sum = 0
+    for (var i = 0; i < 10; i++) {
+        sum = sum + i
+    }
+    print("10. For loop typing: ", sum)
+}
+test_for_loop_typing()
+
+// 11. Function return type inference
+func get_number() {
+    return 42
+}
+func test_return_inference() {
+    var val = get_number()
+    val = 99
+    print("11. Return type inference: ", val)
+}
+test_return_inference()
+
+// 12. Ternary with same types
+func test_ternary() {
+    var x = true ? 42 : 99
+    x = 0
+    print("12. Ternary same type: ", x)
+}
+test_ternary()
+
+// 13. Nested function type tracking
+func outer() {
+    var x = 10
+    func inner() {
+        return x + 5
+    }
+    return inner()
+}
+print("13. Nested function: ", outer())
+
+// 14. Table field access with type lock
+func test_table_fields() {
+    var t = {value: 42}
+    var v = t.value
+    print("14. Table field: ", v)
+}
+test_table_fields()
+
+// 15. Reassignment with same type (should work)
+func test_reassign() {
+    var x = 1
+    x = 2
+    x = 3
+    x = 4
+    x = 5
+    print("15. Reassignment: ", x)
+}
+test_reassign()
+
+print("\n=== All type locking tests passed! ===")

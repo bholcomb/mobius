@@ -1,9 +1,11 @@
 # Mobius
 
-Mobius is a dynamically typed scripting language designed to be easy to extend
-with C functions. It takes a lot of inspiration from Lua and adds features
-like optional type annotations, enums, a rich `switch` with pattern matching,
-and familiar C-style syntax.
+Mobius is a type-inferred scripting language designed to be easy to extend
+with C functions. Variables are type-locked — their type is inferred from the
+first non-nil assignment and cannot change, enabling the compiler to emit
+specialized opcodes and eliminate runtime type checks. Mobius takes a lot of
+inspiration from Lua and adds features like type locking, enums, a rich
+`switch` with pattern matching, and familiar C-style syntax.
 
 The interpreter ships with a bytecode VM (default) and an older tree-walk
 backend selectable via `--tree-walk`.

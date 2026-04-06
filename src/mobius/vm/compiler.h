@@ -35,6 +35,7 @@ private:
         const char* name;  // interned pointer
         int depth;         // scope depth (0 = top-level of function)
         bool is_captured;  // true if an inner function closes over this local
+        ValueType inferred_type;  // VAL_UNKNOWN = type not yet determined
     };
 
     // --- Loop jump targets for break/continue ---
@@ -152,6 +153,10 @@ private:
     int compileShared(SharedExpr* expr, int dest);
 
     void compileBlock(Stmt** stmts, size_t count);
+
+    // --- Type inference ---
+    ValueType inferExprType(Expr* expr);
+    ValueType localType(int reg);
 
     // --- Helpers ---
     Prototype* endCompiler();

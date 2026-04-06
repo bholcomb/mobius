@@ -1,0 +1,93 @@
+// Test that type-lock violations produce runtime errors
+// Uses try/catch to verify expected type errors
+
+print("=== Type Lock Error Tests ===")
+
+var errors_caught = 0
+
+// 1. Integer variable cannot hold string (runtime lock via OP_TYPELOCK)
+var caught = false
+try {
+    var x = nil
+    x = 42
+    x = "hello"
+} catch err {
+    caught = true
+}
+if (caught) {
+    errors_caught = errors_caught + 1
+    print("1. PASS: int->string rejected")
+} else {
+    print("1. FAIL: int->string was allowed")
+}
+
+// 2. String variable cannot hold integer (runtime lock)
+caught = false
+try {
+    var x = nil
+    x = "hello"
+    x = 42
+} catch err {
+    caught = true
+}
+if (caught) {
+    errors_caught = errors_caught + 1
+    print("2. PASS: string->int rejected")
+} else {
+    print("2. FAIL: string->int was allowed")
+}
+
+// 3. Nil assignment should always be OK
+caught = false
+try {
+    var x = nil
+    x = 42
+    x = nil
+    x = 99
+    x = nil
+} catch err {
+    caught = true
+}
+if (!caught) {
+    errors_caught = errors_caught + 1
+    print("3. PASS: nil assignment OK")
+} else {
+    print("3. FAIL: nil assignment rejected")
+}
+
+// 4. Bool to int should fail
+caught = false
+try {
+    var x = nil
+    x = true
+    x = 42
+} catch err {
+    caught = true
+}
+if (caught) {
+    errors_caught = errors_caught + 1
+    print("4. PASS: bool->int rejected")
+} else {
+    print("4. FAIL: bool->int was allowed")
+}
+
+// 5. Array to table should fail
+caught = false
+try {
+    var x = nil
+    x = [1, 2, 3]
+    x = {a: 1}
+} catch err {
+    caught = true
+}
+if (caught) {
+    errors_caught = errors_caught + 1
+    print("5. PASS: array->table rejected")
+} else {
+    print("5. FAIL: array->table was allowed")
+}
+
+print("\nErrors caught: ", errors_caught, " / 5")
+if (errors_caught == 5) {
+    print("=== All type lock error tests passed! ===")
+}

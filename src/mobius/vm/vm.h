@@ -146,6 +146,7 @@ public:
     FutureValue* future_ = nullptr;
 
     std::vector<Value> registers_;
+    std::vector<ValueType> type_tags_;
     int        register_capacity_;
 
     CallInfo*  call_stack_;
@@ -188,6 +189,7 @@ public:
     void ensureRegisters(int needed) {
         if (MOBIUS_UNLIKELY(needed > register_capacity_)) {
             registers_.resize(needed, Value());
+            type_tags_.resize(needed, VAL_UNKNOWN);
             register_capacity_ = (int)registers_.size();
             if ((size_t)register_capacity_ > metrics_->peak_registers)
                 metrics_->peak_registers = register_capacity_;

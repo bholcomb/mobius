@@ -54,6 +54,8 @@ struct UserdataObject {
 #define VAL_FLAG_SHARED    0x40  // container is shared across fibers; mutations are mutex-protected
 
 enum ValueType : int8_t {
+    // Internal sentinel — type not yet determined (compiler/VM only, never user-visible)
+    VAL_UNKNOWN = -1,
     // Non-refcounted (inline) types — must stay below VAL_STRING
     VAL_NIL,
     VAL_BOOL,
@@ -142,6 +144,11 @@ public:
             other.type = VAL_NIL;
         }
         return *this;
+    }
+
+    MOBIUS_FORCEINLINE void rawCopyFrom(const Value& other) {
+        type = other.type; flags = other.flags;
+        aux = other.aux; as.i64 = other.as.i64;
     }
 
     MOBIUS_API bool operator==(const Value& other) const;
