@@ -145,9 +145,9 @@ var empty_arr = array_create(0)
 assert_test("stringify empty array", json.stringify(empty_arr) == "[]")
 
 var arr = array_create(0)
-array_push(arr, 1)
-array_push(arr, 2)
-array_push(arr, 3)
+arr:push(1)
+arr:push(2)
+arr:push(3)
 assert_test("stringify int array", json.stringify(arr) == "[1,2,3]")
 
 // ============================================================================

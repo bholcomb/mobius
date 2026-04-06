@@ -17,7 +17,7 @@ func work(id) {
 // Spawn N fibers
 var futures = []
 for (var i = 0; i < N; i += 1) {
-    array_push(futures, spawn work(i))
+    futures:push(spawn work(i))
 }
 
 // Collect all results

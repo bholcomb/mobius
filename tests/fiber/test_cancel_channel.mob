@@ -91,7 +91,7 @@ fiber.cancel(f3)
 
 var received = []
 for (var i = 0; i < 5; i += 1) {
-    array_push(received, ch3:recv())
+    received:push(ch3:recv())
 }
 
 for (var i = 0; i < 5; i += 1) {

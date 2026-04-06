@@ -43,12 +43,12 @@ func benchmark_function_calls() {
 func benchmark_arrays() {
     var arr = array_create(10000);
     for (var i = 0; i < 10000; i = i + 1) {
-        array_push(arr, i * 2);
+        arr:push(i * 2);
     }
 
     var sum = 0;
     for (var i = 0; i < 10000; i = i + 1) {
-        sum = sum + array_get(arr, i);
+        sum = sum + arr:get(i);
     }
 
     return sum;
@@ -60,7 +60,7 @@ func benchmark_arrays() {
 func build_table_keys(count) {
     var keys = array_create(count);
     for (var i = 0; i < count; i = i + 1) {
-        array_push(keys, concat("key_", str(i)));
+        keys:push(concat("key_", str(i)));
     }
     return keys;
 }
@@ -69,13 +69,13 @@ func benchmark_tables() {
     var keys = build_table_keys(5000);
     var tbl = {};
     for (var i = 0; i < 5000; i = i + 1) {
-        var key = array_get(keys, i);
+        var key = keys:get(i);
         tbl[key] = i * 3;
     }
 
     var sum = 0;
     for (var i = 0; i < 5000; i = i + 1) {
-        var key = array_get(keys, i);
+        var key = keys:get(i);
         sum = sum + tbl[key];
     }
 
@@ -134,12 +134,12 @@ func benchmark_mixed() {
             value: i * 2,
             name: concat("item_", str(i))
         };
-        array_push(data, record);
+        data:push(record);
     }
 
     var total = 0;
     for (var i = 0; i < 1000; i = i + 1) {
-        var record = array_get(data, i);
+        var record = data:get(i);
         total = total + record.value;
     }
 

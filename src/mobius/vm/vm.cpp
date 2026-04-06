@@ -584,23 +584,29 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
     f.regs[a + 1] = obj;
 
     if (obj.type == VAL_TABLE && obj.as.table) {
+        Value method;
         if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            f.regs[a] = obj.as.table->getByString(key.as.string);
+            method = obj.as.table->getByString(key.as.string);
         else
-            f.regs[a] = obj.as.table->get(key);
-    } else {
-        Table* mt = vm->state_->typeMetatable(obj.type);
-        if (mt && key.type == VAL_STRING) {
-            const Value& method = mt->getByString(key.as.string);
-            if (method.type != VAL_NIL) {
-                f.regs[a] = method;
-                return 0;
-            }
+            method = obj.as.table->get(key);
+
+        if (method.type != VAL_NIL) {
+            f.regs[a] = method;
+            return 0;
         }
-        vm->runtimeError("Attempt to call method on a %s value", value_type_name(obj.type));
-        return -1;
     }
-    return 0;
+
+    Table* mt = vm->state_->typeMetatable(obj.type);
+    if (mt && key.type == VAL_STRING) {
+        const Value& method = mt->getByString(key.as.string);
+        if (method.type != VAL_NIL) {
+            f.regs[a] = method;
+            return 0;
+        }
+    }
+
+    vm->runtimeError("Attempt to call method on a %s value", value_type_name(obj.type));
+    return -1;
 }
 
 // ---- Array fast-path ----

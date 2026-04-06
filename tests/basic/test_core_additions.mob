@@ -26,42 +26,42 @@ if (r1 == r2) { print("✓ randomseed produces repeatable results"); }
 
 // --- array_sort ---
 var nums = [5, 3, 1, 4, 2];
-array_sort(nums);
+nums:sort();
 print("sorted:", nums[0], nums[1], nums[2], nums[3], nums[4]);
 if (nums[0] == 1 && nums[4] == 5) { print("✓ array_sort works"); }
 
 // Sort with comparator (descending)
-array_sort(nums, func(a, b) { return a > b; });
+nums:sort(func(a, b) { return a > b; });
 if (nums[0] == 5 && nums[4] == 1) { print("✓ array_sort with comparator works"); }
 
 // --- array_map ---
-var doubled = array_map([1, 2, 3], func(x, i) { return x * 2; });
+var doubled = [1, 2, 3]:map(func(x, i) { return x * 2; });
 print("doubled:", doubled[0], doubled[1], doubled[2]);
 if (doubled[0] == 2 && doubled[1] == 4 && doubled[2] == 6) { print("✓ array_map works"); }
 
 // --- array_filter ---
-var evens = array_filter([1, 2, 3, 4, 5, 6], func(x, i) { return x % 2 == 0; });
+var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0; });
 print("evens:", evens[0], evens[1], evens[2]);
-if (array_length(evens) == 3 && evens[0] == 2) { print("✓ array_filter works"); }
+if (evens:length() == 3 && evens[0] == 2) { print("✓ array_filter works"); }
 
 // --- array_reduce ---
-var sum = array_reduce([1, 2, 3, 4, 5], func(acc, x) { return acc + x; }, 0);
+var sum = [1, 2, 3, 4, 5]:reduce(func(acc, x) { return acc + x; }, 0);
 print("sum:", sum);
 if (sum == 15) { print("✓ array_reduce works"); }
 
 // --- array_foreach ---
 var count = 0;
-array_foreach([10, 20, 30], func(x, i) { count = count + 1; });
+[10, 20, 30]:foreach(func(x, i) { count = count + 1; });
 if (count == 3) { print("✓ array_foreach works"); }
 
 // --- array_any ---
-var has_big = array_any([1, 2, 100, 3], func(x) { return x > 50; });
-var has_neg = array_any([1, 2, 3], func(x) { return x < 0; });
+var has_big = [1, 2, 100, 3]:any(func(x) { return x > 50; });
+var has_neg = [1, 2, 3]:any(func(x) { return x < 0; });
 if (has_big == true && has_neg == false) { print("✓ array_any works"); }
 
 // --- array_all ---
-var all_pos = array_all([1, 2, 3], func(x) { return x > 0; });
-var all_big = array_all([1, 2, 3], func(x) { return x > 2; });
+var all_pos = [1, 2, 3]:all(func(x) { return x > 0; });
+var all_big = [1, 2, 3]:all(func(x) { return x > 2; });
 if (all_pos == true && all_big == false) { print("✓ array_all works"); }
 
 print("✓ All core additions tests passed");

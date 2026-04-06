@@ -59,32 +59,12 @@ static const PluginFunction library_registry[] = {
     {"file_exists", lib_file_exists, 1, "Return true if a file exists at the given path"},
     {"readlines",   lib_readlines,   1, "Read file into array of lines"},
 
-    // Table functions
-    {"table_remove",  lib_table_remove,  2, "Remove a key from a table"},
-    {"table_has_key", lib_table_has_key, 2, "Return true if a key exists in a table"},
-    {"table_size",    lib_table_size,    1, "Return the number of entries in a table"},
+    // Table globals (setmetatable/getmetatable stay global; remove/has_key/size/pairs are now methods)
     {"setmetatable",  lib_setmetatable,  2, "Set the metatable for a table"},
     {"getmetatable",  lib_getmetatable,  1, "Get the metatable of a table"},
-    {"pairs",         lib_pairs,         1, "Return an array of [key, value] pairs for a table"},
 
-    // Array functions
-    {"array_create",  lib_array_create,  0,        "Create a new empty array with optional capacity hint"},
-    {"array_push",    lib_array_push,    2,        "Append a value to the end of an array"},
-    {"array_pop",     lib_array_pop,     1,        "Remove and return the last element of an array"},
-    {"array_get",     lib_array_get,     2,        "Get element at a zero-based index"},
-    {"array_set",     lib_array_set,     3,        "Set element at a zero-based index (strict bounds)"},
-    {"array_length",  lib_array_length,  1,        "Return the number of elements in an array"},
-    {"array_slice",   lib_array_slice,   3,        "Return a sub-array from start (inclusive) to end (exclusive)"},
-    {"array_concat",  lib_array_concat,  2,        "Return a new array combining two or more arrays"},
-    {"array_reverse", lib_array_reverse, 1,        "Return a reversed copy of an array"},
-    {"array_find",    lib_array_find,    2,        "Return the index of a value, or -1 if not found"},
-    {"array_sort",    lib_array_sort,    SIZE_MAX, "Sort array in-place (optional comparator function)"},
-    {"array_map",     lib_array_map,     2,        "Apply function to each element, return new array"},
-    {"array_filter",  lib_array_filter,  2,        "Filter elements by predicate, return new array"},
-    {"array_reduce",  lib_array_reduce,  3,        "Fold array to single value (array, func, initial)"},
-    {"array_foreach", lib_array_foreach, 2,        "Call function for each element"},
-    {"array_any",     lib_array_any,     2,        "Return true if any element satisfies predicate"},
-    {"array_all",     lib_array_all,     2,        "Return true if all elements satisfy predicate"},
+    // Array globals (array_create stays; all instance methods moved to type metatable)
+    {"array_create",  lib_array_create,  SIZE_MAX, "Create a new array with required capacity and optional fill value"},
 
     // Type system functions
     {"get_type_config", lib_get_type_config, 0, "Return the current type checking configuration"},

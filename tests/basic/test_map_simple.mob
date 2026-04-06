@@ -1,4 +1,4 @@
 // Test array_map
-var doubled = array_map([1, 2, 3], func(x, i) { return x * 2; });
+var doubled = [1, 2, 3]:map(func(x, i) { return x * 2; });
 print("doubled:", doubled[0], doubled[1], doubled[2]);
 print("done");

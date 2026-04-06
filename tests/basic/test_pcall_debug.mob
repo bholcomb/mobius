@@ -1,6 +1,6 @@
 // Test 1: filter alone
-var evens = array_filter([1, 2, 3, 4, 5, 6], func(x, i) { return x % 2 == 0; });
-print("filter ok, len:", array_length(evens));
+var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0; });
+print("filter ok, len:", evens:length());
 
 // Test 2: simple array literal after filter
 print("making array...");

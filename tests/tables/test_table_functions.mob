@@ -10,17 +10,17 @@ data["city"] = "New York";
 print("After assignment:", data);
 
 // Test table_has_key
-print("Has 'name':", table_has_key(data, "name"));
-print("Has 'country':", table_has_key(data, "country"));
+print("Has 'name':", data:has_key("name"));
+print("Has 'country':", data:has_key("country"));
 
 // Test table_size
-print("Table size:", table_size(data));
+print("Table size:", data:size());
 
 // Test table_remove
-var removed = table_remove(data, "age");
+var removed = data:remove("age");
 print("Removed value:", removed);
 print("After table_remove:", data);
-print("New size:", table_size(data));
+print("New size:", data:size());
 
 // Test metatable functions
 var meta = {name: "__meta"};

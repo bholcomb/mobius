@@ -104,8 +104,8 @@ print("=== Comprehensive Switch Statement Test ===");
 
 // Test all patterns
 var i = 0;
-while (i < array_length(test_values)) {
-    var value = array_get(test_values, i);
+while (i < test_values:length()) {
+    var value = test_values:get(i);
     var result = classify_value(value);
     print("Value " + value + " -> " + result);
     i = i + 1;

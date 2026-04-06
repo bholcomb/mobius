@@ -50,14 +50,14 @@ data["d"] = 4;
 print("After assignment:", data);
 
 // table_has_key
-print("Has key 'a':", table_has_key(data, "a"));
-print("Has key 'z':", table_has_key(data, "z"));
+print("Has key 'a':", data:has_key("a"));
+print("Has key 'z':", data:has_key("z"));
 
 // table_size
-print("Table size:", table_size(data));
+print("Table size:", data:size());
 
 // table_remove
-var removed = table_remove(data, "b");
+var removed = data:remove("b");
 print("Removed value:", removed);
 print("After removing 'b':", data);
 
@@ -67,7 +67,7 @@ print("5. Table Iteration with pairs()");
 var inventory = {apples: 10, bananas: 5, oranges: 8};
 print("Inventory:", inventory);
 
-var all_pairs = pairs(inventory);
+var all_pairs = inventory:pairs();
 print("Using pairs() to iterate:");
 for (var i = 0; i < len(all_pairs); i = i + 1) {
     var pair = all_pairs[i];

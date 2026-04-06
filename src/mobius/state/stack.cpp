@@ -116,6 +116,9 @@ static MobiusValueType internal_to_public_type(ValueType t) {
         case VAL_TABLE:           return MOBIUS_VAL_TABLE;
         case VAL_USERDATA:        return MOBIUS_VAL_USERDATA;
         case VAL_ENUM:            return MOBIUS_VAL_ENUM;
+        case VAL_FUTURE:          return MOBIUS_VAL_FUTURE;
+        case VAL_ARRAY_SLICE:     return MOBIUS_VAL_ARRAY_SLICE;
+        case VAL_CHANNEL:         return MOBIUS_VAL_CHANNEL;
         default:                  return MOBIUS_VAL_NIL;
     }
 }
@@ -704,6 +707,63 @@ void mobius_stack_pop(MobiusState* state, int count) {
 void mobius_stack_copy(MobiusState* state, int idx) {
     Value copy = *get_value_at(state, idx);
     stack_push(state, copy);
+}
+
+// ============================================================================
+// TYPE METATABLE OPERATIONS
+// ============================================================================
+
+static ValueType public_to_internal_type(MobiusValueType t) {
+    switch (t) {
+        case MOBIUS_VAL_NIL:             return VAL_NIL;
+        case MOBIUS_VAL_BOOL:            return VAL_BOOL;
+        case MOBIUS_VAL_INT64:           return VAL_INT64;
+        case MOBIUS_VAL_UINT64:          return VAL_UINT64;
+        case MOBIUS_VAL_FLOAT64:         return VAL_FLOAT64;
+        case MOBIUS_VAL_CHAR:            return VAL_CHAR;
+        case MOBIUS_VAL_NATIVE_FUNCTION: return VAL_NATIVE_FUNCTION;
+        case MOBIUS_VAL_STRING:          return VAL_STRING;
+        case MOBIUS_VAL_ARRAY:           return VAL_ARRAY;
+        case MOBIUS_VAL_FUNCTION:        return VAL_FUNCTION;
+        case MOBIUS_VAL_TABLE:           return VAL_TABLE;
+        case MOBIUS_VAL_USERDATA:        return VAL_USERDATA;
+        case MOBIUS_VAL_ENUM:            return VAL_ENUM;
+        case MOBIUS_VAL_FUTURE:          return VAL_FUTURE;
+        case MOBIUS_VAL_ARRAY_SLICE:     return VAL_ARRAY_SLICE;
+        case MOBIUS_VAL_CHANNEL:         return VAL_CHANNEL;
+        default:                         return VAL_NIL;
+    }
+}
+
+void mobius_push_type_metatable(MobiusState* state, MobiusValueType type) {
+    ValueType vt = public_to_internal_type(type);
+    Table* mt = state->typeMetatable(vt);
+    if (mt) {
+        stack_push(state, make_table_value(mt));
+    } else {
+        stack_push(state, make_nil_value());
+    }
+}
+
+void mobius_set_type_metatable(MobiusState* state, MobiusValueType type) {
+    NativeCallContext* nctx = get_nctx(state);
+    if (nctx->top <= nctx->base) {
+        fprintf(stderr, "FATAL: mobius_set_type_metatable() - Stack is empty\n");
+        exit(1);
+    }
+
+    Value val = nctx->registers[--nctx->top];
+    ValueType vt = public_to_internal_type(type);
+
+    if (val.type == VAL_TABLE) {
+        state->setTypeMetatable(vt, val.as.table);
+    } else if (val.type == VAL_NIL) {
+        state->setTypeMetatable(vt, nullptr);
+    } else {
+        fprintf(stderr, "FATAL: mobius_set_type_metatable() - Expected table or nil, got %s\n",
+                value_type_name(val.type));
+        exit(1);
+    }
 }
 
 // ============================================================================

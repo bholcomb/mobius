@@ -7,7 +7,9 @@
 #include "frontend/parser.h"
 #include "frontend/token.h"
 #include "library/library.h"
+#include "library/array.h"
 #include "library/fiber_lib.h"
+#include "library/table_lib.h"
 #include "internal/string_intern.h"
 #include "data/table.h"
 #include "data/metamethods.h"
@@ -415,6 +417,14 @@ int MobiusState::initStdlib() {
     Table* channel_mt = create_channel_type_metatable(this);
     setTypeMetatable(VAL_CHANNEL, channel_mt);
     channel_mt->release();
+
+    Table* array_mt = create_array_type_metatable(this);
+    setTypeMetatable(VAL_ARRAY, array_mt);
+    array_mt->release();
+
+    Table* table_mt = create_table_type_metatable(this);
+    setTypeMetatable(VAL_TABLE, table_mt);
+    table_mt->release();
 
     initialized_ = true;
     return MOBIUS_OK;
