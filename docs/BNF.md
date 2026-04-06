@@ -4,6 +4,10 @@ Formal grammar for the Mobius scripting language. This document is the
 canonical source of truth for the language syntax. The parser and scanner
 implementations should conform to this specification.
 
+**Semantic note:** Variables are type-locked. The type is inferred from the
+first non-nil assignment and cannot change. The grammar itself is unchanged —
+type locking is enforced at compile time and runtime, not through new syntax.
+
 ## Notation
 
 | Symbol       | Meaning                            |

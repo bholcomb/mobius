@@ -133,7 +133,7 @@ void Compiler::endScope() {
 
 int Compiler::addLocal(const char* name) {
     int reg = allocReg();
-    current_->locals.push_back({name, current_->scope_depth, false});
+    current_->locals.push_back({name, current_->scope_depth, false, VAL_UNKNOWN});
     return reg;
 }
 
@@ -253,6 +253,135 @@ void Compiler::emitSetGlobal(int reg, const char* name) {
     } else {
         int ki = stringConstant(name);
         emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
+    }
+}
+
+// ============================================================================
+// Type inference
+// ============================================================================
+
+ValueType Compiler::localType(int reg) {
+    if (reg >= 0 && reg < (int)current_->locals.size())
+        return current_->locals[reg].inferred_type;
+    return VAL_UNKNOWN;
+}
+
+ValueType Compiler::inferExprType(Expr* expr) {
+    if (!expr) return VAL_UNKNOWN;
+
+    switch (expr->type) {
+        case EXPR_LITERAL: {
+            ValueType t = expr->as.literal.value.type;
+            return (t == VAL_NIL) ? VAL_UNKNOWN : t;
+        }
+
+        case EXPR_VARIABLE: {
+            int local = resolveLocal(expr->as.variable.name.identifier);
+            if (local >= 0) return localType(local);
+            return VAL_UNKNOWN;
+        }
+
+        case EXPR_BINARY: {
+            BinaryExpr* bin = &expr->as.binary;
+            switch (bin->op.type) {
+                case TOKEN_PLUS: case TOKEN_MINUS: case TOKEN_STAR:
+                case TOKEN_SLASH: case TOKEN_PERCENT: {
+                    ValueType lt = inferExprType(bin->left);
+                    ValueType rt = inferExprType(bin->right);
+                    if (lt == VAL_INT64 && rt == VAL_INT64) return VAL_INT64;
+                    if ((lt == VAL_FLOAT64 || lt == VAL_INT64) &&
+                        (rt == VAL_FLOAT64 || rt == VAL_INT64)) {
+                        if (lt == VAL_FLOAT64 || rt == VAL_FLOAT64) return VAL_FLOAT64;
+                        return VAL_INT64;
+                    }
+                    if (bin->op.type == TOKEN_PLUS && lt == VAL_STRING && rt == VAL_STRING)
+                        return VAL_STRING;
+                    return VAL_UNKNOWN;
+                }
+                case TOKEN_LESS: case TOKEN_LESS_EQUAL:
+                case TOKEN_GREATER: case TOKEN_GREATER_EQUAL:
+                case TOKEN_EQUAL_EQUAL: case TOKEN_BANG_EQUAL:
+                case TOKEN_IS:
+                    return VAL_BOOL;
+                case TOKEN_AMPERSAND: case TOKEN_PIPE: case TOKEN_CARET:
+                case TOKEN_LEFT_SHIFT: case TOKEN_RIGHT_SHIFT:
+                    return VAL_INT64;
+                case TOKEN_AND: case TOKEN_OR:
+                    return VAL_BOOL;
+                default:
+                    return VAL_UNKNOWN;
+            }
+        }
+
+        case EXPR_UNARY: {
+            if (expr->as.unary.op.type == TOKEN_BANG) return VAL_BOOL;
+            if (expr->as.unary.op.type == TOKEN_MINUS) return inferExprType(expr->as.unary.right);
+            if (expr->as.unary.op.type == TOKEN_TILDE) return VAL_INT64;
+            return VAL_UNKNOWN;
+        }
+
+        case EXPR_INCREMENT:
+        case EXPR_DECREMENT:
+            return VAL_INT64;
+
+        case EXPR_ARRAY_LITERAL:
+            return VAL_ARRAY;
+
+        case EXPR_TABLE_LITERAL:
+            return VAL_TABLE;
+
+        case EXPR_FUNCTION:
+            return VAL_FUNCTION;
+
+        case EXPR_SPAWN:
+            return VAL_FUTURE;
+
+        case EXPR_GROUPING:
+            return inferExprType(expr->as.grouping.expression);
+
+        case EXPR_TERNARY: {
+            ValueType then_t = inferExprType(expr->as.ternary.then_expr);
+            ValueType else_t = inferExprType(expr->as.ternary.else_expr);
+            if (then_t == VAL_UNKNOWN) return else_t;
+            if (else_t == VAL_UNKNOWN) return then_t;
+            if (then_t == else_t) return then_t;
+            return VAL_UNKNOWN;
+        }
+
+        case EXPR_CALL: {
+            Expr* callee = expr->as.call.callee;
+            if (callee->type == EXPR_VARIABLE) {
+                const char* name = callee->as.variable.name.identifier;
+                int local = resolveLocal(name);
+                if (local >= 0) {
+                    if (localType(local) == VAL_FUNCTION) {
+                        // Can't determine return type from a local function variable
+                        return VAL_UNKNOWN;
+                    }
+                }
+                // Check if it's a previously compiled function with known return type
+                for (auto* p : current_->proto->protos) {
+                    if (p->name == name && p->return_type != VAL_UNKNOWN) {
+                        return p->return_type;
+                    }
+                }
+                // Check enclosing scopes' prototypes
+                for (FunctionState* fs = current_->enclosing; fs; fs = fs->enclosing) {
+                    for (auto* p : fs->proto->protos) {
+                        if (p->name == name && p->return_type != VAL_UNKNOWN) {
+                            return p->return_type;
+                        }
+                    }
+                }
+            }
+            return VAL_UNKNOWN;
+        }
+
+        case EXPR_ASSIGNMENT:
+            return inferExprType(expr->as.assignment.value);
+
+        default:
+            return VAL_UNKNOWN;
     }
 }
 
@@ -752,15 +881,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         rk_right = (uint8_t)right;
     }
 
-    // Determine operand types for specialized opcode selection.
-    // An RK operand from tryExprAsRK always came from a literal, so we can
-    // recover its ValueType from the original expression node.
-    auto exprLiteralType = [](Expr* e) -> ValueType {
-        if (e->type == EXPR_LITERAL) return e->as.literal.value.type;
-        return VAL_NIL;
-    };
-    ValueType lt = left_is_rk ? exprLiteralType(expr->left) : VAL_NIL;
-    ValueType rt = right_is_rk ? exprLiteralType(expr->right) : VAL_NIL;
+    ValueType lt = inferExprType(expr->left);
+    ValueType rt = inferExprType(expr->right);
     bool both_i64 = (lt == VAL_INT64 && rt == VAL_INT64);
     bool both_f64 = (lt == VAL_FLOAT64 && rt == VAL_FLOAT64);
 
@@ -802,7 +924,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
 
         // Comparison operators: emit comparison + conditional jump pattern
         case TOKEN_EQUAL_EQUAL: {
-            emitABC(OP_EQ, 1, rk_left, rk_right);
+            OpCode cmp = both_i64 ? OP_EQ_II : both_f64 ? OP_EQ_FF : OP_EQ;
+            emitABC(cmp, 1, rk_left, rk_right);
             int jmp = emitJump();
             emitABC(OP_LOADBOOL, (uint8_t)reg, 0, 1);
             patchJump(jmp);
@@ -810,7 +933,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             break;
         }
         case TOKEN_BANG_EQUAL: {
-            emitABC(OP_EQ, 0, rk_left, rk_right);
+            OpCode cmp = both_i64 ? OP_EQ_II : both_f64 ? OP_EQ_FF : OP_EQ;
+            emitABC(cmp, 0, rk_left, rk_right);
             int jmp = emitJump();
             emitABC(OP_LOADBOOL, (uint8_t)reg, 0, 1);
             patchJump(jmp);
@@ -818,7 +942,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             break;
         }
         case TOKEN_LESS: {
-            emitABC(OP_LT, 1, rk_left, rk_right);
+            OpCode cmp = both_i64 ? OP_LT_II : both_f64 ? OP_LT_FF : OP_LT;
+            emitABC(cmp, 1, rk_left, rk_right);
             int jmp = emitJump();
             emitABC(OP_LOADBOOL, (uint8_t)reg, 0, 1);
             patchJump(jmp);
@@ -826,7 +951,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             break;
         }
         case TOKEN_LESS_EQUAL: {
-            emitABC(OP_LE, 1, rk_left, rk_right);
+            OpCode cmp = both_i64 ? OP_LE_II : both_f64 ? OP_LE_FF : OP_LE;
+            emitABC(cmp, 1, rk_left, rk_right);
             int jmp = emitJump();
             emitABC(OP_LOADBOOL, (uint8_t)reg, 0, 1);
             patchJump(jmp);
@@ -835,7 +961,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         }
         case TOKEN_GREATER: {
             // a > b  =>  b < a
-            emitABC(OP_LT, 1, rk_right, rk_left);
+            OpCode cmp = both_i64 ? OP_LT_II : both_f64 ? OP_LT_FF : OP_LT;
+            emitABC(cmp, 1, rk_right, rk_left);
             int jmp = emitJump();
             emitABC(OP_LOADBOOL, (uint8_t)reg, 0, 1);
             patchJump(jmp);
@@ -844,7 +971,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         }
         case TOKEN_GREATER_EQUAL: {
             // a >= b  =>  b <= a
-            emitABC(OP_LE, 1, rk_right, rk_left);
+            OpCode cmp = both_i64 ? OP_LE_II : both_f64 ? OP_LE_FF : OP_LE;
+            emitABC(cmp, 1, rk_right, rk_left);
             int jmp = emitJump();
             emitABC(OP_LOADBOOL, (uint8_t)reg, 0, 1);
             patchJump(jmp);
@@ -1053,7 +1181,25 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 
             int local = resolveLocal(name);
             if (local >= 0) {
+                ValueType target_t = localType(local);
+                ValueType rhs_t = inferExprType(expr->value);
+
+                if (target_t != VAL_UNKNOWN && rhs_t != VAL_UNKNOWN && rhs_t != target_t) {
+                    fprintf(stderr, "Compile error [%s:%d]: cannot assign type %d to variable '%s' "
+                            "of type %d\n",
+                            current_->proto->source.c_str(), currentLine_,
+                            (int)rhs_t, name, (int)target_t);
+                }
+
                 compileExpr(expr->value, local);
+
+                if (target_t != VAL_UNKNOWN && rhs_t == VAL_UNKNOWN) {
+                    emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, 0, 0);
+                }
+                if (target_t == VAL_UNKNOWN) {
+                    emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, 0, 0);
+                }
+
                 if (dest >= 0 && dest != local) {
                     emitABC(OP_MOVE, (uint8_t)dest, (uint8_t)local, 0);
                     return dest;
@@ -1508,7 +1654,10 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
 
     if (current_->scope_depth > 0) {
         // Local variable
+        ValueType inferred = stmt->initializer ? inferExprType(stmt->initializer) : VAL_UNKNOWN;
         int reg = addLocal(name);
+        current_->locals.back().inferred_type = inferred;
+
         if (stmt->initializer) {
             compileExpr(stmt->initializer, reg);
         } else {
@@ -1516,6 +1665,9 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
         }
         if (stmt->is_annotated) {
             emitABC(OP_TYPECHECK, (uint8_t)reg, (uint8_t)stmt->type_hint, 0);
+        }
+        if (inferred == VAL_UNKNOWN && stmt->initializer) {
+            emitABC(OP_TYPELOCK, (uint8_t)reg, 0, 0);
         }
     } else {
         // Global variable
@@ -1633,19 +1785,24 @@ int Compiler::compileConditionJump(Expr* condition) {
                 rk_right = (uint8_t)right;
             }
 
+            ValueType lt = inferExprType(bin->left);
+            ValueType rt = inferExprType(bin->right);
+            bool ii = (lt == VAL_INT64 && rt == VAL_INT64);
+            bool ff = (lt == VAL_FLOAT64 && rt == VAL_FLOAT64);
+
             switch (op) {
                 case TOKEN_LESS:
-                    emitABC(OP_LT, 0, rk_left, rk_right); break;
+                    emitABC(ii ? OP_LT_II : ff ? OP_LT_FF : OP_LT, 0, rk_left, rk_right); break;
                 case TOKEN_LESS_EQUAL:
-                    emitABC(OP_LE, 0, rk_left, rk_right); break;
+                    emitABC(ii ? OP_LE_II : ff ? OP_LE_FF : OP_LE, 0, rk_left, rk_right); break;
                 case TOKEN_GREATER:
-                    emitABC(OP_LT, 0, rk_right, rk_left); break;
+                    emitABC(ii ? OP_LT_II : ff ? OP_LT_FF : OP_LT, 0, rk_right, rk_left); break;
                 case TOKEN_GREATER_EQUAL:
-                    emitABC(OP_LE, 0, rk_right, rk_left); break;
+                    emitABC(ii ? OP_LE_II : ff ? OP_LE_FF : OP_LE, 0, rk_right, rk_left); break;
                 case TOKEN_EQUAL_EQUAL:
-                    emitABC(OP_EQ, 0, rk_left, rk_right); break;
+                    emitABC(ii ? OP_EQ_II : ff ? OP_EQ_FF : OP_EQ, 0, rk_left, rk_right); break;
                 case TOKEN_BANG_EQUAL:
-                    emitABC(OP_EQ, 1, rk_left, rk_right); break;
+                    emitABC(ii ? OP_EQ_II : ff ? OP_EQ_FF : OP_EQ, 1, rk_left, rk_right); break;
                 default: break;
             }
 
@@ -1815,9 +1972,13 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         // locals vector stays in sync with register indices.
         int base = current_->free_reg;
         addLocal("(for index)");
+        current_->locals.back().inferred_type = VAL_INT64;
         addLocal("(for limit)");
+        current_->locals.back().inferred_type = VAL_INT64;
         addLocal("(for step)");
+        current_->locals.back().inferred_type = VAL_INT64;
         addLocal(var_name);
+        current_->locals.back().inferred_type = VAL_INT64;
         int idx_reg = base;
         int limit_reg = base + 1;
         int step_reg = base + 2;
@@ -1981,6 +2142,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
 
     if (current_->scope_depth > 0) {
         int reg = addLocal(name);
+        current_->locals.back().inferred_type = VAL_FUNCTION;
         emitABx(OP_CLOSURE, (uint8_t)reg, (uint16_t)proto_idx);
     } else {
         int save = current_->free_reg;
@@ -1997,6 +2159,18 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
     currentLine_ = stmt->keyword.line;
 
     if (stmt->value) {
+        ValueType ret_t = inferExprType(stmt->value);
+        if (ret_t != VAL_UNKNOWN) {
+            if (current_->proto->return_type == VAL_UNKNOWN) {
+                current_->proto->return_type = ret_t;
+            } else if (current_->proto->return_type != ret_t) {
+                fprintf(stderr, "Compile error [%s:%d]: function has inconsistent return types: "
+                        "expected type %d, got type %d\n",
+                        current_->proto->source.c_str(), currentLine_,
+                        (int)current_->proto->return_type, (int)ret_t);
+            }
+        }
+
         // Tail call optimization: if the return value is a direct call,
         // emit OP_TAILCALL instead of OP_CALL + OP_RETURN.
         if (stmt->value->type == EXPR_CALL) {

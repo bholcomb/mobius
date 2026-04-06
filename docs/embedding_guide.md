@@ -10,8 +10,10 @@ registration.
 - `<mobius/mobius.h>` — core embedding API (state lifecycle, execution, config)
 - `<mobius/mobius_plugin.h>` — stack API, native functions, value types
 
-Scripts only use **`int64`**, **`uint64`**, and **`float64`** as numeric type
-annotations; integers live as **`int64`** in the VM. The stack API still offers
+Mobius variables are **type-locked**: a variable's type is inferred from its
+first non-nil assignment and cannot change afterward. Scripts may optionally use
+**`int64`**, **`uint64`**, and **`float64`** as numeric type annotations;
+integers live as **`int64`** in the VM. The stack API still offers
 **`pushInt8`**, **`asInt32`**, and other narrow helpers: they convert at the C
 boundary for backward compatibility. Prefer **`pushInt64`** / **`pushUInt64`**
 and **`asInt64`** / **`asUInt64`** (and **`Float64`**) in new embedding code.

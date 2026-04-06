@@ -256,6 +256,18 @@ enum OpCode : uint8_t {
     // -- Method dispatch --
     OP_SELF,        // A B C     R[A+1] = R[B]; R[A] = R[B][RK(C)]  (method lookup with self)
 
+    // -- Type-specialized comparison (both operands same type, no type checks) --
+    OP_LT_II,      // A B C     if (RK(B).i64 < RK(C).i64) != A then skip next
+    OP_LE_II,      // A B C     if (RK(B).i64 <= RK(C).i64) != A then skip next
+    OP_EQ_II,      // A B C     if (RK(B).i64 == RK(C).i64) != A then skip next
+    OP_LT_FF,      // A B C     if (RK(B).f64 < RK(C).f64) != A then skip next
+    OP_LE_FF,      // A B C     if (RK(B).f64 <= RK(C).f64) != A then skip next
+    OP_EQ_FF,      // A B C     if (RK(B).f64 == RK(C).f64) != A then skip next
+
+    // -- Type locking --
+    OP_TYPELOCK,    // A         lock R[A]'s type on first non-nil value
+    OP_TYPECHECK_LOCKED, // A    verify R[A] matches locked type (or is nil); error on mismatch
+
     // -- Debug / sentinel --
     OP_NOP,         //           no operation (padding / breakpoint target)
 
@@ -396,6 +408,16 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"CANCEL_CHECK", FMT_ABC},
 
         {"SELF",      FMT_ABC},
+
+        {"LT_II",    FMT_ABC},
+        {"LE_II",    FMT_ABC},
+        {"EQ_II",    FMT_ABC},
+        {"LT_FF",    FMT_ABC},
+        {"LE_FF",    FMT_ABC},
+        {"EQ_FF",    FMT_ABC},
+
+        {"TYPELOCK",           FMT_ABC},
+        {"TYPECHECK_LOCKED",   FMT_ABC},
 
         {"NOP",       FMT_ABC},
     };

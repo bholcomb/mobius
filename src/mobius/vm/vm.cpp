@@ -68,6 +68,7 @@ MobiusVM::MobiusVM(MobiusState* state)
       call_depth_(0), call_stack_capacity_(VM_INITIAL_CALL_STACK)
 {
     registers_.reserve(VM_INITIAL_REGISTERS);
+    type_tags_.reserve(VM_INITIAL_REGISTERS);
     register_capacity_ = (int)registers_.size();
     call_stack_ = new CallInfo[VM_INITIAL_CALL_STACK];
     call_stack_[0].initUpvalues();
@@ -255,6 +256,9 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
     int needed = child_base + child->num_registers + 16;
     ensureRegisters(needed);
 
+    std::fill(type_tags_.begin() + child_base,
+              type_tags_.begin() + child_base + child->num_registers, VAL_UNKNOWN);
+
     CallInfo& new_ci = callStackPush(child, child->code.data(), child_base, nresults);
     if (mf->upvalues && mf->upvalue_count > 0) {
         new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
@@ -349,6 +353,8 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         registers_[scratch + 2] = rhs;
 
         int child_base = scratch + 1;
+        std::fill(type_tags_.begin() + child_base,
+                  type_tags_.begin() + child_base + child->num_registers, VAL_UNKNOWN);
         size_t stop_depth = callStackSize();
         callStackPush(child, child->code.data(), child_base, 2);
 
@@ -375,6 +381,7 @@ struct VMFrame {
     Prototype*  proto;
     int         base;
     Value*      regs;
+    ValueType*  tags;
 };
 
 MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
@@ -382,6 +389,7 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
     f.proto = f.ci->proto;
     f.base = f.ci->base;
     f.regs = registers_.data() + f.base;
+    f.tags = type_tags_.data() + f.base;
     f.ip = f.ci->ip;
 }
 
@@ -419,7 +427,17 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
 
 MOBIUS_FORCEINLINE static int vm_op_move(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    RA(inst) = RB(inst);
+    const Value& src = RB(inst);
+    if (MOBIUS_LIKELY(src.type < VAL_STRING)) {
+        Value& dst = RA(inst);
+        if (MOBIUS_LIKELY(dst.type < VAL_STRING)) {
+            dst.rawCopyFrom(src);
+        } else {
+            dst = src;
+        }
+    } else {
+        RA(inst) = src;
+    }
     return 0;
 }
 
@@ -433,8 +451,10 @@ MOBIUS_FORCEINLINE static int vm_op_loadnil(MobiusVM* vm, VMFrame& f, uint32_t i
     (void)vm;
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
-    for (int i = a; i <= a + b; i++)
+    for (int i = a; i <= a + b; i++) {
         f.regs[i] = Value();
+        f.tags[i] = VAL_UNKNOWN;
+    }
     return 0;
 }
 
@@ -689,7 +709,7 @@ MOBIUS_FORCEINLINE static int vm_op_add(MobiusVM* vm, VMFrame& f, uint32_t inst)
         if (rc == 0) { VM_ERROR(vm, f, "Cannot add: no __add metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        VM_ERROR(vm, f, "Cannot add these types");
+        VM_ERROR(vm, f, "Cannot add %s and %s", value_type_name(lhs.type), value_type_name(rhs.type));
         return -1;
     }
     return 0;
@@ -726,7 +746,7 @@ MOBIUS_FORCEINLINE static int vm_op_sub(MobiusVM* vm, VMFrame& f, uint32_t inst)
         if (rc == 0) { VM_ERROR(vm, f, "Cannot subtract: no __sub metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        VM_ERROR(vm, f, "Cannot subtract these types");
+        VM_ERROR(vm, f, "Cannot subtract %s and %s", value_type_name(lhs.type), value_type_name(rhs.type));
         return -1;
     }
     return 0;
@@ -763,7 +783,7 @@ MOBIUS_FORCEINLINE static int vm_op_mul(MobiusVM* vm, VMFrame& f, uint32_t inst)
         if (rc == 0) { VM_ERROR(vm, f, "Cannot multiply: no __mul metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        VM_ERROR(vm, f, "Cannot multiply these types");
+        VM_ERROR(vm, f, "Cannot multiply %s and %s", value_type_name(lhs.type), value_type_name(rhs.type));
         return -1;
     }
     return 0;
@@ -843,7 +863,7 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
         if (rc == 0) { VM_ERROR(vm, f, "Cannot modulo: no __mod metamethod on table"); return -1; }
         RA(inst) = out;
     } else {
-        VM_ERROR(vm, f, "Cannot modulo these types");
+        VM_ERROR(vm, f, "Cannot modulo %s and %s", value_type_name(lhs.type), value_type_name(rhs.type));
         return -1;
     }
     return 0;
@@ -1364,6 +1384,86 @@ MOBIUS_FORCEINLINE static int vm_op_typeis(MobiusVM* vm, VMFrame& f, uint32_t in
     return 0;
 }
 
+// ---- Type locking ----
+
+MOBIUS_FORCEINLINE static int vm_op_typelock(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    uint8_t a = DECODE_A(inst);
+    const Value& val = f.regs[a];
+    if (val.type != VAL_NIL) {
+        f.tags[a] = val.type;
+    } else {
+        f.tags[a] = VAL_UNKNOWN;
+    }
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_typecheck_locked(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint8_t a = DECODE_A(inst);
+    const Value& val = f.regs[a];
+    ValueType tag = f.tags[a];
+    if (tag == VAL_UNKNOWN) {
+        if (val.type != VAL_NIL) {
+            f.tags[a] = val.type;
+        }
+    } else if (val.type != VAL_NIL && val.type != tag) {
+        VM_ERROR(vm, f, "Type error: cannot assign %s to variable of type %s",
+                 value_type_name(val.type), value_type_name(tag));
+        return -1;
+    }
+    return 0;
+}
+
+// ---- Typed comparisons ----
+
+MOBIUS_FORCEINLINE static int vm_op_lt_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    int a = DECODE_A(inst);
+    bool result = RKB(inst).as.i64 < RKC(inst).as.i64;
+    if (result != (a != 0)) f.ip++;
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_le_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    int a = DECODE_A(inst);
+    bool result = RKB(inst).as.i64 <= RKC(inst).as.i64;
+    if (result != (a != 0)) f.ip++;
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_eq_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    int a = DECODE_A(inst);
+    bool result = RKB(inst).as.i64 == RKC(inst).as.i64;
+    if (result != (a != 0)) f.ip++;
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_lt_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    int a = DECODE_A(inst);
+    bool result = RKB(inst).as.double_val < RKC(inst).as.double_val;
+    if (result != (a != 0)) f.ip++;
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_le_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    int a = DECODE_A(inst);
+    bool result = RKB(inst).as.double_val <= RKC(inst).as.double_val;
+    if (result != (a != 0)) f.ip++;
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_eq_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    int a = DECODE_A(inst);
+    bool result = RKB(inst).as.double_val == RKC(inst).as.double_val;
+    if (result != (a != 0)) f.ip++;
+    return 0;
+}
+
 // ---- Length ----
 
 MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -1498,6 +1598,9 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
         int child_base = f.ci->base + a + 1;
         vm->ensureRegisters(child_base + child->num_registers + 16);
 
+        std::fill(vm->type_tags_.begin() + child_base,
+                  vm->type_tags_.begin() + child_base + child->num_registers, VAL_UNKNOWN);
+
         CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
             new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
@@ -1595,6 +1698,8 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     if (args != arg_buf) delete[] args;
 
     vm->ensureRegisters(f.ci->base + child->num_registers + 16);
+    std::fill(vm->type_tags_.begin() + f.ci->base,
+              vm->type_tags_.begin() + f.ci->base + child->num_registers, VAL_UNKNOWN);
     for (int i = nargs; i < child->num_registers; i++) {
         vm->registers_[f.ci->base + i] = Value();
     }
@@ -2106,6 +2211,9 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
                 fiber_vm.registers_[base + i] = std::move(args_copy[i]);
             }
 
+            std::fill(fiber_vm.type_tags_.begin() + base,
+                      fiber_vm.type_tags_.begin() + base + proto->num_registers, VAL_UNKNOWN);
+
             MobiusVM* prev_vm = MobiusVM::t_current_vm;
             MobiusVM::t_current_vm = &fiber_vm;
 
@@ -2238,6 +2346,7 @@ int MobiusVM::run(size_t base_depth) {
     f.proto = f.ci->proto;
     f.base = f.ci->base;
     f.regs = registers_.data() + f.base;
+    f.tags = type_tags_.data() + f.base;
 
     uint32_t inst;
 
@@ -2274,6 +2383,10 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_SHARE,
         &&L_OP_CANCEL_CHECK,
         &&L_OP_SELF,
+        &&L_OP_LT_II, &&L_OP_LE_II, &&L_OP_EQ_II,
+        &&L_OP_LT_FF, &&L_OP_LE_FF, &&L_OP_EQ_FF,
+        &&L_OP_TYPELOCK,
+        &&L_OP_TYPECHECK_LOCKED,
         &&L_OP_NOP,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
@@ -2461,6 +2574,14 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_CANCEL_CHECK, vm_op_cancel_check)
     VM_HANDLER(OP_THROW, vm_op_throw)
     VM_HANDLER(OP_SELF, vm_op_self)
+    VM_HANDLER(OP_LT_II, vm_op_lt_ii)
+    VM_HANDLER(OP_LE_II, vm_op_le_ii)
+    VM_HANDLER(OP_EQ_II, vm_op_eq_ii)
+    VM_HANDLER(OP_LT_FF, vm_op_lt_ff)
+    VM_HANDLER(OP_LE_FF, vm_op_le_ff)
+    VM_HANDLER(OP_EQ_FF, vm_op_eq_ff)
+    VM_HANDLER(OP_TYPELOCK, vm_op_typelock)
+    VM_HANDLER(OP_TYPECHECK_LOCKED, vm_op_typecheck_locked)
     VM_HANDLER(OP_NOP, vm_op_nop)
 
     VM_DEFAULT()
