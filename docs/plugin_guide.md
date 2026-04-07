@@ -75,7 +75,7 @@ int my_hello(MobiusState* state, int arg_count) {
 // --- Function table ---
 
 static MobiusPluginFunction functions[] = {
-    {"hello", my_hello, 0, "Returns a greeting"},
+    {"hello", my_hello, 0, MOBIUS_VAL_STRING, "Returns a greeting"},
 };
 
 // --- Plugin descriptor ---
@@ -258,12 +258,18 @@ typedef struct {
     const char*     name;         // Function name
     MobiusCFunction function;     // Function pointer
     size_t          arg_count;    // Expected argument count (SIZE_MAX = variadic)
+    MobiusValueType return_type;  // Expected return type (MOBIUS_VAL_UNKNOWN if input-dependent)
     const char*     description;  // Help text (may be NULL)
 } MobiusPluginFunction;
 ```
 
 Set `arg_count` to `SIZE_MAX` for variadic functions that accept any number of
 arguments.
+
+The `return_type` field tells the compiler what type the function returns so
+it can emit type-specialized opcodes at call sites. Use `MOBIUS_VAL_UNKNOWN`
+when the return type depends on the input types (e.g., a generic `add()` that
+returns an integer when given integers and a float when given floats).
 
 ### MobiusPlugin
 
@@ -445,8 +451,8 @@ int text_upper(MobiusState* state, int arg_count) {
 // --- Registration ---
 
 static MobiusPluginFunction functions[] = {
-    {"word_count", text_word_count, 1, "Count words in a string"},
-    {"to_upper",   text_upper,     1, "Convert string to uppercase"},
+    {"word_count", text_word_count, 1, MOBIUS_VAL_INT64,  "Count words in a string"},
+    {"to_upper",   text_upper,     1, MOBIUS_VAL_STRING, "Convert string to uppercase"},
 };
 
 static MobiusPlugin plugin = {
@@ -592,16 +598,19 @@ void mobius_set_type_metatable(state, type);     // pop and install as type meta
 
 ```c
 typedef enum {
+    MOBIUS_VAL_UNKNOWN = -1,       // return type depends on inputs
+    /* Non-refcounted (inline) types */
     MOBIUS_VAL_NIL,
     MOBIUS_VAL_BOOL,
     MOBIUS_VAL_INT64,
     MOBIUS_VAL_UINT64,
     MOBIUS_VAL_FLOAT64,
-    MOBIUS_VAL_STRING,
     MOBIUS_VAL_CHAR,
+    MOBIUS_VAL_NATIVE_FUNCTION,
+    /* Refcounted (heap-allocated) types */
+    MOBIUS_VAL_STRING,
     MOBIUS_VAL_ARRAY,
     MOBIUS_VAL_FUNCTION,
-    MOBIUS_VAL_NATIVE_FUNCTION,
     MOBIUS_VAL_TABLE,
     MOBIUS_VAL_USERDATA,
     MOBIUS_VAL_ENUM,
@@ -610,6 +619,9 @@ typedef enum {
     MOBIUS_VAL_CHANNEL,
 } MobiusValueType;
 ```
+
+The enum values match the internal `ValueType` enum numerically, so no
+conversion is needed when passing types between plugin and interpreter code.
 
 ### Type Metatables
 
