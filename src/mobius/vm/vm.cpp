@@ -288,8 +288,9 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
     int needed = child_base + child->num_registers + 16;
     ensureRegisters(needed);
 
-    std::fill(type_tags_.begin() + child_base,
-              type_tags_.begin() + child_base + child->num_registers, VAL_UNKNOWN);
+    if (MOBIUS_UNLIKELY(child->has_type_locks)) {
+        memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
+    }
 
     CallInfo& new_ci = callStackPush(child, child->code.data(), child_base, nresults);
     if (mf->upvalues && mf->upvalue_count > 0) {
@@ -389,8 +390,9 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         registers_[scratch + 2] = rhs;
 
         int child_base = scratch + 1;
-        std::fill(type_tags_.begin() + child_base,
-                  type_tags_.begin() + child_base + child->num_registers, VAL_UNKNOWN);
+        if (MOBIUS_UNLIKELY(child->has_type_locks)) {
+            memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
+        }
         size_t stop_depth = callStackSize();
         callStackPush(child, child->code.data(), child_base, 2);
 
@@ -416,8 +418,8 @@ struct VMFrame {
     uint32_t*   ip;
     Prototype*  proto;
     int         base;
-    Value*      regs;
-    ValueType*  tags;
+    Value* __restrict__      regs;
+    ValueType* __restrict__  tags;
 };
 
 MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
@@ -1598,8 +1600,9 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
         int child_base = f.ci->base + a + 1;
         vm->ensureRegisters(child_base + child->num_registers + 16);
 
-        std::fill(vm->type_tags_.begin() + child_base,
-                  vm->type_tags_.begin() + child_base + child->num_registers, VAL_UNKNOWN);
+        if (MOBIUS_UNLIKELY(child->has_type_locks)) {
+            memset(&vm->type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
+        }
 
         CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
@@ -1698,8 +1701,9 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     if (args != arg_buf) delete[] args;
 
     vm->ensureRegisters(f.ci->base + child->num_registers + 16);
-    std::fill(vm->type_tags_.begin() + f.ci->base,
-              vm->type_tags_.begin() + f.ci->base + child->num_registers, VAL_UNKNOWN);
+    if (MOBIUS_UNLIKELY(child->has_type_locks)) {
+        memset(&vm->type_tags_[f.ci->base], (uint8_t)VAL_UNKNOWN, child->num_registers);
+    }
     for (int i = nargs; i < child->num_registers; i++) {
         vm->registers_[f.ci->base + i] = Value();
     }
@@ -2211,8 +2215,9 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
                 fiber_vm.registers_[base + i] = std::move(args_copy[i]);
             }
 
-            std::fill(fiber_vm.type_tags_.begin() + base,
-                      fiber_vm.type_tags_.begin() + base + proto->num_registers, VAL_UNKNOWN);
+            if (MOBIUS_UNLIKELY(proto->has_type_locks)) {
+                memset(&fiber_vm.type_tags_[base], (uint8_t)VAL_UNKNOWN, proto->num_registers);
+            }
 
             ScopedCurrentVM bind_vm(&fiber_vm);
 

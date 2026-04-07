@@ -441,11 +441,11 @@ static void cleanup_regex_plugin(void) {
 }
 
 static MobiusPluginFunction regex_functions[] = {
-    {"match",   regex_match,   2, "Full match: returns table if pattern matches entire string, else nil"},
-    {"search",  regex_search,  2, "Search: returns table for first match found anywhere, else nil"},
-    {"findall", regex_findall, 2, "Find all matches, return array of match tables"},
-    {"replace", regex_replace, 3, "Replace all occurrences of pattern in string"},
-    {"split",   regex_split,   2, "Split string by regex pattern, return array of strings"},
+    {"match",   regex_match,   2, MOBIUS_VAL_TABLE,   "Full match: returns table if pattern matches entire string, else nil"},
+    {"search",  regex_search,  2, MOBIUS_VAL_TABLE,   "Search: returns table for first match found anywhere, else nil"},
+    {"findall", regex_findall, 2, MOBIUS_VAL_ARRAY,   "Find all matches, return array of match tables"},
+    {"replace", regex_replace, 3, MOBIUS_VAL_STRING,  "Replace all occurrences of pattern in string"},
+    {"split",   regex_split,   2, MOBIUS_VAL_ARRAY,   "Split string by regex pattern, return array of strings"},
 };
 
 static MobiusPlugin regex_plugin = {

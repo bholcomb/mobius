@@ -51,6 +51,7 @@ MOBIUS_API int mobius_error(MobiusState* state, const char* message);
 /* ====================================================================== */
 
 typedef enum {
+    MOBIUS_VAL_UNKNOWN = -1,  /* return type depends on inputs / not yet determined */
     MOBIUS_VAL_NIL,
     MOBIUS_VAL_BOOL,
 
@@ -286,6 +287,7 @@ typedef struct {
     const char*     name;
     MobiusCFunction function;
     size_t          arg_count;    /* SIZE_MAX for variadic */
+    MobiusValueType return_type;  /* MOBIUS_VAL_UNKNOWN if depends on inputs */
     const char*     description;  /* short help text, may be NULL */
 } MobiusPluginFunction;
 

@@ -1173,62 +1173,62 @@ static void cleanup_os_plugin(void) {}
 
 static MobiusPluginFunction os_functions[] = {
     // Environment
-    {"getenv",      os_getenv,      1,          "Get environment variable"},
-    {"setenv",      os_setenv,      2,          "Set environment variable"},
-    {"unsetenv",    os_unsetenv,    1,          "Unset environment variable"},
+    {"getenv",      os_getenv,      1,  MOBIUS_VAL_STRING,  "Get environment variable"},
+    {"setenv",      os_setenv,      2,  MOBIUS_VAL_NIL,     "Set environment variable"},
+    {"unsetenv",    os_unsetenv,    1,  MOBIUS_VAL_NIL,     "Unset environment variable"},
     // Working directory
-    {"getcwd",      os_getcwd,      0,          "Get current working directory"},
-    {"chdir",       os_chdir,       1,          "Change working directory"},
+    {"getcwd",      os_getcwd,      0,  MOBIUS_VAL_STRING,  "Get current working directory"},
+    {"chdir",       os_chdir,       1,  MOBIUS_VAL_BOOL,    "Change working directory"},
     // Sleep
-    {"sleep",       os_sleep,       1,          "Sleep for fractional seconds"},
+    {"sleep",       os_sleep,       1,  MOBIUS_VAL_NIL,     "Sleep for fractional seconds"},
     // Process / commands
-    {"system",      os_system,      1,          "Run shell command, return exit code"},
-    {"exec",        os_exec,        1,          "Run command, capture stdout"},
-    {"getpid",      os_getpid,      0,          "Get current process ID"},
+    {"system",      os_system,      1,  MOBIUS_VAL_INT64,   "Run shell command, return exit code"},
+    {"exec",        os_exec,        1,  MOBIUS_VAL_STRING,  "Run command, capture stdout"},
+    {"getpid",      os_getpid,      0,  MOBIUS_VAL_INT64,   "Get current process ID"},
     // Directory ops
-    {"listdir",     os_listdir,     1,          "List directory entries"},
-    {"mkdir",       os_mkdir,       1,          "Create directory"},
-    {"rmdir",       os_rmdir,       1,          "Remove empty directory"},
+    {"listdir",     os_listdir,     1,  MOBIUS_VAL_ARRAY,   "List directory entries"},
+    {"mkdir",       os_mkdir,       1,  MOBIUS_VAL_BOOL,    "Create directory"},
+    {"rmdir",       os_rmdir,       1,  MOBIUS_VAL_BOOL,    "Remove empty directory"},
     // File ops
-    {"remove",      os_remove,      1,          "Remove file"},
-    {"rename",      os_rename,      2,          "Rename/move file"},
-    {"cp",          os_cp,          2,          "Copy file"},
-    {"touch",       os_touch,       1,          "Create file or update mtime"},
+    {"remove",      os_remove,      1,  MOBIUS_VAL_BOOL,    "Remove file"},
+    {"rename",      os_rename,      2,  MOBIUS_VAL_BOOL,    "Rename/move file"},
+    {"cp",          os_cp,          2,  MOBIUS_VAL_BOOL,    "Copy file"},
+    {"touch",       os_touch,       1,  MOBIUS_VAL_BOOL,    "Create file or update mtime"},
     // File metadata
-    {"stat",        os_stat,        1,          "Get file status (table)"},
-    {"chmod",       os_chmod,       2,          "Change file permissions"},
-    {"filesize",    os_filesize,    1,          "Get file size in bytes"},
+    {"stat",        os_stat,        1,  MOBIUS_VAL_TABLE,   "Get file status (table)"},
+    {"chmod",       os_chmod,       2,  MOBIUS_VAL_BOOL,    "Change file permissions"},
+    {"filesize",    os_filesize,    1,  MOBIUS_VAL_INT64,   "Get file size in bytes"},
     // Links and paths
-    {"link",        os_link,        2,          "Create hard link"},
-    {"symlink",     os_symlink,     2,          "Create symbolic link"},
-    {"realpath",    os_realpath,    1,          "Resolve symlinks to absolute path"},
+    {"link",        os_link,        2,  MOBIUS_VAL_BOOL,    "Create hard link"},
+    {"symlink",     os_symlink,     2,  MOBIUS_VAL_BOOL,    "Create symbolic link"},
+    {"realpath",    os_realpath,    1,  MOBIUS_VAL_STRING,  "Resolve symlinks to absolute path"},
     // Temp
-    {"tmpdir",      os_tmpdir,      0,          "Get temp directory path"},
-    {"tmpfile",     os_tmpfile,     0,          "Create temp file, return path"},
+    {"tmpdir",      os_tmpdir,      0,  MOBIUS_VAL_STRING,  "Get temp directory path"},
+    {"tmpfile",     os_tmpfile,     0,  MOBIUS_VAL_STRING,  "Create temp file, return path"},
     // Glob / walk
-    {"glob",        os_glob,        1,          "List files matching glob pattern"},
-    {"walkdir",     os_walkdir,     1,          "Recursively list directory contents"},
+    {"glob",        os_glob,        1,  MOBIUS_VAL_ARRAY,   "List files matching glob pattern"},
+    {"walkdir",     os_walkdir,     1,  MOBIUS_VAL_ARRAY,   "Recursively list directory contents"},
     // System info
-    {"uname",       os_uname,       0,          "Get OS/kernel info table"},
-    {"cpu_count",   os_cpu_count,   0,          "Get number of CPU cores"},
+    {"uname",       os_uname,       0,  MOBIUS_VAL_TABLE,   "Get OS/kernel info table"},
+    {"cpu_count",   os_cpu_count,   0,  MOBIUS_VAL_INT64,   "Get number of CPU cores"},
     // Existence checks
-    {"exists",      os_exists,      1,          "Check if path exists"},
-    {"is_file",     os_is_file,     1,          "Check if path is a regular file"},
-    {"is_dir",      os_is_dir,      1,          "Check if path is a directory"},
+    {"exists",      os_exists,      1,  MOBIUS_VAL_BOOL,    "Check if path exists"},
+    {"is_file",     os_is_file,     1,  MOBIUS_VAL_BOOL,    "Check if path is a regular file"},
+    {"is_dir",      os_is_dir,      1,  MOBIUS_VAL_BOOL,    "Check if path is a directory"},
     // Path utilities
-    {"basename",    os_basename,    1,          "Get filename from path"},
-    {"dirname",     os_dirname,     1,          "Get directory from path"},
-    {"extname",     os_extname,     1,          "Get file extension (incl. dot)"},
-    {"join",        os_join,        2,          "Join two path components"},
+    {"basename",    os_basename,    1,  MOBIUS_VAL_STRING,  "Get filename from path"},
+    {"dirname",     os_dirname,     1,  MOBIUS_VAL_STRING,  "Get directory from path"},
+    {"extname",     os_extname,     1,  MOBIUS_VAL_STRING,  "Get file extension (incl. dot)"},
+    {"join",        os_join,        2,  MOBIUS_VAL_STRING,  "Join two path components"},
     // Recursive mkdir
-    {"mkdirp",      os_mkdirp,      1,          "Create directory recursively"},
+    {"mkdirp",      os_mkdirp,      1,  MOBIUS_VAL_BOOL,    "Create directory recursively"},
     // Timestamp
-    {"time",        os_time,        0,          "Current Unix timestamp"},
+    {"time",        os_time,        0,  MOBIUS_VAL_INT64,   "Current Unix timestamp"},
     // Datetime
-    {"gmtime",      os_gmtime,      1,          "Convert timestamp to UTC time table"},
-    {"localtime",   os_localtime,   1,          "Convert timestamp to local time table"},
-    {"strftime",    os_strftime,    2,          "Format timestamp with strftime"},
-    {"mktime",      os_mktime,      1,          "Convert time table to timestamp"},
+    {"gmtime",      os_gmtime,      1,  MOBIUS_VAL_TABLE,   "Convert timestamp to UTC time table"},
+    {"localtime",   os_localtime,   1,  MOBIUS_VAL_TABLE,   "Convert timestamp to local time table"},
+    {"strftime",    os_strftime,    2,  MOBIUS_VAL_STRING,  "Format timestamp with strftime"},
+    {"mktime",      os_mktime,      1,  MOBIUS_VAL_INT64,   "Convert time table to timestamp"},
 };
 
 static MobiusPlugin os_plugin = {

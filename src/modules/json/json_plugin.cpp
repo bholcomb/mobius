@@ -593,8 +593,8 @@ static int init_json_plugin(MobiusState* /*state*/) { return 0; }
 static void cleanup_json_plugin(void) {}
 
 static MobiusPluginFunction json_functions[] = {
-    {"parse",     json_parse,     1,        "Parse a JSON string into Mobius values"},
-    {"stringify", json_stringify, SIZE_MAX, "Serialize a Mobius value to JSON string"},
+    {"parse",     json_parse,     1,        MOBIUS_VAL_UNKNOWN, "Parse a JSON string into Mobius values"},
+    {"stringify", json_stringify, SIZE_MAX, MOBIUS_VAL_STRING,  "Serialize a Mobius value to JSON string"},
 };
 
 static MobiusPlugin json_plugin = {
