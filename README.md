@@ -7,8 +7,8 @@ specialized opcodes and eliminate runtime type checks. Mobius takes a lot of
 inspiration from Lua and adds features like type locking, enums, a rich
 `switch` with pattern matching, and familiar C-style syntax.
 
-The interpreter ships with a bytecode VM (default) and an older tree-walk
-backend selectable via `--tree-walk`.
+The interpreter uses a bytecode VM with type-specialized opcodes for
+optimal performance.
 
 ## Quick Start
 
@@ -18,9 +18,6 @@ mobius script.mob
 
 # Start the REPL
 mobius
-
-# Use the tree-walk interpreter
-mobius --tree-walk script.mob
 ```
 
 ```mobius
@@ -66,8 +63,7 @@ See the [`examples/`](examples/) directory for:
 ## Tests
 
 ```bash
-./test_simple.sh         # Run all tests (VM)
-./test_simple_tw.sh      # Run all tests (tree-walk)
+./test_simple.sh         # Run all tests
 ```
 
 Test scripts live in [`tests/`](tests/) organized by category: `basic/`,

@@ -113,7 +113,6 @@ MobiusConfig config = mobius_default_config();
 | `warn_on_conversion` | `bool`                  | `false`      | Warn on implicit type conversions           |
 | `debug_mode`         | `bool`                  | `false`      | Enable extra debug output                   |
 | `enable_hot_reload`  | `bool`                  | `false`      | Enable hot-reload support                   |
-| `use_vm`             | `bool`                  | `true`       | Use the bytecode VM (false = tree-walk)     |
 | `override_behavior`  | `MobiusOverrideBehavior`| `MOBIUS_OVERRIDE_ERROR` | How to handle global name conflicts |
 | `fiber_stack_size`   | `size_t`                | `131072`     | Size (bytes) of each fiber's C stack        |
 | `initial_fiber_pool_size` | `size_t`           | `16`         | Pre-allocated fibers in the pool            |

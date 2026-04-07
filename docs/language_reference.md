@@ -62,7 +62,7 @@ mobius
 |--------------------|-------------------------------------------------|
 | `--help`, `-h`     | Show help                                       |
 | `--debug`, `-d`    | Enable debug output                             |
-| `--tree-walk`, `-tw` | Use the tree-walk interpreter instead of the bytecode VM |
+| `--decompile`, `-d`  | Dump bytecode disassembly                               |
 | `--list-modules`   | List all loaded modules and their functions      |
 
 ---
