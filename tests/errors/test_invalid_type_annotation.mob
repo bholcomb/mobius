@@ -1,0 +1,5 @@
+// Test that invalid type annotations produce parse errors
+// This test is expected to fail (parse error)
+func bad(x: badtype) {
+    return x
+}
