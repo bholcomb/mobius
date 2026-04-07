@@ -518,8 +518,8 @@ print(text_tools.to_upper("hello"))               // "HELLO"
 7. **Use lifecycle hooks for resources.** Open files, connections, or
    allocations in `init_plugin()` and release them in `cleanup_plugin()`.
 
-8. **Test with both backends.** Mobius has a bytecode VM (default) and a
-   tree-walk interpreter (`--tree-walk`). Test your plugin with both.
+8. **Test thoroughly.** Run your plugin through the full test suite to
+   catch edge cases.
 
 ---
 
