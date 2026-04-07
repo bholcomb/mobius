@@ -64,6 +64,7 @@ private:
     StringInternPool* pool_;
     MobiusState* state_;
     std::unordered_set<std::string> enum_names_;
+    bool had_error_ = false;
 
     // --- Register management ---
     int allocReg();

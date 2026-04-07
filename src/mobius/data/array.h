@@ -49,7 +49,7 @@ public:
 private:
     std::vector<Value> elements;
     bool shared_ = false;
-    std::shared_mutex mutex_;
+    mutable std::shared_mutex mutex_;
 };
 
 #endif // MOBIUS_ARRAY_H

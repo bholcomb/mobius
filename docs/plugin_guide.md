@@ -35,8 +35,8 @@ and **`mobius_stack_asInt64`** / **`mobius_stack_asUInt64`** in new code.
 
 ## How Plugins Work
 
-1. The host application calls `mobius_add_plugin_directory()` with one or
-   more directories before creating the interpreter state.
+1. The host application creates a `MobiusState`, then calls
+   `mobius_add_plugin_directory(state, path)` with one or more directories.
 2. The interpreter scans those directories for shared libraries that export
    a `mobius_plugin_info()` function.
 3. When a script runs `import "my_plugin"`, the interpreter loads the
@@ -272,8 +272,8 @@ typedef struct {
     MobiusPluginMetadata  metadata;
     MobiusPluginFunction* functions;
     size_t                function_count;
-    int  (*init_plugin)(void);       // Optional (may be NULL)
-    void (*cleanup_plugin)(void);    // Optional (may be NULL)
+    int  (*init_plugin)(MobiusState* state);  // Optional (may be NULL)
+    void (*cleanup_plugin)(void);             // Optional (may be NULL)
 } MobiusPlugin;
 ```
 
@@ -283,12 +283,14 @@ typedef struct {
 
 ### init_plugin
 
-Called once when the plugin is first loaded. Return 0 for success, non-zero
-for failure (which prevents the plugin from loading).
+Called once when the plugin is first loaded. Receives the `MobiusState` so
+the plugin can register type metatables or access interpreter services.
+Return 0 for success, non-zero for failure (which prevents the plugin from
+loading).
 
 ```c
-int my_init(void) {
-    // Allocate resources, open connections, seed RNG, etc.
+int my_init(MobiusState* state) {
+    (void)state;
     srand(time(NULL));
     return 0;
 }
@@ -352,12 +354,12 @@ be `text_processing.so` (or `text_processing.dll`).
 ### From the Embedding Application
 
 ```c
-// Register plugin directories before creating the state
-mobius_add_plugin_directory("./plugins");
-mobius_add_plugin_directory("./bin/modules");
-
 MobiusState* state = mobius_new_state(NULL);
 mobius_init_stdlib(state);
+
+// Register plugin directories (per-state)
+mobius_add_plugin_directory(state, "./plugins");
+mobius_add_plugin_directory(state, "./bin/modules");
 
 // Plugins are now discoverable
 mobius_exec_string(state, "import \"text_processing\"\n"

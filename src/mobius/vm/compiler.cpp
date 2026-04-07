@@ -20,13 +20,19 @@ Compiler::Compiler(StringInternPool* pool, MobiusState* state)
 Prototype* Compiler::compile(Stmt** statements, size_t count,
                              const char* source_name) {
 
+    had_error_ = false;
     FunctionState fs;
     initCompiler(nullptr, source_name);
 
     compileBlock(statements, count);
     emitReturn(0, 0);
 
-    return endCompiler();
+    Prototype* proto = endCompiler();
+    if (had_error_) {
+        delete proto;
+        return nullptr;
+    }
+    return proto;
 }
 
 // ============================================================================
@@ -77,6 +83,10 @@ int Compiler::allocReg() {
     if (current_->free_reg > current_->max_reg) {
         current_->max_reg = current_->free_reg;
     }
+    if (reg > 255) {
+        fprintf(stderr, "Compile error: register overflow (> 255) — function uses too many locals/temporaries\n");
+        had_error_ = true;
+    }
     return reg;
 }
 
@@ -84,6 +94,10 @@ void Compiler::allocRegs(int count) {
     current_->free_reg += count;
     if (current_->free_reg > current_->max_reg) {
         current_->max_reg = current_->free_reg;
+    }
+    if (current_->free_reg > 256) {
+        fprintf(stderr, "Compile error: register overflow (> 255) — function uses too many locals/temporaries\n");
+        had_error_ = true;
     }
 }
 
@@ -434,8 +448,9 @@ int Compiler::compileExpr(Expr* expr, int dest) {
         case EXPR_SHARED:
             return compileShared(&expr->as.shared, dest);
         default:
-            fprintf(stderr, "Compiler [%s]: unknown expression type %d\n",
+            fprintf(stderr, "Compile error [%s]: unknown expression type %d\n",
                     current_->proto->source.c_str(), expr->type);
+            had_error_ = true;
             return -1;
     }
 }
@@ -980,8 +995,9 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             break;
         }
         default:
-            fprintf(stderr, "Compiler [%s:%d]: unknown binary operator %d\n",
+            fprintf(stderr, "Compile error [%s:%d]: unknown binary operator %d\n",
                     current_->proto->source.c_str(), currentLine_, expr->op.type);
+            had_error_ = true;
             break;
     }
 
@@ -1100,8 +1116,9 @@ int Compiler::compileUnary(UnaryExpr* expr, int dest) {
                 emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)operand, 0);
             break;
         default:
-            fprintf(stderr, "Compiler [%s:%d]: unknown unary operator %d\n",
+            fprintf(stderr, "Compile error [%s:%d]: unknown unary operator %d\n",
                     current_->proto->source.c_str(), currentLine_, expr->op.type);
+            had_error_ = true;
             break;
     }
 
@@ -1242,8 +1259,9 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
         }
 
         default:
-            fprintf(stderr, "Compiler [%s:%d]: invalid assignment target %d\n",
+            fprintf(stderr, "Compile error [%s:%d]: invalid assignment target %d\n",
                     current_->proto->source.c_str(), currentLine_, expr->target->type);
+            had_error_ = true;
             return -1;
     }
 }
@@ -1609,8 +1627,9 @@ void Compiler::compileStmt(Stmt* stmt) {
             emitABC(OP_YIELD, 0, 0, 0);
             break;
         default:
-            fprintf(stderr, "Compiler [%s]: unknown statement type %d\n",
+            fprintf(stderr, "Compile error [%s]: unknown statement type %d\n",
                     current_->proto->source.c_str(), stmt->type);
+            had_error_ = true;
             break;
     }
 }
@@ -2521,8 +2540,9 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
 
 void Compiler::compileBreakStmt() {
     if (current_->loops.empty()) {
-        fprintf(stderr, "Compiler [%s:%d]: 'break' outside of loop\n",
+        fprintf(stderr, "Compile error [%s:%d]: 'break' outside of loop\n",
                 current_->proto->source.c_str(), currentLine_);
+        had_error_ = true;
         return;
     }
     int jmp = emitJump();
@@ -2533,8 +2553,9 @@ void Compiler::compileBreakStmt() {
 
 void Compiler::compileContinueStmt() {
     if (current_->loops.empty()) {
-        fprintf(stderr, "Compiler [%s:%d]: 'continue' outside of loop\n",
+        fprintf(stderr, "Compile error [%s:%d]: 'continue' outside of loop\n",
                 current_->proto->source.c_str(), currentLine_);
+        had_error_ = true;
         return;
     }
 

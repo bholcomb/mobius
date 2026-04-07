@@ -701,28 +701,38 @@ MOBIUS_FORCEINLINE static int vm_op_array_push(MobiusVM* vm, VMFrame& f, uint32_
 
 // ---- Arithmetic ----
 
-MOBIUS_FORCEINLINE static int vm_op_add(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+// Generic arithmetic dispatch — parameterized by the integer/float/unsigned
+// operators, the metamethod accessor, and the human-readable verb.
+template<typename IntOp, typename UIntOp, typename FloatOp>
+MOBIUS_FORCEINLINE static int vm_arith_generic(
+        MobiusVM* vm, VMFrame& f, uint32_t inst,
+        IntOp int_op, UIntOp uint_op, FloatOp float_op,
+        MobiusString* (Metamethods::*mm)() const,
+        const char* verb, bool supports_string_concat = false) {
     const Value& lhs = RKB(inst);
     const Value& rhs = RKC(inst);
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         Value& dst = RA(inst);
-        dst.as.i64 = lhs.as.i64 + rhs.as.i64;
+        dst.as.i64 = int_op(lhs.as.i64, rhs.as.i64);
         dst.type = VAL_INT64; dst.flags = 0;
     } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
         Value& dst = RA(inst);
-        dst.as.double_val = lhs.as.double_val + rhs.as.double_val;
+        dst.as.double_val = float_op(lhs.as.double_val, rhs.as.double_val);
         dst.type = VAL_FLOAT64; dst.flags = 0;
     } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
         if (MobiusVM::vm_use_unsigned(lhs, rhs))
-            RA(inst) = make_uint64_value(MobiusVM::vm_extract_uint64(lhs) + MobiusVM::vm_extract_uint64(rhs));
+            RA(inst) = make_uint64_value(uint_op(MobiusVM::vm_extract_uint64(lhs),
+                                                  MobiusVM::vm_extract_uint64(rhs)));
         else
-            RA(inst) = make_int64_value(MobiusVM::vm_extract_int64(lhs) + MobiusVM::vm_extract_int64(rhs));
+            RA(inst) = make_int64_value(int_op(MobiusVM::vm_extract_int64(lhs),
+                                                MobiusVM::vm_extract_int64(rhs)));
     } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
         Value& dst = RA(inst);
-        dst.as.double_val = MobiusVM::vm_extract_double(lhs) + MobiusVM::vm_extract_double(rhs);
+        dst.as.double_val = float_op(MobiusVM::vm_extract_double(lhs),
+                                     MobiusVM::vm_extract_double(rhs));
         dst.type = VAL_FLOAT64; dst.flags = 0;
-    } else if (lhs.type == VAL_STRING || rhs.type == VAL_STRING) {
+    } else if (supports_string_concat && (lhs.type == VAL_STRING || rhs.type == VAL_STRING)) {
         std::string result;
         auto append_val = [&](const Value& v) {
             if (v.type == VAL_STRING && v.as.string) {
@@ -739,90 +749,44 @@ MOBIUS_FORCEINLINE static int vm_op_add(MobiusVM* vm, VMFrame& f, uint32_t inst)
         const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
         Value out;
         f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->add(), lhs, rhs, out);
+        int rc = vm->callMetamethod(tbl, (vm->state_->metamethods()->*mm)(), lhs, rhs, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
-        if (rc == 0) { VM_ERROR(vm, f, "Cannot add: no __add metamethod on table"); return -1; }
+        if (rc == 0) {
+            VM_ERROR(vm, f, "Cannot %s: no metamethod on table", verb);
+            return -1;
+        }
         RA(inst) = out;
     } else {
-        VM_ERROR(vm, f, "Cannot add %s and %s", value_type_name(lhs.type), value_type_name(rhs.type));
+        VM_ERROR(vm, f, "Cannot %s %s and %s", verb,
+                 value_type_name(lhs.type), value_type_name(rhs.type));
         return -1;
     }
     return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_add(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_arith_generic(vm, f, inst,
+        [](int64_t a, int64_t b) { return a + b; },
+        [](uint64_t a, uint64_t b) { return a + b; },
+        [](double a, double b) { return a + b; },
+        &Metamethods::add, "add", true);
 }
 
 MOBIUS_FORCEINLINE static int vm_op_sub(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
-    if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
-        Value& dst = RA(inst);
-        dst.as.i64 = lhs.as.i64 - rhs.as.i64;
-        dst.type = VAL_INT64; dst.flags = 0;
-    } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
-        Value& dst = RA(inst);
-        dst.as.double_val = lhs.as.double_val - rhs.as.double_val;
-        dst.type = VAL_FLOAT64; dst.flags = 0;
-    } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
-               (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
-        if (MobiusVM::vm_use_unsigned(lhs, rhs))
-            RA(inst) = make_uint64_value(MobiusVM::vm_extract_uint64(lhs) - MobiusVM::vm_extract_uint64(rhs));
-        else
-            RA(inst) = make_int64_value(MobiusVM::vm_extract_int64(lhs) - MobiusVM::vm_extract_int64(rhs));
-    } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
-        Value& dst = RA(inst);
-        dst.as.double_val = MobiusVM::vm_extract_double(lhs) - MobiusVM::vm_extract_double(rhs);
-        dst.type = VAL_FLOAT64; dst.flags = 0;
-    } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-        const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
-        Value out;
-        f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->sub(), lhs, rhs, out);
-        vm->refreshFrame(f);
-        if (rc < 0) return -1;
-        if (rc == 0) { VM_ERROR(vm, f, "Cannot subtract: no __sub metamethod on table"); return -1; }
-        RA(inst) = out;
-    } else {
-        VM_ERROR(vm, f, "Cannot subtract %s and %s", value_type_name(lhs.type), value_type_name(rhs.type));
-        return -1;
-    }
-    return 0;
+    return vm_arith_generic(vm, f, inst,
+        [](int64_t a, int64_t b) { return a - b; },
+        [](uint64_t a, uint64_t b) { return a - b; },
+        [](double a, double b) { return a - b; },
+        &Metamethods::sub, "subtract");
 }
 
 MOBIUS_FORCEINLINE static int vm_op_mul(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
-    if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
-        Value& dst = RA(inst);
-        dst.as.i64 = lhs.as.i64 * rhs.as.i64;
-        dst.type = VAL_INT64; dst.flags = 0;
-    } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
-        Value& dst = RA(inst);
-        dst.as.double_val = lhs.as.double_val * rhs.as.double_val;
-        dst.type = VAL_FLOAT64; dst.flags = 0;
-    } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
-               (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
-        if (MobiusVM::vm_use_unsigned(lhs, rhs))
-            RA(inst) = make_uint64_value(MobiusVM::vm_extract_uint64(lhs) * MobiusVM::vm_extract_uint64(rhs));
-        else
-            RA(inst) = make_int64_value(MobiusVM::vm_extract_int64(lhs) * MobiusVM::vm_extract_int64(rhs));
-    } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
-        Value& dst = RA(inst);
-        dst.as.double_val = MobiusVM::vm_extract_double(lhs) * MobiusVM::vm_extract_double(rhs);
-        dst.type = VAL_FLOAT64; dst.flags = 0;
-    } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-        const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
-        Value out;
-        f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->mul(), lhs, rhs, out);
-        vm->refreshFrame(f);
-        if (rc < 0) return -1;
-        if (rc == 0) { VM_ERROR(vm, f, "Cannot multiply: no __mul metamethod on table"); return -1; }
-        RA(inst) = out;
-    } else {
-        VM_ERROR(vm, f, "Cannot multiply %s and %s", value_type_name(lhs.type), value_type_name(rhs.type));
-        return -1;
-    }
-    return 0;
+    return vm_arith_generic(vm, f, inst,
+        [](int64_t a, int64_t b) { return a * b; },
+        [](uint64_t a, uint64_t b) { return a * b; },
+        [](double a, double b) { return a * b; },
+        &Metamethods::mul, "multiply");
 }
 
 MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst) {

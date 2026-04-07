@@ -43,13 +43,14 @@ ModuleRegistry* getGlobalRegistry() {
 
 extern "C" {
 
-void mobius_add_plugin_directory(const char* path) {
-    if (!path) return;
-    getGlobalRegistry()->addPluginDirectory(path);
+void mobius_add_plugin_directory(MobiusState* state, const char* path) {
+    if (!state || !path) return;
+    state->addPluginDirectory(path);
 }
 
-void mobius_clear_plugin_directories() {
-    getGlobalRegistry()->clearPluginDirectories();
+void mobius_clear_plugin_directories(MobiusState* state) {
+    if (!state) return;
+    state->clearPluginDirectories();
 }
 
 } // extern "C"
@@ -83,17 +84,6 @@ void ModuleRegistry::registerBuiltinModule(const char* name, Table* module_table
     if (!name || !module_table) return;
     std::unique_lock<std::shared_mutex> lock(registry_mutex_);
     module_tables_[name] = module_table;
-}
-
-void ModuleRegistry::addPluginDirectory(const char* directory) {
-    if (!directory) return;
-    std::unique_lock<std::shared_mutex> lock(registry_mutex_);
-    plugin_directories_.emplace_back(directory);
-}
-
-void ModuleRegistry::clearPluginDirectories() {
-    std::unique_lock<std::shared_mutex> lock(registry_mutex_);
-    plugin_directories_.clear();
 }
 
 // ============================================================================
@@ -229,7 +219,7 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         }
     }
 
-    for (const auto& d : plugin_directories_) {
+    for (const auto& d : state->pluginDirectories()) {
         search_dirs.push_back(d);
     }
 

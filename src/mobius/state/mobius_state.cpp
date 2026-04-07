@@ -298,10 +298,13 @@ MobiusState::MobiusState(MobiusConfig* config)
 MobiusState::~MobiusState() {
     delete job_system_;
 
-    for (int i = 0; i < 16; i++) {
-        if (type_metatables_[i]) {
-            type_metatables_[i]->release();
-            type_metatables_[i] = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(type_metatables_mutex_);
+        for (int i = 0; i < 16; i++) {
+            if (type_metatables_[i]) {
+                type_metatables_[i]->release();
+                type_metatables_[i] = nullptr;
+            }
         }
     }
 
@@ -332,6 +335,7 @@ MobiusState::~MobiusState() {
 }
 
 void MobiusState::setTypeMetatable(ValueType t, Table* mt) {
+    std::lock_guard<std::mutex> lock(type_metatables_mutex_);
     if (type_metatables_[t]) {
         type_metatables_[t]->release();
     }
@@ -449,6 +453,17 @@ int MobiusState::initStdlib() {
 void MobiusState::addOwnedProto(Prototype* proto) {
     std::lock_guard<std::mutex> lock(owned_protos_mutex_);
     owned_protos_.push_back(proto);
+}
+
+void MobiusState::addPluginDirectory(const char* directory) {
+    if (!directory) return;
+    std::lock_guard<std::mutex> lock(plugin_dirs_mutex_);
+    plugin_directories_.emplace_back(directory);
+}
+
+void MobiusState::clearPluginDirectories() {
+    std::lock_guard<std::mutex> lock(plugin_dirs_mutex_);
+    plugin_directories_.clear();
 }
 
 int MobiusState::execString(const char* code) {

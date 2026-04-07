@@ -3,7 +3,7 @@
 
 #include "vm/bytecode.h"
 #include "data/value.h"
-#include "mobius/mobius.h"
+#include <mobius/mobius.h>
 
 #include <vector>
 #include <cstdint>

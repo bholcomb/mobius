@@ -34,7 +34,7 @@
 static char* safe_strdup(const char* str) {
     if (!str) return NULL;
     size_t len = strlen(str);
-    char* copy = malloc(len + 1);
+    char* copy = (char*)malloc(len + 1);
     if (copy) {
         strcpy(copy, str);
     }
@@ -260,7 +260,7 @@ int text_trim(MobiusState* state, int arg_count) {
     
     // Create trimmed string
     size_t len = end - input + 1;
-    char* result = malloc(len + 1);
+    char* result = (char*)malloc(len + 1);
     if (!result) {
         return mobius_error(state, "Memory allocation failed");
     }
@@ -315,7 +315,7 @@ int text_replace_all(MobiusState* state, int arg_count) {
     size_t new_len = strlen(new_substr);
     size_t result_len = strlen(text) + count * (new_len - old_len);
     
-    char* result = malloc(result_len + 1);
+    char* result = (char*)malloc(result_len + 1);
     if (!result) {
         return mobius_error(state, "Memory allocation failed");
     }
@@ -378,7 +378,7 @@ int text_pad_left(MobiusState* state, int arg_count) {
         return 1;
     }
     
-    char* result = malloc(width + 1);
+    char* result = (char*)malloc(width + 1);
     if (!result) {
         return mobius_error(state, "Memory allocation failed");
     }
@@ -417,7 +417,7 @@ int text_split(MobiusState* state, int arg_count) {
     
     // For simplicity, return parts joined with " | " 
     // In a real implementation, you'd return an array
-    char* result = malloc(strlen(text) * 2 + 100); // Rough estimate
+    char* result = (char*)malloc(strlen(text) * 2 + 100);
     if (!result) {
         return mobius_error(state, "Memory allocation failed");
     }
@@ -450,10 +450,8 @@ int text_split(MobiusState* state, int arg_count) {
 /**
  * Plugin initialization function
  */
-int init_text_processing_plugin(void) {
-    // Perform any necessary initialization
-    // For this example, no special initialization is needed
-    return 0; // Success
+int init_text_processing_plugin(MobiusState* /*state*/) {
+    return 0;
 }
 
 /**

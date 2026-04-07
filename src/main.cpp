@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include "mobius/mobius.h"
+#include <mobius/mobius.h>
 
 int execute_file(MobiusState* state, const char* filename) {
     if (!state || !filename) {
@@ -37,10 +37,6 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    // Configure plugin directories (before creating state)
-    mobius_add_plugin_directory("./bin/modules");
-    mobius_add_plugin_directory("./modules");
-    
     MobiusConfig config = mobius_default_config();
     if (debug_mode) {
         config.debug_mode = true;
@@ -52,6 +48,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
+    mobius_add_plugin_directory(state, "./bin/modules");
+    mobius_add_plugin_directory(state, "./modules");
+
     if (mobius_init_stdlib(state) != MOBIUS_OK) {
         fprintf(stderr, "Failed to initialize standard library\n");
         mobius_free_state(state);

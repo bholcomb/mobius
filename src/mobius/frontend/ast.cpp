@@ -11,7 +11,7 @@
 
 // Expression constructors
 Expr* make_binary_expr(Expr* left, Token op, Expr* right) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_BINARY;
@@ -23,7 +23,7 @@ Expr* make_binary_expr(Expr* left, Token op, Expr* right) {
 }
 
 Expr* make_unary_expr(Token op, Expr* right) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_UNARY;
@@ -34,7 +34,7 @@ Expr* make_unary_expr(Token op, Expr* right) {
 }
 
 Expr* make_literal_expr(Value value) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_LITERAL;
@@ -44,7 +44,7 @@ Expr* make_literal_expr(Value value) {
 }
 
 Expr* make_variable_expr(Token name) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_VARIABLE;
@@ -54,7 +54,7 @@ Expr* make_variable_expr(Token name) {
 }
 
 Expr* make_assignment_expr(Expr* target, Expr* value) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_ASSIGNMENT;
@@ -65,7 +65,7 @@ Expr* make_assignment_expr(Expr* target, Expr* value) {
 }
 
 Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_count) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_CALL;
@@ -78,7 +78,7 @@ Expr* make_call_expr(Expr* callee, Token paren, Expr** arguments, size_t arg_cou
 }
 
 Expr* make_grouping_expr(Expr* expression) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_GROUPING;
@@ -88,7 +88,7 @@ Expr* make_grouping_expr(Expr* expression) {
 }
 
 Expr* make_array_literal_expr(Expr** elements, size_t element_count) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_ARRAY_LITERAL;
@@ -99,7 +99,7 @@ Expr* make_array_literal_expr(Expr** elements, size_t element_count) {
 }
 
 Expr* make_array_index_expr(Expr* array, Expr* index) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_ARRAY_INDEX;
@@ -110,7 +110,7 @@ Expr* make_array_index_expr(Expr* array, Expr* index) {
 }
 
 Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_LITERAL;
@@ -121,7 +121,7 @@ Expr* make_table_literal_expr(TablePair* pairs, size_t pair_count) {
 }
 
 Expr* make_table_index_expr(Expr* table, Expr* index) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_INDEX;
@@ -132,7 +132,7 @@ Expr* make_table_index_expr(Expr* table, Expr* index) {
 }
 
 Expr* make_table_dot_expr(Expr* table, Token key) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_TABLE_DOT;
@@ -143,7 +143,7 @@ Expr* make_table_dot_expr(Expr* table, Token key) {
 }
 
 Expr* make_method_dot_expr(Expr* table, Token key) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_METHOD_DOT;
@@ -154,7 +154,7 @@ Expr* make_method_dot_expr(Expr* table, Token key) {
 }
 
 Expr* make_enum_access_expr(Token enum_name, Token member_name) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = EXPR_ENUM_ACCESS;
@@ -165,7 +165,7 @@ Expr* make_enum_access_expr(Token enum_name, Token member_name) {
 }
 
 Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token op) {
-    Expr* expr = calloc(1, sizeof(Expr));
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
     
     expr->type = is_increment ? EXPR_INCREMENT : EXPR_DECREMENT;
@@ -206,7 +206,7 @@ Expr* make_function_expr(Token name, Token* params, size_t param_count,
 
 // Statement constructors
 Stmt* make_expression_stmt(Expr* expression) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_EXPRESSION;
@@ -216,7 +216,7 @@ Stmt* make_expression_stmt(Expr* expression) {
 }
 
 Stmt* make_print_stmt(Expr* expression) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_PRINT;
@@ -226,7 +226,7 @@ Stmt* make_print_stmt(Expr* expression) {
 }
 
 Stmt* make_var_stmt(Token name, Expr* initializer, NumberType type_hint, bool is_annotated) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_VAR;
@@ -239,7 +239,7 @@ Stmt* make_var_stmt(Token name, Expr* initializer, NumberType type_hint, bool is
 }
 
 Stmt* make_block_stmt(Stmt** statements, size_t count) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_BLOCK;
@@ -250,7 +250,7 @@ Stmt* make_block_stmt(Stmt** statements, size_t count) {
 }
 
 Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_IF;
@@ -262,7 +262,7 @@ Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch) {
 }
 
 Stmt* make_while_stmt(Expr* condition, Stmt* body) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_WHILE;
@@ -273,7 +273,7 @@ Stmt* make_while_stmt(Expr* condition, Stmt* body) {
 }
 
 Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* body) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_FOR;
@@ -287,7 +287,7 @@ Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* b
 
 Stmt* make_function_stmt(Token name, Token* params, size_t param_count, 
                         Stmt** body, size_t body_count) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_FUNCTION;
@@ -296,7 +296,7 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
     
     // Deep copy parameter tokens to own their identifier strings
     if (param_count > 0 && params) {
-        Token* params_copy = malloc(param_count * sizeof(Token));
+        Token* params_copy = (Token*)malloc(param_count * sizeof(Token));
         if (!params_copy) {
             free_token(&stmt->as.function.name);
             free(stmt);
@@ -318,7 +318,7 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
 
 
 Stmt* make_return_stmt(Token keyword, Expr* value) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_RETURN;
@@ -330,7 +330,7 @@ Stmt* make_return_stmt(Token keyword, Expr* value) {
 
 Stmt* make_enum_stmt(Token keyword, Token name, NumberType underlying_type, 
                      bool has_explicit_type, EnumMemberDef* members) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_ENUM;
@@ -344,7 +344,7 @@ Stmt* make_enum_stmt(Token keyword, Token name, NumberType underlying_type,
 }
 
 EnumMemberDef* make_enum_member(Token name, Expr* value) {
-    EnumMemberDef* member = calloc(1, sizeof(EnumMemberDef));
+    EnumMemberDef* member = (EnumMemberDef*)calloc(1, sizeof(EnumMemberDef));
     if (!member) return NULL;
     
     member->name = copy_token(&name);  // Deep copy token to own the identifier string
@@ -607,251 +607,6 @@ void print_stmt(Stmt* stmt) {
             if (stmt->as.throw_stmt.value) print_expr(stmt->as.throw_stmt.value);
             break;
     }
-}
-
-// Memory management functions
-void free_expr(Expr* expr) {
-    if (!expr) return;
-    
-    switch (expr->type) {
-        case EXPR_BINARY:
-            free_expr(expr->as.binary.left);
-            free_expr(expr->as.binary.right);
-            break;
-        case EXPR_UNARY:
-            free_expr(expr->as.unary.right);
-            break;
-        case EXPR_CALL:
-            free_expr(expr->as.call.callee);
-            for (size_t i = 0; i < expr->as.call.arg_count; i++) {
-                free_expr(expr->as.call.arguments[i]);
-            }
-            if (expr->as.call.arguments) free(expr->as.call.arguments);
-            break;
-        case EXPR_GROUPING:
-            free_expr(expr->as.grouping.expression);
-            break;
-        case EXPR_ARRAY_LITERAL:
-            for (size_t i = 0; i < expr->as.array_literal.element_count; i++) {
-                free_expr(expr->as.array_literal.elements[i]);
-            }
-            if (expr->as.array_literal.elements) free(expr->as.array_literal.elements);
-            break;
-        case EXPR_ARRAY_INDEX:
-            free_expr(expr->as.array_index.array);
-            free_expr(expr->as.array_index.index);
-            break;
-        case EXPR_LITERAL:
-            break;
-        case EXPR_VARIABLE:
-            // Token doesn't need freeing
-            break;
-        case EXPR_ASSIGNMENT:
-            free_expr(expr->as.assignment.target);
-            free_expr(expr->as.assignment.value);
-            break;
-        case EXPR_TABLE_LITERAL:
-            for (size_t i = 0; i < expr->as.table_literal.pair_count; i++) {
-                if (expr->as.table_literal.pairs[i].key) {
-                    free_expr(expr->as.table_literal.pairs[i].key);
-                }
-                free_expr(expr->as.table_literal.pairs[i].value);
-            }
-            if (expr->as.table_literal.pairs) free(expr->as.table_literal.pairs);
-            break;
-        case EXPR_TABLE_INDEX:
-            free_expr(expr->as.table_index.table);
-            free_expr(expr->as.table_index.index);
-            break;
-        case EXPR_TABLE_DOT:
-        case EXPR_METHOD_DOT:
-            free_expr(expr->as.table_dot.table);
-            break;
-        case EXPR_ENUM_ACCESS:
-            // No dynamic allocations to free for enum access
-            break;
-        case EXPR_INCREMENT:
-        case EXPR_DECREMENT:
-            break;
-        case EXPR_TERNARY:
-            free_expr(expr->as.ternary.condition);
-            free_expr(expr->as.ternary.then_expr);
-            free_expr(expr->as.ternary.else_expr);
-            break;
-        case EXPR_FUNCTION:
-            if (expr->as.function_expr.params) free(expr->as.function_expr.params);
-            for (size_t i = 0; i < expr->as.function_expr.body_count; i++) {
-                free_stmt(expr->as.function_expr.body[i]);
-            }
-            if (expr->as.function_expr.body) free(expr->as.function_expr.body);
-            break;
-        case EXPR_SPAWN:
-            free_expr(expr->as.spawn.callee);
-            for (size_t i = 0; i < expr->as.spawn.arg_count; i++) {
-                free_expr(expr->as.spawn.arguments[i]);
-            }
-            free(expr->as.spawn.arguments);
-            break;
-        case EXPR_AWAIT:
-            free_expr(expr->as.await.operand);
-            break;
-        case EXPR_SHARED:
-            free_expr(expr->as.shared.operand);
-            break;
-    }
-    free(expr);
-}
-
-void free_stmt(Stmt* stmt) {
-    if (!stmt) return;
-    
-    switch (stmt->type) {
-        case STMT_EXPRESSION:
-            free_expr(stmt->as.expression.expression);
-            break;
-        case STMT_PRINT:
-            free_expr(stmt->as.print.expression);
-            break;
-        case STMT_VAR:
-            if (stmt->as.var.initializer) {
-                free_expr(stmt->as.var.initializer);
-            }
-            break;
-        case STMT_BLOCK:
-            for (size_t i = 0; i < stmt->as.block.count; i++) {
-                free_stmt(stmt->as.block.statements[i]);
-            }
-            if (stmt->as.block.statements) free(stmt->as.block.statements);
-            break;
-        case STMT_IF:
-            free_expr(stmt->as.if_stmt.condition);
-            free_stmt(stmt->as.if_stmt.then_branch);
-            if (stmt->as.if_stmt.else_branch) {
-                free_stmt(stmt->as.if_stmt.else_branch);
-            }
-            break;
-        case STMT_WHILE:
-            free_expr(stmt->as.while_stmt.condition);
-            free_stmt(stmt->as.while_stmt.body);
-            break;
-        case STMT_FOR:
-            if (stmt->as.for_stmt.initializer) {
-                free_stmt(stmt->as.for_stmt.initializer);
-            }
-            if (stmt->as.for_stmt.condition) {
-                free_expr(stmt->as.for_stmt.condition);
-            }
-            if (stmt->as.for_stmt.increment) {
-                free_expr(stmt->as.for_stmt.increment);
-            }
-            free_stmt(stmt->as.for_stmt.body);
-            break;
-        case STMT_FUNCTION:
-            if (stmt->as.function.params) free(stmt->as.function.params);
-            for (size_t i = 0; i < stmt->as.function.body_count; i++) {
-                free_stmt(stmt->as.function.body[i]);
-            }
-            if (stmt->as.function.body) free(stmt->as.function.body);
-            break;
-        case STMT_RETURN:
-            if (stmt->as.return_stmt.value) {
-                free_expr(stmt->as.return_stmt.value);
-            }
-            break;
-        case STMT_SWITCH:
-            if (stmt->as.switch_stmt.discriminant) {
-                free_expr(stmt->as.switch_stmt.discriminant);
-            }
-            // Free all case patterns and bodies
-            for (size_t i = 0; i < stmt->as.switch_stmt.case_count; i++) {
-                SwitchCase* case_clause = stmt->as.switch_stmt.cases[i];
-                if (case_clause) {
-                    // Free patterns
-                    for (size_t j = 0; j < case_clause->pattern_count; j++) {
-                        if (case_clause->patterns[j]) {
-                            free_case_pattern(case_clause->patterns[j]);
-                        }
-                    }
-                    if (case_clause->patterns) free(case_clause->patterns);
-                    
-                    // Free guard
-                    if (case_clause->guard) {
-                        free_expr(case_clause->guard);
-                    }
-                    
-                    // Free body
-                    for (size_t j = 0; j < case_clause->body_count; j++) {
-                        if (case_clause->body[j]) {
-                            free_stmt(case_clause->body[j]);
-                        }
-                    }
-                    if (case_clause->body) free(case_clause->body);
-                    
-                    free(case_clause);
-                }
-            }
-            if (stmt->as.switch_stmt.cases) free(stmt->as.switch_stmt.cases);
-            
-            // Free default body
-            for (size_t i = 0; i < stmt->as.switch_stmt.default_body_count; i++) {
-                if (stmt->as.switch_stmt.default_body[i]) {
-                    free_stmt(stmt->as.switch_stmt.default_body[i]);
-                }
-            }
-            if (stmt->as.switch_stmt.default_body) free(stmt->as.switch_stmt.default_body);
-            break;
-        case STMT_BREAK:
-            // Nothing to free for break statements
-            break;
-        case STMT_CONTINUE:
-            // Nothing to free for continue statements
-            break;
-        case STMT_IMPORT:
-            // Nothing to free for import statements (tokens are not owned)
-            break;
-        case STMT_PRAGMA:
-            // Nothing to free for pragma statements (tokens are not owned)
-            break;
-        case STMT_ENUM: {
-            // Free enum members
-            EnumMemberDef* member = stmt->as.enum_stmt.members;
-            while (member) {
-                EnumMemberDef* next = member->next;
-                if (member->value) {
-                    free_expr(member->value);
-                }
-                free(member);
-                member = next;
-            }
-            break;
-        }
-        case STMT_FOR_IN:
-            free_expr(stmt->as.for_in_stmt.iterable);
-            free_stmt(stmt->as.for_in_stmt.body);
-            break;
-        case STMT_TRY_CATCH:
-            for (size_t i = 0; i < stmt->as.try_catch_stmt.try_body_count; i++) {
-                free_stmt(stmt->as.try_catch_stmt.try_body[i]);
-            }
-            if (stmt->as.try_catch_stmt.try_body) free(stmt->as.try_catch_stmt.try_body);
-            for (size_t i = 0; i < stmt->as.try_catch_stmt.catch_body_count; i++) {
-                free_stmt(stmt->as.try_catch_stmt.catch_body[i]);
-            }
-            if (stmt->as.try_catch_stmt.catch_body) free(stmt->as.try_catch_stmt.catch_body);
-            for (size_t i = 0; i < stmt->as.try_catch_stmt.finally_body_count; i++) {
-                free_stmt(stmt->as.try_catch_stmt.finally_body[i]);
-            }
-            if (stmt->as.try_catch_stmt.finally_body) free(stmt->as.try_catch_stmt.finally_body);
-            break;
-        case STMT_THROW:
-            if (stmt->as.throw_stmt.value) {
-                free_expr(stmt->as.throw_stmt.value);
-            }
-            break;
-        case STMT_YIELD:
-            break;
-    }
-    free(stmt);
 }
 
 // ============================================================================
@@ -1215,7 +970,7 @@ void ast_release_expr_array(Expr** exprs, size_t count) {
 // Switch statement creation functions
 Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count,
                       Stmt** default_body, size_t default_body_count) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_SWITCH;
@@ -1229,7 +984,7 @@ Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count
 }
 
 Stmt* make_break_stmt(Token keyword) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_BREAK;
@@ -1239,7 +994,7 @@ Stmt* make_break_stmt(Token keyword) {
 }
 
 Stmt* make_continue_stmt(Token keyword) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_CONTINUE;
@@ -1249,7 +1004,7 @@ Stmt* make_continue_stmt(Token keyword) {
 }
 
 Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_alias) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_IMPORT;
@@ -1278,7 +1033,7 @@ Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_a
 }
 
 Stmt* make_pragma_stmt(Token keyword, Token name, Token value) {
-    Stmt* stmt = calloc(1, sizeof(Stmt));
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_PRAGMA;
@@ -1402,7 +1157,7 @@ Expr* make_shared_expr(Expr* operand) {
 
 // Pattern creation functions
 CasePattern* make_value_pattern(Value literal) {
-    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    CasePattern* pattern = (CasePattern*)calloc(1, sizeof(CasePattern));
     if (!pattern) return NULL;
     
     pattern->type = PATTERN_VALUE;
@@ -1411,7 +1166,7 @@ CasePattern* make_value_pattern(Value literal) {
 }
 
 CasePattern* make_expression_pattern(TokenType op, Expr* expression) {
-    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    CasePattern* pattern = (CasePattern*)calloc(1, sizeof(CasePattern));
     if (!pattern) return NULL;
     
     pattern->type = PATTERN_EXPRESSION;
@@ -1421,7 +1176,7 @@ CasePattern* make_expression_pattern(TokenType op, Expr* expression) {
 }
 
 CasePattern* make_range_pattern(Expr* start, Expr* end, bool inclusive) {
-    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    CasePattern* pattern = (CasePattern*)calloc(1, sizeof(CasePattern));
     if (!pattern) return NULL;
     
     pattern->type = PATTERN_RANGE;
@@ -1432,7 +1187,7 @@ CasePattern* make_range_pattern(Expr* start, Expr* end, bool inclusive) {
 }
 
 CasePattern* make_type_pattern(ValueType value_type) {
-    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    CasePattern* pattern = (CasePattern*)calloc(1, sizeof(CasePattern));
     if (!pattern) return NULL;
     
     pattern->type = PATTERN_TYPE;
@@ -1442,7 +1197,7 @@ CasePattern* make_type_pattern(ValueType value_type) {
 
 CasePattern* make_array_pattern(ArrayPattern* elements, size_t element_count, 
                                bool has_rest, char* rest_name) {
-    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    CasePattern* pattern = (CasePattern*)calloc(1, sizeof(CasePattern));
     if (!pattern) return NULL;
     
     pattern->type = PATTERN_ARRAY;
@@ -1454,7 +1209,7 @@ CasePattern* make_array_pattern(ArrayPattern* elements, size_t element_count,
 }
 
 CasePattern* make_table_pattern(TablePattern* fields, size_t field_count, bool is_exhaustive) {
-    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    CasePattern* pattern = (CasePattern*)calloc(1, sizeof(CasePattern));
     if (!pattern) return NULL;
     
     pattern->type = PATTERN_TABLE;
@@ -1465,7 +1220,7 @@ CasePattern* make_table_pattern(TablePattern* fields, size_t field_count, bool i
 }
 
 CasePattern* make_wildcard_pattern(void) {
-    CasePattern* pattern = calloc(1, sizeof(CasePattern));
+    CasePattern* pattern = (CasePattern*)calloc(1, sizeof(CasePattern));
     if (!pattern) return NULL;
     
     pattern->type = PATTERN_WILDCARD;
@@ -1474,7 +1229,7 @@ CasePattern* make_wildcard_pattern(void) {
 
 SwitchCase* make_switch_case(CasePattern** patterns, size_t pattern_count,
                             Expr* guard, Stmt** body, size_t body_count, bool has_break) {
-    SwitchCase* switch_case = calloc(1, sizeof(SwitchCase));
+    SwitchCase* switch_case = (SwitchCase*)calloc(1, sizeof(SwitchCase));
     if (!switch_case) return NULL;
     
     switch_case->patterns = patterns;
@@ -1496,15 +1251,15 @@ void free_case_pattern(CasePattern* pattern) {
             break;
         case PATTERN_EXPRESSION:
             if (pattern->as.expr_pattern.expression) {
-                free_expr(pattern->as.expr_pattern.expression);
+                ast_release_expr(pattern->as.expr_pattern.expression);
             }
             break;
         case PATTERN_RANGE:
             if (pattern->as.range_pattern.start) {
-                free_expr(pattern->as.range_pattern.start);
+                ast_release_expr(pattern->as.range_pattern.start);
             }
             if (pattern->as.range_pattern.end) {
-                free_expr(pattern->as.range_pattern.end);
+                ast_release_expr(pattern->as.range_pattern.end);
             }
             break;
         case PATTERN_TYPE:

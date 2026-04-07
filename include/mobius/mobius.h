@@ -40,10 +40,10 @@ extern "C" {
 /*  Version                                                                */
 /* ====================================================================== */
 
-#define MOBIUS_VERSION_MAJOR  1
-#define MOBIUS_VERSION_MINOR  0
+#define MOBIUS_VERSION_MAJOR  0
+#define MOBIUS_VERSION_MINOR  1
 #define MOBIUS_VERSION_PATCH  0
-#define MOBIUS_VERSION_STRING "1.0.0"
+#define MOBIUS_VERSION_STRING "0.1.0"
 
 /* ====================================================================== */
 /*  Opaque state handle                                                    */
@@ -235,15 +235,15 @@ MOBIUS_API int mobius_exec_file(MobiusState* state, const char* filename);
 /* ====================================================================== */
 
 /**
- * Add a directory to the plugin/module search path.
+ * Add a directory to the plugin/module search path for this state.
  * Modules are loaded lazily on first import.
  */
-MOBIUS_API void mobius_add_plugin_directory(const char* path);
+MOBIUS_API void mobius_add_plugin_directory(MobiusState* state, const char* path);
 
 /**
- * Clear all configured plugin/module search directories.
+ * Clear all configured plugin/module search directories for this state.
  */
-MOBIUS_API void mobius_clear_plugin_directories(void);
+MOBIUS_API void mobius_clear_plugin_directories(MobiusState* state);
 
 /* ====================================================================== */
 /*  REPL                                                                   */

@@ -16,21 +16,19 @@
 // INTERNAL HELPERS
 // ============================================================================
 
-// Retrieve the active NativeCallContext. Fatal if the state has no usable VM
-// context (for example, if state construction failed).
 static NativeCallContext* get_nctx(MobiusState* state) {
     NativeCallContext* nctx = state->nativeContext();
     if (!nctx) {
-        fprintf(stderr, "FATAL: mobius_stack_* called without an available VM context\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_* called without an available VM context",
+                        "Ensure the state has an active VM before calling stack functions",
+                        0, 0, nullptr);
+        return nullptr;
     }
     return nctx;
 }
 
-// Convert a stack index to an absolute register index.
-// idx >= 0: offset from base (0 = first arg).
-// idx < 0:  offset from top (-1 = last pushed value).
-static int normalize_index(NativeCallContext* nctx, int idx) {
+static int normalize_index(NativeCallContext* nctx, int idx, bool* out_ok) {
     int size = nctx->top - nctx->base;
 
     if (idx < 0) {
@@ -38,37 +36,42 @@ static int normalize_index(NativeCallContext* nctx, int idx) {
     }
 
     if (idx < 0 || idx >= size) {
-        fprintf(stderr, "FATAL: Stack index out of bounds (size: %d, idx: %d)\n",
-                size, idx);
-        exit(1);
+        *out_ok = false;
+        return 0;
     }
 
+    *out_ok = true;
     return nctx->base + idx;
 }
 
 static Value* get_value_at(MobiusState* state, int idx) {
     NativeCallContext* nctx = get_nctx(state);
-    int abs = normalize_index(nctx, idx);
+    if (!nctx) return nullptr;
+    bool ok;
+    int abs = normalize_index(nctx, idx, &ok);
+    if (!ok) {
+        int size = nctx->top - nctx->base;
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "Stack index out of bounds (size: %d, idx: %d)", size, idx);
+        state->setError(MOBIUS_ERROR_ARGUMENT, buf, nullptr, 0, 0, nullptr);
+        return nullptr;
+    }
     return &nctx->registers[abs];
 }
 
-// Fatal error helper
-static void fatal_type_error(const char* func, ValueType expected, ValueType actual, int idx) {
-    fprintf(stderr, "FATAL: %s() - Expected %s at index %d, got %s\n",
-            func, value_type_name(expected), idx, value_type_name(actual));
-    exit(1);
-}
-
-// Check if conversion is needed and fail in strict mode
 static bool check_strict_conversion(MobiusState* state, ValueType from, ValueType to) {
     if (from == to) return false;
 
     bool strict = state->config().strict_mode;
     if (state->activeVM()) strict = state->activeVM()->strict_mode_;
     if (strict) {
-        fprintf(stderr, "FATAL: Type conversion not allowed in strict mode (from %s to %s)\n",
-                value_type_name(from), value_type_name(to));
-        exit(1);
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "Type conversion not allowed in strict mode (from %s to %s)",
+                 value_type_name(from), value_type_name(to));
+        state->setError(MOBIUS_ERROR_TYPE, buf, nullptr, 0, 0, nullptr);
+        return false;
     }
 
     return true;
@@ -86,6 +89,7 @@ extern "C" {
 
 int mobius_stack_size(MobiusState* state) {
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return 0;
     return nctx->top - nctx->base;
 }
 
@@ -172,43 +176,52 @@ bool mobius_stack_isFunction(MobiusState* state, int idx) {
 // CONVERSION HELPERS
 // ============================================================================
 
-static int64_t value_to_int64(Value* val) {
+static bool value_to_int64(Value* val, int64_t* out) {
     switch (val->type) {
         case VAL_INT64:
-            return val->as.i64;
+            *out = val->as.i64;
+            return true;
         case VAL_UINT64:
-            return (int64_t)val->as.u64;
+            *out = (int64_t)val->as.u64;
+            return true;
         case VAL_FLOAT64:
-            return (int64_t)val->as.double_val;
+            *out = (int64_t)val->as.double_val;
+            return true;
         case VAL_BOOL:
-            return val->as.boolean ? 1 : 0;
+            *out = val->as.boolean ? 1 : 0;
+            return true;
         case VAL_STRING:
             if (val->as.string && val->as.string->data) {
-                return strtoll(val->as.string->data, NULL, 10);
+                *out = strtoll(val->as.string->data, NULL, 10);
+                return true;
             }
-            return 0;
+            *out = 0;
+            return true;
         default:
-            fprintf(stderr, "FATAL: Cannot convert %s to integer\n", value_type_name(val->type));
-            exit(1);
+            return false;
     }
 }
 
-static double value_to_double(Value* val) {
+static bool value_to_double(Value* val, double* out) {
     switch (val->type) {
         case VAL_INT64:
-            return (double)val->as.i64;
+            *out = (double)val->as.i64;
+            return true;
         case VAL_UINT64:
-            return (double)val->as.u64;
+            *out = (double)val->as.u64;
+            return true;
         case VAL_FLOAT64:
-            return val->as.double_val;
+            *out = val->as.double_val;
+            return true;
         case VAL_STRING:
             if (val->as.string && val->as.string->data) {
-                return strtod(val->as.string->data, NULL);
+                *out = strtod(val->as.string->data, NULL);
+                return true;
             }
-            return 0.0;
+            *out = 0.0;
+            return true;
         default:
-            fprintf(stderr, "FATAL: Cannot convert %s to float\n", value_type_name(val->type));
-            exit(1);
+            return false;
     }
 }
 
@@ -237,7 +250,7 @@ static const char* stack_value_to_string(Value* val) {
             }
             return "";
         case VAL_INT64:
-            snprintf(buffer, sizeof(buffer), "%" PRId64, value_to_int64(val));
+            snprintf(buffer, sizeof(buffer), "%" PRId64, val->as.i64);
             return buffer;
         case VAL_FLOAT64:
             snprintf(buffer, sizeof(buffer), "%g", val->as.double_val);
@@ -257,51 +270,95 @@ static const char* stack_value_to_string(Value* val) {
 // ============================================================================
 
 int8_t mobius_stack_asInt8(MobiusState* state, int idx) {
-    return (int8_t)value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (int8_t)v;
 }
 
 uint8_t mobius_stack_asUInt8(MobiusState* state, int idx) {
-    return (uint8_t)value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint8_t)v;
 }
 
 int16_t mobius_stack_asInt16(MobiusState* state, int idx) {
-    return (int16_t)value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (int16_t)v;
 }
 
 uint16_t mobius_stack_asUInt16(MobiusState* state, int idx) {
-    return (uint16_t)value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint16_t)v;
 }
 
 int32_t mobius_stack_asInt32(MobiusState* state, int idx) {
-    return (int32_t)value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (int32_t)v;
 }
 
 uint32_t mobius_stack_asUInt32(MobiusState* state, int idx) {
-    return (uint32_t)value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint32_t)v;
 }
 
 int64_t mobius_stack_asInt64(MobiusState* state, int idx) {
-    return value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return v;
 }
 
 uint64_t mobius_stack_asUInt64(MobiusState* state, int idx) {
-    return (uint64_t)value_to_int64(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint64_t)v;
 }
 
 float mobius_stack_asFloat32(MobiusState* state, int idx) {
-    return (float)value_to_double(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0.0f;
+    double v;
+    if (!value_to_double(val, &v)) return 0.0f;
+    return (float)v;
 }
 
 double mobius_stack_asFloat64(MobiusState* state, int idx) {
-    return value_to_double(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0.0;
+    double v;
+    if (!value_to_double(val, &v)) return 0.0;
+    return v;
 }
 
 bool mobius_stack_asBool(MobiusState* state, int idx) {
-    return value_to_bool(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return false;
+    return value_to_bool(val);
 }
 
 const char* mobius_stack_asString(MobiusState* state, int idx) {
-    return stack_value_to_string(get_value_at(state, idx));
+    Value* val = get_value_at(state, idx);
+    if (!val) return "";
+    return stack_value_to_string(val);
 }
 
 // ============================================================================
@@ -310,72 +367,104 @@ const char* mobius_stack_asString(MobiusState* state, int idx) {
 
 int8_t mobius_stack_getInt8(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return (int8_t)value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (int8_t)v;
 }
 
 uint8_t mobius_stack_getUInt8(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return (uint8_t)value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint8_t)v;
 }
 
 int16_t mobius_stack_getInt16(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return (int16_t)value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (int16_t)v;
 }
 
 uint16_t mobius_stack_getUInt16(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return (uint16_t)value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint16_t)v;
 }
 
 int32_t mobius_stack_getInt32(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return (int32_t)value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (int32_t)v;
 }
 
 uint32_t mobius_stack_getUInt32(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return (uint32_t)value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint32_t)v;
 }
 
 int64_t mobius_stack_getInt64(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return v;
 }
 
 uint64_t mobius_stack_getUInt64(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0;
     if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
-    return (uint64_t)value_to_int64(val);
+    int64_t v;
+    if (!value_to_int64(val, &v)) return 0;
+    return (uint64_t)v;
 }
 
 float mobius_stack_getFloat32(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0.0f;
     if (val->type != VAL_FLOAT64) check_strict_conversion(state, val->type, VAL_FLOAT64);
-    return (float)value_to_double(val);
+    double v;
+    if (!value_to_double(val, &v)) return 0.0f;
+    return (float)v;
 }
 
 double mobius_stack_getFloat64(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return 0.0;
     if (val->type != VAL_FLOAT64) check_strict_conversion(state, val->type, VAL_FLOAT64);
-    return value_to_double(val);
+    double v;
+    if (!value_to_double(val, &v)) return 0.0;
+    return v;
 }
 
 bool mobius_stack_getBool(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return false;
     if (val->type != VAL_BOOL) check_strict_conversion(state, val->type, VAL_BOOL);
     return value_to_bool(val);
 }
 
 const char* mobius_stack_getString(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
+    if (!val) return "";
     if (val->type != VAL_STRING) check_strict_conversion(state, val->type, VAL_STRING);
     return stack_value_to_string(val);
 }
@@ -384,13 +473,18 @@ const char* mobius_stack_getString(MobiusState* state, int idx) {
 // STACK PUSH OPERATIONS
 // ============================================================================
 
-static void stack_push(MobiusState* state, Value val) {
+static int stack_push(MobiusState* state, Value val) {
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return MOBIUS_ERROR_RUNTIME;
     if (nctx->top >= nctx->capacity) {
-        fprintf(stderr, "FATAL: Native stack overflow (capacity %d)\n", nctx->capacity);
-        exit(1);
+        state->setError(MOBIUS_ERROR_MEMORY,
+                        "Native stack overflow",
+                        "Reduce the number of values pushed to the stack",
+                        0, 0, nullptr);
+        return MOBIUS_ERROR_MEMORY;
     }
     nctx->registers[nctx->top++] = val;
+    return MOBIUS_OK;
 }
 
 void mobius_stack_pushInt8(MobiusState* state, int8_t value) {
@@ -452,17 +546,19 @@ void mobius_stack_pushNil(MobiusState* state) {
 void mobius_stack_pushNewTable(MobiusState* state, size_t capacity) {
     Table* table = new (std::nothrow) Table(state, capacity == 0 ? 16 : capacity);
     if (!table) {
-        fprintf(stderr, "FATAL: Failed to create table\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_MEMORY, "Failed to create table",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
     stack_push(state, make_table_value(table));
 }
 
 void mobius_stack_pushNewArray(MobiusState* state, size_t capacity) {
-    ArrayValue* array = new ArrayValue(capacity == 0 ? 8 : capacity);
+    ArrayValue* array = new (std::nothrow) ArrayValue(capacity == 0 ? 8 : capacity);
     if (!array) {
-        fprintf(stderr, "FATAL: Failed to create array\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_MEMORY, "Failed to create array",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
     stack_push(state, make_array_value(array));
 }
@@ -474,8 +570,10 @@ void mobius_stack_pushNewArray(MobiusState* state, size_t capacity) {
 
 void mobius_stack_getVariable(MobiusState* state, const char* name) {
     if (!name) {
-        fprintf(stderr, "FATAL: mobius_stack_getVariable() - NULL variable name\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_stack_getVariable() - NULL variable name",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     int slot = state->findGlobalSlot(name);
@@ -488,8 +586,10 @@ void mobius_stack_getVariable(MobiusState* state, const char* name) {
 
 void mobius_stack_getGlobal(MobiusState* state, const char* name) {
     if (!name) {
-        fprintf(stderr, "FATAL: mobius_stack_getGlobal() - NULL variable name\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_stack_getGlobal() - NULL variable name",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     int slot = state->findGlobalSlot(name);
@@ -502,14 +602,19 @@ void mobius_stack_getGlobal(MobiusState* state, const char* name) {
 
 void mobius_stack_setVariable(MobiusState* state, const char* name) {
     if (!name) {
-        fprintf(stderr, "FATAL: mobius_stack_setVariable() - NULL variable name\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_stack_setVariable() - NULL variable name",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     if (nctx->top <= nctx->base) {
-        fprintf(stderr, "FATAL: mobius_stack_setVariable() - Stack is empty\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_setVariable() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value val = nctx->registers[--nctx->top];
@@ -520,14 +625,19 @@ void mobius_stack_setVariable(MobiusState* state, const char* name) {
 
 void mobius_stack_setGlobal(MobiusState* state, const char* name) {
     if (!name) {
-        fprintf(stderr, "FATAL: mobius_stack_setGlobal() - NULL variable name\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_stack_setGlobal() - NULL variable name",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     if (nctx->top <= nctx->base) {
-        fprintf(stderr, "FATAL: mobius_stack_setGlobal() - Stack is empty\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_setGlobal() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value val = nctx->registers[--nctx->top];
@@ -542,19 +652,28 @@ void mobius_stack_setGlobal(MobiusState* state, const char* name) {
 
 void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* key) {
     if (!key) {
-        fprintf(stderr, "FATAL: mobius_stack_setTableField() - NULL key\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_stack_setTableField() - NULL key",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     if (nctx->top <= nctx->base) {
-        fprintf(stderr, "FATAL: mobius_stack_setTableField() - Stack is empty\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_setTableField() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value* table_val = get_value_at(state, table_idx);
+    if (!table_val) return;
     if (table_val->type != VAL_TABLE) {
-        fatal_type_error("mobius_stack_setTableField", VAL_TABLE, table_val->type, table_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_setTableField() - Expected table",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value key_val   = make_string_value_from_cstr(state, key);
@@ -564,13 +683,19 @@ void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* k
 
 void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* key) {
     if (!key) {
-        fprintf(stderr, "FATAL: mobius_stack_getTableField() - NULL key\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_stack_getTableField() - NULL key",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value* table_val = get_value_at(state, table_idx);
+    if (!table_val) return;
     if (table_val->type != VAL_TABLE) {
-        fatal_type_error("mobius_stack_getTableField", VAL_TABLE, table_val->type, table_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_getTableField() - Expected table",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value key_val = make_string_value_from_cstr(state, key);
@@ -579,14 +704,18 @@ void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* k
 
 size_t mobius_stack_getTableSize(MobiusState* state, int table_idx) {
     Value* table_val = get_value_at(state, table_idx);
-    if (table_val->type != VAL_TABLE) return 0;
+    if (!table_val || table_val->type != VAL_TABLE) return 0;
     return table_val->as.table->size();
 }
 
 void mobius_stack_getTableKeys(MobiusState* state, int table_idx) {
     Value* table_val = get_value_at(state, table_idx);
+    if (!table_val) return;
     if (table_val->type != VAL_TABLE) {
-        fatal_type_error("mobius_stack_getTableKeys", VAL_TABLE, table_val->type, table_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_getTableKeys() - Expected table",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Table* tbl = table_val->as.table;
@@ -605,14 +734,21 @@ void mobius_stack_getTableKeys(MobiusState* state, int table_idx) {
 
 void mobius_stack_setArrayElement(MobiusState* state, int array_idx, size_t element_idx) {
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     if (nctx->top <= nctx->base) {
-        fprintf(stderr, "FATAL: mobius_stack_setArrayElement() - Stack is empty\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_setArrayElement() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value* array_val = get_value_at(state, array_idx);
+    if (!array_val) return;
     if (array_val->type != VAL_ARRAY) {
-        fatal_type_error("mobius_stack_setArrayElement", VAL_ARRAY, array_val->type, array_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_setArrayElement() - Expected array",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value element_val = nctx->registers[--nctx->top];
@@ -621,8 +757,12 @@ void mobius_stack_setArrayElement(MobiusState* state, int array_idx, size_t elem
 
 void mobius_stack_getArrayElement(MobiusState* state, int array_idx, size_t element_idx) {
     Value* array_val = get_value_at(state, array_idx);
+    if (!array_val) return;
     if (array_val->type != VAL_ARRAY) {
-        fatal_type_error("mobius_stack_getArrayElement", VAL_ARRAY, array_val->type, array_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_getArrayElement() - Expected array",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     stack_push(state, array_val->as.array->get(element_idx));
@@ -630,20 +770,27 @@ void mobius_stack_getArrayElement(MobiusState* state, int array_idx, size_t elem
 
 size_t mobius_stack_getArrayLength(MobiusState* state, int array_idx) {
     Value* array_val = get_value_at(state, array_idx);
-    if (array_val->type != VAL_ARRAY) return 0;
+    if (!array_val || array_val->type != VAL_ARRAY) return 0;
     return array_val->as.array->length();
 }
 
 void mobius_stack_arrayPush(MobiusState* state, int array_idx) {
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     if (nctx->top <= nctx->base) {
-        fprintf(stderr, "FATAL: mobius_stack_arrayPush() - Stack is empty\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_arrayPush() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value* array_val = get_value_at(state, array_idx);
+    if (!array_val) return;
     if (array_val->type != VAL_ARRAY) {
-        fatal_type_error("mobius_stack_arrayPush", VAL_ARRAY, array_val->type, array_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_arrayPush() - Expected array",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value element_val = nctx->registers[--nctx->top];
@@ -652,8 +799,12 @@ void mobius_stack_arrayPush(MobiusState* state, int array_idx) {
 
 void mobius_stack_arrayPop(MobiusState* state, int array_idx) {
     Value* array_val = get_value_at(state, array_idx);
+    if (!array_val) return;
     if (array_val->type != VAL_ARRAY) {
-        fatal_type_error("mobius_stack_arrayPop", VAL_ARRAY, array_val->type, array_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_arrayPop() - Expected array",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     stack_push(state, array_val->as.array->pop());
@@ -661,14 +812,21 @@ void mobius_stack_arrayPop(MobiusState* state, int array_idx) {
 
 void mobius_stack_arrayInsert(MobiusState* state, int array_idx, size_t element_idx) {
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     if (nctx->top <= nctx->base) {
-        fprintf(stderr, "FATAL: mobius_stack_arrayInsert() - Stack is empty\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_arrayInsert() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value* array_val = get_value_at(state, array_idx);
+    if (!array_val) return;
     if (array_val->type != VAL_ARRAY) {
-        fatal_type_error("mobius_stack_arrayInsert", VAL_ARRAY, array_val->type, array_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_arrayInsert() - Expected array",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value element_val = nctx->registers[--nctx->top];
@@ -677,8 +835,12 @@ void mobius_stack_arrayInsert(MobiusState* state, int array_idx, size_t element_
 
 void mobius_stack_arrayRemove(MobiusState* state, int array_idx, size_t element_idx) {
     Value* array_val = get_value_at(state, array_idx);
+    if (!array_val) return;
     if (array_val->type != VAL_ARRAY) {
-        fatal_type_error("mobius_stack_arrayRemove", VAL_ARRAY, array_val->type, array_idx);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_stack_arrayRemove() - Expected array",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     stack_push(state, array_val->as.array->remove(element_idx));
@@ -690,23 +852,29 @@ void mobius_stack_arrayRemove(MobiusState* state, int array_idx, size_t element_
 
 void mobius_stack_pop(MobiusState* state, int count) {
     if (count < 0) {
-        fprintf(stderr, "FATAL: mobius_stack_pop() - Invalid count %d\n", count);
-        exit(1);
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_stack_pop() - Invalid negative count",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     int size = nctx->top - nctx->base;
     if (count > size) {
-        fprintf(stderr, "FATAL: mobius_stack_pop() - Cannot pop %d values from stack of size %d\n",
-                count, size);
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_stack_pop() - Cannot pop more values than stack size",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     nctx->top -= count;
 }
 
 void mobius_stack_copy(MobiusState* state, int idx) {
-    Value copy = *get_value_at(state, idx);
+    Value* val = get_value_at(state, idx);
+    if (!val) return;
+    Value copy = *val;
     stack_push(state, copy);
 }
 
@@ -748,9 +916,12 @@ void mobius_push_type_metatable(MobiusState* state, MobiusValueType type) {
 
 void mobius_set_type_metatable(MobiusState* state, MobiusValueType type) {
     NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
     if (nctx->top <= nctx->base) {
-        fprintf(stderr, "FATAL: mobius_set_type_metatable() - Stack is empty\n");
-        exit(1);
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_set_type_metatable() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
     }
 
     Value val = nctx->registers[--nctx->top];
@@ -761,9 +932,9 @@ void mobius_set_type_metatable(MobiusState* state, MobiusValueType type) {
     } else if (val.type == VAL_NIL) {
         state->setTypeMetatable(vt, nullptr);
     } else {
-        fprintf(stderr, "FATAL: mobius_set_type_metatable() - Expected table or nil, got %s\n",
-                value_type_name(val.type));
-        exit(1);
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_set_type_metatable() - Expected table or nil",
+                        nullptr, 0, 0, nullptr);
     }
 }
 
@@ -809,29 +980,38 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     if (func_slot < nctx->base) return -1;
 
     Value func_val = nctx->registers[func_slot];
-    Value args[16];
-    int safe_nargs = (nargs > 16) ? 16 : nargs;
-    for (int i = 0; i < safe_nargs; i++) {
+
+    // Use dynamic allocation only if nargs exceeds inline buffer
+    static constexpr int INLINE_ARGS = 16;
+    Value inline_args[INLINE_ARGS];
+    Value* args = (nargs <= INLINE_ARGS) ? inline_args : new (std::nothrow) Value[nargs];
+    if (!args) return -1;
+
+    for (int i = 0; i < nargs; i++) {
         args[i] = nctx->registers[func_slot + 1 + i];
     }
 
     nctx->top = func_slot;
 
+    int rc;
     if (func_val.type == VAL_NATIVE_FUNCTION) {
-        for (int i = 0; i < safe_nargs; i++) {
+        for (int i = 0; i < nargs; i++) {
             nctx->registers[nctx->top++] = args[i];
         }
-        int rc = func_val.as.native_function(state, safe_nargs);
+        if (args != inline_args) delete[] args;
+        rc = func_val.as.native_function(state, nargs);
         if (rc < 0) return -1;
         return rc;
     }
 
     if (func_val.type != VAL_FUNCTION || !func_val.as.function) {
+        if (args != inline_args) delete[] args;
         return state->error("pcall: value is not a function");
     }
 
     MobiusFunction* mf = func_val.as.function;
-    if (!mf->proto || (int)mf->param_count != safe_nargs) {
+    if (!mf->proto || (int)mf->param_count != nargs) {
+        if (args != inline_args) delete[] args;
         return state->error("pcall: argument count mismatch");
     }
 
@@ -845,9 +1025,10 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     vm->ensureRegisters(needed);
 
     vm->registers_[pcall_base] = func_val;
-    for (int i = 0; i < safe_nargs; i++) {
+    for (int i = 0; i < nargs; i++) {
         vm->registers_[child_base + i] = args[i];
     }
+    if (args != inline_args) delete[] args;
 
     nctx->registers = vm->registers_.data();
     nctx->capacity = (int)vm->registers_.size();
@@ -862,7 +1043,7 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     int saved_top  = vm->native_ctx_.top;
 
     size_t depth = vm->callStackSize() - 1;
-    int rc = vm->run(depth);
+    rc = vm->run(depth);
 
     nctx->registers = vm->registers_.data();
     nctx->capacity  = (int)vm->registers_.size();
