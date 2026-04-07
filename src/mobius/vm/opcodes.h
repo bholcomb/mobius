@@ -222,6 +222,9 @@ enum OpCode : uint8_t {
     OP_MUL_II,      // A B C     R[A] = RK(B).i64  * RK(C).i64   -> VAL_INT64
     OP_MUL_FF,      // A B C     R[A] = RK(B).f64  * RK(C).f64   -> VAL_FLOAT64
     OP_MOD_II,      // A B C     R[A] = RK(B).i64  % RK(C).i64   -> VAL_INT64
+    OP_DIV_II,      // A B C     R[A] = RK(B).i64  / RK(C).i64   -> VAL_INT64
+    OP_DIV_FF,      // A B C     R[A] = RK(B).f64  / RK(C).f64   -> VAL_FLOAT64
+    OP_MOD_FF,      // A B C     R[A] = fmod(RK(B).f64, RK(C).f64) -> VAL_FLOAT64
 
     // -- Inline-data arithmetic (ABC + 2 data words for 64-bit constant) --
     OP_ADDK,        // A B C     R[A] = R[B] + inline64; C=type_tag; ip+=2
@@ -382,6 +385,9 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"MUL_II",    FMT_ABC},
         {"MUL_FF",    FMT_ABC},
         {"MOD_II",    FMT_ABC},
+        {"DIV_II",    FMT_ABC},
+        {"DIV_FF",    FMT_ABC},
+        {"MOD_FF",    FMT_ABC},
 
         {"ADDK",      FMT_ABC_D},
         {"SUBK",      FMT_ABC_D},

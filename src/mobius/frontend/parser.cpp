@@ -10,6 +10,7 @@
 // Forward declarations
 Stmt* parse_continue_statement(Parser* parser);
 Stmt* parse_pragma_statement(Parser* parser);
+static ValueType parse_type_name(Parser* parser, const char* context = "after ':'");
 
 // Parser initialization
 void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token_count) {
@@ -331,27 +332,49 @@ Expr* parse_primary(Parser* parser) {
         consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'func' in expression.");
 
         Token* params = NULL;
+        ValueType* param_types = NULL;
         size_t param_count = 0;
         size_t param_capacity = 0;
+        bool has_any_type = false;
 
         if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
             do {
                 if (param_count >= param_capacity) {
                     size_t new_cap = param_capacity == 0 ? 4 : param_capacity * 2;
                     Token* new_params = (Token*)realloc(params, new_cap * sizeof(Token));
-                    if (!new_params) { free(params); parser_error_at_current(parser, "Out of memory"); return NULL; }
+                    ValueType* new_types = (ValueType*)realloc(param_types, new_cap * sizeof(ValueType));
+                    if (!new_params || !new_types) { free(params); free(param_types); parser_error_at_current(parser, "Out of memory"); return NULL; }
                     params = new_params;
+                    param_types = new_types;
                     param_capacity = new_cap;
                 }
                 if (!parser_check(parser, TOKEN_IDENTIFIER)) {
                     parser_error_at_current(parser, "Expect parameter name");
-                    free(params);
+                    free(params); free(param_types);
                     return NULL;
                 }
-                params[param_count++] = parser_advance(parser);
+                params[param_count] = parser_advance(parser);
+                if (parser_match(parser, TOKEN_COLON)) {
+                    ValueType vt = parse_type_name(parser, "in parameter type annotation");
+                    if ((int)vt < 0) { free(params); free(param_types); return NULL; }
+                    param_types[param_count] = vt;
+                    has_any_type = true;
+                } else {
+                    param_types[param_count] = VAL_UNKNOWN;
+                }
+                param_count++;
             } while (parser_match(parser, TOKEN_COMMA));
         }
         consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+
+        ValueType return_type = VAL_UNKNOWN;
+        if (parser_match(parser, TOKEN_COLON)) {
+            return_type = parse_type_name(parser, "in return type annotation");
+            if ((int)return_type < 0) { free(params); free(param_types); return NULL; }
+        }
+
+        if (!has_any_type) { free(param_types); param_types = NULL; }
+
         consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before function body.");
 
         Stmt** body = NULL;
@@ -363,13 +386,13 @@ Expr* parse_primary(Parser* parser) {
             Stmt* s = parse_declaration(parser);
             if (!s) {
                 for (size_t i = 0; i < body_count; i++) ast_release_stmt(body[i]);
-                free(body); free(params);
+                free(body); free(params); free(param_types);
                 return NULL;
             }
             if (body_count >= body_capacity) {
                 size_t new_cap = body_capacity == 0 ? 8 : body_capacity * 2;
                 Stmt** nb = (Stmt**)realloc(body, new_cap * sizeof(Stmt*));
-                if (!nb) { ast_release_stmt(s); for (size_t i = 0; i < body_count; i++) ast_release_stmt(body[i]); free(body); free(params); return NULL; }
+                if (!nb) { ast_release_stmt(s); for (size_t i = 0; i < body_count; i++) ast_release_stmt(body[i]); free(body); free(params); free(param_types); return NULL; }
                 body = nb;
                 body_capacity = new_cap;
             }
@@ -377,7 +400,7 @@ Expr* parse_primary(Parser* parser) {
         }
         consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after function body.");
 
-        return make_function_expr(name, params, param_count, body, body_count);
+        return make_function_expr(name, params, param_types, param_count, return_type, body, body_count);
     }
 
     if (parser_match(parser, TOKEN_LEFT_BRACE)) {
@@ -711,7 +734,7 @@ Expr* parse_shift(Parser* parser) {
 
 // Shared helper: consume a type name token and return the corresponding ValueType.
 // Returns (ValueType)-1 on failure and reports an error.
-static ValueType parse_type_name(Parser* parser) {
+static ValueType parse_type_name(Parser* parser, const char* context) {
     const char* type_name = NULL;
 
     if (parser_check(parser, TOKEN_IDENTIFIER)) {
@@ -724,7 +747,9 @@ static ValueType parse_type_name(Parser* parser) {
       else if (parser_check(parser, TOKEN_TRUE) || parser_check(parser, TOKEN_FALSE)) {
           parser_advance(parser); type_name = "bool";
       } else {
-        parser_error_at_current(parser, "Expect type name after 'is'");
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Expected type name %s", context);
+        parser_error_at_current(parser, msg);
         return (ValueType)-1;
     }
 
@@ -741,7 +766,9 @@ static ValueType parse_type_name(Parser* parser) {
     if (strcmp(type_name, "userdata") == 0)                                        return VAL_USERDATA;
     if (strcmp(type_name, "enum") == 0)                                            return VAL_ENUM;
 
-    parser_error_at_current(parser, "Unknown type name in 'is' expression");
+    char msg[128];
+    snprintf(msg, sizeof(msg), "Unknown type name %s", context);
+    parser_error_at_current(parser, msg);
     return (ValueType)-1;
 }
 
@@ -758,7 +785,7 @@ Expr* parse_comparison(Parser* parser) {
     // Handle 'expr is type' — same precedence level as comparisons
     if (parser_match(parser, TOKEN_IS)) {
         Token op = parser_previous(parser);
-        ValueType vt = parse_type_name(parser);
+        ValueType vt = parse_type_name(parser, "after 'is'");
         if ((int)vt >= 0) {
             Expr* right = make_literal_expr(make_int64_value((int64_t)vt));
             expr = make_binary_expr(expr, op, right);
@@ -1347,7 +1374,6 @@ ParseResult parse(MobiusState* state, TokenArray tokens) {
 
 // Function declaration parsing: func name(param1, param2) { ... }
 Stmt* parse_function_declaration(Parser* parser) {
-    // Parse function name
     if (!parser_check(parser, TOKEN_IDENTIFIER)) {
         parser_error_at_current(parser, "Expected function name");
         return NULL;
@@ -1355,39 +1381,51 @@ Stmt* parse_function_declaration(Parser* parser) {
     
     Token name = parser_advance(parser);
     
-    // Parse parameter list
     consume(parser, TOKEN_LEFT_PAREN, "Expected '(' after function name");
     
     Token* params = NULL;
+    ValueType* param_types = NULL;
     size_t param_count = 0;
     size_t param_capacity = 0;
+    bool has_any_type = false;
     
-    // Parse parameters
     if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
         do {
             if (param_count >= param_capacity) {
                 size_t new_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
                 Token* new_params = (Token*)realloc(params, new_capacity * sizeof(Token));
-                if (!new_params) {
-                    free(params);
+                ValueType* new_types = (ValueType*)realloc(param_types, new_capacity * sizeof(ValueType));
+                if (!new_params || !new_types) {
+                    free(params); free(param_types);
                     parser_error_at_current(parser, "Memory allocation failed");
                     return NULL;
                 }
                 params = new_params;
+                param_types = new_types;
                 param_capacity = new_capacity;
             }
             
             if (!parser_check(parser, TOKEN_IDENTIFIER)) {
                 parser_error_at_current(parser, "Expected parameter name");
-                free(params);
+                free(params); free(param_types);
                 return NULL;
             }
             
-            params[param_count++] = parser_advance(parser);
+            params[param_count] = parser_advance(parser);
+            
+            if (parser_match(parser, TOKEN_COLON)) {
+                ValueType vt = parse_type_name(parser, "in parameter type annotation");
+                if ((int)vt < 0) { free(params); free(param_types); return NULL; }
+                param_types[param_count] = vt;
+                has_any_type = true;
+            } else {
+                param_types[param_count] = VAL_UNKNOWN;
+            }
+            param_count++;
             
             if (param_count >= 255) {
                 parser_error_at_current(parser, "Cannot have more than 255 parameters");
-                free(params);
+                free(params); free(param_types);
                 return NULL;
             }
         } while (parser_match(parser, TOKEN_COMMA));
@@ -1395,7 +1433,14 @@ Stmt* parse_function_declaration(Parser* parser) {
     
     consume(parser, TOKEN_RIGHT_PAREN, "Expected ')' after parameters");
     
-    // Parse function body
+    ValueType return_type = VAL_UNKNOWN;
+    if (parser_match(parser, TOKEN_COLON)) {
+        return_type = parse_type_name(parser, "in return type annotation");
+        if ((int)return_type < 0) { free(params); free(param_types); return NULL; }
+    }
+    
+    if (!has_any_type) { free(param_types); param_types = NULL; }
+    
     consume(parser, TOKEN_LEFT_BRACE, "Expected '{' before function body");
     
     Stmt** body = NULL;
@@ -1403,23 +1448,19 @@ Stmt* parse_function_declaration(Parser* parser) {
     size_t body_capacity = 0;
     
     while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
-        // Skip newlines in function body
         if (parser_match(parser, TOKEN_NEWLINE)) {
             continue;
         }
         
         Stmt* stmt = parse_declaration(parser);
         if (!stmt) {
-            // Error occurred, clean up and return
             for (size_t i = 0; i < body_count; i++) {
                 ast_release_stmt(body[i]);
             }
-            free(body);
-            free(params);
+            free(body); free(params); free(param_types);
             return NULL;
         }
         
-        // Add statement to body
         if (body_count >= body_capacity) {
             size_t new_capacity = body_capacity == 0 ? 8 : body_capacity * 2;
             Stmt** new_body = (Stmt**)realloc(body, new_capacity * sizeof(Stmt*));
@@ -1428,8 +1469,7 @@ Stmt* parse_function_declaration(Parser* parser) {
                 for (size_t i = 0; i < body_count; i++) {
                     ast_release_stmt(body[i]);
                 }
-                free(body);
-                free(params);
+                free(body); free(params); free(param_types);
                 parser_error_at_current(parser, "Memory allocation failed");
                 return NULL;
             }
@@ -1442,7 +1482,7 @@ Stmt* parse_function_declaration(Parser* parser) {
     
     consume(parser, TOKEN_RIGHT_BRACE, "Expected '}' after function body");
     
-    return make_function_stmt(name, params, param_count, body, body_count);
+    return make_function_stmt(name, params, param_types, param_count, return_type, body, body_count);
 }
 
 // Return statement parsing: return [expression];
@@ -1847,7 +1887,7 @@ CasePattern* parse_case_pattern(Parser* parser) {
         return make_table_pattern(fields, count, false);
     } else if (parser_check(parser, TOKEN_IS)) {
         parser_advance(parser); // consume 'is'
-        ValueType value_type = parse_type_name(parser);
+        ValueType value_type = parse_type_name(parser, "after 'is'");
         if ((int)value_type < 0) return make_wildcard_pattern();
         return make_type_pattern(value_type);
     } else {

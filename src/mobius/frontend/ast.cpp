@@ -189,7 +189,8 @@ Expr* make_ternary_expr(Expr* condition, Expr* then_expr, Expr* else_expr) {
     return expr;
 }
 
-Expr* make_function_expr(Token name, Token* params, size_t param_count,
+Expr* make_function_expr(Token name, Token* params, ValueType* param_types,
+                         size_t param_count, ValueType return_type,
                          Stmt** body, size_t body_count) {
     Expr* expr = (Expr*)calloc(1, sizeof(Expr));
     if (!expr) return NULL;
@@ -198,7 +199,9 @@ Expr* make_function_expr(Token name, Token* params, size_t param_count,
     expr->ref_count = 1;
     expr->as.function_expr.name = name;
     expr->as.function_expr.params = params;
+    expr->as.function_expr.param_types = param_types;
     expr->as.function_expr.param_count = param_count;
+    expr->as.function_expr.return_type = return_type;
     expr->as.function_expr.body = body;
     expr->as.function_expr.body_count = body_count;
     return expr;
@@ -285,16 +288,16 @@ Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* b
     return stmt;
 }
 
-Stmt* make_function_stmt(Token name, Token* params, size_t param_count, 
+Stmt* make_function_stmt(Token name, Token* params, ValueType* param_types,
+                        size_t param_count, ValueType return_type,
                         Stmt** body, size_t body_count) {
     Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
     if (!stmt) return NULL;
     
     stmt->type = STMT_FUNCTION;
-    stmt->ref_count = 1;  // Initialize reference count
-    stmt->as.function.name = copy_token(&name);  // Deep copy token to own the identifier string
+    stmt->ref_count = 1;
+    stmt->as.function.name = copy_token(&name);
     
-    // Deep copy parameter tokens to own their identifier strings
     if (param_count > 0 && params) {
         Token* params_copy = (Token*)malloc(param_count * sizeof(Token));
         if (!params_copy) {
@@ -310,7 +313,18 @@ Stmt* make_function_stmt(Token name, Token* params, size_t param_count,
         stmt->as.function.params = NULL;
     }
     
+    if (param_count > 0 && param_types) {
+        ValueType* types_copy = (ValueType*)malloc(param_count * sizeof(ValueType));
+        if (types_copy) {
+            memcpy(types_copy, param_types, param_count * sizeof(ValueType));
+        }
+        stmt->as.function.param_types = types_copy;
+    } else {
+        stmt->as.function.param_types = NULL;
+    }
+    
     stmt->as.function.param_count = param_count;
+    stmt->as.function.return_type = return_type;
     stmt->as.function.body = body;
     stmt->as.function.body_count = body_count;
     return stmt;
@@ -701,6 +715,7 @@ void ast_release_expr(Expr* expr) {
                 break;
             case EXPR_FUNCTION:
                 if (expr->as.function_expr.params) free(expr->as.function_expr.params);
+                if (expr->as.function_expr.param_types) free(expr->as.function_expr.param_types);
                 if (expr->as.function_expr.body) {
                     for (size_t i = 0; i < expr->as.function_expr.body_count; i++) {
                         ast_release_stmt(expr->as.function_expr.body[i]);
@@ -786,7 +801,6 @@ void ast_release_stmt(Stmt* stmt) {
                 ast_release_stmt(stmt->as.for_stmt.body);
                 break;
             case STMT_FUNCTION:
-                // Free the copied token identifier
                 free_token(&stmt->as.function.name);
                 if (stmt->as.function.body) {
                     for (size_t i = 0; i < stmt->as.function.body_count; i++) {
@@ -795,12 +809,12 @@ void ast_release_stmt(Stmt* stmt) {
                     free(stmt->as.function.body);
                 }
                 if (stmt->as.function.params) {
-                    // Free each copied parameter token
                     for (size_t i = 0; i < stmt->as.function.param_count; i++) {
                         free_token(&stmt->as.function.params[i]);
                     }
                     free(stmt->as.function.params);
                 }
+                if (stmt->as.function.param_types) free(stmt->as.function.param_types);
                 break;
             case STMT_RETURN:
                 if (stmt->as.return_stmt.value) {
