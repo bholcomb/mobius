@@ -33,7 +33,7 @@ FileResult read_file(const char* path) {
     }
     
     // Allocate buffer
-    result.content = malloc(file_size + 1);
+    result.content = (char*)malloc(file_size + 1);
     if (!result.content) {
         fclose(file);
         result.error = "Memory allocation failed";

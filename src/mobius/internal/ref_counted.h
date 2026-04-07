@@ -2,6 +2,7 @@
 #define MOBIUS_REF_COUNTED_H
 
 #include <atomic>
+#include <cassert>
 
 class RefCounted {
 public:
@@ -11,7 +12,9 @@ public:
     void retain() { ref_count_.fetch_add(1, std::memory_order_relaxed); }
 
     void release() {
-        if (ref_count_.fetch_sub(1, std::memory_order_acq_rel) <= 1) {
+        int old = ref_count_.fetch_sub(1, std::memory_order_acq_rel);
+        assert(old > 0 && "RefCounted::release() called on object with refcount <= 0 (double-release)");
+        if (old <= 1) {
             delete this;
         }
     }

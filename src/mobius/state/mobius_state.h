@@ -2,7 +2,7 @@
 #define MOBIUS_STATE_H
 
 #include "data/value.h"
-#include "mobius/mobius.h"
+#include <mobius/mobius.h>
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -197,6 +197,10 @@ public:
 
     void addOwnedProto(struct Prototype* proto);
 
+    void addPluginDirectory(const char* directory);
+    void clearPluginDirectories();
+    const std::vector<std::string>& pluginDirectories() const { return plugin_directories_; }
+
     // Active VM — returns the currently executing VM for this state, or nullptr
     // if this state is not currently executing on the thread.
     class MobiusVM* activeVM() const;
@@ -237,7 +241,10 @@ public:
     }
 
     // Type-level metatables — one per ValueType, for method dispatch on non-table values
-    Table* typeMetatable(ValueType t) const { return type_metatables_[t]; }
+    Table* typeMetatable(ValueType t) const {
+        std::lock_guard<std::mutex> lock(type_metatables_mutex_);
+        return type_metatables_[t];
+    }
     void setTypeMetatable(ValueType t, Table* mt);
 
 private:
@@ -272,6 +279,10 @@ private:
 
     std::mutex import_mutex_;
 
+    std::vector<std::string> plugin_directories_;
+    std::mutex plugin_dirs_mutex_;
+
+    mutable std::mutex type_metatables_mutex_;
     Table* type_metatables_[16] = {};
 
     class MobiusVM* main_vm_;

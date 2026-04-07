@@ -48,7 +48,7 @@ int lib_upper(MobiusState* state, int arg_count) {
     
     const char* input = arg.as.string->data;
     size_t len = arg.as.string->length;
-    char* upper_str = malloc(len + 1);
+    char* upper_str = (char*)malloc(len + 1);
     if (!upper_str) {
         return state->error("Memory allocation failed");
     }
@@ -83,7 +83,7 @@ int lib_lower(MobiusState* state, int arg_count) {
     
     const char* input = arg.as.string->data;
     size_t len = arg.as.string->length;
-    char* lower_str = malloc(len + 1);
+    char* lower_str = (char*)malloc(len + 1);
     if (!lower_str) {
         return state->error("Memory allocation failed");
     }
@@ -146,7 +146,7 @@ int lib_substr(MobiusState* state, int arg_count) {
         actual_length = input_len - (size_t)start;
     }
     
-    char* substr_data = malloc(actual_length + 1);
+    char* substr_data = (char*)malloc(actual_length + 1);
     if (!substr_data) {
         return state->error("Memory allocation failed");
     }
@@ -181,7 +181,7 @@ int lib_concat(MobiusState* state, int arg_count) {
         }
     }
     
-    char* result_data = malloc(total_length + 1);
+    char* result_data = (char*)malloc(total_length + 1);
     if (!result_data) {
         return state->error("Memory allocation failed");
     }

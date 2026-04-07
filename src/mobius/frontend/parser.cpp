@@ -272,7 +272,7 @@ Expr* parse_primary(Parser* parser) {
             }
             if (depth != 0) {
                 parser_error(parser, token, "Unterminated ${...} in interpolated string");
-                if (result) free_expr(result);
+                if (result) ast_release_expr(result);
                 return NULL;
             }
             size_t expr_len = ds - expr_start;
@@ -427,7 +427,7 @@ Expr* parse_table_literal(Parser* parser) {
         // Ensure capacity
         if (pair_count >= pair_capacity) {
             pair_capacity = pair_capacity == 0 ? 4 : pair_capacity * 2;
-            TablePair* new_pairs = realloc(pairs, pair_capacity * sizeof(TablePair));
+            TablePair* new_pairs = (TablePair*)realloc(pairs, pair_capacity * sizeof(TablePair));
             if (!new_pairs) {
                 free(pairs);
                 parser_error_at_current(parser, "Memory allocation failed");
@@ -454,7 +454,7 @@ Expr* parse_table_literal(Parser* parser) {
             Token key_token = parser_advance(parser);
             if (parser_match(parser, TOKEN_COLON)) {
                 // Create a string literal from the identifier
-                char* key_str = malloc(key_token.length + 1);
+                char* key_str = (char*)malloc(key_token.length + 1);
                 if (key_str) {
                     const char* key_id = key_token.identifier ? key_token.identifier : "unknown";
                     strncpy(key_str, key_id, strlen(key_id));
@@ -523,7 +523,7 @@ Expr* parse_array_literal(Parser* parser) {
         // Resize elements array if needed
         if (element_count >= element_capacity) {
             element_capacity = element_capacity == 0 ? 8 : element_capacity * 2;
-            elements = realloc(elements, element_capacity * sizeof(Expr*));
+            elements = (Expr**)realloc(elements, element_capacity * sizeof(Expr*));
             if (!elements) {
                 parser_error_at_current(parser, "Out of memory parsing array literal");
                 return NULL;
@@ -559,7 +559,7 @@ Expr* finish_call(Parser* parser, Expr* callee) {
             // Resize arguments array if needed
             if (arg_count >= arg_capacity) {
                 arg_capacity = arg_capacity == 0 ? 8 : arg_capacity * 2;
-                arguments = realloc(arguments, arg_capacity * sizeof(Expr*));
+                arguments = (Expr**)realloc(arguments, arg_capacity * sizeof(Expr*));
             }
             
             arguments[arg_count++] = parse_expression(parser);
@@ -598,13 +598,13 @@ Expr* parse_call(Parser* parser) {
             // Can only apply to variable expressions
             if (expr->type != EXPR_VARIABLE) {
                 parser_error(parser, op, "Postfix operator can only be applied to variables");
-                free_expr(expr);
+                ast_release_expr(expr);
                 return NULL;
             }
             
             Token name = expr->as.variable.name;
             bool is_increment = (op.type == TOKEN_PLUS_PLUS);
-            free_expr(expr);
+            ast_release_expr(expr);
             expr = make_increment_expr(name, false, is_increment, op);
         }
         else {
@@ -644,7 +644,7 @@ Expr* parse_unary(Parser* parser) {
 
         if (callee->type != EXPR_CALL) {
             parser_error_at_current(parser, "spawn requires a function call, e.g. 'spawn func(args)'");
-            free_expr(callee);
+            ast_release_expr(callee);
             return NULL;
         }
 
@@ -654,7 +654,7 @@ Expr* parse_unary(Parser* parser) {
         callee->as.call.callee = NULL;
         callee->as.call.arguments = NULL;
         callee->as.call.arg_count = 0;
-        free_expr(callee);
+        ast_release_expr(callee);
         return spawn;
     }
 
@@ -868,7 +868,7 @@ Expr* parse_assignment(Parser* parser) {
         }
         
         parser_error(parser, equals, "Invalid assignment target.");
-        free_expr(value);
+        ast_release_expr(value);
     }
 
     if (parser_match_any(parser, 5, TOKEN_PLUS_EQUAL, TOKEN_MINUS_EQUAL,
@@ -911,7 +911,7 @@ Stmt* parse_expression_statement(Parser* parser) {
     Expr* expr = parse_expression(parser);
     if (!consume_statement_terminator(parser, "Expect ';' or newline after expression")) {
         // Error already reported by consume_statement_terminator
-        free_expr(expr);
+        ast_release_expr(expr);
         return NULL;
     }
     return make_expression_stmt(expr);
@@ -953,7 +953,7 @@ Stmt* parse_var_declaration(Parser* parser) {
     
     if (!consume_statement_terminator(parser, "Expect ';' or newline after variable declaration")) {
         // Error already reported, clean up
-        if (initializer) free_expr(initializer);
+        if (initializer) ast_release_expr(initializer);
         return NULL;
     }
     return make_var_stmt(name, initializer, type_hint, is_annotated);
@@ -975,7 +975,7 @@ Stmt* parse_block_statement(Parser* parser) {
             // Resize statements array if needed
             if (count >= capacity) {
                 capacity = capacity == 0 ? 8 : capacity * 2;
-                statements = realloc(statements, capacity * sizeof(Stmt*));
+                statements = (Stmt**)realloc(statements, capacity * sizeof(Stmt*));
             }
             statements[count++] = stmt;
         }
@@ -1272,7 +1272,7 @@ Stmt* parse_statement(Parser* parser) {
             value = parse_expression(parser);
         }
         if (!consume_statement_terminator(parser, "Expect ';' or newline after throw")) {
-            if (value) free_expr(value);
+            if (value) ast_release_expr(value);
             return NULL;
         }
         return make_throw_stmt(keyword, value);
@@ -1307,7 +1307,7 @@ Stmt* parse_declaration(Parser* parser) {
 
 // Main parsing function
 ParseResult parse(MobiusState* state, TokenArray tokens) {
-    ParseResult result = {0};
+    ParseResult result = {};
     
     Parser parser;
     init_parser(&parser, state, tokens.tokens, tokens.count);
@@ -1325,7 +1325,7 @@ ParseResult parse(MobiusState* state, TokenArray tokens) {
         // Resize statements array if needed
         if (count >= capacity) {
             capacity = capacity == 0 ? 8 : capacity * 2;
-            statements = realloc(statements, capacity * sizeof(Stmt*));
+            statements = (Stmt**)realloc(statements, capacity * sizeof(Stmt*));
         }
         
         Stmt* stmt = parse_declaration(&parser);
@@ -1367,7 +1367,7 @@ Stmt* parse_function_declaration(Parser* parser) {
         do {
             if (param_count >= param_capacity) {
                 size_t new_capacity = param_capacity == 0 ? 4 : param_capacity * 2;
-                Token* new_params = realloc(params, new_capacity * sizeof(Token));
+                Token* new_params = (Token*)realloc(params, new_capacity * sizeof(Token));
                 if (!new_params) {
                     free(params);
                     parser_error_at_current(parser, "Memory allocation failed");
@@ -1422,7 +1422,7 @@ Stmt* parse_function_declaration(Parser* parser) {
         // Add statement to body
         if (body_count >= body_capacity) {
             size_t new_capacity = body_capacity == 0 ? 8 : body_capacity * 2;
-            Stmt** new_body = realloc(body, new_capacity * sizeof(Stmt*));
+            Stmt** new_body = (Stmt**)realloc(body, new_capacity * sizeof(Stmt*));
             if (!new_body) {
                 ast_release_stmt(stmt);
                 for (size_t i = 0; i < body_count; i++) {
@@ -1456,7 +1456,7 @@ Stmt* parse_return_statement(Parser* parser) {
     }
     
     if (!consume_statement_terminator(parser, "Expect ';' or newline after return statement")) {
-        if (value) free_expr(value);
+        if (value) ast_release_expr(value);
         return NULL;
     }
     
@@ -1490,7 +1490,7 @@ Stmt* parse_import_statement(Parser* parser) {
     Token module_name = parser_advance(parser);
     
     // Check for optional 'as' clause
-    Token alias = {0};
+    Token alias = {};
     bool has_alias = false;
     
     if (parser_match(parser, TOKEN_IDENTIFIER) && 
@@ -1563,7 +1563,7 @@ Stmt* parse_pragma_statement(Parser* parser) {
     Token name = parser_advance(parser);
     
     // Expect pragma value (identifier, string, or boolean keyword)
-    Token value = {0};
+    Token value = {};
     if (parser_check(parser, TOKEN_IDENTIFIER)) {
         value = parser_advance(parser);
     } else if (parser_check(parser, TOKEN_STRING)) {
@@ -1610,7 +1610,7 @@ Stmt* parse_switch_statement(Parser* parser) {
             SwitchCase* case_clause = parse_switch_case(parser);
             if (case_count >= case_capacity) {
                 case_capacity = case_capacity == 0 ? 4 : case_capacity * 2;
-                cases = realloc(cases, sizeof(SwitchCase*) * case_capacity);
+                cases = (SwitchCase**)realloc(cases, sizeof(SwitchCase*) * case_capacity);
             }
             cases[case_count++] = case_clause;
         } else if (parser_match(parser, TOKEN_DEFAULT)) {
@@ -1633,7 +1633,7 @@ Stmt* parse_switch_statement(Parser* parser) {
                 Stmt* stmt = parse_statement(parser);
                 if (body_count >= body_capacity) {
                     body_capacity = body_capacity == 0 ? 4 : body_capacity * 2;
-                    body = realloc(body, sizeof(Stmt*) * body_capacity);
+                    body = (Stmt**)realloc(body, sizeof(Stmt*) * body_capacity);
                 }
                 body[body_count++] = stmt;
             }
@@ -1693,7 +1693,7 @@ SwitchCase* parse_switch_case(Parser* parser) {
         
         if (body_count >= body_capacity) {
             body_capacity = body_capacity == 0 ? 4 : body_capacity * 2;
-            body = realloc(body, sizeof(Stmt*) * body_capacity);
+            body = (Stmt**)realloc(body, sizeof(Stmt*) * body_capacity);
         }
         body[body_count++] = stmt;
     }
@@ -1917,7 +1917,7 @@ Stmt* parse_enum_declaration(Parser* parser) {
             // Error in parsing member, cleanup and return
             while (members) {
                 EnumMemberDef* next = members->next;
-                if (members->value) free_expr(members->value);
+                if (members->value) ast_release_expr(members->value);
                 free(members);
                 members = next;
             }
@@ -1958,7 +1958,7 @@ Stmt* parse_enum_declaration(Parser* parser) {
         // Error already reported, clean up
         while (members) {
             EnumMemberDef* next = members->next;
-            if (members->value) free_expr(members->value);
+            if (members->value) ast_release_expr(members->value);
             free(members);
             members = next;
         }

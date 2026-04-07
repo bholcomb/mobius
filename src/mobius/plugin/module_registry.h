@@ -32,9 +32,6 @@ public:
     Table* resolveModule(const char* name, const char* caller_source, MobiusState* state);
     void registerBuiltinModule(const char* name, Table* module_table);
 
-    void addPluginDirectory(const char* directory);
-    void clearPluginDirectories();
-
     bool debugMode() const { return debug_mode_; }
     void setDebugMode(bool mode) { debug_mode_ = mode; }
 
@@ -44,7 +41,6 @@ private:
 
     mutable std::shared_mutex registry_mutex_;
     std::vector<LoadedModule> modules_;
-    std::vector<std::string> plugin_directories_;
     std::unordered_map<std::string, Table*> module_tables_;
     bool debug_mode_ = false;
     std::string last_error_;

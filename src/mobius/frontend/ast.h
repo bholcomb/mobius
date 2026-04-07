@@ -507,10 +507,6 @@ void ast_release_stmt_array(Stmt** stmts, size_t count);
 void ast_retain_expr_array(Expr** exprs, size_t count);
 void ast_release_expr_array(Expr** exprs, size_t count);
 
-// Memory management (legacy - will be replaced by reference counting)
-void free_expr(Expr* expr);
-void free_stmt(Stmt* stmt);
-
 // AST printing for debugging
 void print_expr(Expr* expr);
 void print_stmt(Stmt* stmt);

@@ -522,18 +522,21 @@ author them.
 
 ### Adding Plugin Directories
 
-Call `mobius_add_plugin_directory()` **before** creating the state:
+Plugin directories are per-state. Call `mobius_add_plugin_directory()` **after**
+creating the state:
 
 ```c
-mobius_add_plugin_directory("./plugins");
-mobius_add_plugin_directory("/usr/lib/mobius/modules");
-
 MobiusState* state = mobius_new_state(NULL);
 mobius_init_stdlib(state);
+
+mobius_add_plugin_directory(state, "./plugins");
+mobius_add_plugin_directory(state, "/usr/lib/mobius/modules");
 ```
 
 The interpreter scans these directories for `.so`/`.dll` files that export
-`mobius_plugin_info()`.
+`mobius_plugin_info()`. Each `MobiusState` maintains its own list of plugin
+directories, so multiple interpreter instances can have independent plugin
+search paths.
 
 ### Querying Loaded Modules
 
@@ -831,11 +834,12 @@ int native_array_sum(MobiusState* state, int arg_count) {
 
 ### Plugins
 
-| Function                                | Description                              |
-|-----------------------------------------|------------------------------------------|
-| `mobius_add_plugin_directory(path)`     | Add a directory to the plugin search path|
-| `mobius_get_module_count(state)`        | Number of loaded modules                 |
-| `mobius_print_modules(state)`           | Print module summary to stdout           |
+| Function                                       | Description                              |
+|------------------------------------------------|------------------------------------------|
+| `mobius_add_plugin_directory(state, path)`      | Add a directory to the plugin search path|
+| `mobius_clear_plugin_directories(state)`        | Clear all plugin search paths            |
+| `mobius_get_module_count(state)`                | Number of loaded modules                 |
+| `mobius_print_modules(state)`                   | Print module summary to stdout           |
 
 ### Metrics
 

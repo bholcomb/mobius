@@ -2,7 +2,7 @@
 #define MOBIUS_FIBER_POOL_H
 
 #include "fiber/fiber.h"
-#include "mobius/mobius.h"
+#include <mobius/mobius.h>
 
 #include <vector>
 #include <mutex>

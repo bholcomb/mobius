@@ -7,7 +7,7 @@ environment:
   compile:
     cpp_standard: "c++17"
     warnings: extra
-    flags: ["-fpermissive"]
+    flags: []
 
   configurations:
     debug:
