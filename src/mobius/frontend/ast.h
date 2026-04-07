@@ -152,7 +152,9 @@ typedef struct {
 typedef struct {
     Token name;             // Optional name (identifier field may be NULL for anonymous)
     Token* params;
+    ValueType* param_types; // Optional per-param type annotations (NULL if none)
     size_t param_count;
+    ValueType return_type;  // Declared return type (VAL_UNKNOWN if omitted)
     Stmt** body;
     size_t body_count;
 } FunctionExpr;
@@ -243,7 +245,9 @@ typedef struct {
 typedef struct {
     Token name;
     Token* params;      // Array of parameter tokens
+    ValueType* param_types; // Optional per-param type annotations (NULL if none)
     size_t param_count;
+    ValueType return_type;  // Declared return type (VAL_UNKNOWN if omitted)
     Stmt** body;        // Array of statements in function body
     size_t body_count;
 } FunctionStmt;
@@ -443,7 +447,8 @@ Expr* make_method_dot_expr(Expr* table, Token key);
 Expr* make_enum_access_expr(Token enum_name, Token member_name);
 Expr* make_increment_expr(Token name, bool is_prefix, bool is_increment, Token op);
 Expr* make_ternary_expr(Expr* condition, Expr* then_expr, Expr* else_expr);
-Expr* make_function_expr(Token name, Token* params, size_t param_count,
+Expr* make_function_expr(Token name, Token* params, ValueType* param_types,
+                         size_t param_count, ValueType return_type,
                          Stmt** body, size_t body_count);
 
 Stmt* make_expression_stmt(Expr* expression);
@@ -453,7 +458,8 @@ Stmt* make_block_stmt(Stmt** statements, size_t count);
 Stmt* make_if_stmt(Expr* condition, Stmt* then_branch, Stmt* else_branch);
 Stmt* make_while_stmt(Expr* condition, Stmt* body);
 Stmt* make_for_stmt(Stmt* initializer, Expr* condition, Expr* increment, Stmt* body);
-Stmt* make_function_stmt(Token name, Token* params, size_t param_count, 
+Stmt* make_function_stmt(Token name, Token* params, ValueType* param_types,
+                        size_t param_count, ValueType return_type,
                         Stmt** body, size_t body_count);
 Stmt* make_return_stmt(Token keyword, Expr* value);
 Stmt* make_switch_stmt(Expr* discriminant, SwitchCase** cases, size_t case_count,

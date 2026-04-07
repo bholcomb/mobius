@@ -52,21 +52,18 @@ MOBIUS_API int mobius_error(MobiusState* state, const char* message);
 
 typedef enum {
     MOBIUS_VAL_UNKNOWN = -1,  /* return type depends on inputs / not yet determined */
+    /* Non-refcounted (inline) types */
     MOBIUS_VAL_NIL,
     MOBIUS_VAL_BOOL,
-
-    /* Integer types */
     MOBIUS_VAL_INT64,
     MOBIUS_VAL_UINT64,
-
-    /* Float types */
     MOBIUS_VAL_FLOAT64,
-
-    MOBIUS_VAL_STRING,
     MOBIUS_VAL_CHAR,
+    MOBIUS_VAL_NATIVE_FUNCTION,
+    /* Refcounted (heap-allocated) types */
+    MOBIUS_VAL_STRING,
     MOBIUS_VAL_ARRAY,
     MOBIUS_VAL_FUNCTION,
-    MOBIUS_VAL_NATIVE_FUNCTION,
     MOBIUS_VAL_TABLE,
     MOBIUS_VAL_USERDATA,
     MOBIUS_VAL_ENUM,

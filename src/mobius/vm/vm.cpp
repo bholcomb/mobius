@@ -1189,6 +1189,24 @@ MOBIUS_FORCEINLINE static int vm_op_mod_ii(MobiusVM* vm, VMFrame& f, uint32_t in
     Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 % rv;
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
+MOBIUS_FORCEINLINE static int vm_op_div_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    int64_t rv = RKC(inst).as.i64;
+    if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
+    Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 / rv;
+    dst.type = VAL_INT64; dst.flags = 0; return 0;
+}
+MOBIUS_FORCEINLINE static int vm_op_div_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    double rv = RKC(inst).as.double_val;
+    if (MOBIUS_UNLIKELY(rv == 0.0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
+    Value& dst = RA(inst); dst.as.double_val = RKB(inst).as.double_val / rv;
+    dst.type = VAL_FLOAT64; dst.flags = 0; return 0;
+}
+MOBIUS_FORCEINLINE static int vm_op_mod_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    double rv = RKC(inst).as.double_val;
+    if (MOBIUS_UNLIKELY(rv == 0.0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
+    Value& dst = RA(inst); dst.as.double_val = fmod(RKB(inst).as.double_val, rv);
+    dst.type = VAL_FLOAT64; dst.flags = 0; return 0;
+}
 
 // ---- Inline-data arithmetic ----
 
@@ -2376,6 +2394,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_TESTJMP,
         &&L_OP_ADD_II, &&L_OP_ADD_FF, &&L_OP_SUB_II, &&L_OP_SUB_FF,
         &&L_OP_MUL_II, &&L_OP_MUL_FF, &&L_OP_MOD_II,
+        &&L_OP_DIV_II, &&L_OP_DIV_FF, &&L_OP_MOD_FF,
         &&L_OP_ADDK, &&L_OP_SUBK, &&L_OP_MULK, &&L_OP_DIVK, &&L_OP_MODK,
         &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
         &&L_OP_ARRAY_PUSH,
@@ -2497,6 +2516,9 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_MUL_II, vm_op_mul_ii)
     VM_HANDLER(OP_MUL_FF, vm_op_mul_ff)
     VM_HANDLER(OP_MOD_II, vm_op_mod_ii)
+    VM_HANDLER(OP_DIV_II, vm_op_div_ii)
+    VM_HANDLER(OP_DIV_FF, vm_op_div_ff)
+    VM_HANDLER(OP_MOD_FF, vm_op_mod_ff)
 
     VM_HANDLER(OP_ADDK, vm_op_addk)
     VM_HANDLER(OP_SUBK, vm_op_subk)

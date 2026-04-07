@@ -394,6 +394,13 @@ ValueType Compiler::inferExprType(Expr* expr) {
             if (callee->type == EXPR_VARIABLE) {
                 const char* name = callee->as.variable.name.identifier;
 
+                // Self-recursive call: use return type already set (from
+                // declaration or earlier return statements in this function)
+                if (current_->proto->name == name &&
+                    current_->proto->return_type != VAL_UNKNOWN) {
+                    return current_->proto->return_type;
+                }
+
                 // Check native function return types (stdlib globals)
                 ValueType nrt = nativeReturnType(name);
                 if (nrt != VAL_UNKNOWN) return nrt;
@@ -953,10 +960,11 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                     (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_SLASH:
-            emitABC(OP_DIV, (uint8_t)reg, rk_left, rk_right);
+            emitABC(both_i64 ? OP_DIV_II : both_f64 ? OP_DIV_FF : OP_DIV,
+                    (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_PERCENT:
-            emitABC(both_i64 ? OP_MOD_II : OP_MOD,
+            emitABC(both_i64 ? OP_MOD_II : both_f64 ? OP_MOD_FF : OP_MOD,
                     (uint8_t)reg, rk_left, rk_right);
             break;
         case TOKEN_AMPERSAND:
@@ -2209,8 +2217,6 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     currentLine_ = stmt->name.line;
     const char* name = stmt->name.identifier;
 
-    // Save enclosing compiler state (including DCE flag — child function
-    // bodies are independent and must not leak unreachable_ to the parent).
     bool saved_unreachable = unreachable_;
     unreachable_ = false;
     FunctionState* enclosing = current_;
@@ -2223,14 +2229,19 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     child_fs.scope_depth = 0;
     child_fs.free_reg = 0;
     child_fs.max_reg = 0;
+
+    if (stmt->return_type != VAL_UNKNOWN)
+        child_fs.proto->return_type = stmt->return_type;
+
     current_ = &child_fs;
 
     beginScope();
 
-    // Define parameters as locals
     child_fs.proto->num_params = (int)stmt->param_count;
     for (size_t i = 0; i < stmt->param_count; i++) {
         addLocal(stmt->params[i].identifier);
+        if (stmt->param_types && stmt->param_types[i] != VAL_UNKNOWN)
+            current_->locals.back().inferred_type = stmt->param_types[i];
     }
 
     // Compile function body
@@ -3182,6 +3193,10 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     child_fs.scope_depth = 0;
     child_fs.free_reg = 0;
     child_fs.max_reg = 0;
+
+    if (expr->return_type != VAL_UNKNOWN)
+        child_fs.proto->return_type = expr->return_type;
+
     current_ = &child_fs;
 
     beginScope();
@@ -3189,6 +3204,8 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     child_fs.proto->num_params = (int)expr->param_count;
     for (size_t i = 0; i < expr->param_count; i++) {
         addLocal(expr->params[i].identifier);
+        if (expr->param_types && expr->param_types[i] != VAL_UNKNOWN)
+            current_->locals.back().inferred_type = expr->param_types[i];
     }
 
     compileBlock(expr->body, expr->body_count);
