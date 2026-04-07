@@ -1308,9 +1308,9 @@ static int init_toml_plugin(MobiusState* /*state*/) { return 0; }
 static void cleanup_toml_plugin(void) {}
 
 static MobiusPluginFunction toml_functions[] = {
-    {"parse",     toml_parse,     1, "Parse a TOML string into Mobius tables"},
-    {"parsefile", toml_parsefile, 1, "Parse a TOML file into Mobius tables"},
-    {"stringify", toml_stringify, 1, "Serialize a Mobius table to TOML string"},
+    {"parse",     toml_parse,     1, MOBIUS_VAL_TABLE,  "Parse a TOML string into Mobius tables"},
+    {"parsefile", toml_parsefile, 1, MOBIUS_VAL_TABLE,  "Parse a TOML file into Mobius tables"},
+    {"stringify", toml_stringify, 1, MOBIUS_VAL_STRING, "Serialize a Mobius table to TOML string"},
 };
 
 static MobiusPlugin toml_plugin = {

@@ -467,15 +467,15 @@ void cleanup_text_processing_plugin(void) {
 // ============================================================================
 
 static MobiusPluginFunction text_processing_functions[] = {
-    {"word_count", text_word_count, 1, "Count words in a string"},
-    {"line_count", text_line_count, 1, "Count lines in a string"},
-    {"char_count", text_char_count, 2, "Count character occurrences"},
-    {"reverse", text_reverse, 1, "Reverse a string"},
-    {"title_case", text_title_case, 1, "Convert to title case"},
-    {"trim", text_trim, 1, "Remove leading/trailing whitespace"},
-    {"replace_all", text_replace_all, 3, "Replace all occurrences of a substring"},
-    {"pad_left", text_pad_left, 3, "Pad string to width on the left"},
-    {"split", text_split, 2, "Split string by delimiter"}
+    {"word_count",   text_word_count,   1, MOBIUS_VAL_INT64,  "Count words in a string"},
+    {"line_count",   text_line_count,   1, MOBIUS_VAL_INT64,  "Count lines in a string"},
+    {"char_count",   text_char_count,   2, MOBIUS_VAL_INT64,  "Count character occurrences"},
+    {"reverse",      text_reverse,      1, MOBIUS_VAL_STRING, "Reverse a string"},
+    {"title_case",   text_title_case,   1, MOBIUS_VAL_STRING, "Convert to title case"},
+    {"trim",         text_trim,         1, MOBIUS_VAL_STRING, "Remove leading/trailing whitespace"},
+    {"replace_all",  text_replace_all,  3, MOBIUS_VAL_STRING, "Replace all occurrences of a substring"},
+    {"pad_left",     text_pad_left,     3, MOBIUS_VAL_STRING, "Pad string to width on the left"},
+    {"split",        text_split,        2, MOBIUS_VAL_ARRAY,  "Split string by delimiter"}
 };
 
 // ============================================================================

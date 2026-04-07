@@ -1,5 +1,6 @@
 #include "vm/compiler.h"
 #include "state/mobius_state.h"
+#include "library/library.h"
 
 #include <cstdio>
 #include <cstring>
@@ -11,7 +12,16 @@
 // ============================================================================
 
 Compiler::Compiler(StringInternPool* pool, MobiusState* state)
-    : current_(nullptr), pool_(pool), state_(state) {}
+    : current_(nullptr), pool_(pool), state_(state)
+{
+    const PluginFunction* reg = get_library_registry();
+    if (reg) {
+        for (size_t i = 0; reg[i].name != nullptr; i++) {
+            native_return_types_[reg[i].name] = (ValueType)reg[i].return_type;
+            global_types_[reg[i].name] = VAL_NATIVE_FUNCTION;
+        }
+    }
+}
 
 // ============================================================================
 // Public API
@@ -169,20 +179,21 @@ int Compiler::resolveUpvalue(FunctionState* fs, const char* name) {
     for (int i = (int)enclosing->locals.size() - 1; i >= 0; i--) {
         if (enclosing->locals[i].name == name) {
             enclosing->locals[i].is_captured = true;
-            return addUpvalue(fs, (uint8_t)i, true);
+            return addUpvalue(fs, (uint8_t)i, true, enclosing->locals[i].inferred_type);
         }
     }
 
     // Check enclosing function's upvalues (recursive)
     int upvalue = resolveUpvalue(enclosing, name);
     if (upvalue != -1) {
-        return addUpvalue(fs, (uint8_t)upvalue, false);
+        ValueType uv_type = enclosing->proto->upvalues[upvalue].type;
+        return addUpvalue(fs, (uint8_t)upvalue, false, uv_type);
     }
 
     return -1;
 }
 
-int Compiler::addUpvalue(FunctionState* fs, uint8_t index, bool is_local) {
+int Compiler::addUpvalue(FunctionState* fs, uint8_t index, bool is_local, ValueType type) {
     auto& upvalues = fs->proto->upvalues;
 
     // Reuse existing upvalue if already captured
@@ -192,7 +203,7 @@ int Compiler::addUpvalue(FunctionState* fs, uint8_t index, bool is_local) {
         }
     }
 
-    upvalues.push_back({index, is_local});
+    upvalues.push_back({index, is_local, type});
     return (int)upvalues.size() - 1;
 }
 
@@ -281,6 +292,18 @@ ValueType Compiler::localType(int reg) {
     return VAL_UNKNOWN;
 }
 
+ValueType Compiler::globalType(const char* name) {
+    auto it = global_types_.find(name);
+    if (it != global_types_.end()) return it->second;
+    return VAL_UNKNOWN;
+}
+
+ValueType Compiler::nativeReturnType(const char* name) {
+    auto it = native_return_types_.find(name);
+    if (it != native_return_types_.end()) return it->second;
+    return VAL_UNKNOWN;
+}
+
 ValueType Compiler::inferExprType(Expr* expr) {
     if (!expr) return VAL_UNKNOWN;
 
@@ -291,9 +314,12 @@ ValueType Compiler::inferExprType(Expr* expr) {
         }
 
         case EXPR_VARIABLE: {
-            int local = resolveLocal(expr->as.variable.name.identifier);
+            const char* vname = expr->as.variable.name.identifier;
+            int local = resolveLocal(vname);
             if (local >= 0) return localType(local);
-            return VAL_UNKNOWN;
+            int uv = resolveUpvalue(current_, vname);
+            if (uv >= 0) return current_->proto->upvalues[uv].type;
+            return globalType(vname);
         }
 
         case EXPR_BINARY: {
@@ -367,13 +393,11 @@ ValueType Compiler::inferExprType(Expr* expr) {
             Expr* callee = expr->as.call.callee;
             if (callee->type == EXPR_VARIABLE) {
                 const char* name = callee->as.variable.name.identifier;
-                int local = resolveLocal(name);
-                if (local >= 0) {
-                    if (localType(local) == VAL_FUNCTION) {
-                        // Can't determine return type from a local function variable
-                        return VAL_UNKNOWN;
-                    }
-                }
+
+                // Check native function return types (stdlib globals)
+                ValueType nrt = nativeReturnType(name);
+                if (nrt != VAL_UNKNOWN) return nrt;
+
                 // Check if it's a previously compiled function with known return type
                 for (auto* p : current_->proto->protos) {
                     if (p->name == name && p->return_type != VAL_UNKNOWN) {
@@ -1226,9 +1250,11 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 
                 if (target_t != VAL_UNKNOWN && rhs_t == VAL_UNKNOWN) {
                     emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, 0, 0);
+                    current_->proto->has_type_locks = true;
                 }
                 if (target_t == VAL_UNKNOWN) {
                     emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, 0, 0);
+                    current_->proto->has_type_locks = true;
                 }
 
                 if (dest >= 0 && dest != local) {
@@ -1718,9 +1744,11 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
         }
         if (inferred == VAL_UNKNOWN && stmt->initializer) {
             emitABC(OP_TYPELOCK, (uint8_t)reg, 0, 0);
+            current_->proto->has_type_locks = true;
         }
     } else {
         // Global variable
+        ValueType inferred = stmt->initializer ? inferExprType(stmt->initializer) : VAL_UNKNOWN;
         int save = current_->free_reg;
         int reg = allocReg();
         if (stmt->initializer) {
@@ -1730,8 +1758,12 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
         }
         if (stmt->is_annotated) {
             emitABC(OP_TYPECHECK, (uint8_t)reg, (uint8_t)stmt->type_hint, 0);
+            inferred = (ValueType)stmt->type_hint;
         }
         emitSetGlobal(reg, name);
+        if (inferred != VAL_UNKNOWN) {
+            global_types_[name] = inferred;
+        }
         setFreeReg(save);
     }
 }
@@ -2230,6 +2262,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
         int reg = allocReg();
         emitABx(OP_CLOSURE, (uint8_t)reg, (uint16_t)proto_idx);
         emitSetGlobal(reg, name);
+        global_types_[name] = VAL_FUNCTION;
         setFreeReg(save);
     }
 }

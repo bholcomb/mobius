@@ -18,6 +18,7 @@ struct UpvalueDesc {
     uint8_t index;     // register index (if in_stack) or parent upvalue index
     bool    in_stack;  // true = captured from enclosing function's registers
                        // false = captured from enclosing function's upvalues
+    ValueType type = VAL_UNKNOWN;  // inferred type of captured value
 };
 
 // ============================================================================
@@ -50,6 +51,7 @@ struct Prototype {
     int num_params   = 0;   // declared parameter count
     int num_registers = 2;  // max registers needed (locals + temporaries)
     bool is_vararg   = false;
+    bool has_type_locks = false;  // true if any OP_TYPELOCK/OP_TYPECHECK_LOCKED emitted
     ValueType return_type = VAL_UNKNOWN;  // inferred from return statements
 
     // -- Debug information --

@@ -6,6 +6,7 @@
 #include "internal/string_intern.h"
 
 #include <vector>
+#include <unordered_map>
 #include <unordered_set>
 #include <string>
 #include <cstdint>
@@ -94,7 +95,7 @@ private:
     int addLocal(const char* name);
     int resolveLocal(const char* name);
     int resolveUpvalue(FunctionState* fs, const char* name);
-    int addUpvalue(FunctionState* fs, uint8_t index, bool is_local);
+    int addUpvalue(FunctionState* fs, uint8_t index, bool is_local, ValueType type = VAL_UNKNOWN);
 
     // --- Constant management ---
     int stringConstant(const char* name);
@@ -175,6 +176,13 @@ private:
     // --- Type inference ---
     ValueType inferExprType(Expr* expr);
     ValueType localType(int reg);
+    ValueType globalType(const char* name);
+    ValueType nativeReturnType(const char* name);
+
+    // Global type tracking: maps global name → value type for user-defined
+    // globals, and caches native function return types from the stdlib registry.
+    std::unordered_map<std::string, ValueType> global_types_;
+    std::unordered_map<std::string, ValueType> native_return_types_;
 
     // --- Helpers ---
     Prototype* endCompiler();

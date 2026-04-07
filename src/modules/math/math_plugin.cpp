@@ -545,38 +545,38 @@ void cleanup_math_plugin(void) {
 
 // Plugin function definitions
 static MobiusPluginFunction math_functions[] = {
-    // Trigonometric
-    {"sin",       math_sin,       1,        "Sine"},
-    {"cos",       math_cos,       1,        "Cosine"},
-    {"tan",       math_tan,       1,        "Tangent"},
-    {"asin",      math_asin,      1,        "Arc sine"},
-    {"acos",      math_acos,      1,        "Arc cosine"},
-    {"atan",      math_atan,      1,        "Arc tangent"},
-    {"atan2",     math_atan2,     2,        "Arc tangent of y/x"},
+    // Trigonometric — all return float64
+    {"sin",       math_sin,       1,  MOBIUS_VAL_FLOAT64, "Sine"},
+    {"cos",       math_cos,       1,  MOBIUS_VAL_FLOAT64, "Cosine"},
+    {"tan",       math_tan,       1,  MOBIUS_VAL_FLOAT64, "Tangent"},
+    {"asin",      math_asin,      1,  MOBIUS_VAL_FLOAT64, "Arc sine"},
+    {"acos",      math_acos,      1,  MOBIUS_VAL_FLOAT64, "Arc cosine"},
+    {"atan",      math_atan,      1,  MOBIUS_VAL_FLOAT64, "Arc tangent"},
+    {"atan2",     math_atan2,     2,  MOBIUS_VAL_FLOAT64, "Arc tangent of y/x"},
     // Hyperbolic
-    {"sinh",      math_sinh,      1,        "Hyperbolic sine"},
-    {"cosh",      math_cosh,      1,        "Hyperbolic cosine"},
-    {"tanh",      math_tanh,      1,        "Hyperbolic tangent"},
-    {"asinh",     math_asinh,     1,        "Inverse hyperbolic sine"},
-    {"acosh",     math_acosh,     1,        "Inverse hyperbolic cosine"},
-    {"atanh",     math_atanh,     1,        "Inverse hyperbolic tangent"},
+    {"sinh",      math_sinh,      1,  MOBIUS_VAL_FLOAT64, "Hyperbolic sine"},
+    {"cosh",      math_cosh,      1,  MOBIUS_VAL_FLOAT64, "Hyperbolic cosine"},
+    {"tanh",      math_tanh,      1,  MOBIUS_VAL_FLOAT64, "Hyperbolic tangent"},
+    {"asinh",     math_asinh,     1,  MOBIUS_VAL_FLOAT64, "Inverse hyperbolic sine"},
+    {"acosh",     math_acosh,     1,  MOBIUS_VAL_FLOAT64, "Inverse hyperbolic cosine"},
+    {"atanh",     math_atanh,     1,  MOBIUS_VAL_FLOAT64, "Inverse hyperbolic tangent"},
     // Logarithmic / Exponential
-    {"log",       math_log,       1,        "Natural logarithm"},
-    {"log10",     math_log10,     1,        "Base-10 logarithm"},
-    {"log2",      math_log2,      1,        "Base-2 logarithm"},
-    {"log1p",     math_log1p,     1,        "Natural log of (1+x), accurate for small x"},
-    {"exp",       math_exp,       1,        "Exponential (e^x)"},
-    {"exp2",      math_exp2,      1,        "Base-2 exponential (2^x)"},
-    {"expm1",     math_expm1,     1,        "e^x - 1, accurate for small x"},
+    {"log",       math_log,       1,  MOBIUS_VAL_FLOAT64, "Natural logarithm"},
+    {"log10",     math_log10,     1,  MOBIUS_VAL_FLOAT64, "Base-10 logarithm"},
+    {"log2",      math_log2,      1,  MOBIUS_VAL_FLOAT64, "Base-2 logarithm"},
+    {"log1p",     math_log1p,     1,  MOBIUS_VAL_FLOAT64, "Natural log of (1+x), accurate for small x"},
+    {"exp",       math_exp,       1,  MOBIUS_VAL_FLOAT64, "Exponential (e^x)"},
+    {"exp2",      math_exp2,      1,  MOBIUS_VAL_FLOAT64, "Base-2 exponential (2^x)"},
+    {"expm1",     math_expm1,     1,  MOBIUS_VAL_FLOAT64, "e^x - 1, accurate for small x"},
     // Utility
-    {"deg2rad",   math_deg2rad,   1,        "Degrees to radians"},
-    {"rad2deg",   math_rad2deg,   1,        "Radians to degrees"},
-    {"sign",      math_sign,      1,        "Sign of number (-1, 0, or 1)"},
-    {"clamp",     math_clamp,     3,        "Clamp value to range"},
+    {"deg2rad",   math_deg2rad,   1,  MOBIUS_VAL_FLOAT64, "Degrees to radians"},
+    {"rad2deg",   math_rad2deg,   1,  MOBIUS_VAL_FLOAT64, "Radians to degrees"},
+    {"sign",      math_sign,      1,  MOBIUS_VAL_INT64,   "Sign of number (-1, 0, or 1)"},
+    {"clamp",     math_clamp,     3,  MOBIUS_VAL_UNKNOWN, "Clamp value to range"},
     // Advanced
-    {"factorial", math_factorial, 1,        "Factorial (n!)"},
-    {"gcd",       math_gcd,       2,        "Greatest common divisor"},
-    {"lcm",       math_lcm,       2,        "Least common multiple"},
+    {"factorial", math_factorial, 1,  MOBIUS_VAL_INT64,   "Factorial (n!)"},
+    {"gcd",       math_gcd,       2,  MOBIUS_VAL_INT64,   "Greatest common divisor"},
+    {"lcm",       math_lcm,       2,  MOBIUS_VAL_INT64,   "Least common multiple"},
 };
 
 static MobiusPlugin math_plugin = {
