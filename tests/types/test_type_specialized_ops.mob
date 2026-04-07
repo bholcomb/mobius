@@ -1,0 +1,214 @@
+// Test type-specialized arithmetic opcodes
+// When both operands have known types, the compiler emits specialized opcodes
+// (e.g. OP_ADD_II, OP_SUB_II, OP_MUL_II, OP_DIV_II, OP_MOD_II for integers,
+//  OP_ADD_FF, OP_SUB_FF, OP_MUL_FF, OP_DIV_FF, OP_MOD_FF for floats)
+// These tests verify correctness of the specialized paths.
+
+print("=== Type-Specialized Arithmetic Tests ===")
+
+// --- Integer-specialized operations ---
+
+// 1. Integer addition (OP_ADD_II)
+func int_add(a: int, b: int): int {
+    return a + b
+}
+
+var r1 = int_add(100, 200)
+if (r1 == 300) {
+    print("1. int + int: PASS")
+} else {
+    print("1. FAIL: expected 300, got " + r1)
+}
+
+// 2. Integer subtraction (OP_SUB_II)
+func int_sub(a: int, b: int): int {
+    return a - b
+}
+
+var r2 = int_sub(500, 123)
+if (r2 == 377) {
+    print("2. int - int: PASS")
+} else {
+    print("2. FAIL: expected 377, got " + r2)
+}
+
+// 3. Integer multiplication (OP_MUL_II)
+func int_mul(a: int, b: int): int {
+    return a * b
+}
+
+var r3 = int_mul(12, 34)
+if (r3 == 408) {
+    print("3. int * int: PASS")
+} else {
+    print("3. FAIL: expected 408, got " + r3)
+}
+
+// 4. Integer division (OP_DIV_II)
+func int_div(a: int, b: int): int {
+    return a / b
+}
+
+var r4 = int_div(100, 7)
+if (r4 == 14) {
+    print("4. int / int: PASS")
+} else {
+    print("4. FAIL: expected 14, got " + r4)
+}
+
+// 5. Integer modulo (OP_MOD_II)
+func int_mod(a: int, b: int): int {
+    return a % b
+}
+
+var r5 = int_mod(100, 7)
+if (r5 == 2) {
+    print("5. int %% int: PASS")
+} else {
+    print("5. FAIL: expected 2, got " + r5)
+}
+
+// --- Float-specialized operations ---
+
+// 6. Float addition (OP_ADD_FF)
+func float_add(a: float, b: float): float {
+    return a + b
+}
+
+var r6 = float_add(1.5, 2.3)
+if (r6 > 3.79 && r6 < 3.81) {
+    print("6. float + float: PASS")
+} else {
+    print("6. FAIL: expected ~3.8, got " + r6)
+}
+
+// 7. Float subtraction (OP_SUB_FF)
+func float_sub(a: float, b: float): float {
+    return a - b
+}
+
+var r7 = float_sub(10.5, 3.2)
+if (r7 > 7.29 && r7 < 7.31) {
+    print("7. float - float: PASS")
+} else {
+    print("7. FAIL: expected ~7.3, got " + r7)
+}
+
+// 8. Float multiplication (OP_MUL_FF)
+func float_mul(a: float, b: float): float {
+    return a * b
+}
+
+var r8 = float_mul(2.5, 4.0)
+if (r8 == 10.0) {
+    print("8. float * float: PASS")
+} else {
+    print("8. FAIL: expected 10.0, got " + r8)
+}
+
+// 9. Float division (OP_DIV_FF)
+func float_div(a: float, b: float): float {
+    return a / b
+}
+
+var r9 = float_div(10.0, 4.0)
+if (r9 == 2.5) {
+    print("9. float / float: PASS")
+} else {
+    print("9. FAIL: expected 2.5, got " + r9)
+}
+
+// 10. Float modulo (OP_MOD_FF)
+func float_mod(a: float, b: float): float {
+    return a % b
+}
+
+var r10 = float_mod(10.5, 3.0)
+if (r10 > 1.49 && r10 < 1.51) {
+    print("10. float %% float: PASS")
+} else {
+    print("10. FAIL: expected ~1.5, got " + r10)
+}
+
+// --- Edge cases ---
+
+// 11. Negative integer operations
+func neg_ops(a: int, b: int): int {
+    return (a + b) * (a - b)
+}
+
+var r11 = neg_ops(-10, 3)
+if (r11 == -91) {
+    print("11. Negative integer ops: PASS")
+} else {
+    print("11. FAIL: expected -91, got " + r11)
+}
+
+// 12. Chained integer operations in a loop
+func sum_range(start: int, end: int): int {
+    var total = 0
+    for (var i = start; i <= end; i++) {
+        total = total + i
+    }
+    return total
+}
+
+var r12 = sum_range(1, 100)
+if (r12 == 5050) {
+    print("12. Chained int ops in loop: PASS")
+} else {
+    print("12. FAIL: expected 5050, got " + r12)
+}
+
+// 13. Chained float operations
+func quadratic(a: float, b: float, c: float, x: float): float {
+    return a * x * x + b * x + c
+}
+
+var r13 = quadratic(1.0, 2.0, 3.0, 5.0)
+if (r13 == 38.0) {
+    print("13. Chained float ops (quadratic): PASS")
+} else {
+    print("13. FAIL: expected 38.0, got " + r13)
+}
+
+// 14. Division and modulo together
+func divmod(a: int, b: int): array {
+    return [a / b, a % b]
+}
+
+var r14 = divmod(17, 5)
+if (r14[0] == 3 && r14[1] == 2) {
+    print("14. Integer divmod: PASS")
+} else {
+    print("14. FAIL: expected [3, 2], got [" + r14[0] + ", " + r14[1] + "]")
+}
+
+// 15. Recursive with specialized ops (sum using annotations)
+func recursive_sum(n: int): int {
+    if (n <= 0) return 0
+    return n + recursive_sum(n - 1)
+}
+
+var r15 = recursive_sum(100)
+if (r15 == 5050) {
+    print("15. Recursive sum with int annotations: PASS")
+} else {
+    print("15. FAIL: expected 5050, got " + r15)
+}
+
+// 16. Float comparison after specialized arithmetic
+func distance(x1: float, y1: float, x2: float, y2: float): float {
+    var dx = x2 - x1
+    var dy = y2 - y1
+    return sqrt(dx * dx + dy * dy)
+}
+
+var r16 = distance(0.0, 0.0, 3.0, 4.0)
+if (r16 == 5.0) {
+    print("16. Float distance calculation: PASS")
+} else {
+    print("16. FAIL: expected 5.0, got " + r16)
+}
+
+print("=== All Type-Specialized Arithmetic Tests Completed ===")

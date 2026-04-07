@@ -26,4 +26,5 @@ tests/errors/test_pragma_errors.mob
 tests/errors/test_pragma_invalid_value.mob
 tests/errors/test_namespace_error.mob
 tests/errors/test_error_context.mob
+tests/errors/test_invalid_type_annotation.mob
 tests/basic/test_exit_nonzero.mob
