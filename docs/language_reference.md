@@ -196,9 +196,23 @@ var count: uint64 = 0
 var pi: float64 = 3.14159
 ```
 
+Functions also support optional type annotations on parameters and return
+values (see [Functions](#functions) for details):
+
+```mobius
+func add(a: int, b: int): int {
+    return a + b
+}
+```
+
 ### Available Types
 
-Optional `: type` annotations on variables accept only **`int64`**, **`uint64`**, and **`float64`**. Integer literals and values are stored as 64-bit integers internally.
+Variable declarations accept **`int64`**, **`uint64`**, and **`float64`** as
+type annotations. Function parameter and return type annotations accept the
+full set of type names: **`int`** (alias `integer`, `int64`), **`uint64`**,
+**`float`** (alias `float64`), **`bool`** (alias `boolean`), **`string`**,
+**`array`**, **`table`**, **`function`**, **`nil`**, **`userdata`**, and
+**`enum`**.
 
 | Category  | In annotations (`var x: …`) | Runtime values (`typeof`, etc.) |
 |-----------|-----------------------------|----------------------------------|
@@ -636,6 +650,61 @@ func add(a, b) {
 var result = add(10, 20)    // 30
 ```
 
+### Parameter and Return Type Annotations
+
+Function parameters and return values can optionally be annotated with types.
+All annotations are optional — you can annotate all, some, or none of the
+parameters, and the return type can be omitted.
+
+```mobius
+// Fully annotated
+func add(a: int, b: int): int {
+    return a + b
+}
+
+// Mixed — only some parameters annotated
+func greet(name: string, times) {
+    for (var i = 0; i < times; i++) {
+        print("Hello,", name)
+    }
+}
+
+// Return type only
+func pi(): float {
+    return 3.14159
+}
+
+// No annotations (inferred — same as before)
+func double(n) {
+    return n * 2
+}
+```
+
+When a return type is declared, the compiler knows the function's return type
+before compiling its body. This enables type-specialized opcodes for recursive
+calls:
+
+```mobius
+func fibonacci(n: int): int {
+    if (n <= 1) return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
+}
+```
+
+Without the `: int` return annotation, the compiler cannot determine the
+return type of `fibonacci` during compilation of its own body (since it
+hasn't finished compiling yet). With the annotation, the recursive
+`fibonacci(n - 1) + fibonacci(n - 2)` addition uses a fast integer-only
+opcode instead of a generic one.
+
+Parameter type annotations set the inferred type for that local variable,
+which improves type specialization for operations on those parameters within
+the function body. Unannotated parameters remain `unknown` until assigned.
+
+Accepted type names: `int` (aliases `integer`, `int64`), `uint64`,
+`float` (alias `float64`), `bool` (alias `boolean`), `string`, `array`,
+`table`, `function`, `nil`, `userdata`, `enum`.
+
 ### Return Values
 
 Functions return `nil` by default. Use `return` to return a value:
@@ -714,10 +783,11 @@ var f = outer(1)(2)(3)    // 6
 
 ### Recursion
 
-Functions can call themselves:
+Functions can call themselves. Adding type annotations lets the compiler emit
+optimized opcodes for the recursive arithmetic:
 
 ```mobius
-func fibonacci(n) {
+func fibonacci(n: int): int {
     if (n <= 1) return n
     return fibonacci(n - 1) + fibonacci(n - 2)
 }

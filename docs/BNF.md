@@ -38,15 +38,28 @@ declaration         ::= function_decl
                       | enum_decl
                       | statement
 
-function_decl       ::= "func" IDENTIFIER "(" [ param_list ] ")" block
+function_decl       ::= "func" IDENTIFIER "(" [ param_list ] ")" [ ":" func_type_name ] block
 
-param_list          ::= IDENTIFIER { "," IDENTIFIER }
+param_list          ::= param { "," param }
+
+param               ::= IDENTIFIER [ ":" func_type_name ]
 
 var_decl            ::= "var" IDENTIFIER [ type_annotation ] [ "=" expression ] terminator
 
 type_annotation     ::= ":" type_name
 
 type_name           ::= "int64" | "uint64" | "float64"
+
+func_type_name      ::= "int" | "integer" | "int64"
+                      | "uint64"
+                      | "float" | "float64"
+                      | "bool" | "boolean"
+                      | "string"
+                      | "array" | "table"
+                      | "function"
+                      | "nil"
+                      | "userdata"
+                      | "enum"
 
 enum_decl           ::= "enum" IDENTIFIER [ ":" integer_type ] "{" enum_body "}" terminator
 
@@ -198,7 +211,10 @@ primary             ::= literal
                       | IDENTIFIER
                       | table_literal
                       | array_literal
+                      | function_expr
                       | "(" expression ")"
+
+function_expr       ::= "func" "(" [ param_list ] ")" [ ":" func_type_name ] block
 
 literal             ::= INTEGER
                       | FLOAT
