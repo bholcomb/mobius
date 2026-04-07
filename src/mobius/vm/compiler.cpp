@@ -21,6 +21,7 @@ Prototype* Compiler::compile(Stmt** statements, size_t count,
                              const char* source_name) {
 
     had_error_ = false;
+    unreachable_ = false;
     FunctionState fs;
     initCompiler(nullptr, source_name);
 
@@ -523,6 +524,19 @@ int Compiler::compileVariable(VariableExpr* expr, int dest) {
         int reg = (dest >= 0) ? dest : allocReg();
         emitABC(OP_GETUPVAL, (uint8_t)reg, (uint8_t)upvalue, 0);
         return reg;
+    }
+
+    // Check loop-invariant hoisted globals — emit a MOVE (not a
+    // direct register return) so the caller's contiguous register
+    // layout (e.g. for call frames) is preserved.
+    for (auto it = hoisted_globals_stack_.rbegin(); it != hoisted_globals_stack_.rend(); ++it) {
+        for (const auto& e : it->entries) {
+            if (e.name == name) {
+                int reg = (dest >= 0) ? dest : allocReg();
+                emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)e.reg, 0);
+                return reg;
+            }
+        }
     }
 
     // Global — use flat slot index when state is available
@@ -1595,15 +1609,18 @@ void Compiler::compileStmt(Stmt* stmt) {
             break;
         case STMT_RETURN:
             compileReturnStmt(&stmt->as.return_stmt);
+            unreachable_ = true;
             break;
         case STMT_SWITCH:
             compileSwitchStmt(&stmt->as.switch_stmt);
             break;
         case STMT_BREAK:
             compileBreakStmt();
+            unreachable_ = true;
             break;
         case STMT_CONTINUE:
             compileContinueStmt();
+            unreachable_ = true;
             break;
         case STMT_IMPORT:
             compileImportStmt(&stmt->as.import_stmt);
@@ -1622,6 +1639,7 @@ void Compiler::compileStmt(Stmt* stmt) {
             break;
         case STMT_THROW:
             compileThrowStmt(&stmt->as.throw_stmt);
+            unreachable_ = true;
             break;
         case STMT_YIELD:
             emitABC(OP_YIELD, 0, 0, 0);
@@ -1636,9 +1654,8 @@ void Compiler::compileStmt(Stmt* stmt) {
 
 void Compiler::compileBlock(Stmt** stmts, size_t count) {
     for (size_t i = 0; i < count; i++) {
+        if (unreachable_) break;
         compileStmt(stmts[i]);
-        if (stmts[i]->type == STMT_RETURN)
-            break;
     }
 }
 
@@ -1653,10 +1670,24 @@ void Compiler::compileExpressionStmt(ExpressionStmt* stmt) {
 // --- Print statement ---
 
 void Compiler::compilePrintStmt(PrintStmt* stmt) {
-    // Compile as a call to the global "print" function
     int save = current_->free_reg;
     int func_reg = allocReg();
-    emitGetGlobal(func_reg, "print");
+
+    // Use hoisted "print" if available (MOVE), otherwise GETGLOBAL
+    bool found_hoisted = false;
+    for (auto it = hoisted_globals_stack_.rbegin(); it != hoisted_globals_stack_.rend(); ++it) {
+        for (const auto& e : it->entries) {
+            if (e.name == "print") {
+                emitABC(OP_MOVE, (uint8_t)func_reg, (uint8_t)e.reg, 0);
+                found_hoisted = true;
+                break;
+            }
+        }
+        if (found_hoisted) break;
+    }
+    if (!found_hoisted) {
+        emitGetGlobal(func_reg, "print");
+    }
 
     int arg_reg = allocReg();
     compileExpr(stmt->expression, arg_reg);
@@ -1709,7 +1740,11 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
 
 void Compiler::compileBlockStmt(BlockStmt* stmt) {
     beginScope();
+    bool saved_unreachable = unreachable_;
+    unreachable_ = false;
     compileBlock(stmt->statements, stmt->count);
+    bool block_unreachable = unreachable_;
+    unreachable_ = saved_unreachable || block_unreachable;
     endScope();
 }
 
@@ -1848,21 +1883,29 @@ void Compiler::compileIfStmt(IfStmt* stmt) {
     int jmp_else = compileConditionJump(stmt->condition);
 
     // Then branch
+    unreachable_ = false;
     compileStmt(stmt->then_branch);
+    bool then_unreachable = unreachable_;
 
     if (stmt->else_branch) {
+        unreachable_ = false;
         int jmp_end = emitJump();
         patchJump(jmp_else);
         compileStmt(stmt->else_branch);
+        bool else_unreachable = unreachable_;
         patchJump(jmp_end);
+        unreachable_ = then_unreachable && else_unreachable;
     } else {
         patchJump(jmp_else);
+        unreachable_ = false;
     }
 }
 
 // --- While statement ---
 
 void Compiler::compileWhileStmt(WhileStmt* stmt) {
+    int hoisted = hoistLoopGlobals(stmt->body);
+
     LoopContext loop;
     loop.start_pc = current_->proto->currentPC();
     loop.is_for_loop = false;
@@ -1871,12 +1914,15 @@ void Compiler::compileWhileStmt(WhileStmt* stmt) {
 
     int jmp_exit = compileConditionJump(stmt->condition);
 
+    unreachable_ = false;
     compileStmt(stmt->body);
 
     // Jump back to condition
-    int loop_start = current_->loops.back().start_pc;
-    int offset = loop_start - (current_->proto->currentPC() + 1);
-    current_->proto->emitJump(offset, currentLine_);
+    if (!unreachable_) {
+        int loop_start = current_->loops.back().start_pc;
+        int offset = loop_start - (current_->proto->currentPC() + 1);
+        current_->proto->emitJump(offset, currentLine_);
+    }
 
     patchJump(jmp_exit);
 
@@ -1885,6 +1931,9 @@ void Compiler::compileWhileStmt(WhileStmt* stmt) {
         patchJump(jmp);
     }
     current_->loops.pop_back();
+
+    if (hoisted > 0) hoisted_globals_stack_.pop_back();
+    unreachable_ = false;
 }
 
 // --- For statement ---
@@ -1986,6 +2035,8 @@ void Compiler::compileForStmt(ForStmt* stmt) {
                          &step_val, &count_up)) {
         beginScope();
 
+        int hoisted = hoistLoopGlobals(stmt->body);
+
         // Reserve 4 consecutive registers: index, limit, step, loop_var
         // Use addLocal with internal names for the 3 hidden registers so the
         // locals vector stays in sync with register indices.
@@ -2035,6 +2086,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         current_->loops.push_back(loop);
 
         // Body
+        unreachable_ = false;
         compileStmt(stmt->body);
 
         // Patch continue jumps to IFORLOOP
@@ -2055,8 +2107,9 @@ void Compiler::compileForStmt(ForStmt* stmt) {
             patchJump(jmp);
         }
         current_->loops.pop_back();
-
+        if (hoisted > 0) hoisted_globals_stack_.pop_back();
         endScope();
+        unreachable_ = false;
         return;
     }
 
@@ -2067,6 +2120,8 @@ void Compiler::compileForStmt(ForStmt* stmt) {
     if (stmt->initializer) {
         compileStmt(stmt->initializer);
     }
+
+    int hoisted = hoistLoopGlobals(stmt->body);
 
     LoopContext loop;
     loop.start_pc = current_->proto->currentPC();
@@ -2082,6 +2137,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
     }
 
     // Body
+    unreachable_ = false;
     compileStmt(stmt->body);
 
     // Patch continue jumps to here (the increment step)
@@ -2089,6 +2145,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         patchJump(jmp);
     }
 
+    unreachable_ = false;
     if (stmt->increment) {
         int save = current_->free_reg;
         compileExpr(stmt->increment);
@@ -2109,8 +2166,9 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         patchJump(jmp);
     }
     current_->loops.pop_back();
-
+    if (hoisted > 0) hoisted_globals_stack_.pop_back();
     endScope();
+    unreachable_ = false;
 }
 
 // --- Function statement ---
@@ -2119,7 +2177,10 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     currentLine_ = stmt->name.line;
     const char* name = stmt->name.identifier;
 
-    // Save enclosing compiler state
+    // Save enclosing compiler state (including DCE flag — child function
+    // bodies are independent and must not leak unreachable_ to the parent).
+    bool saved_unreachable = unreachable_;
+    unreachable_ = false;
     FunctionState* enclosing = current_;
     FunctionState child_fs;
     child_fs.proto = new Prototype();
@@ -2154,6 +2215,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
 
     // Restore enclosing state
     current_ = enclosing;
+    unreachable_ = saved_unreachable;
 
     // Add child prototype to parent and emit CLOSURE
     int proto_idx = (int)current_->proto->protos.size();
@@ -2500,8 +2562,10 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
             }
         }
 
+        unreachable_ = false;
         compileBlock(sc->body, sc->body_count);
         endScope();
+        unreachable_ = false;
 
         if (sc->has_break) {
             break_jumps.push_back(emitJump());
@@ -2517,6 +2581,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
 
     // Default case
     if (stmt->default_body && stmt->default_body_count > 0) {
+        unreachable_ = false;
         beginScope();
         compileBlock(stmt->default_body, stmt->default_body_count);
         endScope();
@@ -2534,6 +2599,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
     current_->loops.pop_back();
 
     setFreeReg(save);
+    unreachable_ = false;
 }
 
 // --- Break ---
@@ -2646,6 +2712,173 @@ void Compiler::compileEnumStmt(EnumStmt* stmt) {
 }
 
 // ============================================================================
+// ============================================================================
+// Loop-invariant global hoisting — collect global names used as call targets
+// ============================================================================
+
+void Compiler::collectGlobalCallNamesFromExpr(Expr* expr,
+                                               std::unordered_set<std::string>& names) {
+    if (!expr) return;
+    switch (expr->type) {
+        case EXPR_CALL: {
+            CallExpr* c = &expr->as.call;
+            if (c->callee->type == EXPR_VARIABLE) {
+                const char* name = c->callee->as.variable.name.identifier;
+                if (name && resolveLocal(name) < 0 &&
+                    resolveUpvalue(current_, name) < 0) {
+                    names.insert(name);
+                }
+            }
+            collectGlobalCallNamesFromExpr(c->callee, names);
+            for (size_t i = 0; i < c->arg_count; i++)
+                collectGlobalCallNamesFromExpr(c->arguments[i], names);
+            break;
+        }
+        case EXPR_BINARY:
+            collectGlobalCallNamesFromExpr(expr->as.binary.left, names);
+            collectGlobalCallNamesFromExpr(expr->as.binary.right, names);
+            break;
+        case EXPR_UNARY:
+            collectGlobalCallNamesFromExpr(expr->as.unary.right, names);
+            break;
+        case EXPR_ASSIGNMENT:
+            collectGlobalCallNamesFromExpr(expr->as.assignment.target, names);
+            collectGlobalCallNamesFromExpr(expr->as.assignment.value, names);
+            break;
+        case EXPR_GROUPING:
+            collectGlobalCallNamesFromExpr(expr->as.grouping.expression, names);
+            break;
+        case EXPR_ARRAY_LITERAL:
+            for (size_t i = 0; i < expr->as.array_literal.element_count; i++)
+                collectGlobalCallNamesFromExpr(expr->as.array_literal.elements[i], names);
+            break;
+        case EXPR_ARRAY_INDEX:
+            collectGlobalCallNamesFromExpr(expr->as.array_index.array, names);
+            collectGlobalCallNamesFromExpr(expr->as.array_index.index, names);
+            break;
+        case EXPR_TABLE_LITERAL:
+            for (size_t i = 0; i < expr->as.table_literal.pair_count; i++) {
+                collectGlobalCallNamesFromExpr(expr->as.table_literal.pairs[i].key, names);
+                collectGlobalCallNamesFromExpr(expr->as.table_literal.pairs[i].value, names);
+            }
+            break;
+        case EXPR_TABLE_INDEX:
+            collectGlobalCallNamesFromExpr(expr->as.table_index.table, names);
+            collectGlobalCallNamesFromExpr(expr->as.table_index.index, names);
+            break;
+        case EXPR_TABLE_DOT:
+        case EXPR_METHOD_DOT:
+            collectGlobalCallNamesFromExpr(expr->as.table_dot.table, names);
+            break;
+        case EXPR_TERNARY:
+            collectGlobalCallNamesFromExpr(expr->as.ternary.condition, names);
+            collectGlobalCallNamesFromExpr(expr->as.ternary.then_expr, names);
+            collectGlobalCallNamesFromExpr(expr->as.ternary.else_expr, names);
+            break;
+        case EXPR_SPAWN:
+            collectGlobalCallNamesFromExpr(expr->as.spawn.callee, names);
+            for (size_t i = 0; i < expr->as.spawn.arg_count; i++)
+                collectGlobalCallNamesFromExpr(expr->as.spawn.arguments[i], names);
+            break;
+        case EXPR_AWAIT:
+            collectGlobalCallNamesFromExpr(expr->as.await.operand, names);
+            break;
+        case EXPR_SHARED:
+            collectGlobalCallNamesFromExpr(expr->as.shared.operand, names);
+            break;
+        default:
+            break;
+    }
+}
+
+void Compiler::collectGlobalCallNames(Stmt* stmt,
+                                       std::unordered_set<std::string>& names) {
+    if (!stmt) return;
+    switch (stmt->type) {
+        case STMT_EXPRESSION:
+            collectGlobalCallNamesFromExpr(stmt->as.expression.expression, names);
+            break;
+        case STMT_PRINT:
+            collectGlobalCallNamesFromExpr(stmt->as.print.expression, names);
+            break;
+        case STMT_VAR:
+            collectGlobalCallNamesFromExpr(stmt->as.var.initializer, names);
+            break;
+        case STMT_BLOCK:
+            for (size_t i = 0; i < stmt->as.block.count; i++)
+                collectGlobalCallNames(stmt->as.block.statements[i], names);
+            break;
+        case STMT_IF:
+            collectGlobalCallNamesFromExpr(stmt->as.if_stmt.condition, names);
+            collectGlobalCallNames(stmt->as.if_stmt.then_branch, names);
+            collectGlobalCallNames(stmt->as.if_stmt.else_branch, names);
+            break;
+        case STMT_WHILE:
+            collectGlobalCallNamesFromExpr(stmt->as.while_stmt.condition, names);
+            collectGlobalCallNames(stmt->as.while_stmt.body, names);
+            break;
+        case STMT_FOR:
+            collectGlobalCallNames(stmt->as.for_stmt.initializer, names);
+            collectGlobalCallNamesFromExpr(stmt->as.for_stmt.condition, names);
+            collectGlobalCallNamesFromExpr(stmt->as.for_stmt.increment, names);
+            collectGlobalCallNames(stmt->as.for_stmt.body, names);
+            break;
+        case STMT_FOR_IN:
+            collectGlobalCallNamesFromExpr(stmt->as.for_in_stmt.iterable, names);
+            collectGlobalCallNames(stmt->as.for_in_stmt.body, names);
+            break;
+        case STMT_RETURN:
+            collectGlobalCallNamesFromExpr(stmt->as.return_stmt.value, names);
+            break;
+        case STMT_THROW:
+            collectGlobalCallNamesFromExpr(stmt->as.throw_stmt.value, names);
+            break;
+        case STMT_TRY_CATCH:
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.try_body_count; i++)
+                collectGlobalCallNames(stmt->as.try_catch_stmt.try_body[i], names);
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.catch_body_count; i++)
+                collectGlobalCallNames(stmt->as.try_catch_stmt.catch_body[i], names);
+            if (stmt->as.try_catch_stmt.finally_body) {
+                for (size_t i = 0; i < stmt->as.try_catch_stmt.finally_body_count; i++)
+                    collectGlobalCallNames(stmt->as.try_catch_stmt.finally_body[i], names);
+            }
+            break;
+        case STMT_SWITCH:
+            collectGlobalCallNamesFromExpr(stmt->as.switch_stmt.discriminant, names);
+            for (size_t i = 0; i < stmt->as.switch_stmt.case_count; i++) {
+                SwitchCase* sc = stmt->as.switch_stmt.cases[i];
+                collectGlobalCallNamesFromExpr(sc->guard, names);
+                for (size_t j = 0; j < sc->body_count; j++)
+                    collectGlobalCallNames(sc->body[j], names);
+            }
+            if (stmt->as.switch_stmt.default_body) {
+                for (size_t j = 0; j < stmt->as.switch_stmt.default_body_count; j++)
+                    collectGlobalCallNames(stmt->as.switch_stmt.default_body[j], names);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+// hoistLoopGlobals — pre-load globals used as call targets before a loop body.
+// Returns the number of registers consumed (for cleanup after loop).
+int Compiler::hoistLoopGlobals(Stmt* body) {
+    std::unordered_set<std::string> globals;
+    collectGlobalCallNames(body, globals);
+    if (globals.empty()) return 0;
+
+    HoistedGlobals hg;
+    for (const auto& name : globals) {
+        std::string local_name = "(hoisted:" + name + ")";
+        int reg = addLocal(pool_->intern(local_name.c_str())->data);
+        emitGetGlobal(reg, name.c_str());
+        hg.entries.push_back({name, reg});
+    }
+    hoisted_globals_stack_.push_back(std::move(hg));
+    return (int)globals.size();
+}
+
 // Peephole optimizer — fuse common instruction sequences into superinstructions
 // ============================================================================
 
@@ -2904,6 +3137,8 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     currentLine_ = expr->name.line;
     const char* name = expr->name.identifier ? expr->name.identifier : "<lambda>";
 
+    bool saved_unreachable = unreachable_;
+    unreachable_ = false;
     FunctionState* enclosing = current_;
     FunctionState child_fs;
     child_fs.proto = new Prototype();
@@ -2931,6 +3166,7 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     child_proto->num_registers = child_fs.max_reg;
 
     current_ = enclosing;
+    unreachable_ = saved_unreachable;
 
     int proto_idx = (int)current_->proto->protos.size();
     current_->proto->protos.push_back(child_proto);
@@ -2974,6 +3210,7 @@ void Compiler::compileForInStmt(ForInStmt* stmt) {
 
     int jmp_exit = emitJump();
 
+    unreachable_ = false;
     compileStmt(stmt->body);
 
     int loop_offset = loop.start_pc - ((int)current_->proto->code.size() + 1);
@@ -2986,9 +3223,9 @@ void Compiler::compileForInStmt(ForInStmt* stmt) {
         patchJump(jmp);
     }
     current_->loops.pop_back();
-
     endScope();
     setFreeReg(save);
+    unreachable_ = false;
 }
 
 // --- Try-catch ---
@@ -3002,7 +3239,9 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
 
     int try_begin_pc = emitAsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, 0);
 
+    unreachable_ = false;
     compileBlock(stmt->try_body, stmt->try_body_count);
+    bool try_unreachable = unreachable_;
 
     emitABC(OP_TRY_END, 0, 0, 0);
     int jmp_past_catch = emitJump();
@@ -3011,14 +3250,18 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
     int offset = catch_target - (try_begin_pc + 1);
     current_->proto->code[try_begin_pc] = ENCODE_AsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, offset);
 
+    unreachable_ = false;
     compileBlock(stmt->catch_body, stmt->catch_body_count);
+    bool catch_unreachable = unreachable_;
 
     patchJump(jmp_past_catch);
 
     if (stmt->finally_body && stmt->finally_body_count > 0) {
+        unreachable_ = false;
         compileBlock(stmt->finally_body, stmt->finally_body_count);
     }
 
+    unreachable_ = try_unreachable && catch_unreachable;
     endScope();
     setFreeReg(save);
 }

@@ -65,6 +65,18 @@ private:
     MobiusState* state_;
     std::unordered_set<std::string> enum_names_;
     bool had_error_ = false;
+    bool unreachable_ = false;  // DCE: set after return/break/continue/throw
+
+    // Loop-invariant global hoisting: small flat array mapping global name ->
+    // register holding the pre-loaded value. Stacked per loop depth.
+    struct HoistedEntry {
+        std::string name;
+        int reg;
+    };
+    struct HoistedGlobals {
+        std::vector<HoistedEntry> entries;
+    };
+    std::vector<HoistedGlobals> hoisted_globals_stack_;
 
     // --- Register management ---
     int allocReg();
@@ -154,6 +166,11 @@ private:
     int compileShared(SharedExpr* expr, int dest);
 
     void compileBlock(Stmt** stmts, size_t count);
+
+    // --- Loop-invariant global hoisting ---
+    void collectGlobalCallNames(Stmt* stmt, std::unordered_set<std::string>& names);
+    void collectGlobalCallNamesFromExpr(Expr* expr, std::unordered_set<std::string>& names);
+    int hoistLoopGlobals(Stmt* body);
 
     // --- Type inference ---
     ValueType inferExprType(Expr* expr);
