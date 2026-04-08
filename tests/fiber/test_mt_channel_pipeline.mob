@@ -29,7 +29,7 @@ func consumer(ch, results) {
 }
 
 var ch = fiber.channel(8)
-var received = shared []
+shared var received = []
 
 var fp = spawn producer(ch, COUNT)
 var fc = spawn consumer(ch, received)

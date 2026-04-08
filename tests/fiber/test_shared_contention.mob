@@ -6,7 +6,7 @@ import "fiber"
 
 // Test 1: shared array — 4 fibers writing DIFFERENT values to the same slot
 // Last writer wins, but no crash or corruption
-var arr = shared [0]
+shared var arr = [0]
 
 func write_slot(arr, idx, value, times) {
     for (var i = 0; i < times; i += 1) {
@@ -34,7 +34,7 @@ if (arr[0] < 1 || arr[0] > 4) {
 print("  4 fibers writing same slot: final value =", arr[0], "(no corruption)")
 
 // Test 2: shared table — 4 fibers writing to the same key, no crash
-var tbl = shared { val: 0 }
+shared var tbl = { val: 0 }
 
 func write_key(t, value, times) {
     for (var i = 0; i < times; i += 1) {
@@ -61,7 +61,7 @@ print("  4 fibers writing same key: final value =", tbl.val, "(no corruption)")
 
 // Test 3: shared array — parallel push (all fibers push to same array)
 // Total items must equal the sum of all pushes
-var results = shared []
+shared var results = []
 
 func push_values(arr, start, count) {
     for (var i = 0; i < count; i += 1) {
@@ -87,7 +87,7 @@ if (len(results) != 100) {
 print("  4 fibers pushing to same array: length =", len(results))
 
 // Test 4: disjoint index writes remain correct under contention
-var data = shared []
+shared var data = []
 for (var i = 0; i < 40; i += 1) {
     data:push(0)
 }

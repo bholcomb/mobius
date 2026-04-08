@@ -1,9 +1,12 @@
 #include "fiber/job_system.h"
 #include "state/mobius_state.h"
+#include "vm/vm.h"
 
 #include <cstdio>
 #include <chrono>
 #include <algorithm>
+#include <thread>
+
 
 thread_local MobiusFiber* JobSystem::t_current_fiber_ = nullptr;
 thread_local FiberContext JobSystem::t_scheduler_ctx_ = {};
@@ -85,10 +88,7 @@ void JobSystem::submitJobs(JobDecl* jobs, uint32_t count, AtomicCounter* counter
     }
 
     metrics_->total_fibers_spawned += count;
-
-    // Wake up workers to process the new jobs
     ready_cv_.notify_all();
-
     spawnWorkerIfNeeded();
 }
 
@@ -107,14 +107,11 @@ void JobSystem::waitForCounter(AtomicCounter* counter, int32_t target_value) {
     MobiusFiber* self = t_current_fiber_;
     if (!self) return;
 
-    // Put current fiber on the wait list
     {
         std::lock_guard<std::mutex> lock(wait_mutex_);
         wait_list_.push_back({self, counter, target_value});
     }
     self->state = FiberState::Suspended;
-
-    // Switch back to the scheduler to run other work
     fiber_context_swap(&self->context, &t_scheduler_ctx_);
 }
 
@@ -122,7 +119,7 @@ void JobSystem::yieldFiber() {
     MobiusFiber* self = t_current_fiber_;
     if (!self) return;
 
-    submitFiber(self);
+    self->state = FiberState::Suspended;
     fiber_context_swap(&self->context, &t_scheduler_ctx_);
 }
 
@@ -131,8 +128,39 @@ MobiusFiber* JobSystem::currentFiber() const {
 }
 
 MobiusFiber* JobSystem::dequeueReadyFiber() {
-    // First check if any waiting fibers have their conditions met
     wakeWaiters();
+
+    // Interleave: convert ONE pending job into a fiber each time we dequeue,
+    // so pending jobs are never starved by the ready queue.
+    {
+        std::lock_guard<std::mutex> lock(job_mutex_);
+        if (!pending_jobs_.empty()) {
+            JobDecl job = std::move(pending_jobs_.front());
+            pending_jobs_.erase(pending_jobs_.begin());
+
+            MobiusFiber* f = fiber_pool_->acquire();
+            if (!f) {
+                pending_jobs_.insert(pending_jobs_.begin(), std::move(job));
+                // Fall through to try the ready queue instead
+            } else {
+                size_t active = fiber_pool_->activeCount();
+                if (active > metrics_->peak_fibers)
+                    metrics_->peak_fibers = active;
+
+                size_t page_size = 4096;
+                void* stack_top = static_cast<char*>(f->stack_memory) + page_size;
+                FiberStartData* data = new FiberStartData{this, std::move(job)};
+                fiber_context_init(&f->context, stack_top, f->stack_size,
+                                   fiberEntryTrampoline, data);
+                f->state = FiberState::Running;
+
+                // Also spawn more workers if there are still pending jobs
+                spawnWorkerIfNeeded();
+
+                return f;
+            }
+        }
+    }
 
     // Check ready queue
     {
@@ -140,35 +168,6 @@ MobiusFiber* JobSystem::dequeueReadyFiber() {
         if (!ready_queue_.empty()) {
             MobiusFiber* f = ready_queue_.front();
             ready_queue_.erase(ready_queue_.begin());
-            return f;
-        }
-    }
-
-    // Check pending jobs -- assign a fiber from the pool
-    {
-        std::lock_guard<std::mutex> lock(job_mutex_);
-        if (!pending_jobs_.empty()) {
-            JobDecl job = pending_jobs_.front();
-            pending_jobs_.erase(pending_jobs_.begin());
-
-            MobiusFiber* f = fiber_pool_->acquire();
-            if (!f) {
-                // Pool exhausted, put job back
-                pending_jobs_.insert(pending_jobs_.begin(), job);
-                return nullptr;
-            }
-
-            size_t active = fiber_pool_->activeCount();
-            if (active > metrics_->peak_fibers)
-                metrics_->peak_fibers = active;
-
-            // Initialize the fiber's context with the job
-            size_t page_size = 4096; // reasonable default
-            void* stack_top = static_cast<char*>(f->stack_memory) + page_size;
-            FiberStartData* data = new FiberStartData{this, job};
-            fiber_context_init(&f->context, stack_top, f->stack_size,
-                               fiberEntryTrampoline, data);
-            f->state = FiberState::Running;
             return f;
         }
     }
@@ -201,7 +200,7 @@ void JobSystem::spawnWorkerIfNeeded() {
         std::lock_guard<std::mutex> lock(worker_mutex_);
         workers_.emplace_back(&JobSystem::workerThreadEntry, this);
 
-        size_t count = workers_.size() + 1; // +1 for calling thread
+        size_t count = workers_.size() + 1;
         if (count > metrics_->peak_worker_threads)
             metrics_->peak_worker_threads = count;
     }
@@ -212,7 +211,6 @@ void JobSystem::workerThreadEntry() {
 
     auto idle_start = std::chrono::steady_clock::now();
     const auto idle_timeout = std::chrono::milliseconds(1000);
-    bool keep_one_alive = false;
 
     while (!shutdown_requested_.load(std::memory_order_relaxed)) {
         MobiusFiber* fiber = dequeueReadyFiber();
@@ -222,25 +220,35 @@ void JobSystem::workerThreadEntry() {
 
             t_current_fiber_ = fiber;
             fiber->state = FiberState::Running;
+            if (fiber->vm) MobiusVM::t_current_vm = fiber->vm;
             fiber_context_swap(&t_scheduler_ctx_, &fiber->context);
             t_current_fiber_ = nullptr;
+            MobiusVM::t_current_vm = nullptr;
 
             if (fiber->state == FiberState::Dead) {
                 metrics_->total_jobs_executed++;
                 if (fiber->peak_stack_bytes > metrics_->peak_fiber_stack_bytes)
                     metrics_->peak_fiber_stack_bytes = fiber->peak_stack_bytes;
-                fiber_pool_->release(fiber);
+
+                // If this was the main fiber, signal the calling thread
+                if (fiber == main_fiber_) {
+                    std::lock_guard<std::mutex> lock(main_done_mutex_);
+                    main_fiber_done_ = true;
+                    main_done_cv_.notify_one();
+                } else {
+                    fiber_pool_->release(fiber);
+                }
+            } else if (fiber->state == FiberState::Suspended) {
+                submitFiber(fiber);
             }
         } else {
-            // No work available, wait briefly
             std::unique_lock<std::mutex> lock(ready_mutex_);
             ready_cv_.wait_for(lock, std::chrono::milliseconds(10));
 
             auto now = std::chrono::steady_clock::now();
             if (now - idle_start > idle_timeout) {
-                // Check if we're the last extra worker -- keep one alive
                 int count = active_worker_count_.load(std::memory_order_relaxed);
-                if (count > 1 || !keep_one_alive) {
+                if (count > 1) {
                     active_worker_count_.fetch_sub(1, std::memory_order_relaxed);
                     return;
                 }
@@ -251,52 +259,50 @@ void JobSystem::workerThreadEntry() {
     active_worker_count_.fetch_sub(1, std::memory_order_relaxed);
 }
 
-void JobSystem::runWorkerLoop(MobiusFiber* main_fiber) {
-    fiber_context_convert_thread(&t_scheduler_ctx_);
+int JobSystem::executeAsMainFiber(std::function<int()> fn) {
+    ensureInitialized();
 
-    // Run the main fiber first
-    t_current_fiber_ = main_fiber;
-    main_fiber->state = FiberState::Running;
-    fiber_context_swap(&t_scheduler_ctx_, &main_fiber->context);
-    t_current_fiber_ = nullptr;
+    main_fiber_done_ = false;
+    main_fiber_result_ = 0;
 
-    // Main fiber may have yielded or completed.
-    // If completed, we still need to drain child fibers (structured execution).
-    while (!shutdown_requested_.load(std::memory_order_relaxed)) {
-        // Check if main fiber is done and no more work remains
-        bool main_done = (main_fiber->state == FiberState::Dead);
-        bool has_work;
-        {
-            std::lock_guard<std::mutex> lock1(ready_mutex_);
-            std::lock_guard<std::mutex> lock2(job_mutex_);
-            std::lock_guard<std::mutex> lock3(wait_mutex_);
-            has_work = !ready_queue_.empty() || !pending_jobs_.empty() || !wait_list_.empty();
-        }
-
-        if (main_done && !has_work) break;
-
-        MobiusFiber* fiber = dequeueReadyFiber();
-        if (fiber) {
-            t_current_fiber_ = fiber;
-            fiber->state = FiberState::Running;
-            fiber_context_swap(&t_scheduler_ctx_, &fiber->context);
-            t_current_fiber_ = nullptr;
-
-            if (fiber->state == FiberState::Dead) {
-                metrics_->total_jobs_executed++;
-                if (fiber->peak_stack_bytes > metrics_->peak_fiber_stack_bytes)
-                    metrics_->peak_fiber_stack_bytes = fiber->peak_stack_bytes;
-                if (fiber == main_fiber) {
-                    // Main fiber completed during this iteration
-                    continue;
-                }
-                fiber_pool_->release(fiber);
-            }
-        } else {
-            // No work, brief sleep to avoid busy-waiting
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-        }
+    MobiusFiber* fiber = fiber_pool_->acquire();
+    if (!fiber) {
+        fprintf(stderr, "FATAL: cannot acquire fiber for main script\n");
+        return -1;
     }
+    main_fiber_ = fiber;
+
+    // Wrap fn so we can capture its return value
+    int* result_ptr = &main_fiber_result_;
+    JobDecl job;
+    job.entry = [fn = std::move(fn), result_ptr]() {
+        *result_ptr = fn();
+    };
+
+    size_t page_size = 4096;
+    void* stack_top = static_cast<char*>(fiber->stack_memory) + page_size;
+    FiberStartData* data = new FiberStartData{this, std::move(job)};
+    fiber_context_init(&fiber->context, stack_top, fiber->stack_size,
+                       fiberEntryTrampoline, data);
+    fiber->state = FiberState::Suspended;
+
+    // Put the main fiber on the ready queue
+    submitFiber(fiber);
+    metrics_->total_fibers_spawned++;
+
+    // Ensure at least one worker thread
+    spawnWorkerIfNeeded();
+
+    // Block the calling thread until the main fiber completes
+    {
+        std::unique_lock<std::mutex> lock(main_done_mutex_);
+        main_done_cv_.wait(lock, [this] { return main_fiber_done_; });
+    }
+
+    fiber_pool_->release(main_fiber_);
+    main_fiber_ = nullptr;
+
+    return main_fiber_result_;
 }
 
 void JobSystem::shutdown() {

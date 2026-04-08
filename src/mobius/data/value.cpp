@@ -20,9 +20,6 @@
 
 void Value::releaseRefSlow() {
     switch (type) {
-        case VAL_STRING:
-            if (as.string) as.string->release();
-            break;
         case VAL_ARRAY:
             if (as.array) as.array->release();
             break;

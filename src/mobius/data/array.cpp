@@ -18,7 +18,7 @@ ArrayValue* ArrayValue::retain() {
 
 void ArrayValue::push(const Value& value) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         elements.push_back(value);
     } else {
         elements.push_back(value);
@@ -27,7 +27,7 @@ void ArrayValue::push(const Value& value) {
 
 Value ArrayValue::pop() {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         if (elements.empty()) return make_nil_value();
         Value result = std::move(elements.back());
         elements.pop_back();
@@ -42,7 +42,7 @@ Value ArrayValue::pop() {
 
 const Value& ArrayValue::get(size_t index) const {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::shared_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return elements[index];
     }
     return elements[index];
@@ -50,7 +50,7 @@ const Value& ArrayValue::get(size_t index) const {
 
 void ArrayValue::set(size_t index, const Value& value) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         elements[index] = value;
     } else {
         elements[index] = value;
@@ -59,7 +59,7 @@ void ArrayValue::set(size_t index, const Value& value) {
 
 void ArrayValue::insert(size_t index, Value value) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         if (index > elements.size()) index = elements.size();
         elements.insert(elements.begin() + (ptrdiff_t)index, value);
     } else {
@@ -70,7 +70,7 @@ void ArrayValue::insert(size_t index, Value value) {
 
 Value ArrayValue::remove(size_t index) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         if (index >= elements.size()) return make_nil_value();
         Value result = std::move(elements[index]);
         elements.erase(elements.begin() + (ptrdiff_t)index);
@@ -85,7 +85,7 @@ Value ArrayValue::remove(size_t index) {
 
 void ArrayValue::reserve(size_t new_capacity) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         elements.reserve(new_capacity);
     } else {
         elements.reserve(new_capacity);
@@ -94,7 +94,7 @@ void ArrayValue::reserve(size_t new_capacity) {
 
 void ArrayValue::reverse() {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         std::reverse(elements.begin(), elements.end());
     } else {
         std::reverse(elements.begin(), elements.end());
@@ -103,7 +103,7 @@ void ArrayValue::reverse() {
 
 const Value& ArrayValue::operator[](size_t index) const {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::shared_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return elements[index];
     }
     return elements[index];
@@ -111,7 +111,7 @@ const Value& ArrayValue::operator[](size_t index) const {
 
 Value& ArrayValue::operator[](size_t index) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return elements[index];
     }
     return elements[index];

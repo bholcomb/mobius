@@ -175,6 +175,7 @@ void synchronize(Parser* parser) {
         switch (parser_peek(parser).type) {
             case TOKEN_FUNC:
             case TOKEN_VAR:
+            case TOKEN_SHARED:
             case TOKEN_FOR:
             case TOKEN_IF:
             case TOKEN_WHILE:
@@ -687,12 +688,14 @@ Expr* parse_unary(Parser* parser) {
         return make_await_expr(operand);
     }
 
-    if (parser_match(parser, TOKEN_SHARED)) {
-        Expr* operand = parse_unary(parser);
-        if (!operand) return NULL;
-        return make_shared_expr(operand);
+    if (parser_match(parser, TOKEN_ATOMIC)) {
+        consume(parser, TOKEN_LEFT_PAREN, "Expect '(' after 'atomic'.");
+        Expr* body = parse_expression(parser);
+        if (!body) return NULL;
+        consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after atomic expression.");
+        return make_atomic_expr(body);
     }
-    
+
     return parse_call(parser);
 }
 
@@ -1320,7 +1323,19 @@ Stmt* parse_declaration(Parser* parser) {
     if (parser_match(parser, TOKEN_FUNC)) {
         return parse_function_declaration(parser);
     }
-    
+
+    if (parser_match(parser, TOKEN_SHARED)) {
+        if (!parser_match(parser, TOKEN_VAR)) {
+            parser_error_at_current(parser, "'shared' must be followed by 'var'");
+            return NULL;
+        }
+        Stmt* stmt = parse_var_declaration(parser);
+        if (stmt && stmt->as.var.initializer) {
+            stmt->as.var.initializer = make_shared_expr(stmt->as.var.initializer);
+        }
+        return stmt;
+    }
+
     if (parser_match(parser, TOKEN_VAR)) {
         return parse_var_declaration(parser);
     }

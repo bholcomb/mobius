@@ -97,6 +97,7 @@ typedef enum {
     TOKEN_AWAIT,            // await
     TOKEN_YIELD,            // yield
     TOKEN_SHARED,           // shared
+    TOKEN_ATOMIC,           // atomic
 
     // Type annotation tokens
     TOKEN_TYPE_INT64,       // int64

@@ -94,7 +94,7 @@ struct Prototype {
 
         Value v;
         v.type = VAL_STRING;
-        v.as.string = str->retain();
+        v.as.string = str;
         int idx = addConstant(v);
         if (idx >= 0) string_const_map_[str->data] = idx;
         return idx;

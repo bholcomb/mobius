@@ -2,7 +2,7 @@
 // different keys of a shared table concurrently.
 print("=== Shared Table Concurrency Test ===")
 
-var results = shared {}
+shared var results = {}
 
 func compute_and_store(tbl, key, n) {
     var sum = 0

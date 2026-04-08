@@ -35,6 +35,7 @@ program             ::= { NEWLINE | declaration } EOF
 ```
 declaration         ::= function_decl
                       | var_decl
+                      | shared_var_decl
                       | enum_decl
                       | statement
 
@@ -45,6 +46,8 @@ param_list          ::= param { "," param }
 param               ::= IDENTIFIER [ ":" func_type_name ]
 
 var_decl            ::= "var" IDENTIFIER [ type_annotation ] [ "=" expression ] terminator
+
+shared_var_decl     ::= "shared" var_decl
 
 type_annotation     ::= ":" type_name
 
@@ -191,7 +194,7 @@ factor              ::= unary { ( "*" | "/" | "%" ) unary }
 unary               ::= ( "!" | "-" | "not" | "+" | "~" ) unary
                       | "spawn" postfix "(" [ arg_list ] ")"
                       | "await" unary
-                      | "shared" unary
+                      | "atomic" "(" expression ")"
                       | postfix
 
 postfix             ::= primary { call_tail }
@@ -269,9 +272,9 @@ ESCAPE_CHAR         ::= "n" | "t" | "r" | "\" | '"' | "'" | "0"
 ## Keywords
 
 ```
-and     await    break    case     continue  default  else   elif
-enum    false    for      func     if        import   is
-nil     not      or       return   shared    spawn    switch
+and     atomic   await    break    case     continue  default  else
+elif    enum     false    for      func     if        import   is
+nil     not      or       return   shared   spawn     switch
 true    var      while    yield
 ```
 

@@ -31,7 +31,8 @@ typedef enum {
     EXPR_FUNCTION,
     EXPR_SPAWN,
     EXPR_AWAIT,
-    EXPR_SHARED
+    EXPR_SHARED,
+    EXPR_ATOMIC
 } ExprType;
 
 // Statement types
@@ -176,6 +177,10 @@ typedef struct {
     Expr* operand;
 } SharedExpr;
 
+typedef struct {
+    Expr* body;
+} AtomicExpr;
+
 // Main expression structure
 struct Expr {
     ExprType type;
@@ -200,6 +205,7 @@ struct Expr {
         SpawnExpr spawn;
         AwaitExpr await;
         SharedExpr shared;
+        AtomicExpr atomic;
     } as;
 };
 
@@ -481,6 +487,7 @@ Stmt* make_yield_stmt(Token keyword);
 Expr* make_spawn_expr(Expr* callee, Expr** arguments, size_t arg_count);
 Expr* make_await_expr(Expr* operand);
 Expr* make_shared_expr(Expr* operand);
+Expr* make_atomic_expr(Expr* body);
 
 // Enum helper functions
 EnumMemberDef* make_enum_member(Token name, Expr* value);

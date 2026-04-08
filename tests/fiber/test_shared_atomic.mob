@@ -1,0 +1,153 @@
+// Test shared variables and atomic operations across fibers.
+//
+// 1. Shared counter: multiple fibers increment a shared var counter
+//    WITHOUT atomic — individual writes are safe, but read-modify-write
+//    is racy, so we only check the counter is non-zero and <= expected.
+//
+// 2. Atomic counter: multiple fibers increment a shared array element
+//    WITH atomic() — exact total must be preserved.
+//
+// 3. Atomic table: multiple fibers increment a shared table field
+//    WITH atomic() — exact total must be preserved.
+
+print("=== Shared Variables and Atomic Operations ===")
+
+import "fiber"
+
+var NUM_FIBERS = 8
+var INCREMENTS_PER_FIBER = 500
+var EXPECTED_TOTAL = NUM_FIBERS * INCREMENTS_PER_FIBER
+
+// ---------------------------------------------------------------------------
+// Test 1: shared counter WITHOUT atomic (racy read-modify-write)
+// Each individual arr[0] = value is safe, but arr[0] = arr[0] + 1 is not
+// atomic across the read and write, so we expect some lost updates.
+// ---------------------------------------------------------------------------
+
+shared var racy_counter = [0]
+
+func racy_increment(counter, n) {
+    for (var i = 0; i < n; i += 1) {
+        counter[0] = counter[0] + 1
+    }
+    return n
+}
+
+var racy_futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    racy_futures:push(spawn racy_increment(racy_counter, INCREMENTS_PER_FIBER))
+}
+fiber.all(racy_futures)
+
+if (racy_counter[0] < 1) {
+    print("FAIL: racy_counter should be at least 1, got", racy_counter[0])
+    exit(1)
+}
+if (racy_counter[0] > EXPECTED_TOTAL) {
+    print("FAIL: racy_counter exceeded expected total:", racy_counter[0], ">", EXPECTED_TOTAL)
+    exit(1)
+}
+print("  Racy counter (no atomic):", racy_counter[0], "/ " + str(EXPECTED_TOTAL), "(some lost updates expected)")
+
+// ---------------------------------------------------------------------------
+// Test 2: shared counter WITH atomic — exact count required
+// ---------------------------------------------------------------------------
+
+shared var atomic_counter = [0]
+
+func atomic_increment(counter, n) {
+    for (var i = 0; i < n; i += 1) {
+        atomic(counter[0] = counter[0] + 1)
+    }
+    return n
+}
+
+var atomic_futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    atomic_futures:push(spawn atomic_increment(atomic_counter, INCREMENTS_PER_FIBER))
+}
+fiber.all(atomic_futures)
+
+if (atomic_counter[0] != EXPECTED_TOTAL) {
+    print("FAIL: atomic_counter =", atomic_counter[0], "expected", EXPECTED_TOTAL)
+    exit(1)
+}
+print("  Atomic counter:", atomic_counter[0], "(exact)")
+
+// ---------------------------------------------------------------------------
+// Test 3: shared table with atomic — exact count required
+// ---------------------------------------------------------------------------
+
+shared var atomic_table = { count: 0 }
+
+func atomic_table_increment(tbl, n) {
+    for (var i = 0; i < n; i += 1) {
+        atomic(tbl["count"] = tbl["count"] + 1)
+    }
+    return n
+}
+
+var table_futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    table_futures:push(spawn atomic_table_increment(atomic_table, INCREMENTS_PER_FIBER))
+}
+fiber.all(table_futures)
+
+if (atomic_table.count != EXPECTED_TOTAL) {
+    print("FAIL: atomic_table.count =", atomic_table.count, "expected", EXPECTED_TOTAL)
+    exit(1)
+}
+print("  Atomic table counter:", atomic_table.count, "(exact)")
+
+// ---------------------------------------------------------------------------
+// Test 4: atomic bucket distribution — multiple fibers scatter into buckets
+// ---------------------------------------------------------------------------
+
+var NUM_BUCKETS = 4
+shared var buckets = []
+for (var i = 0; i < NUM_BUCKETS; i += 1) {
+    buckets:push(0)
+}
+
+func scatter_to_buckets(buckets_arr, num_buckets, start, count) {
+    for (var i = 0; i < count; i += 1) {
+        var idx = (start + i) % num_buckets
+        atomic(buckets_arr[idx] = buckets_arr[idx] + 1)
+    }
+    return count
+}
+
+var scatter_futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    scatter_futures:push(spawn scatter_to_buckets(buckets, NUM_BUCKETS, i * INCREMENTS_PER_FIBER, INCREMENTS_PER_FIBER))
+}
+fiber.all(scatter_futures)
+
+var bucket_sum = 0
+for (var i = 0; i < NUM_BUCKETS; i += 1) {
+    bucket_sum = bucket_sum + buckets[i]
+}
+if (bucket_sum != EXPECTED_TOTAL) {
+    print("FAIL: bucket_sum =", bucket_sum, "expected", EXPECTED_TOTAL)
+    exit(1)
+}
+print("  Atomic bucket scatter: sum =", bucket_sum, "(exact)")
+
+// ---------------------------------------------------------------------------
+// Test 5: verify atomic() on non-shared is an error
+// ---------------------------------------------------------------------------
+
+var caught_error = false
+try {
+    var local_arr = [0]
+    atomic(local_arr[0] = local_arr[0] + 1)
+} catch e {
+    caught_error = true
+}
+if (!caught_error) {
+    print("FAIL: atomic() on non-shared should throw an error")
+    exit(1)
+}
+print("  atomic() on non-shared correctly raised error")
+
+print("=== All shared/atomic tests passed! ===")

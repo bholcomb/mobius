@@ -48,6 +48,7 @@ static const Keyword keywords[] = {
     {"await",    TOKEN_AWAIT},
     {"yield",    TOKEN_YIELD},
     {"shared",   TOKEN_SHARED},
+    {"atomic",   TOKEN_ATOMIC},
     
     // Type keywords
     {"int64",    TOKEN_TYPE_INT64},

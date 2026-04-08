@@ -255,6 +255,8 @@ enum OpCode : uint8_t {
     OP_YIELD,       // A         cooperatively yield current fiber (reschedule)
     OP_SHARE,       // A         mark R[A] as shared (deep); sets VAL_FLAG_SHARED
     OP_CANCEL_CHECK,// --        check if current fiber is cancelled; throw CancellationError if so
+    OP_ATOMIC_BEGIN,// A         acquire unique lock on shared container R[A]
+    OP_ATOMIC_END,  // A         release unique lock on shared container R[A]
 
     // -- Method dispatch --
     OP_SELF,        // A B C     R[A+1] = R[B]; R[A] = R[B][RK(C)]  (method lookup with self)
@@ -412,6 +414,8 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"YIELD",     FMT_ABC},
         {"SHARE",     FMT_ABC},
         {"CANCEL_CHECK", FMT_ABC},
+        {"ATOMIC_BEGIN", FMT_ABC},
+        {"ATOMIC_END",   FMT_ABC},
 
         {"SELF",      FMT_ABC},
 

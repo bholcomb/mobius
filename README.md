@@ -8,7 +8,8 @@ inspiration from Lua and adds features like type locking, enums, a rich
 `switch` with pattern matching, and familiar C-style syntax.
 
 The interpreter uses a bytecode VM with type-specialized opcodes for
-optimal performance.
+optimal performance. Mobius includes fiber-based concurrency with
+channels, shared containers, and atomic operations for safe parallelism.
 
 ## Quick Start
 
@@ -67,4 +68,4 @@ See the [`examples/`](examples/) directory for:
 ```
 
 Test scripts live in [`tests/`](tests/) organized by category: `basic/`,
-`types/`, `tables/`, `errors/`, `functions/`, and `integration/`.
+`types/`, `tables/`, `errors/`, `functions/`, `fiber/`, and `integration/`.

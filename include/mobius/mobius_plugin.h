@@ -60,8 +60,8 @@ typedef enum {
     MOBIUS_VAL_FLOAT64,
     MOBIUS_VAL_CHAR,
     MOBIUS_VAL_NATIVE_FUNCTION,
-    /* Refcounted (heap-allocated) types */
     MOBIUS_VAL_STRING,
+    /* Refcounted (heap-allocated) types */
     MOBIUS_VAL_ARRAY,
     MOBIUS_VAL_FUNCTION,
     MOBIUS_VAL_TABLE,

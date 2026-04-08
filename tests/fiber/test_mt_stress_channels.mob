@@ -1,0 +1,192 @@
+// Multithreaded stress test: 60 fibers communicating through channels,
+// doing variable amounts of work, and updating shared state atomically.
+//
+// Topology:
+//   - 10 producer fibers generate work items and send them to a dispatch channel
+//   - 30 worker fibers read from dispatch, do computation, send results downstream
+//   - 20 aggregator fibers read results and accumulate into shared buckets
+//
+// Verifies: channel safety, atomic shared mutations, no deadlocks,
+//           all messages delivered, correct shutdown cascade.
+
+print("=== Multithreaded Channel Stress Test (60 fibers) ===")
+
+import "fiber"
+
+var NUM_PRODUCERS   = 10
+var NUM_WORKERS     = 30
+var NUM_AGGREGATORS = 20
+var ITEMS_PER_PRODUCER = 100
+var TOTAL_ITEMS = NUM_PRODUCERS * ITEMS_PER_PRODUCER
+
+// --- Shared state ---
+shared var work_counter = [0]
+shared var done_counter = [0]
+shared var agg_counter  = [0]
+shared var error_flag   = [0]
+
+shared var buckets = []
+for (var i = 0; i < NUM_AGGREGATORS; i += 1) {
+    buckets:push(0)
+}
+
+// --- Channels ---
+var dispatch_ch = fiber.channel(128)
+var results_ch  = fiber.channel(128)
+
+// --- Producer: generates work items via blocking send ---
+func producer(id: int, ch, counter, items_per) {
+    for (var i = 0; i < items_per; i += 1) {
+        var work_id = id * items_per + i
+        ch:send(work_id)
+        atomic(counter[0] = counter[0] + 1)
+    }
+    return id
+}
+
+// --- Worker: blocking recv from dispatch, compute, blocking send to results ---
+func worker(id: int, in_ch, out_ch, counter, err, total) {
+    var processed = 0
+    try {
+        while (true) {
+            var work_id = in_ch:recv()
+
+            if (work_id < 0 || work_id >= total) {
+                atomic(err[0] = 1)
+            }
+
+            var result = 0
+            var iterations = (work_id % 13) + 5
+            for (var j = 0; j < iterations; j += 1) {
+                result = result + work_id + j
+            }
+
+            out_ch:send(work_id * 1000 + result)
+            atomic(counter[0] = counter[0] + 1)
+            processed = processed + 1
+        }
+    } catch e {
+        // dispatch channel closed and drained
+    }
+    return processed
+}
+
+// --- Aggregator: blocking recv from results, accumulate into buckets ---
+func aggregator(id: int, ch, buckets_arr, counter, num_agg) {
+    var aggregated = 0
+    try {
+        while (true) {
+            var encoded = ch:recv()
+            var work_id = encoded / 1000
+
+            var bucket = work_id % num_agg
+            atomic(buckets_arr[bucket] = buckets_arr[bucket] + 1)
+
+            atomic(counter[0] = counter[0] + 1)
+            aggregated = aggregated + 1
+        }
+    } catch e {
+        // results channel closed and drained
+    }
+    return aggregated
+}
+
+// --- Launch all fibers ---
+
+var agg_futures = []
+for (var i = 0; i < NUM_AGGREGATORS; i += 1) {
+    agg_futures:push(spawn aggregator(i, results_ch, buckets, agg_counter, NUM_AGGREGATORS))
+}
+
+var worker_futures = []
+for (var i = 0; i < NUM_WORKERS; i += 1) {
+    worker_futures:push(spawn worker(i, dispatch_ch, results_ch, done_counter, error_flag, TOTAL_ITEMS))
+}
+
+var prod_futures = []
+for (var i = 0; i < NUM_PRODUCERS; i += 1) {
+    prod_futures:push(spawn producer(i, dispatch_ch, work_counter, ITEMS_PER_PRODUCER))
+}
+
+// --- Shutdown cascade ---
+var prod_results = fiber.all(prod_futures)
+dispatch_ch:close()
+
+var worker_results = fiber.all(worker_futures)
+results_ch:close()
+
+var agg_results = fiber.all(agg_futures)
+
+// === Verification ===
+
+print("  Producers finished:", len(prod_results))
+print("  Workers finished:", len(worker_results))
+print("  Aggregators finished:", len(agg_results))
+
+// 1. Producer return values
+for (var i = 0; i < NUM_PRODUCERS; i += 1) {
+    if (prod_results[i] != i) {
+        print("FAIL: producer", i, "returned", prod_results[i])
+        exit(1)
+    }
+}
+print("  All producer return values correct")
+
+// 2. Total items processed by workers
+var total_worker_processed = 0
+for (var i = 0; i < NUM_WORKERS; i += 1) {
+    total_worker_processed = total_worker_processed + worker_results[i]
+}
+if (total_worker_processed != TOTAL_ITEMS) {
+    print("FAIL: workers processed", total_worker_processed, "expected", TOTAL_ITEMS)
+    exit(1)
+}
+print("  Workers processed:", total_worker_processed, "items (expected", str(TOTAL_ITEMS) + ")")
+
+// 3. Total items aggregated
+var total_aggregated = 0
+for (var i = 0; i < NUM_AGGREGATORS; i += 1) {
+    total_aggregated = total_aggregated + agg_results[i]
+}
+if (total_aggregated != TOTAL_ITEMS) {
+    print("FAIL: aggregators received", total_aggregated, "expected", TOTAL_ITEMS)
+    exit(1)
+}
+print("  Aggregators received:", total_aggregated, "items (expected", str(TOTAL_ITEMS) + ")")
+
+// 4. Shared counters (now atomic — must be exact)
+if (work_counter[0] != TOTAL_ITEMS) {
+    print("FAIL: work_counter =", work_counter[0], "expected", TOTAL_ITEMS)
+    exit(1)
+}
+if (done_counter[0] != TOTAL_ITEMS) {
+    print("FAIL: done_counter =", done_counter[0], "expected", TOTAL_ITEMS)
+    exit(1)
+}
+if (agg_counter[0] != TOTAL_ITEMS) {
+    print("FAIL: agg_counter =", agg_counter[0], "expected", TOTAL_ITEMS)
+    exit(1)
+}
+print("  Shared counters verified: produced=" + str(work_counter[0]) +
+      " processed=" + str(done_counter[0]) +
+      " aggregated=" + str(agg_counter[0]))
+
+// 5. Bucket totals (now atomic — must sum to exact total)
+var bucket_sum = 0
+for (var i = 0; i < NUM_AGGREGATORS; i += 1) {
+    bucket_sum = bucket_sum + buckets[i]
+}
+if (bucket_sum != TOTAL_ITEMS) {
+    print("FAIL: bucket_sum =", bucket_sum, "expected", TOTAL_ITEMS)
+    exit(1)
+}
+print("  Bucket distribution verified: sum =", bucket_sum)
+
+// 6. No corruption
+if (error_flag[0] != 0) {
+    print("FAIL: error flag was set — data corruption detected")
+    exit(1)
+}
+print("  No data corruption detected")
+
+print("=== Multithreaded channel stress test passed! ===")

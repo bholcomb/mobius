@@ -5,7 +5,7 @@ print("=== Slice Parallel Test ===")
 import "fiber"
 
 var SIZE = 200
-var data = shared []
+shared var data = []
 for (var i = 0; i < SIZE; i += 1) {
     data:push(i)
 }

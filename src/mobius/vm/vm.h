@@ -118,6 +118,7 @@ public:
     ~MobiusVM();
 
     int execute(Prototype* proto);
+    int executeDirect(Prototype* proto);
     MOBIUS_FORCEINLINE void refreshFrame(VMFrame& f);
 
     static inline int64_t  vm_extract_int64(const Value& v);
