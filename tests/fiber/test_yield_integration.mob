@@ -40,7 +40,7 @@ if (total != 45) { print("FAIL: consumer sum =", total, "expected 45"); exit(1) 
 print("  yield in producer/consumer pipeline: sum =", total)
 
 // Test 2: yield interleaving between fibers modifying shared state
-var log = shared []
+shared var log = []
 
 func worker(id, arr, count) {
     for (var i = 0; i < count; i += 1) {

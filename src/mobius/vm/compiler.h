@@ -165,6 +165,7 @@ private:
     int compileSpawn(SpawnExpr* expr, int dest);
     int compileAwait(AwaitExpr* expr, int dest);
     int compileShared(SharedExpr* expr, int dest);
+    int compileAtomic(AtomicExpr* expr, int dest);
 
     void compileBlock(Stmt** stmts, size_t count);
 

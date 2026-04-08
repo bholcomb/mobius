@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <vector>
-#include <atomic>
 #include <mutex>
 
 class MobiusState;
@@ -14,17 +13,7 @@ struct MobiusString {
     const char* data;
     size_t length;
     uint32_t hash;
-    std::atomic<int> ref_count;
     MobiusString* next;
-
-    MobiusString* retain() {
-        ref_count.fetch_add(1, std::memory_order_relaxed);
-        return this;
-    }
-
-    void release() {
-        ref_count.fetch_sub(1, std::memory_order_relaxed);
-    }
 
     bool operator==(const MobiusString& other) const;
 };

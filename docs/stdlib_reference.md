@@ -559,7 +559,9 @@ print(id(a) == id(c))    // false — different array
 
 ## Fiber / Concurrency Functions
 
-These functions work with Mobius fibers, futures, channels, and array slices. See the [Language Reference](language_reference.md#concurrency) for an overview of the concurrency model.
+These functions and keywords work with Mobius fibers, futures, channels, shared
+containers, and array slices. See the [Language Reference](language_reference.md#concurrency)
+for an overview of the concurrency model.
 
 Channels are accessed via the `fiber` module and support method syntax using `:`.
 
@@ -612,6 +614,44 @@ Closes the channel. Subsequent sends return `false`. Pending receivers are unblo
 ch:close()
 ```
 
+### shared var
+
+Declares a variable whose container (array or table) is safe for concurrent
+access by multiple fibers. All reads and writes are mutex-protected. The
+`shared` keyword must prefix `var`.
+
+```mobius
+shared var counter = [0]
+shared var config = { debug: false }
+```
+
+`shared` propagates deeply — nested arrays and tables inside a shared
+container are also marked shared.
+
+### atomic(expression)
+
+Executes a compound read-modify-write expression atomically on a shared
+container. The container's mutex is held across the entire expression,
+preventing lost updates from concurrent fibers.
+
+```mobius
+shared var counter = [0]
+atomic(counter[0] = counter[0] + 1)
+
+shared var stats = { hits: 0 }
+atomic(stats["hits"] = stats["hits"] + 1)
+```
+
+Without `atomic()`, `counter[0] = counter[0] + 1` compiles to separate read
+and write instructions — two fibers can read the same value, both increment,
+and one update is lost. `atomic()` prevents this.
+
+**Rules:**
+- The expression must operate on a shared array or table element.
+- Using `atomic()` on a non-shared variable is a runtime error.
+- Nested `atomic()` calls on the same container do not deadlock (recursive
+  mutex).
+
 ### fiber_cancel(future)
 
 Requests cancellation of the fiber associated with the given future. The fiber will throw a `CancellationError` at its next cancellation check point (loop back-edges, yield points).
@@ -651,7 +691,7 @@ fiber_sleep(100)  // sleep for ~100ms
 Creates a lightweight array slice (a view into the parent array). Reads and writes through the slice pass through to the underlying array. Useful for dividing work among fibers.
 
 ```mobius
-var data = shared [1, 2, 3, 4, 5, 6]
+shared var data = [1, 2, 3, 4, 5, 6]
 var first_half = fiber_slice(data, 0, 3)
 var second_half = fiber_slice(data, 3, 3)
 print(first_half[0])  // 1

@@ -736,6 +736,9 @@ void ast_release_expr(Expr* expr) {
             case EXPR_SHARED:
                 ast_release_expr(expr->as.shared.operand);
                 break;
+            case EXPR_ATOMIC:
+                ast_release_expr(expr->as.atomic.body);
+                break;
         }
         
         free(expr);
@@ -1166,6 +1169,16 @@ Expr* make_shared_expr(Expr* operand) {
     expr->type = EXPR_SHARED;
     expr->ref_count = 1;
     expr->as.shared.operand = operand;
+    return expr;
+}
+
+Expr* make_atomic_expr(Expr* body) {
+    Expr* expr = (Expr*)calloc(1, sizeof(Expr));
+    if (!expr) return NULL;
+
+    expr->type = EXPR_ATOMIC;
+    expr->ref_count = 1;
+    expr->as.atomic.body = body;
     return expr;
 }
 

@@ -98,7 +98,6 @@ MobiusString* StringInternPool::Shard::insert(const char* data, size_t len, uint
     str->data = data_copy;
     str->length = len;
     str->hash = hash;
-    str->ref_count.store(1, std::memory_order_relaxed);
     str->next = nullptr;
 
     size_t bucket = hash & (buckets.size() - 1);
@@ -180,7 +179,6 @@ MobiusString* StringInternPool::intern(const char* data, size_t length) {
 
     MobiusString* existing = shard.find(data, length, hash);
     if (existing) {
-        existing->ref_count.fetch_add(1, std::memory_order_relaxed);
         return existing;
     }
 

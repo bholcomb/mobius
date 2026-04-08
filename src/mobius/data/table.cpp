@@ -185,7 +185,7 @@ void Table::resize(size_t new_capacity) {
 
 const Value& Table::get(const Value& key) const {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::shared_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return getUnlocked(key);
     }
     return getUnlocked(key);
@@ -219,7 +219,7 @@ const Value& Table::getUnlocked(const Value& key) const {
 
 const Value& Table::getByString(MobiusString* key) const {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::shared_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return getByStringUnlocked(key);
     }
     return getByStringUnlocked(key);
@@ -268,7 +268,7 @@ const Value& Table::getByStringUnlocked(MobiusString* key) const {
 
 bool Table::set(const Value& key, const Value& value) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return setUnlocked(key, value);
     }
     return setUnlocked(key, value);
@@ -302,7 +302,7 @@ bool Table::setUnlocked(const Value& key, const Value& value) {
 
 bool Table::setByString(MobiusString* key, const Value& value) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return setByStringUnlocked(key, value);
     }
     return setByStringUnlocked(key, value);
@@ -336,7 +336,6 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
             e.key.type = VAL_STRING;
             e.key.as.string = key;
             e.key.flags = 0;
-            key->retain();
             e.value = value;
             tags_[index] = tag;
             size_++;
@@ -356,7 +355,6 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
     e.key.type = VAL_STRING;
     e.key.as.string = key;
     e.key.flags = 0;
-    key->retain();
     e.value = value;
     tags_[start] = tag;
     size_++;
@@ -365,7 +363,7 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
 
 bool Table::hasKey(const Value& key) const {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::shared_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
     }
     if (size_ == 0) return false;
     size_t h = hash_value_raw(key);
@@ -375,7 +373,7 @@ bool Table::hasKey(const Value& key) const {
 
 bool Table::remove(const Value& key) {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::unique_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
         return removeUnlocked(key);
     }
     return removeUnlocked(key);
@@ -424,7 +422,7 @@ Table* Table::copy() const {
 
 void Table::forEach(const std::function<void(const Value& key, const Value& value)>& fn) const {
     if (MOBIUS_UNLIKELY(shared_)) {
-        std::shared_lock lock(mutex_);
+        std::lock_guard lock(mutex_);
     }
     for (size_t i = 0; i < entries_.size(); i++) {
         if (tags_[i] != TAG_EMPTY) {

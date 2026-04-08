@@ -3,7 +3,7 @@
 print("=== Shared Array Concurrency Test ===")
 
 var SIZE = 100
-var data = shared []
+shared var data = []
 for (var i = 0; i < SIZE; i += 1) {
     data:push(0)
 }

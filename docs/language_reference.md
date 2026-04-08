@@ -100,10 +100,10 @@ my_var  _private  count2  MAX_SIZE
 ### Keywords
 
 ```
-and     break    case     continue  default  else   elif
-enum    false    for      func      if       import is
-nil     not      or       return    switch   true   var
-while
+and     atomic   await    break    case     continue  default  else
+elif    enum     false    for      func     if        import   is
+nil     not      or       return   shared   spawn     switch   true
+var     while    yield
 ```
 
 ---
@@ -1174,7 +1174,8 @@ func greet() { print("hi") }     // warning printed, but allowed
 
 ## Concurrency
 
-Mobius provides fiber-based concurrency through the `spawn`, `await`, `yield`, and `shared` keywords.
+Mobius provides fiber-based concurrency through the `spawn`, `await`, `yield`,
+`shared`, and `atomic` keywords.
 
 ### Spawn and Await
 
@@ -1223,13 +1224,58 @@ for (var i = 0; i < 1000; i += 1) {
 
 ### Shared Containers
 
-By default, arrays and tables are **not** thread-safe. The `shared` keyword marks a container for concurrent access by adding mutex protection:
+By default, arrays and tables are **not** thread-safe. The `shared` keyword
+prefixes a `var` declaration to mark the container for concurrent access by
+adding mutex protection:
 
 ```mobius
-var data = shared [0, 0, 0, 0]
+shared var data = [0, 0, 0, 0]
 ```
 
-`shared` propagates deeply — nested arrays and tables are also marked shared. All reads and writes to a shared container are automatically synchronized.
+`shared` propagates deeply — nested arrays and tables are also marked shared.
+All reads and writes to a shared container are automatically synchronized.
+
+Note that individual reads and writes are safe, but compound operations like
+`counter[0] = counter[0] + 1` are **not** atomic — the read and write are
+separate operations, so concurrent fibers can lose updates. Use `atomic()` for
+compound operations (see below).
+
+### Atomic Operations
+
+The `atomic()` expression ensures that a compound read-modify-write operation
+on a shared container is executed atomically. The container's mutex is held for
+the duration of the entire expression, preventing other fibers from interleaving.
+
+```mobius
+shared var counter = [0]
+
+func increment(counter, n) {
+    for (var i = 0; i < n; i += 1) {
+        atomic(counter[0] = counter[0] + 1)
+    }
+    return n
+}
+```
+
+Without `atomic()`, the `counter[0] = counter[0] + 1` operation compiles to
+separate read and write instructions. Two fibers could both read the same
+value, increment it, and write back the same result — losing one update.
+`atomic()` prevents this by holding the lock across the entire expression.
+
+`atomic()` works with both shared arrays and shared tables:
+
+```mobius
+shared var stats = { hits: 0 }
+atomic(stats["hits"] = stats["hits"] + 1)
+```
+
+**Rules:**
+
+- The expression inside `atomic()` must operate on a shared array or table
+  element (e.g., `arr[i] = arr[i] + 1` or `tbl["key"] = tbl["key"] + 1`).
+- Using `atomic()` on a non-shared variable is a **runtime error**.
+- The container uses a recursive mutex, so nested `atomic()` calls on the same
+  container will not deadlock.
 
 ### Channels
 
@@ -1280,7 +1326,7 @@ Spawned fibers can be cancelled via `fiber_cancel(future)`. A cancelled fiber wi
 `fiber_slice(array, start, length)` creates a lightweight view into an existing array. Reads and writes through the slice affect the underlying array, making slices ideal for data-parallel decomposition:
 
 ```mobius
-var data = shared [1, 2, 3, 4, 5, 6, 7, 8]
+shared var data = [1, 2, 3, 4, 5, 6, 7, 8]
 var left  = fiber_slice(data, 0, 4)  // view of [1,2,3,4]
 var right = fiber_slice(data, 4, 4)  // view of [5,6,7,8]
 ```

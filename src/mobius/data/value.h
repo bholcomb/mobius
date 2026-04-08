@@ -30,6 +30,7 @@ class Channel;
 struct EnumValue;
 class EnumDefinition;
 class FutureValue;
+class SharedCell;
 class Table;
 class MobiusState;
 
@@ -48,7 +49,6 @@ struct UserdataObject {
 #define VAL_FLAG_DEFINED   0x01  // slot has been explicitly assigned a value
 #define VAL_FLAG_DELETED   0x02  // slot was defined then explicitly removed
 #define VAL_FLAG_READONLY  0x04  // value cannot be reassigned (const, builtins)
-#define VAL_FLAG_INTERNED  0x08  // heap object is interned; skip refcount release
 #define VAL_FLAG_MARKED    0x10  // reserved: GC mark phase
 #define VAL_FLAG_FROZEN    0x20  // reserved: container contents are immutable
 #define VAL_FLAG_SHARED    0x40  // container is shared across fibers; mutations are mutex-protected
@@ -56,7 +56,7 @@ struct UserdataObject {
 enum ValueType : int8_t {
     // Internal sentinel — type not yet determined (compiler/VM only, never user-visible)
     VAL_UNKNOWN = -1,
-    // Non-refcounted (inline) types — must stay below VAL_STRING
+    // Non-refcounted (inline) types — must stay below VAL_ARRAY
     VAL_NIL,
     VAL_BOOL,
     VAL_INT64,   // signed int64_t  — stored in as.i64
@@ -64,8 +64,8 @@ enum ValueType : int8_t {
     VAL_FLOAT64,
     VAL_CHAR,
     VAL_NATIVE_FUNCTION,
-    // Refcounted (heap-allocated) types — must stay at VAL_STRING or above
-    VAL_STRING,
+    VAL_STRING,  // interned; owned by StringInternPool, not refcounted
+    // Refcounted (heap-allocated) types — must stay at VAL_ARRAY or above
     VAL_ARRAY,
     VAL_FUNCTION,
     VAL_TABLE,
@@ -73,7 +73,8 @@ enum ValueType : int8_t {
     VAL_ENUM,
     VAL_FUTURE,
     VAL_ARRAY_SLICE,
-    VAL_CHANNEL
+    VAL_CHANNEL,
+    VAL_SHARED_CELL
 };
 
 class Value {
@@ -115,7 +116,7 @@ public:
 
     Value& operator=(const Value& other) {
         if (this != &other) {
-            if (MOBIUS_LIKELY(type < VAL_STRING && other.type < VAL_STRING)) {
+            if (MOBIUS_LIKELY(type < VAL_ARRAY && other.type < VAL_ARRAY)) {
                 type = other.type; flags = other.flags;
                 aux = other.aux; as.i64 = other.as.i64;
             } else {
@@ -190,9 +191,8 @@ public:
 
 private:
     inline void retain() const {
-        if (type < VAL_STRING) return;
+        if (type < VAL_ARRAY) return;
         switch (type) {
-            case VAL_STRING:   if (as.string) as.string->retain(); break;
             case VAL_ARRAY:    if (as.array) ((RefCounted*)as.array)->retain(); break;
             case VAL_FUNCTION: if (as.function) as.function->ref_count.fetch_add(1, std::memory_order_relaxed); break;
             case VAL_TABLE:    if (as.table) ((RefCounted*)as.table)->retain(); break;
@@ -205,7 +205,7 @@ private:
         }
     }
     inline void releaseRef() {
-        if (type < VAL_STRING) return;
+        if (type < VAL_ARRAY) return;
         releaseRefSlow();
     }
     MOBIUS_API void releaseRefSlow();

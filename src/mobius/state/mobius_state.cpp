@@ -44,7 +44,7 @@ MobiusConfig mobius_default_config(void) {
     config.enable_hot_reload = false;
     config.override_behavior = MOBIUS_OVERRIDE_ERROR;
 
-    config.fiber_stack_size        = 128 * 1024;  // 128 KiB
+    config.fiber_stack_size        = 512 * 1024;  // 512 KiB
     config.initial_fiber_pool_size = 16;
     config.max_fiber_pool_size     = 256;
     unsigned int hw = std::thread::hardware_concurrency();
@@ -318,8 +318,8 @@ MobiusState::~MobiusState() {
     // Don't free module registry — it's a global singleton freed via atexit()
     registry_ = nullptr;
 
-    // Destroy main VM before the string pool — VM registers may hold
-    // string references that need the pool alive for release.
+    // Destroy main VM before the string pool — VM registers hold
+    // MobiusString* pointers that must not dangle during teardown.
     delete main_vm_;
     main_vm_ = nullptr;
 

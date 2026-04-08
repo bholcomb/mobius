@@ -1,0 +1,4 @@
+// atomic() on a non-shared array should be a runtime error
+var arr = [0];
+atomic(arr[0] = arr[0] + 1);
+print("This should not print");

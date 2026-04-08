@@ -7,6 +7,7 @@
 #include "data/value.h"
 #include "internal/string_intern.h"
 #include "state/mobius_state.h"
+#include "fiber/job_system.h"
 #include "vm/vm.h"
 
 #include <thread>
@@ -68,12 +69,13 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
     }
 
     ArrayValue* results = new ArrayValue(count);
+    JobSystem* js = state->jobSystem();
 
     for (size_t i = 0; i < count; i++) {
         FutureValue* future = futures->get(i).as.future;
-        if (!future->isDone()) {
-            std::unique_lock<std::mutex> lock(future->mutex());
-            future->cv().wait(lock, [future]() { return future->isDone(); });
+        while (!future->isDone()) {
+            if (js) js->yieldFiber();
+            else std::this_thread::yield();
         }
         if (future->isRejected()) {
             results->release();
@@ -110,6 +112,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
         }
     }
 
+    JobSystem* js = state->jobSystem();
     while (true) {
         for (size_t i = 0; i < count; i++) {
             FutureValue* future = futures->get(i).as.future;
@@ -120,7 +123,8 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
                 }
             }
         }
-        std::this_thread::yield();
+        if (js) js->yieldFiber();
+        else std::this_thread::yield();
     }
 }
 
@@ -142,17 +146,14 @@ int lib_fiber_sleep(MobiusState* state, int arg_count) {
     if (ms > 0) {
         MobiusVM* vm = MobiusVM::t_current_vm;
         FutureValue* fut = vm ? vm->future_ : nullptr;
+        JobSystem* js = state->jobSystem();
         auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
         while (std::chrono::steady_clock::now() < deadline) {
             if (fut && fut->isCancelled()) {
                 return state->error("CancellationError: fiber was cancelled");
             }
-            auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-                deadline - std::chrono::steady_clock::now());
-            auto chunk = std::min(remaining, std::chrono::milliseconds(10));
-            if (chunk.count() > 0) {
-                std::this_thread::sleep_for(chunk);
-            }
+            if (js) js->yieldFiber();
+            else std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
     state->npush(make_nil_value());
@@ -213,8 +214,17 @@ int channel_method_send(MobiusState* state, int arg_count) {
     Value val = state->npop();
     state->npop();
 
-    bool ok = ch->send(val);
-    state->npush(make_bool_value(ok));
+    // Yield the fiber instead of blocking the OS thread when the channel is full
+    JobSystem* js = state->jobSystem();
+    while (!ch->trySend(val)) {
+        if (ch->isClosed()) {
+            state->npush(make_bool_value(false));
+            return 1;
+        }
+        if (js) js->yieldFiber();
+        else std::this_thread::yield();
+    }
+    state->npush(make_bool_value(true));
     return 1;
 }
 
@@ -226,13 +236,17 @@ int channel_method_recv(MobiusState* state, int arg_count) {
 
     state->npop();
 
+    // Yield the fiber instead of blocking the OS thread when the channel is empty
+    JobSystem* js = state->jobSystem();
     Value result;
-    bool ok = ch->recv(result);
-    if (ok) {
-        state->npush(result);
-    } else {
-        return state->error("ChannelClosedError: recv on closed and empty channel");
+    while (!ch->tryRecv(result)) {
+        if (ch->isClosed()) {
+            return state->error("ChannelClosedError: recv on closed and empty channel");
+        }
+        if (js) js->yieldFiber();
+        else std::this_thread::yield();
     }
+    state->npush(result);
     return 1;
 }
 

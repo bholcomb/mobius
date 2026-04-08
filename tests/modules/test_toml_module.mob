@@ -223,10 +223,13 @@ assert_test("aot roundtrip[1] name", aot_doc2.products[1].name == "Nail")
 assert_test("aot roundtrip[1] price", aot_doc2.products[1].price == 1)
 
 // ============================================================================
-// toml.parsefile
+// toml.parsefile (write a temp file, then read it back)
 // ============================================================================
 
-var pf_doc = toml.parsefile("/tmp/test_toml_aot.toml")
+var pf_toml = "title = \"Test Config\"\n\n[[servers]]\nname = \"alpha\"\n\n[[servers]]\nname = \"beta\"\n\n[settings]\ntimeout = 30\n"
+writefile("/tmp/test_toml_parsefile.toml", pf_toml)
+
+var pf_doc = toml.parsefile("/tmp/test_toml_parsefile.toml")
 assert_test("parsefile title", pf_doc.title == "Test Config")
 assert_test("parsefile servers len", len(pf_doc.servers) == 2)
 assert_test("parsefile servers[0] name", pf_doc.servers[0].name == "alpha")

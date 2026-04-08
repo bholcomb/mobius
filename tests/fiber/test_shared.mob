@@ -1,19 +1,19 @@
 // Test shared keyword
 print("=== Shared Tests ===")
 
-var arr = shared [1, 2, 3]
+shared var arr = [1, 2, 3]
 if (len(arr) != 3) { print("FAIL: shared array length"); exit(1) }
 if (arr[0] != 1 || arr[1] != 2 || arr[2] != 3) {
     print("FAIL: shared array values")
     exit(1)
 }
 
-var tbl = shared { name: "mobius", version: 1 }
+shared var tbl = { name: "mobius", version: 1 }
 if (tbl.name != "mobius") { print("FAIL: shared table value"); exit(1) }
 if (tbl.version != 1) { print("FAIL: shared table version"); exit(1) }
 
 // Nested shared propagation
-var nested = shared [[1, 2], [3, 4]]
+shared var nested = [[1, 2], [3, 4]]
 if (nested[0][0] != 1) { print("FAIL: nested shared access"); exit(1) }
 if (nested[1][1] != 4) { print("FAIL: nested shared access 2"); exit(1) }
 

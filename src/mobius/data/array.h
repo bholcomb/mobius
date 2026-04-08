@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 #include <algorithm>
-#include <shared_mutex>
+#include <mutex>
 
 #include "data/value.h"
 #include "internal/ref_counted.h"
@@ -25,7 +25,7 @@ public:
 
     inline size_t length() const {
         if (MOBIUS_UNLIKELY(shared_)) {
-            std::shared_lock lock(mutex_);
+            std::lock_guard lock(mutex_);
             return elements.size();
         }
         return elements.size();
@@ -44,12 +44,12 @@ public:
 
     void markShared();
     bool isShared() const { return shared_; }
-    std::shared_mutex& mutex() { return mutex_; }
+    std::recursive_mutex& mutex() { return mutex_; }
 
 private:
     std::vector<Value> elements;
     bool shared_ = false;
-    mutable std::shared_mutex mutex_;
+    mutable std::recursive_mutex mutex_;
 };
 
 #endif // MOBIUS_ARRAY_H

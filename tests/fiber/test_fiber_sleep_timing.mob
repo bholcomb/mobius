@@ -32,7 +32,7 @@ if (elapsed_ms2 > 50) {
 print("  sleep(0) took ~" + str(elapsed_ms2) + "ms (near-instant)")
 
 // Test 3: sleep in a spawned fiber doesn't block the main fiber
-var marker = shared [0]
+shared var marker = [0]
 
 func sleepy_worker(m) {
     fiber.sleep(100)

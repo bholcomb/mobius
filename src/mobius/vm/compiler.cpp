@@ -479,6 +479,8 @@ int Compiler::compileExpr(Expr* expr, int dest) {
             return compileAwait(&expr->as.await, dest);
         case EXPR_SHARED:
             return compileShared(&expr->as.shared, dest);
+        case EXPR_ATOMIC:
+            return compileAtomic(&expr->as.atomic, dest);
         default:
             fprintf(stderr, "Compile error [%s]: unknown expression type %d\n",
                     current_->proto->source.c_str(), expr->type);
@@ -2830,6 +2832,9 @@ void Compiler::collectGlobalCallNamesFromExpr(Expr* expr,
         case EXPR_SHARED:
             collectGlobalCallNamesFromExpr(expr->as.shared.operand, names);
             break;
+        case EXPR_ATOMIC:
+            collectGlobalCallNamesFromExpr(expr->as.atomic.body, names);
+            break;
         default:
             break;
     }
@@ -3373,5 +3378,36 @@ int Compiler::compileAwait(AwaitExpr* expr, int dest) {
 int Compiler::compileShared(SharedExpr* expr, int dest) {
     int result_reg = compileExpr(expr->operand, dest);
     emitABC(OP_SHARE, (uint8_t)result_reg, 0, 0);
+    return result_reg;
+}
+
+static Expr* findAtomicContainer(Expr* body) {
+    if (!body) return nullptr;
+    if (body->type == EXPR_ASSIGNMENT) {
+        Expr* target = body->as.assignment.target;
+        if (target->type == EXPR_ARRAY_INDEX) return target->as.array_index.array;
+        if (target->type == EXPR_TABLE_INDEX) return target->as.table_index.table;
+        if (target->type == EXPR_TABLE_DOT)   return target->as.table_dot.table;
+    }
+    if (body->type == EXPR_ARRAY_INDEX) return body->as.array_index.array;
+    if (body->type == EXPR_TABLE_INDEX) return body->as.table_index.table;
+    if (body->type == EXPR_TABLE_DOT)   return body->as.table_dot.table;
+    return nullptr;
+}
+
+int Compiler::compileAtomic(AtomicExpr* expr, int dest) {
+    Expr* container_expr = findAtomicContainer(expr->body);
+    if (!container_expr) {
+        fprintf(stderr, "Compile error [%s:%d]: atomic() requires an expression on a "
+                "shared array or table element (e.g. atomic(arr[i] = arr[i] + 1))\n",
+                current_->proto->source.c_str(), currentLine_);
+        had_error_ = true;
+        return -1;
+    }
+
+    int container_reg = compileExpr(container_expr);
+    emitABC(OP_ATOMIC_BEGIN, (uint8_t)container_reg, 0, 0);
+    int result_reg = compileExpr(expr->body, dest);
+    emitABC(OP_ATOMIC_END, (uint8_t)container_reg, 0, 0);
     return result_reg;
 }

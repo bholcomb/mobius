@@ -167,6 +167,22 @@ int MobiusVM::currentLine() const {
 // ============================================================================
 
 int MobiusVM::execute(Prototype* proto) {
+    JobSystem* js = state_->jobSystem();
+
+    // Only use executeAsMainFiber for the top-level call (not from within
+    // a fiber, e.g. during import/require which re-enters execute).
+    if (js && !js->currentFiber()) {
+        MobiusVM* vm = this;
+        Prototype* p = proto;
+        return js->executeAsMainFiber([vm, p]() -> int {
+            return vm->executeDirect(p);
+        });
+    }
+
+    return executeDirect(proto);
+}
+
+int MobiusVM::executeDirect(Prototype* proto) {
     ensureRegisters(proto->num_registers + 256);
 
     size_t saved_call_depth = call_depth_;
@@ -177,6 +193,13 @@ int MobiusVM::execute(Prototype* proto) {
     callStackPush(proto, proto->code.data(), 0, 0);
 
     ScopedCurrentVM bind_vm(this);
+
+    JobSystem* js = state_->jobSystem();
+    if (js) {
+        MobiusFiber* self = js->currentFiber();
+        if (self) self->vm = this;
+    }
+
     uint64_t t0 = get_time_ns_vm();
     int rc = run(saved_call_depth + 1);
     metrics_->total_execution_time_ns += get_time_ns_vm() - t0;
@@ -466,9 +489,9 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
 MOBIUS_FORCEINLINE static int vm_op_move(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
     const Value& src = RB(inst);
-    if (MOBIUS_LIKELY(src.type < VAL_STRING)) {
+    if (MOBIUS_LIKELY(src.type < VAL_ARRAY)) {
         Value& dst = RA(inst);
-        if (MOBIUS_LIKELY(dst.type < VAL_STRING)) {
+        if (MOBIUS_LIKELY(dst.type < VAL_ARRAY)) {
             dst.rawCopyFrom(src);
         } else {
             dst = src;
@@ -2239,6 +2262,12 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
 
             ScopedCurrentVM bind_vm(&fiber_vm);
 
+            JobSystem* js = state->jobSystem();
+            if (js) {
+                MobiusFiber* self = js->currentFiber();
+                if (self) self->vm = &fiber_vm;
+            }
+
             size_t depth_before = fiber_vm.callStackSize();
             fiber_vm.callStackPush(proto, proto->code.data(), base, 2);
 
@@ -2287,9 +2316,10 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
 
     FutureValue* future = future_val.as.future;
 
-    if (!future->isDone()) {
-        std::unique_lock<std::mutex> lock(future->mutex());
-        future->cv().wait(lock, [future]() { return future->isDone(); });
+    while (!future->isDone()) {
+        JobSystem* js = vm->state_->jobSystem();
+        if (js) js->yieldFiber();
+        else std::this_thread::yield();
     }
 
     if (future->isResolved()) {
@@ -2309,8 +2339,10 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
 
 // OP_YIELD A -- cooperatively yield current fiber
 MOBIUS_FORCEINLINE static int vm_op_yield(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm; (void)f; (void)inst;
-    std::this_thread::yield();
+    (void)f; (void)inst;
+    JobSystem* js = vm->state_->jobSystem();
+    if (js) js->yieldFiber();
+    else std::this_thread::yield();
     return 0;
 }
 
@@ -2338,6 +2370,42 @@ MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t ins
     } else {
         VM_ERROR(vm, f, "shared: expected an array or table, got %s", value_type_name(val.type));
         return -1;
+    }
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_atomic_begin(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint8_t a = DECODE_A(inst);
+    Value& val = f.regs[a];
+
+    if (val.type == VAL_ARRAY && val.as.array) {
+        if (!val.as.array->isShared()) {
+            VM_ERROR(vm, f, "atomic: array is not shared; use 'shared var' to declare it");
+            return -1;
+        }
+        val.as.array->mutex().lock();
+    } else if (val.type == VAL_TABLE && val.as.table) {
+        if (!val.as.table->isShared()) {
+            VM_ERROR(vm, f, "atomic: table is not shared; use 'shared var' to declare it");
+            return -1;
+        }
+        val.as.table->mutex().lock();
+    } else {
+        VM_ERROR(vm, f, "atomic: expected a shared array or table, got %s", value_type_name(val.type));
+        return -1;
+    }
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_atomic_end(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    uint8_t a = DECODE_A(inst);
+    Value& val = f.regs[a];
+
+    if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
+        val.as.array->mutex().unlock();
+    } else if (val.type == VAL_TABLE && val.as.table && val.as.table->isShared()) {
+        val.as.table->mutex().unlock();
     }
     return 0;
 }
@@ -2403,6 +2471,8 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_SPAWN, &&L_OP_AWAIT, &&L_OP_YIELD,
         &&L_OP_SHARE,
         &&L_OP_CANCEL_CHECK,
+        &&L_OP_ATOMIC_BEGIN,
+        &&L_OP_ATOMIC_END,
         &&L_OP_SELF,
         &&L_OP_LT_II, &&L_OP_LE_II, &&L_OP_EQ_II,
         &&L_OP_LT_FF, &&L_OP_LE_FF, &&L_OP_EQ_FF,
@@ -2596,6 +2666,8 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_YIELD, vm_op_yield)
     VM_HANDLER(OP_SHARE, vm_op_share)
     VM_HANDLER(OP_CANCEL_CHECK, vm_op_cancel_check)
+    VM_HANDLER(OP_ATOMIC_BEGIN, vm_op_atomic_begin)
+    VM_HANDLER(OP_ATOMIC_END, vm_op_atomic_end)
     VM_HANDLER(OP_THROW, vm_op_throw)
     VM_HANDLER(OP_SELF, vm_op_self)
     VM_HANDLER(OP_LT_II, vm_op_lt_ii)
