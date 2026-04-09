@@ -159,6 +159,9 @@ assert_test("join a b", os.join("/foo", "bar") == "/foo/bar")
 assert_test("join trailing sep", os.join("/foo/", "bar") == "/foo/bar")
 assert_test("join empty a", os.join("", "bar") == "bar")
 assert_test("join empty b", os.join("/foo", "") == "/foo")
+assert_test("join three segments", os.join("/foo", "bar", "baz.txt") == "/foo/bar/baz.txt")
+assert_test("join ignores repeated separators", os.join("/foo/", "/bar/", "baz") == "/foo/bar/baz")
+assert_test("join all empty", os.join("", "", "") == "")
 
 // ============================================================================
 // mkdirp (recursive mkdir)

@@ -1109,13 +1109,15 @@ print(math.sin(3.14))
 print(math.factorial(5))
 ```
 
+Built-in module documentation lives in the [Module Reference](modules/index.md).
+
 ### Import with Alias
 
 ```mobius
 import "math" as m
 
 print(m.cos(0))        // 1
-print(m.sqrt(16))      // 4
+print(m.sign(-16))     // -1
 ```
 
 ### Loading Scripts

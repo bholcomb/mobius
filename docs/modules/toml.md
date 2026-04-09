@@ -1,0 +1,36 @@
+# `toml` Module
+
+Import:
+
+```mobius
+import "toml"
+```
+
+Functions:
+
+| Function | Description |
+|---|---|
+| `toml.parse(string)` | Parse a TOML string into a table. |
+| `toml.parsefile(path)` | Read and parse a TOML file from disk. |
+| `toml.stringify(table)` | Serialize a table to TOML. |
+
+Notes:
+
+- The module is intended for configuration-style data.
+- `toml.stringify(...)` expects a table at the top level.
+
+Example:
+
+```mobius
+import "toml"
+
+var cfg = toml.parsefile("mobius.toml")
+print(cfg.server.host)
+
+var out = toml.stringify({
+    app: {
+        name: "mobius"
+    }
+})
+print(out)
+```
