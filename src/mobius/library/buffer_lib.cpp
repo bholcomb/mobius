@@ -62,7 +62,12 @@ static bool value_to_byte(const Value& value, uint8_t* out) {
 }
 
 static BufferValue* make_buffer_copy(size_t size, uint8_t fill = 0, bool fixed = false) {
-    return new (std::nothrow) BufferValue(size, fill, fixed, false);
+    BufferValue* buffer = new (std::nothrow) BufferValue(size, fill, fixed, false);
+    if (!buffer || !buffer->ok()) {
+        if (buffer) buffer->release();
+        return nullptr;
+    }
+    return buffer;
 }
 
 int lib_buffer_create(MobiusState* state, int arg_count) {

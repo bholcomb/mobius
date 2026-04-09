@@ -37,6 +37,7 @@ BufferValue* BufferValue::retain() {
 }
 
 bool BufferValue::allocate(size_t size, uint8_t fill, bool fixed, bool readonly) {
+    ok_ = true;
     fixed_ = fixed;
     readonly_ = readonly;
     external_ = false;
@@ -50,6 +51,7 @@ bool BufferValue::allocate(size_t size, uint8_t fill, bool fixed, bool readonly)
     }
     data_ = new (std::nothrow) uint8_t[size];
     if (!data_) {
+        ok_ = false;
         size_ = 0;
         capacity_ = 0;
         return false;
@@ -111,7 +113,10 @@ bool BufferValue::appendBytes(const uint8_t* bytes, size_t len) {
 
 BufferValue* BufferValue::clone() const {
     BufferValue* copy = new (std::nothrow) BufferValue(size_, 0, fixed_, readonly_);
-    if (!copy) return nullptr;
+    if (!copy || !copy->ok()) {
+        if (copy) copy->release();
+        return nullptr;
+    }
     if (size_ > 0 && data_) memcpy(copy->data_, data_, size_);
     return copy;
 }
