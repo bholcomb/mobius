@@ -519,14 +519,20 @@ var now = time()
 print("Timestamp:", now)
 ```
 
-### clock() -> float
+### clock() -> int64
 
-Return the CPU time used by the process in seconds. Useful for benchmarking.
+Return a monotonic timestamp in nanoseconds. Subtract two `clock()` readings to
+measure elapsed time, then divide by `1_000_000_000.0` to convert nanoseconds
+to seconds.
 
 ```mobius
+func ns_to_sec(ns) {
+    return float(ns) / 1000000000.0
+}
+
 var start = clock()
 // ... do some work ...
-var elapsed = clock() - start
+var elapsed = ns_to_sec(clock() - start)
 print("Took", elapsed, "seconds")
 ```
 
