@@ -3,6 +3,7 @@
 #include "data/table.h"
 #include "data/array.h"
 #include "data/array_slice.h"
+#include "data/buffer.h"
 #include "data/shared_cell.h"
 #include "data/enum.h"
 #include "data/function.h"
@@ -50,6 +51,20 @@ inline double MobiusVM::vm_extract_double(const Value& v) {
 
 inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
     return l.type == VAL_UINT64 || r.type == VAL_UINT64;
+}
+
+static inline bool vm_value_to_byte(const Value& value, uint8_t* out) {
+    if (value.type == VAL_INT64) {
+        if (value.as.i64 < 0 || value.as.i64 > 255) return false;
+        *out = (uint8_t)value.as.i64;
+        return true;
+    }
+    if (value.type == VAL_UINT64) {
+        if (value.as.u64 > 255) return false;
+        *out = (uint8_t)value.as.u64;
+        return true;
+    }
+    return false;
 }
 
 // ============================================================================
@@ -724,6 +739,13 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             } else {
                 RA(inst) = Value();
             }
+        } else if (inner.type == VAL_BUFFER && inner.as.buffer) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.buffer->size())) {
+                RA(inst) = make_int64_value((int64_t)inner.as.buffer->get((size_t)idx));
+            } else {
+                RA(inst) = Value();
+            }
         } else {
             VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
             return -1;
@@ -745,6 +767,13 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         int64_t idx = MobiusVM::vm_extract_int64(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array_slice->length())) {
             RA(inst) = obj.as.array_slice->get((size_t)idx);
+        } else {
+            RA(inst) = Value();
+        }
+    } else if (obj.type == VAL_BUFFER && obj.as.buffer) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.buffer->size())) {
+            RA(inst) = make_int64_value((int64_t)obj.as.buffer->get((size_t)idx));
         } else {
             RA(inst) = Value();
         }
@@ -802,6 +831,29 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
                                  (long)idx, inner.as.array_slice->length());
                 return -1;
             }
+        } else if (inner.type == VAL_BUFFER && inner.as.buffer) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            uint8_t byte = 0;
+            if (idx < 0) {
+                VM_ERROR(vm, f, "Buffer index must be non-negative");
+                return -1;
+            }
+            if (!vm_value_to_byte(val, &byte)) {
+                VM_ERROR(vm, f, "Buffer values must be integers in [0, 255]");
+                return -1;
+            }
+            if ((size_t)idx >= inner.as.buffer->size()) {
+                if (!inner.as.buffer->resize((size_t)idx + 1, 0)) {
+                    VM_ERROR(vm, f, inner.as.buffer->isFixed()
+                                     ? "cannot resize fixed buffer"
+                                     : "failed to resize buffer");
+                    return -1;
+                }
+            }
+            if (!inner.as.buffer->set((size_t)idx, byte)) {
+                VM_ERROR(vm, f, "failed to write buffer byte");
+                return -1;
+            }
         } else {
             VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
             return -1;
@@ -830,6 +882,29 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
         } else {
             VM_ERROR(vm, f, "Array slice index %ld out of range [0, %zu)",
                              (long)idx, obj.as.array_slice->length());
+            return -1;
+        }
+    } else if (obj.type == VAL_BUFFER && obj.as.buffer) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        uint8_t byte = 0;
+        if (idx < 0) {
+            VM_ERROR(vm, f, "Buffer index must be non-negative");
+            return -1;
+        }
+        if (!vm_value_to_byte(val, &byte)) {
+            VM_ERROR(vm, f, "Buffer values must be integers in [0, 255]");
+            return -1;
+        }
+        if ((size_t)idx >= obj.as.buffer->size()) {
+            if (!obj.as.buffer->resize((size_t)idx + 1, 0)) {
+                VM_ERROR(vm, f, obj.as.buffer->isFixed()
+                                 ? "cannot resize fixed buffer"
+                                 : "failed to resize buffer");
+                return -1;
+            }
+        }
+        if (!obj.as.buffer->set((size_t)idx, byte)) {
+            VM_ERROR(vm, f, "failed to write buffer byte");
             return -1;
         }
     } else {
@@ -1762,6 +1837,8 @@ MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst)
             RA(inst) = make_int64_value((int64_t)inner.as.array_slice->length());
         } else if (inner.type == VAL_STRING && inner.as.string) {
             RA(inst) = make_int64_value((int64_t)inner.as.string->length);
+        } else if (inner.type == VAL_BUFFER && inner.as.buffer) {
+            RA(inst) = make_int64_value((int64_t)inner.as.buffer->size());
         } else {
             VM_ERROR(vm, f, "Attempt to get length of a shared %s value", value_type_name(inner.type));
             return -1;
@@ -1774,6 +1851,8 @@ MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst)
         RA(inst) = make_int64_value((int64_t)raw.as.string->length);
     } else if (raw.type == VAL_ARRAY_SLICE && raw.as.array_slice) {
         RA(inst) = make_int64_value((int64_t)raw.as.array_slice->length());
+    } else if (raw.type == VAL_BUFFER && raw.as.buffer) {
+        RA(inst) = make_int64_value((int64_t)raw.as.buffer->size());
     } else {
         VM_ERROR(vm, f, "Attempt to get length of a %s value", value_type_name(raw.type));
         return -1;
@@ -1857,6 +1936,12 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
                 f.regs[a] = inner.as.array_slice->get((size_t)idx);
             else
                 f.regs[a] = Value();
+        } else if (inner.type == VAL_BUFFER && inner.as.buffer) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.buffer->size()))
+                f.regs[a] = make_int64_value((int64_t)inner.as.buffer->get((size_t)idx));
+            else
+                f.regs[a] = Value();
         } else if (inner.type == VAL_STRING && inner.as.string) {
             if (key.type == VAL_INT64) {
                 int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -1887,6 +1972,12 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
             f.regs[a] = obj.as.table->getByString(key.as.string);
         else
             f.regs[a] = obj.as.table->get(key);
+    } else if (obj.type == VAL_BUFFER && obj.as.buffer) {
+        int64_t idx = MobiusVM::vm_extract_int64(key);
+        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.buffer->size()))
+            f.regs[a] = make_int64_value((int64_t)obj.as.buffer->get((size_t)idx));
+        else
+            f.regs[a] = Value();
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);

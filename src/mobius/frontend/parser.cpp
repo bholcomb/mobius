@@ -763,6 +763,7 @@ static ValueType parse_type_name(Parser* parser, const char* context) {
     if (strcmp(type_name, "float") == 0 || strcmp(type_name, "float64") == 0)      return VAL_FLOAT64;
     if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0)       return VAL_BOOL;
     if (strcmp(type_name, "array") == 0)                                           return VAL_ARRAY;
+    if (strcmp(type_name, "buffer") == 0)                                          return VAL_BUFFER;
     if (strcmp(type_name, "table") == 0)                                           return VAL_TABLE;
     if (strcmp(type_name, "function") == 0)                                        return VAL_FUNCTION;
     if (strcmp(type_name, "nil") == 0)                                             return VAL_NIL;

@@ -26,6 +26,7 @@
 
 class ArrayValue;
 class ArraySlice;
+class BufferValue;
 class Channel;
 struct EnumValue;
 class EnumDefinition;
@@ -49,6 +50,7 @@ struct UserdataObject {
 #define VAL_FLAG_DEFINED   0x01  // slot has been explicitly assigned a value
 #define VAL_FLAG_DELETED   0x02  // slot was defined then explicitly removed
 #define VAL_FLAG_READONLY  0x04  // value cannot be reassigned (const, builtins)
+#define VAL_FLAG_FIXED     0x08  // container has a stable size/address and cannot be resized
 #define VAL_FLAG_MARKED    0x10  // reserved: GC mark phase
 #define VAL_FLAG_FROZEN    0x20  // reserved: container contents are immutable
 #define VAL_FLAG_SHARED    0x40  // container is shared across fibers; mutations are mutex-protected
@@ -74,8 +76,11 @@ enum ValueType : int8_t {
     VAL_FUTURE,
     VAL_ARRAY_SLICE,
     VAL_CHANNEL,
-    VAL_SHARED_CELL
+    VAL_SHARED_CELL,
+    VAL_BUFFER
 };
+
+static constexpr int VALUE_TYPE_COUNT = (int)VAL_BUFFER + 1;
 
 class Value {
 public:
@@ -98,6 +103,7 @@ public:
         ArraySlice* array_slice;     // VAL_ARRAY_SLICE
         Channel* channel;            // VAL_CHANNEL
         SharedCell* shared_cell;     // VAL_SHARED_CELL
+        BufferValue* buffer;         // VAL_BUFFER
 
         ValueData() : i64(0) {}
     } as;
@@ -186,6 +192,8 @@ public:
                 return as.channel == other.as.channel;
             case VAL_SHARED_CELL:
                 return as.shared_cell == other.as.shared_cell;
+            case VAL_BUFFER:
+                return as.buffer == other.as.buffer;
             default: return false;
         }
     }
@@ -205,6 +213,7 @@ private:
             case VAL_ARRAY_SLICE: if (as.array_slice) ((RefCounted*)as.array_slice)->retain(); break;
             case VAL_CHANNEL: if (as.channel) ((RefCounted*)as.channel)->retain(); break;
             case VAL_SHARED_CELL: if (as.shared_cell) ((RefCounted*)as.shared_cell)->retain(); break;
+            case VAL_BUFFER: if (as.buffer) ((RefCounted*)as.buffer)->retain(); break;
             default: break;
         }
     }
@@ -267,6 +276,7 @@ MOBIUS_API Value make_userdata_value(void* ptr, UserdataDestructor destructor, c
 MOBIUS_API Value make_array_value(ArrayValue* array);
 MOBIUS_API Value make_table_value(struct Table* table);
 MOBIUS_API Value make_shared_cell_value(SharedCell* shared_cell);
+MOBIUS_API Value make_buffer_value(BufferValue* buffer);
 MOBIUS_API Value deep_copy_value_for_spawn(const Value& value);
 
 inline bool is_truthy(const Value& value) {
@@ -288,6 +298,7 @@ inline bool is_truthy(const Value& value) {
         case VAL_ARRAY_SLICE: return value.as.array_slice != nullptr;
         case VAL_CHANNEL: return value.as.channel != nullptr;
         case VAL_SHARED_CELL: return value.as.shared_cell != nullptr;
+        case VAL_BUFFER: return value.as.buffer != nullptr;
         default: return false;
     }
 }

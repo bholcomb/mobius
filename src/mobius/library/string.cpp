@@ -2,6 +2,7 @@
 #include "data/value.h"
 #include "data/array.h"
 #include "data/array_slice.h"
+#include "data/buffer.h"
 #include "data/shared_cell.h"
 #include "state/mobius_state.h"
 
@@ -32,8 +33,10 @@ int lib_len(MobiusState* state, int arg_count) {
         state->npush(make_int64_value((int64_t)arg.as.array->length()));
     } else if (arg.type == VAL_ARRAY_SLICE && arg.as.array_slice) {
         state->npush(make_int64_value((int64_t)arg.as.array_slice->length()));
+    } else if (arg.type == VAL_BUFFER && arg.as.buffer) {
+        state->npush(make_int64_value((int64_t)arg.as.buffer->size()));
     } else {
-        return state->error("len expects a string or array argument");
+        return state->error("len expects a string, array, or buffer argument");
     }
     
     return 1;
