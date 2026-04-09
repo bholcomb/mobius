@@ -43,6 +43,35 @@ assert_test("getcwd is string", cwd is string)
 var pid = os.getpid()
 assert_test("getpid > 0", pid > 0)
 
+var ppid = os.getppid()
+assert_test("getppid available or nil", ppid == nil || ppid > 0)
+
+var host = os.hostname()
+assert_test("hostname not nil", host != nil)
+assert_test("hostname is string", host is string)
+
+var exe = os.executable()
+assert_test("executable not nil", exe != nil)
+assert_test("executable is string", exe is string)
+assert_test("executable exists", os.exists(exe))
+
+var env_tbl = os.env()
+assert_test("env table", env_tbl is table)
+os.setenv("MOBIUS_OS_SNAPSHOT_TEST", "snapshot-ok")
+env_tbl = os.env()
+assert_test("env snapshot contains key", env_tbl["MOBIUS_OS_SNAPSHOT_TEST"] == "snapshot-ok")
+os.unsetenv("MOBIUS_OS_SNAPSHOT_TEST")
+
+var resolved_true = nil
+if (os.platform == "windows") {
+    resolved_true = os.which("cmd")
+} else {
+    resolved_true = os.which("sh")
+}
+assert_test("which resolves common shell", resolved_true != nil)
+assert_test("which result exists", resolved_true == nil || os.exists(resolved_true))
+assert_test("which missing returns nil", os.which("__mobius_missing_command__") == nil)
+
 // ============================================================================
 // CPU count
 // ============================================================================
@@ -86,13 +115,21 @@ assert_test("listdir count 3", len(entries) == 3)
 
 var st = os.stat(test_dir + "/a.txt")
 assert_test("stat not nil", st != nil)
+assert_test("stat path exact", st.path == test_dir + "/a.txt")
+assert_test("stat.type file", st.type == "file")
 assert_test("stat.is_file", st.is_file == true)
 assert_test("stat.is_dir false", st.is_dir == false)
+assert_test("stat.is_link false", st.is_link == false)
+assert_test("stat.is_other false", st.is_other == false)
+assert_test("stat.readonly false", st.readonly == false)
 assert_test("stat.size == 0", st.size == 0)
 
 var st_dir = os.stat(test_dir)
+assert_test("stat dir.path exact", st_dir.path == test_dir)
+assert_test("stat dir.type", st_dir.type == "dir")
 assert_test("stat dir.is_dir", st_dir.is_dir == true)
 assert_test("stat dir.is_file", st_dir.is_file == false)
+assert_test("stat dir.is_other false", st_dir.is_other == false)
 
 assert_test("filesize 0", os.filesize(test_dir + "/a.txt") == 0)
 assert_test("filesize nil for missing", os.filesize(test_dir + "/nope.txt") == nil)

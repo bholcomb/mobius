@@ -20,7 +20,7 @@ Function groups:
 |---|---|
 | Environment | `getenv`, `setenv`, `unsetenv` |
 | Working directory | `getcwd`, `chdir` |
-| Process and shell | `sleep`, `system`, `exec`, `getpid`, `cpu_count`, `uname` |
+| Process and shell | `sleep`, `system`, `exec`, `getpid`, `getppid`, `hostname`, `executable`, `env`, `which`, `cpu_count`, `uname` |
 | Directories and files | `listdir`, `mkdir`, `mkdirp`, `rmdir`, `remove`, `rename`, `cp`, `touch` |
 | File metadata | `stat`, `chmod`, `filesize`, `exists`, `is_file`, `is_dir` |
 | Path helpers | `basename`, `dirname`, `extname`, `join`, `realpath`, `tmpdir`, `tmpfile` |
@@ -32,6 +32,9 @@ Notes:
 - `os.join(...)` accepts one or more string path segments.
 - `os.exec(...)` captures stdout as a string.
 - `os.system(...)` returns the subprocess exit code.
+- `os.stat(path)` returns a table with portable fields including `path`, `type`,
+  `size`, `mtime`, `atime`, `ctime`, `mode`, `is_file`, `is_dir`, `is_link`,
+  `is_other`, and `readonly`.
 
 Example:
 

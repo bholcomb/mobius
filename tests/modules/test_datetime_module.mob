@@ -1,0 +1,62 @@
+import "datetime"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var now = datetime.now()
+assert_test("now returns table", now is table)
+assert_test("now year reasonable", now.year >= 2024)
+assert_test("now utc false", now.utc == false)
+assert_test("now timestamp integer", typeof(now.timestamp) == "integer")
+
+var utc_now = datetime.utc_now()
+assert_test("utc_now returns table", utc_now is table)
+assert_test("utc_now utc true", utc_now.utc == true)
+assert_test("utc_now offset zero", utc_now.offset_minutes == 0)
+
+var epoch = datetime.from_unix_utc(0)
+assert_test("epoch year", epoch.year == 1970)
+assert_test("epoch month", epoch.month == 1)
+assert_test("epoch day", epoch.day == 1)
+assert_test("epoch hour", epoch.hour == 0)
+assert_test("epoch utc", epoch.utc == true)
+assert_test("epoch roundtrip unix", datetime.to_unix(epoch) == 0)
+assert_test("epoch isoformat", datetime.isoformat(epoch) == "1970-01-01T00:00:00Z")
+assert_test("epoch format", datetime.format("%Y-%m-%d", epoch) == "1970-01-01")
+
+var local_epoch = datetime.from_unix(0)
+assert_test("local epoch roundtrip unix", datetime.to_unix(local_epoch) == 0)
+
+var parsed_utc = datetime.parse_iso("2024-06-15T12:30:45Z")
+assert_test("parse_iso utc year", parsed_utc.year == 2024)
+assert_test("parse_iso utc month", parsed_utc.month == 6)
+assert_test("parse_iso utc utc", parsed_utc.utc == true)
+assert_test("parse_iso utc offset", parsed_utc.offset_minutes == 0)
+assert_test("parse_iso utc isoformat", datetime.isoformat(parsed_utc) == "2024-06-15T12:30:45Z")
+
+var parsed_offset = datetime.parse_iso("2024-06-15T12:30:45+02:00")
+var parsed_same_utc = datetime.parse_iso("2024-06-15T10:30:45Z")
+assert_test("parse_iso offset minutes", parsed_offset.offset_minutes == 120)
+assert_test("parse_iso offset unix conversion", datetime.to_unix(parsed_offset) == datetime.to_unix(parsed_same_utc))
+
+var parsed_date = datetime.parse_iso("2024-06-15")
+assert_test("parse_iso date year", parsed_date.year == 2024)
+assert_test("parse_iso date month", parsed_date.month == 6)
+assert_test("parse_iso date day", parsed_date.day == 15)
+assert_test("parse_iso date format", datetime.format("%Y-%m-%d", parsed_date) == "2024-06-15")
+
+print("")
+print("Datetime Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

@@ -1,0 +1,58 @@
+import "url"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var encoded = url.encode("hello world/?&")
+assert_test("encode percent escapes", encoded == "hello%20world%2F%3F%26")
+assert_test("decode reverses encode", url.decode(encoded) == "hello world/?&")
+
+var parsed = url.parse("https://user:pass@example.com:8443/a/b?x=1&name=hello%20world#frag")
+assert_test("parse scheme", parsed.scheme == "https")
+assert_test("parse username", parsed.username == "user")
+assert_test("parse password", parsed.password == "pass")
+assert_test("parse host", parsed.host == "example.com")
+assert_test("parse port", parsed.port == 8443)
+assert_test("parse path", parsed.path == "/a/b")
+assert_test("parse query", parsed.query == "x=1&name=hello%20world")
+assert_test("parse fragment", parsed.fragment == "frag")
+assert_test("parse has authority", parsed.has_authority == true)
+
+var built = url.build({
+    scheme: "https",
+    username: "user",
+    password: "pass",
+    host: "example.com",
+    port: 8443,
+    path: "/a/b",
+    query: "x=1&name=hello%20world",
+    fragment: "frag"
+})
+assert_test("build url", built == "https://user:pass@example.com:8443/a/b?x=1&name=hello%20world#frag")
+
+var query = url.parse_query("x=1&name=hello+world&empty=")
+assert_test("parse_query x", query.x == "1")
+assert_test("parse_query plus to space", query.name == "hello world")
+assert_test("parse_query empty", query.empty == "")
+
+var built_query = url.build_query({name: "hello world", x: "1"})
+assert_test("build_query sorted and encoded", built_query == "name=hello%20world&x=1")
+
+var roundtrip = url.build(url.parse("https://example.com/path/to?q=1#top"))
+assert_test("parse build roundtrip", roundtrip == "https://example.com/path/to?q=1#top")
+
+print("")
+print("URL Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <ctime>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
   #define WIN32_LEAN_AND_MEAN
@@ -46,6 +47,12 @@
 
   #define stat_t struct stat
   #define os_stat_call(p, s) ::stat(p, s)
+
+  extern char** environ;
+#endif
+
+#ifdef __APPLE__
+  #include <mach-o/dyld.h>
 #endif
 
 // ============================================================================
@@ -164,6 +171,165 @@ static int os_sleep(MobiusState* state, int arg_count) {
 // PROCESS / COMMAND EXECUTION
 // ============================================================================
 
+static bool os_file_exists(const char* path) {
+    stat_t st;
+    return os_stat_call(path, &st) == 0 && S_ISREG(st.st_mode);
+}
+
+static bool os_is_executable_path(const char* path) {
+#ifdef _WIN32
+    return os_file_exists(path);
+#else
+    return os_file_exists(path) && ::access(path, X_OK) == 0;
+#endif
+}
+
+static bool os_path_has_separator(const char* path) {
+    return strchr(path, '/') != nullptr || strchr(path, '\\') != nullptr;
+}
+
+static std::string os_join_path_component(const std::string& base, const std::string& part) {
+    if (base.empty()) return part;
+    if (part.empty()) return base;
+#ifdef _WIN32
+    char sep = '\\';
+    bool left_has_sep = base.back() == '/' || base.back() == '\\';
+    bool right_has_sep = part.front() == '/' || part.front() == '\\';
+#else
+    char sep = '/';
+    bool left_has_sep = base.back() == '/';
+    bool right_has_sep = part.front() == '/';
+#endif
+    if (left_has_sep && right_has_sep) return base + part.substr(1);
+    if (!left_has_sep && !right_has_sep) return base + sep + part;
+    return base + part;
+}
+
+static bool os_current_executable(std::string& out) {
+#ifdef _WIN32
+    char buf[PATH_MAX];
+    DWORD len = GetModuleFileNameA(nullptr, buf, (DWORD)sizeof(buf));
+    if (len == 0 || len >= sizeof(buf)) return false;
+    out.assign(buf, len);
+    return true;
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::vector<char> buf(size + 1, '\0');
+    if (_NSGetExecutablePath(buf.data(), &size) != 0) return false;
+    out.assign(buf.data());
+    return true;
+#else
+    char buf[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len < 0) return false;
+    buf[len] = '\0';
+    out.assign(buf);
+    return true;
+#endif
+}
+
+static bool os_hostname(std::string& out) {
+#ifdef _WIN32
+    char hostname[256] = {0};
+    DWORD size = sizeof(hostname);
+    if (!GetComputerNameA(hostname, &size)) return false;
+    out.assign(hostname, size);
+    return true;
+#else
+    char hostname[256] = {0};
+    if (::gethostname(hostname, sizeof(hostname)) != 0) return false;
+    hostname[sizeof(hostname) - 1] = '\0';
+    out.assign(hostname);
+    return true;
+#endif
+}
+
+static bool os_which_impl(const char* name, std::string& out) {
+    if (!name || !*name) return false;
+
+#ifdef _WIN32
+    const char path_sep = ';';
+    const char* default_exts = ".COM;.EXE;.BAT;.CMD";
+#else
+    const char path_sep = ':';
+#endif
+
+    if (os_path_has_separator(name)) {
+#ifdef _WIN32
+        if (os_file_exists(name)) {
+            out.assign(name);
+            return true;
+        }
+        const char* pathext = ::getenv("PATHEXT");
+        std::string exts = pathext && *pathext ? pathext : default_exts;
+        size_t start = 0;
+        while (start <= exts.size()) {
+            size_t end = exts.find(path_sep, start);
+            std::string ext = exts.substr(start, end == std::string::npos ? std::string::npos : end - start);
+            if (!ext.empty()) {
+                std::string candidate = std::string(name) + ext;
+                if (os_file_exists(candidate.c_str())) {
+                    out = candidate;
+                    return true;
+                }
+            }
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+        return false;
+#else
+        if (os_is_executable_path(name)) {
+            out.assign(name);
+            return true;
+        }
+        return false;
+#endif
+    }
+
+    const char* path_env = ::getenv("PATH");
+    if (!path_env || !*path_env) return false;
+    std::string path_list(path_env);
+    size_t start = 0;
+    while (start <= path_list.size()) {
+        size_t end = path_list.find(path_sep, start);
+        std::string dir = path_list.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (dir.empty()) dir = ".";
+        std::string candidate = os_join_path_component(dir, name);
+#ifdef _WIN32
+        if (os_file_exists(candidate.c_str())) {
+            out = candidate;
+            return true;
+        }
+        const char* pathext = ::getenv("PATHEXT");
+        std::string exts = pathext && *pathext ? pathext : default_exts;
+        size_t ext_start = 0;
+        while (ext_start <= exts.size()) {
+            size_t ext_end = exts.find(path_sep, ext_start);
+            std::string ext = exts.substr(ext_start, ext_end == std::string::npos ? std::string::npos : ext_end - ext_start);
+            if (!ext.empty()) {
+                std::string with_ext = candidate + ext;
+                if (os_file_exists(with_ext.c_str())) {
+                    out = with_ext;
+                    return true;
+                }
+            }
+            if (ext_end == std::string::npos) break;
+            ext_start = ext_end + 1;
+        }
+#else
+        if (os_is_executable_path(candidate.c_str())) {
+            out = candidate;
+            return true;
+        }
+#endif
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+
+    return false;
+}
+
 static int os_system(MobiusState* state, int arg_count) {
     if (arg_count != 1)
         return mobius_error(state, "system() expects 1 argument");
@@ -221,6 +387,79 @@ static int os_getpid(MobiusState* state, int arg_count) {
 #else
     mobius_stack_pushInt64(state, (int64_t)::getpid());
 #endif
+    return 1;
+}
+
+static int os_getppid(MobiusState* state, int arg_count) {
+    (void)arg_count;
+#ifdef _WIN32
+    mobius_stack_pushNil(state);
+#else
+    mobius_stack_pushInt64(state, (int64_t)::getppid());
+#endif
+    return 1;
+}
+
+static int os_hostname_fn(MobiusState* state, int arg_count) {
+    (void)arg_count;
+    std::string hostname;
+    if (os_hostname(hostname)) mobius_stack_pushString(state, hostname.c_str());
+    else mobius_stack_pushNil(state);
+    return 1;
+}
+
+static int os_executable(MobiusState* state, int arg_count) {
+    (void)arg_count;
+    std::string path;
+    if (os_current_executable(path)) mobius_stack_pushString(state, path.c_str());
+    else mobius_stack_pushNil(state);
+    return 1;
+}
+
+static int os_env(MobiusState* state, int arg_count) {
+    (void)arg_count;
+    mobius_stack_pushNewTable(state, 32);
+    int tbl = mobius_stack_size(state) - 1;
+
+#ifdef _WIN32
+    LPCH env_block = GetEnvironmentStringsA();
+    if (!env_block) return 1;
+    for (LPCH p = env_block; *p; ) {
+        std::string entry(p);
+        p += entry.size() + 1;
+        size_t eq = entry.find('=');
+        if (eq == std::string::npos || eq == 0) continue;
+        std::string key = entry.substr(0, eq);
+        std::string value = entry.substr(eq + 1);
+        mobius_stack_pushString(state, value.c_str());
+        mobius_stack_setTableField(state, tbl, key.c_str());
+    }
+    FreeEnvironmentStringsA(env_block);
+#else
+    for (char** p = environ; p && *p; ++p) {
+        std::string entry(*p);
+        size_t eq = entry.find('=');
+        if (eq == std::string::npos || eq == 0) continue;
+        std::string key = entry.substr(0, eq);
+        std::string value = entry.substr(eq + 1);
+        mobius_stack_pushString(state, value.c_str());
+        mobius_stack_setTableField(state, tbl, key.c_str());
+    }
+#endif
+    return 1;
+}
+
+static int os_which(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "which() expects 1 argument");
+    if (!mobius_stack_isString(state, -1))
+        return mobius_error(state, "which() expects a string argument");
+    const char* name = mobius_stack_asString(state, -1);
+    mobius_stack_pop(state, 1);
+
+    std::string resolved;
+    if (os_which_impl(name, resolved)) mobius_stack_pushString(state, resolved.c_str());
+    else mobius_stack_pushNil(state);
     return 1;
 }
 
@@ -416,8 +655,11 @@ static int os_stat(MobiusState* state, int arg_count) {
         return 1;
     }
 
-    mobius_stack_pushNewTable(state, 8);
+    mobius_stack_pushNewTable(state, 12);
     int tbl = mobius_stack_size(state) - 1;
+
+    mobius_stack_pushString(state, path);
+    mobius_stack_setTableField(state, tbl, "path");
 
     mobius_stack_pushInt64(state, (int64_t)st.st_size);
     mobius_stack_setTableField(state, tbl, "size");
@@ -442,6 +684,29 @@ static int os_stat(MobiusState* state, int arg_count) {
 
     mobius_stack_pushBool(state, S_ISLNK(st.st_mode));
     mobius_stack_setTableField(state, tbl, "is_link");
+
+    const bool is_dir = S_ISDIR(st.st_mode);
+    const bool is_file = S_ISREG(st.st_mode);
+    const bool is_link = S_ISLNK(st.st_mode);
+    const bool is_other = !is_dir && !is_file && !is_link;
+    const bool readonly = (st.st_mode & 0222) == 0;
+
+    if (is_dir) {
+        mobius_stack_pushString(state, "dir");
+    } else if (is_file) {
+        mobius_stack_pushString(state, "file");
+    } else if (is_link) {
+        mobius_stack_pushString(state, "link");
+    } else {
+        mobius_stack_pushString(state, "other");
+    }
+    mobius_stack_setTableField(state, tbl, "type");
+
+    mobius_stack_pushBool(state, is_other);
+    mobius_stack_setTableField(state, tbl, "is_other");
+
+    mobius_stack_pushBool(state, readonly);
+    mobius_stack_setTableField(state, tbl, "readonly");
 
     return 1;
 }
@@ -1208,6 +1473,11 @@ static MobiusPluginFunction os_functions[] = {
     {"system",      os_system,      1,  MOBIUS_VAL_INT64,   "Run shell command, return exit code"},
     {"exec",        os_exec,        1,  MOBIUS_VAL_STRING,  "Run command, capture stdout"},
     {"getpid",      os_getpid,      0,  MOBIUS_VAL_INT64,   "Get current process ID"},
+    {"getppid",     os_getppid,     0,  MOBIUS_VAL_INT64,   "Get parent process ID when available"},
+    {"hostname",    os_hostname_fn, 0,  MOBIUS_VAL_STRING,  "Get local host name"},
+    {"executable",  os_executable,  0,  MOBIUS_VAL_STRING,  "Get current executable path"},
+    {"env",         os_env,         0,  MOBIUS_VAL_TABLE,   "Get current environment as a table"},
+    {"which",       os_which,       1,  MOBIUS_VAL_STRING,  "Resolve an executable on PATH"},
     // Directory ops
     {"listdir",     os_listdir,     1,  MOBIUS_VAL_ARRAY,   "List directory entries"},
     {"mkdir",       os_mkdir,       1,  MOBIUS_VAL_BOOL,    "Create directory"},

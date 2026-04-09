@@ -254,13 +254,13 @@ int math_factorial(MobiusState* state, int arg_count) {
         return mobius_error(state, "factorial() argument too large (max 20)");
     }
     
-    double result = 1.0;
+    int64_t result = 1;
     for (int64_t i = 2; i <= value; i++) {
-        result *= (double)i;
+        result *= i;
     }
     
     mobius_stack_pop(state, 1);
-    mobius_stack_pushFloat64(state, result);
+    mobius_stack_pushInt64(state, result);
     return 1;
 }
 
@@ -317,6 +317,52 @@ int math_lcm(MobiusState* state, int arg_count) {
     int64_t lcm_val = (a / gcd_val) * b;
     mobius_stack_pop(state, 2);
     mobius_stack_pushInt64(state, lcm_val);
+    return 1;
+}
+
+int math_hypot(MobiusState* state, int arg_count) {
+    if (arg_count != 2) {
+        return mobius_error(state, "hypot() expects exactly 2 arguments");
+    }
+
+    if (!mobius_stack_isNumber(state, -1) || !mobius_stack_isNumber(state, -2)) {
+        return mobius_error(state, "hypot() expects numeric arguments");
+    }
+
+    double y = mobius_stack_asFloat64(state, -1);
+    double x = mobius_stack_asFloat64(state, -2);
+    mobius_stack_pop(state, 2);
+    mobius_stack_pushFloat64(state, hypot(x, y));
+    return 1;
+}
+
+int math_cbrt(MobiusState* state, int arg_count) {
+    if (arg_count != 1) {
+        return mobius_error(state, "cbrt() expects exactly 1 argument");
+    }
+
+    if (!mobius_stack_isNumber(state, -1)) {
+        return mobius_error(state, "cbrt() expects a numeric argument");
+    }
+
+    double value = mobius_stack_asFloat64(state, -1);
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushFloat64(state, cbrt(value));
+    return 1;
+}
+
+int math_trunc(MobiusState* state, int arg_count) {
+    if (arg_count != 1) {
+        return mobius_error(state, "trunc() expects exactly 1 argument");
+    }
+
+    if (!mobius_stack_isNumber(state, -1)) {
+        return mobius_error(state, "trunc() expects a numeric argument");
+    }
+
+    double value = mobius_stack_asFloat64(state, -1);
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushFloat64(state, trunc(value));
     return 1;
 }
 
@@ -573,6 +619,9 @@ static MobiusPluginFunction math_functions[] = {
     {"rad2deg",   math_rad2deg,   1,  MOBIUS_VAL_FLOAT64, "Radians to degrees"},
     {"sign",      math_sign,      1,  MOBIUS_VAL_INT64,   "Sign of number (-1, 0, or 1)"},
     {"clamp",     math_clamp,     3,  MOBIUS_VAL_UNKNOWN, "Clamp value to range"},
+    {"hypot",     math_hypot,     2,  MOBIUS_VAL_FLOAT64, "Euclidean distance sqrt(x*x + y*y)"},
+    {"cbrt",      math_cbrt,      1,  MOBIUS_VAL_FLOAT64, "Cube root"},
+    {"trunc",     math_trunc,     1,  MOBIUS_VAL_FLOAT64, "Truncate fractional digits toward zero"},
     // Advanced
     {"factorial", math_factorial, 1,  MOBIUS_VAL_INT64,   "Factorial (n!)"},
     {"gcd",       math_gcd,       2,  MOBIUS_VAL_INT64,   "Greatest common divisor"},
