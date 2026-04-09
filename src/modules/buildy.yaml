@@ -87,3 +87,27 @@ targets:
       libs: ["mobius-core", "dl"]
       depends_on:
         targets: ["mobius-core"]
+
+    - name: crypto
+      language: cpp
+      output_prefix: ""
+      sources: ["crypto/crypto_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]
+
+    - name: yaml
+      language: cpp
+      output_prefix: ""
+      sources: ["yaml/yaml_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]

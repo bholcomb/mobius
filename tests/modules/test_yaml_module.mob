@@ -1,0 +1,174 @@
+import "yaml"
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var doc1 = yaml.parse("
+name: mobius
+enabled: true
+count: 3
+ratio: 2.5
+")
+assert_test("basic mapping string", doc1.name == "mobius")
+assert_test("basic mapping bool", doc1.enabled == true)
+assert_test("basic mapping int", doc1.count == 3)
+assert_test("basic mapping float", doc1.ratio == 2.5)
+
+var doc2 = yaml.parse("
+ports:
+  - 80
+  - 443
+meta:
+  owner: ada
+  tags: [vm, fibers]
+")
+assert_test("nested sequence item 1", doc2.ports[0] == 80)
+assert_test("nested sequence item 2", doc2.ports[1] == 443)
+assert_test("nested mapping field", doc2.meta.owner == "ada")
+assert_test("flow array parse", doc2.meta.tags[0] == "vm" && doc2.meta.tags[1] == "fibers")
+
+var doc3 = yaml.parse("
+users:
+  - name: ada
+    admin: true
+  - name: grace
+    admin: false
+")
+assert_test("sequence of mappings first", doc3.users[0].name == "ada" && doc3.users[0].admin == true)
+assert_test("sequence of mappings second", doc3.users[1].name == "grace" && doc3.users[1].admin == false)
+
+var doc4 = yaml.parse("
+# comment line
+title: 'hello world'
+empty: null
+config: {mode: fast, retries: 2}
+")
+assert_test("single quoted string", doc4.title == "hello world")
+assert_test("null parse", doc4.empty == nil)
+assert_test("flow object parse", doc4.config.mode == "fast" && doc4.config.retries == 2)
+
+var doc5 = yaml.parse("
+enabled: false
+delta: -17
+scientific: 1e2
+empty1: ~
+empty2: nil
+escaped: \"line\\nnext\\tindent\"
+")
+assert_test("bool false parse", doc5.enabled == false)
+assert_test("negative integer parse", doc5.delta == -17)
+assert_test("scientific float parse", doc5.scientific == 100.0)
+assert_test("tilde null parse", doc5.empty1 == nil)
+assert_test("nil null parse", doc5.empty2 == nil)
+assert_test("double quoted escapes", doc5.escaped == "line\nnext\tindent")
+
+var doc6 = yaml.parse("{service: mobius, ports: [8080, 8081], enabled: true}")
+assert_test("root flow object parse", doc6.service == "mobius" && doc6.ports[1] == 8081 && doc6.enabled == true)
+
+var doc7 = yaml.parse("[1, 2, 3]")
+assert_test("root flow array parse", doc7[0] == 1 && doc7[2] == 3)
+
+var doc8 = yaml.parse("'scalar root'")
+assert_test("root scalar parse", doc8 == "scalar root")
+
+var doc9 = yaml.parse("
+---
+name: wrapped
+count: 2
+...
+")
+assert_test("document markers ignored", doc9.name == "wrapped" && doc9.count == 2)
+
+var doc10 = yaml.parse("
+dup: first
+dup: second
+")
+assert_test("duplicate keys last wins", doc10.dup == "second")
+
+var comments_only = yaml.parse("
+# just comments
+# still empty
+")
+assert_test("comments-only doc is table", typeof(comments_only) == "table")
+
+var yaml_path = os.tmpfile()
+assert_test("write yaml fixture", writefile(yaml_path, "file:\n  ok: true\n  nums:\n    - 1\n    - 2\n"))
+var parsed_file = yaml.parsefile(yaml_path)
+assert_test("parsefile nested bool", parsed_file.file.ok == true)
+assert_test("parsefile nested list", parsed_file.file.nums[0] == 1 && parsed_file.file.nums[1] == 2)
+
+var parse_error_count = 0
+
+try {
+    yaml.parse("\tbad: 1")
+} catch e {
+    parse_error_count = parse_error_count + 1
+}
+
+try {
+    yaml.parse("{a: 1,}")
+} catch e {
+    parse_error_count = parse_error_count + 1
+}
+
+try {
+    yaml.parse("[1, 2,]")
+} catch e {
+    parse_error_count = parse_error_count + 1
+}
+
+try {
+    yaml.parse("a: 1\nc")
+} catch e {
+    parse_error_count = parse_error_count + 1
+}
+
+try {
+    yaml.parsefile("/tmp/definitely_missing_mobius_yaml_file.yaml")
+} catch e {
+    parse_error_count = parse_error_count + 1
+}
+
+assert_test("yaml error paths", parse_error_count == 5)
+
+var original = {
+    service: "mobius",
+    enabled: true,
+    ports: [8080, 8081],
+    nested: {owner: "team", count: 2},
+    quoted_true: "true",
+    quoted_empty: "",
+    quoted_space: "hello world",
+    quoted_hash: "a#b",
+    empty_arr: [],
+    empty_obj: {}
+}
+var encoded = yaml.stringify(original)
+var roundtrip = yaml.parse(encoded)
+assert_test("stringify roundtrip string", roundtrip.service == "mobius")
+assert_test("stringify roundtrip bool", roundtrip.enabled == true)
+assert_test("stringify roundtrip array", roundtrip.ports[0] == 8080 && roundtrip.ports[1] == 8081)
+assert_test("stringify roundtrip table", roundtrip.nested.owner == "team" && roundtrip.nested.count == 2)
+assert_test("stringify quoted reserved word", roundtrip.quoted_true == "true")
+assert_test("stringify quoted empty string", roundtrip.quoted_empty == "")
+assert_test("stringify quoted spaced string", roundtrip.quoted_space == "hello world")
+assert_test("stringify quoted hash string", roundtrip.quoted_hash == "a#b")
+assert_test("stringify empty array", len(roundtrip.empty_arr) == 0)
+assert_test("stringify empty object", typeof(roundtrip.empty_obj) == "table")
+
+print("")
+print("YAML Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}
