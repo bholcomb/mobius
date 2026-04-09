@@ -70,7 +70,8 @@ typedef enum {
     MOBIUS_VAL_FUTURE,
     MOBIUS_VAL_ARRAY_SLICE,
     MOBIUS_VAL_CHANNEL,
-    MOBIUS_VAL_SHARED_CELL
+    MOBIUS_VAL_SHARED_CELL,
+    MOBIUS_VAL_BUFFER
 } MobiusValueType;
 
 /* ====================================================================== */
@@ -90,6 +91,7 @@ MOBIUS_API bool mobius_stack_isTable(MobiusState* state, int idx);
 MOBIUS_API bool mobius_stack_isArray(MobiusState* state, int idx);
 MOBIUS_API bool mobius_stack_isFunction(MobiusState* state, int idx);
 MOBIUS_API bool mobius_stack_isUserdata(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_isBuffer(MobiusState* state, int idx);
 
 /* ====================================================================== */
 /*  Stack getters — permissive (auto-convert where possible)               */
@@ -144,6 +146,17 @@ MOBIUS_API void mobius_stack_pushFloat64(MobiusState* state, double value);
 MOBIUS_API void mobius_stack_pushString(MobiusState* state, const char* str);
 MOBIUS_API void mobius_stack_pushNewTable(MobiusState* state, size_t capacity);
 MOBIUS_API void mobius_stack_pushNewArray(MobiusState* state, size_t capacity);
+MOBIUS_API void mobius_stack_pushNewBuffer(MobiusState* state, size_t size);
+MOBIUS_API void mobius_stack_pushBufferCopy(MobiusState* state, const void* data, size_t size);
+
+typedef void (*MobiusBufferReleaseFn)(void* ptr, size_t size, void* userdata);
+MOBIUS_API void mobius_stack_pushBufferExternal(MobiusState* state, void* data, size_t size,
+                                                MobiusBufferReleaseFn release, void* userdata,
+                                                bool readonly);
+MOBIUS_API void* mobius_stack_getBufferData(MobiusState* state, int idx, size_t* out_size);
+MOBIUS_API size_t mobius_stack_getBufferSize(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_bufferIsFixed(MobiusState* state, int idx);
+MOBIUS_API bool mobius_stack_bufferIsReadonly(MobiusState* state, int idx);
 
 typedef void (*MobiusUserdataDestructor)(void* ptr);
 MOBIUS_API void  mobius_stack_pushUserdata(MobiusState* state, void* ptr,

@@ -2,6 +2,7 @@
 #include "data/channel.h"
 #include "data/enum.h"
 #include "data/future.h"
+#include "data/buffer.h"
 #include "data/array_slice.h"
 #include "data/shared_cell.h"
 #include "data/table.h"
@@ -78,6 +79,11 @@ void Value::releaseRefSlow() {
                 ((RefCounted*)as.shared_cell)->release();
             }
             break;
+        case VAL_BUFFER:
+            if (as.buffer) {
+                ((RefCounted*)as.buffer)->release();
+            }
+            break;
         default:
             break;
     }
@@ -127,6 +133,14 @@ Value make_shared_cell_value(SharedCell* shared_cell) {
     Value value;
     value.type = VAL_SHARED_CELL;
     value.as.shared_cell = shared_cell;
+    return value;
+}
+
+Value make_buffer_value(BufferValue* buffer) {
+    Value value;
+    value.type = VAL_BUFFER;
+    value.as.buffer = buffer;
+    if (buffer && buffer->isFixed()) value.flags |= VAL_FLAG_FIXED;
     return value;
 }
 
@@ -186,6 +200,8 @@ bool Value::operator==(const Value& other) const {
             return as.channel == other.as.channel;
         case VAL_SHARED_CELL:
             return as.shared_cell == other.as.shared_cell;
+        case VAL_BUFFER:
+            return as.buffer == other.as.buffer;
         default: return false;
     }
 }
@@ -232,6 +248,13 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
                 clone->set(deep_copy_value_impl(entry.key, memo),
                            deep_copy_value_impl(entry.value, memo));
             }
+            return copy;
+        }
+        case VAL_BUFFER: {
+            if (!value.as.buffer) return make_nil_value();
+            BufferValue* clone = value.as.buffer->clone();
+            Value copy = make_buffer_value(clone);
+            copy.flags = value.flags;
             return copy;
         }
         default: {
@@ -341,6 +364,14 @@ void print_value(const Value& value) {
                 print_value(value.as.shared_cell->load());
             } else {
                 printf("<shared (null)>");
+            }
+            break;
+        case VAL_BUFFER:
+            if (value.as.buffer) {
+                printf("<buffer len=%zu%s>", value.as.buffer->size(),
+                       value.as.buffer->isFixed() ? " fixed" : "");
+            } else {
+                printf("<buffer (null)>");
             }
             break;
         default:
@@ -464,6 +495,17 @@ char* value_to_string(const Value& value) {
             result = (char*)malloc(15);
             if (result) strcpy(result, "<shared null>");
             break;
+        case VAL_BUFFER:
+            if (value.as.buffer) {
+                snprintf(buffer, sizeof(buffer), "<buffer len=%zu%s>",
+                         value.as.buffer->size(),
+                         value.as.buffer->isFixed() ? " fixed" : "");
+            } else {
+                strcpy(buffer, "<buffer (null)>");
+            }
+            result = (char*)malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
         default:
             result = (char*)malloc(8);
             if (result) strcpy(result, "unknown");
@@ -492,6 +534,7 @@ const char* value_type_name(ValueType type) {
         case VAL_ARRAY_SLICE: return "array_slice";
         case VAL_CHANNEL: return "channel";
         case VAL_SHARED_CELL: return "shared";
+        case VAL_BUFFER: return "buffer";
         default: return "unknown";
     }
 }

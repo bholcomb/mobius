@@ -6,6 +6,7 @@
 #include "data/value.h"
 #include "data/table.h"
 #include "data/array.h"
+#include "data/buffer.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -148,6 +149,10 @@ bool mobius_stack_isTable(MobiusState* state, int idx) {
 
 bool mobius_stack_isArray(MobiusState* state, int idx) {
     return stack_get_internal_type(state, idx) == VAL_ARRAY;
+}
+
+bool mobius_stack_isBuffer(MobiusState* state, int idx) {
+    return stack_get_internal_type(state, idx) == VAL_BUFFER;
 }
 
 bool mobius_stack_isFunction(MobiusState* state, int idx) {
@@ -561,6 +566,74 @@ void mobius_stack_pushNewArray(MobiusState* state, size_t capacity) {
         return;
     }
     stack_push(state, make_array_value(array));
+}
+
+void mobius_stack_pushNewBuffer(MobiusState* state, size_t size) {
+    BufferValue* buffer = new (std::nothrow) BufferValue(size, 0, false, false);
+    if (!buffer) {
+        state->setError(MOBIUS_ERROR_MEMORY, "Failed to create buffer",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
+    stack_push(state, make_buffer_value(buffer));
+}
+
+void mobius_stack_pushBufferCopy(MobiusState* state, const void* data, size_t size) {
+    BufferValue* buffer = new (std::nothrow) BufferValue(0, 0, false, false);
+    if (!buffer) {
+        state->setError(MOBIUS_ERROR_MEMORY, "Failed to create buffer",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
+    if (size > 0 && (!data || !buffer->appendBytes((const uint8_t*)data, size))) {
+        buffer->release();
+        state->setError(MOBIUS_ERROR_MEMORY, "Failed to initialize buffer",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
+    stack_push(state, make_buffer_value(buffer));
+}
+
+void mobius_stack_pushBufferExternal(MobiusState* state, void* data, size_t size,
+                                     MobiusBufferReleaseFn release, void* userdata,
+                                     bool readonly) {
+    BufferValue* buffer = new (std::nothrow) BufferValue(data, size,
+                                                         (BufferValue::ReleaseFn)release,
+                                                         userdata, readonly);
+    if (!buffer) {
+        state->setError(MOBIUS_ERROR_MEMORY, "Failed to wrap external buffer",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
+    stack_push(state, make_buffer_value(buffer));
+}
+
+void* mobius_stack_getBufferData(MobiusState* state, int idx, size_t* out_size) {
+    Value* buffer_val = get_value_at(state, idx);
+    if (!buffer_val || buffer_val->type != VAL_BUFFER || !buffer_val->as.buffer) {
+        if (out_size) *out_size = 0;
+        return nullptr;
+    }
+    if (out_size) *out_size = buffer_val->as.buffer->size();
+    return buffer_val->as.buffer->data();
+}
+
+size_t mobius_stack_getBufferSize(MobiusState* state, int idx) {
+    Value* buffer_val = get_value_at(state, idx);
+    if (!buffer_val || buffer_val->type != VAL_BUFFER || !buffer_val->as.buffer) return 0;
+    return buffer_val->as.buffer->size();
+}
+
+bool mobius_stack_bufferIsFixed(MobiusState* state, int idx) {
+    Value* buffer_val = get_value_at(state, idx);
+    return buffer_val && buffer_val->type == VAL_BUFFER && buffer_val->as.buffer &&
+           buffer_val->as.buffer->isFixed();
+}
+
+bool mobius_stack_bufferIsReadonly(MobiusState* state, int idx) {
+    Value* buffer_val = get_value_at(state, idx);
+    return buffer_val && buffer_val->type == VAL_BUFFER && buffer_val->as.buffer &&
+           buffer_val->as.buffer->isReadonly();
 }
 
 // ============================================================================

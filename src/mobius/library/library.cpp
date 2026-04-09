@@ -1,5 +1,6 @@
 #include "library/library.h"
 #include "library/array.h"
+#include "library/buffer_lib.h"
 #include "library/core.h"
 #include "library/fiber_lib.h"
 #include "library/file_lib.h"
@@ -66,6 +67,8 @@ static const PluginFunction library_registry[] = {
 
     // Array globals
     {"array_create", lib_array_create, SIZE_MAX, MOBIUS_VAL_ARRAY, "Create a new array with required capacity and optional fill value"},
+    {"buffer_create", lib_buffer_create, SIZE_MAX, MOBIUS_VAL_BUFFER, "Create a new byte buffer with optional fill byte"},
+    {"buffer_from_string", lib_buffer_from_string, 1, MOBIUS_VAL_BUFFER, "Create a new byte buffer from a string's raw bytes"},
 
     // Type system functions
     {"get_type_config", lib_get_type_config, 0, MOBIUS_VAL_TABLE, "Return the current type checking configuration"},

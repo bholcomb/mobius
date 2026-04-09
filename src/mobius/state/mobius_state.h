@@ -283,7 +283,7 @@ private:
     std::mutex plugin_dirs_mutex_;
 
     mutable std::mutex type_metatables_mutex_;
-    Table* type_metatables_[16] = {};
+    Table* type_metatables_[VALUE_TYPE_COUNT] = {};
 
     class MobiusVM* main_vm_;
 

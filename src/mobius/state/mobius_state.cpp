@@ -8,6 +8,7 @@
 #include "frontend/token.h"
 #include "library/library.h"
 #include "library/array.h"
+#include "library/buffer_lib.h"
 #include "library/fiber_lib.h"
 #include "library/table_lib.h"
 #include "internal/string_intern.h"
@@ -300,7 +301,7 @@ MobiusState::~MobiusState() {
 
     {
         std::lock_guard<std::mutex> lock(type_metatables_mutex_);
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < VALUE_TYPE_COUNT; i++) {
             if (type_metatables_[i]) {
                 type_metatables_[i]->release();
                 type_metatables_[i] = nullptr;
@@ -445,6 +446,10 @@ int MobiusState::initStdlib() {
     Table* table_mt = create_table_type_metatable(this);
     setTypeMetatable(VAL_TABLE, table_mt);
     table_mt->release();
+
+    Table* buffer_mt = create_buffer_type_metatable(this);
+    setTypeMetatable(VAL_BUFFER, buffer_mt);
+    buffer_mt->release();
 
     initialized_ = true;
     return MOBIUS_OK;

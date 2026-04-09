@@ -91,6 +91,9 @@ size_t hash_value_raw(const Value& value) {
         case VAL_SHARED_CELL:
             hash = (size_t)(uintptr_t)value.as.shared_cell;
             break;
+        case VAL_BUFFER:
+            hash = (size_t)(uintptr_t)value.as.buffer;
+            break;
     }
 
     return hash;
