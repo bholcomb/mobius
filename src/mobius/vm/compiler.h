@@ -37,6 +37,7 @@ private:
         int depth;         // scope depth (0 = top-level of function)
         bool is_captured;  // true if an inner function closes over this local
         ValueType inferred_type;  // VAL_UNKNOWN = type not yet determined
+        bool maybe_shared; // true if the binding may hold a SharedCell at runtime
     };
 
     // --- Loop jump targets for break/continue ---
@@ -92,10 +93,11 @@ private:
     void endScope();
 
     // --- Local variable management ---
-    int addLocal(const char* name);
+    int addLocal(const char* name, bool maybe_shared = false);
     int resolveLocal(const char* name);
     int resolveUpvalue(FunctionState* fs, const char* name);
-    int addUpvalue(FunctionState* fs, uint8_t index, bool is_local, ValueType type = VAL_UNKNOWN);
+    int addUpvalue(FunctionState* fs, uint8_t index, bool is_local,
+                   ValueType type = VAL_UNKNOWN, bool maybe_shared = false);
 
     // --- Constant management ---
     int stringConstant(const char* name);
@@ -119,6 +121,7 @@ private:
     int compileExpr(Expr* expr, int dest = -1);
     int compileLiteral(LiteralExpr* expr, int dest);
     int compileVariable(VariableExpr* expr, int dest);
+    int compileUnwrappedExpr(Expr* expr, int dest = -1);
     int compileBinary(BinaryExpr* expr, int dest);
     bool tryExprAsRK(Expr* e, uint8_t* rk);
     int compileUnary(UnaryExpr* expr, int dest);
@@ -179,10 +182,14 @@ private:
     ValueType localType(int reg);
     ValueType globalType(const char* name);
     ValueType nativeReturnType(const char* name);
+    bool localMayBeShared(int reg);
+    bool globalMayBeShared(const char* name);
+    bool exprMayBeShared(Expr* expr);
 
     // Global type tracking: maps global name → value type for user-defined
     // globals, and caches native function return types from the stdlib registry.
     std::unordered_map<std::string, ValueType> global_types_;
+    std::unordered_map<std::string, bool> global_maybe_shared_;
     std::unordered_map<std::string, ValueType> native_return_types_;
 
     // --- Helpers ---
