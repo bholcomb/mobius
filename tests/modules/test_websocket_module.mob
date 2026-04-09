@@ -1,0 +1,74 @@
+import "http"
+import "websocket"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var client_key = "dGhlIHNhbXBsZSBub25jZQ=="
+assert_test("accept key known vector", websocket.accept_key(client_key) == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+
+var upgrade_request = http.parse_request("GET /chat HTTP/1.1\r\nHost: server.example.com\r\nUpgrade: websocket\r\nConnection: keep-alive, Upgrade\r\nSec-WebSocket-Key: " + client_key + "\r\nSec-WebSocket-Version: 13\r\n\r\n")
+assert_test("is upgrade request", websocket.is_upgrade_request(upgrade_request))
+
+var handshake_response = websocket.handshake_response(upgrade_request)
+assert_test("handshake response status", handshake_response.status == 101)
+assert_test("handshake response accept", handshake_response.headers["sec-websocket-accept"] == "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=")
+assert_test("handshake response upgrade", handshake_response.headers.upgrade == "websocket")
+
+var handshake_request = websocket.handshake_request({
+    host: "server.example.com",
+    path: "/chat",
+    protocol: "chat",
+    key: client_key
+})
+var parsed_handshake_request = http.parse_request(handshake_request.request)
+assert_test("handshake request key", handshake_request.key == client_key)
+assert_test("handshake request parses", websocket.is_upgrade_request(parsed_handshake_request))
+assert_test("handshake request protocol header", parsed_handshake_request.headers["sec-websocket-protocol"] == "chat")
+
+var text_frame = websocket.build_frame({
+    type: "text",
+    payload: "Hello"
+})
+assert_test("build unmasked text frame hex", text_frame == "810548656c6c6f")
+var parsed_text_frame = websocket.parse_frame(text_frame)
+assert_test("parse frame opcode", parsed_text_frame.opcode == 1)
+assert_test("parse frame payload", parsed_text_frame.payload == "Hello")
+assert_test("parse frame payload hex", parsed_text_frame.payload_hex == "48656c6c6f")
+assert_test("parse frame fin", parsed_text_frame.fin == true)
+
+var masked_frame = websocket.build_frame({
+    type: "text",
+    payload: "Hello",
+    mask: true,
+    masking_key: "37fa213d"
+})
+assert_test("build masked text frame hex", masked_frame == "818537fa213d7f9f4d5158")
+var parsed_masked_frame = websocket.parse_frame(masked_frame)
+assert_test("parse masked payload", parsed_masked_frame.payload == "Hello")
+assert_test("parse masked key", parsed_masked_frame.masking_key == "37fa213d")
+assert_test("parse masked flag", parsed_masked_frame.masked == true)
+
+var close_frame = websocket.build_frame({
+    type: "close",
+    payload_hex: "03e8"
+})
+var parsed_close_frame = websocket.parse_frame(close_frame)
+assert_test("parse close opcode", parsed_close_frame.opcode == 8)
+assert_test("parse close code", parsed_close_frame.close_code == 1000)
+
+print("")
+print("WebSocket Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

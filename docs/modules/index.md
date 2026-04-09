@@ -11,12 +11,14 @@ Current built-in first-party modules:
 - [`crypto`](crypto.md) - dependency-free hashing, encoding, UUID, and random helpers
 - [`datetime`](datetime.md) - structured date/time conversion and ISO helpers
 - [`fiber`](fiber.md) - concurrency helpers, channels, and slices
+- [`http`](http.md) - HTTP request, response, and header parsing/building helpers
 - [`json`](json.md) - JSON parsing and serialization
 - [`math`](math.md) - extended mathematical functions and constants
 - [`os`](os.md) - filesystem, path, process, and host time utilities
 - [`regex`](regex.md) - regular expression matching and replacement
 - [`toml`](toml.md) - TOML parsing and serialization
 - [`url`](url.md) - URL parsing, encoding, and query helpers
+- [`websocket`](websocket.md) - websocket handshake and frame protocol helpers
 - [`yaml`](yaml.md) - dependency-free YAML subset parser and serializer
 
 Notes:
