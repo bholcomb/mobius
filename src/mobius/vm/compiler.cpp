@@ -156,9 +156,9 @@ void Compiler::endScope() {
 // Local variable management
 // ============================================================================
 
-int Compiler::addLocal(const char* name) {
+int Compiler::addLocal(const char* name, bool maybe_shared) {
     int reg = allocReg();
-    current_->locals.push_back({name, current_->scope_depth, false, VAL_UNKNOWN});
+    current_->locals.push_back({name, current_->scope_depth, false, VAL_UNKNOWN, maybe_shared});
     return reg;
 }
 
@@ -179,7 +179,9 @@ int Compiler::resolveUpvalue(FunctionState* fs, const char* name) {
     for (int i = (int)enclosing->locals.size() - 1; i >= 0; i--) {
         if (enclosing->locals[i].name == name) {
             enclosing->locals[i].is_captured = true;
-            return addUpvalue(fs, (uint8_t)i, true, enclosing->locals[i].inferred_type);
+            return addUpvalue(fs, (uint8_t)i, true,
+                              enclosing->locals[i].inferred_type,
+                              enclosing->locals[i].maybe_shared);
         }
     }
 
@@ -187,13 +189,15 @@ int Compiler::resolveUpvalue(FunctionState* fs, const char* name) {
     int upvalue = resolveUpvalue(enclosing, name);
     if (upvalue != -1) {
         ValueType uv_type = enclosing->proto->upvalues[upvalue].type;
-        return addUpvalue(fs, (uint8_t)upvalue, false, uv_type);
+        bool uv_shared = enclosing->proto->upvalues[upvalue].maybe_shared;
+        return addUpvalue(fs, (uint8_t)upvalue, false, uv_type, uv_shared);
     }
 
     return -1;
 }
 
-int Compiler::addUpvalue(FunctionState* fs, uint8_t index, bool is_local, ValueType type) {
+int Compiler::addUpvalue(FunctionState* fs, uint8_t index, bool is_local,
+                         ValueType type, bool maybe_shared) {
     auto& upvalues = fs->proto->upvalues;
 
     // Reuse existing upvalue if already captured
@@ -203,7 +207,7 @@ int Compiler::addUpvalue(FunctionState* fs, uint8_t index, bool is_local, ValueT
         }
     }
 
-    upvalues.push_back({index, is_local, type});
+    upvalues.push_back({index, is_local, type, maybe_shared});
     return (int)upvalues.size() - 1;
 }
 
@@ -292,16 +296,76 @@ ValueType Compiler::localType(int reg) {
     return VAL_UNKNOWN;
 }
 
+bool Compiler::localMayBeShared(int reg) {
+    return reg >= 0 && reg < (int)current_->locals.size() && current_->locals[reg].maybe_shared;
+}
+
 ValueType Compiler::globalType(const char* name) {
     auto it = global_types_.find(name);
     if (it != global_types_.end()) return it->second;
     return VAL_UNKNOWN;
 }
 
+bool Compiler::globalMayBeShared(const char* name) {
+    auto it = global_maybe_shared_.find(name);
+    return it != global_maybe_shared_.end() && it->second;
+}
+
 ValueType Compiler::nativeReturnType(const char* name) {
     auto it = native_return_types_.find(name);
     if (it != native_return_types_.end()) return it->second;
     return VAL_UNKNOWN;
+}
+
+bool Compiler::exprMayBeShared(Expr* expr) {
+    if (!expr) return false;
+
+    switch (expr->type) {
+        case EXPR_LITERAL:
+        case EXPR_BINARY:
+        case EXPR_UNARY:
+        case EXPR_INCREMENT:
+        case EXPR_DECREMENT:
+        case EXPR_ARRAY_LITERAL:
+        case EXPR_TABLE_LITERAL:
+        case EXPR_ENUM_ACCESS:
+        case EXPR_FUNCTION:
+        case EXPR_SPAWN:
+            return false;
+
+        case EXPR_VARIABLE: {
+            const char* vname = expr->as.variable.name.identifier;
+            int local = resolveLocal(vname);
+            if (local >= 0) return localMayBeShared(local);
+            int uv = resolveUpvalue(current_, vname);
+            if (uv >= 0) return current_->proto->upvalues[uv].maybe_shared;
+            return globalMayBeShared(vname);
+        }
+
+        case EXPR_ASSIGNMENT:
+            return exprMayBeShared(expr->as.assignment.value);
+
+        case EXPR_CALL:
+        case EXPR_AWAIT:
+        case EXPR_ARRAY_INDEX:
+        case EXPR_TABLE_INDEX:
+        case EXPR_TABLE_DOT:
+        case EXPR_METHOD_DOT:
+        case EXPR_SHARED:
+            return true;
+
+        case EXPR_GROUPING:
+            return exprMayBeShared(expr->as.grouping.expression);
+
+        case EXPR_TERNARY:
+            return exprMayBeShared(expr->as.ternary.then_expr) ||
+                   exprMayBeShared(expr->as.ternary.else_expr);
+
+        case EXPR_ATOMIC:
+            return exprMayBeShared(expr->as.atomic.body);
+    }
+
+    return true;
 }
 
 ValueType Compiler::inferExprType(Expr* expr) {
@@ -578,6 +642,17 @@ int Compiler::compileVariable(VariableExpr* expr, int dest) {
     return reg;
 }
 
+int Compiler::compileUnwrappedExpr(Expr* expr, int dest) {
+    if (!exprMayBeShared(expr)) {
+        return compileExpr(expr, dest);
+    }
+
+    int raw_reg = compileExpr(expr);
+    int reg = (dest >= 0) ? dest : allocReg();
+    emitABC(OP_SHARED_LOAD, (uint8_t)reg, (uint8_t)raw_reg, 0);
+    return reg;
+}
+
 // Try to represent an expression as an RK operand (constant pool ref or register).
 // Returns true if the expression is a numeric literal that fits in the RK constant
 // pool (index < 128). Sets *rk to the RK-encoded value. If false, the caller
@@ -797,6 +872,9 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         }
     }
 
+    bool left_maybe_shared = exprMayBeShared(expr->left);
+    bool right_maybe_shared = exprMayBeShared(expr->right);
+
     // Try arithmetic-with-immediate (AsBx format): R[A] = R[A] op sBx
     // sBx range is -SBX16_BIAS..SBX16_BIAS (±32767)
     {
@@ -826,7 +904,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             if (try_imm(expr->right, &imm)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
-                int left_reg = compileExpr(expr->left, reg);
+                int left_reg = compileUnwrappedExpr(expr->left, reg);
                 if (left_reg != reg)
                     emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)left_reg, 0);
                 emitAsBx(imm_op, (uint8_t)reg, imm);
@@ -842,7 +920,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             if ((imm_op == OP_ADDI || imm_op == OP_MULI) && try_imm(expr->left, &imm)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
-                int right_reg = compileExpr(expr->right, reg);
+                int right_reg = compileUnwrappedExpr(expr->right, reg);
                 if (right_reg != reg)
                     emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)right_reg, 0);
                 emitAsBx(imm_op, (uint8_t)reg, imm);
@@ -898,7 +976,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             if (try_literal(expr->right, &raw, &tag)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
-                int src_reg = compileExpr(expr->left, reg);
+                int src_reg = compileUnwrappedExpr(expr->left, reg);
                 emitABC_D64(k_op, (uint8_t)reg, (uint8_t)src_reg, tag, raw);
                 setFreeReg(save_reg);
                 if (dest < 0) {
@@ -912,7 +990,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             if ((k_op == OP_ADDK || k_op == OP_MULK) && try_literal(expr->left, &raw, &tag)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
-                int src_reg = compileExpr(expr->right, reg);
+                int src_reg = compileUnwrappedExpr(expr->right, reg);
                 emitABC_D64(k_op, (uint8_t)reg, (uint8_t)src_reg, tag, raw);
                 setFreeReg(save_reg);
                 if (dest < 0) {
@@ -931,15 +1009,15 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     // Try RK encoding: if either operand is a literal, reference it directly
     // from the constant pool instead of loading it into a register.
     uint8_t rk_left, rk_right;
-    bool left_is_rk = tryExprAsRK(expr->left, &rk_left);
-    bool right_is_rk = tryExprAsRK(expr->right, &rk_right);
+    bool left_is_rk = !left_maybe_shared && tryExprAsRK(expr->left, &rk_left);
+    bool right_is_rk = !right_maybe_shared && tryExprAsRK(expr->right, &rk_right);
 
     if (!left_is_rk) {
-        int left = compileExpr(expr->left);
+        int left = compileUnwrappedExpr(expr->left);
         rk_left = (uint8_t)left;
     }
     if (!right_is_rk) {
-        int right = compileExpr(expr->right);
+        int right = compileUnwrappedExpr(expr->right);
         rk_right = (uint8_t)right;
     }
 
@@ -1199,6 +1277,210 @@ static int assignment_target_line(Expr* target) {
     }
 }
 
+namespace {
+bool is_scalar_binary_context(TokenType op) {
+    switch (op) {
+        case TOKEN_PLUS:
+        case TOKEN_MINUS:
+        case TOKEN_STAR:
+        case TOKEN_SLASH:
+        case TOKEN_PERCENT:
+        case TOKEN_LESS:
+        case TOKEN_LESS_EQUAL:
+        case TOKEN_GREATER:
+        case TOKEN_GREATER_EQUAL:
+        case TOKEN_EQUAL_EQUAL:
+        case TOKEN_BANG_EQUAL:
+        case TOKEN_AMPERSAND:
+        case TOKEN_PIPE:
+        case TOKEN_CARET:
+        case TOKEN_LEFT_SHIFT:
+        case TOKEN_RIGHT_SHIFT:
+        case TOKEN_AND:
+        case TOKEN_OR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool is_scalar_unary_context(TokenType op) {
+    switch (op) {
+        case TOKEN_MINUS:
+        case TOKEN_PLUS:
+        case TOKEN_BANG:
+        case TOKEN_NOT:
+        case TOKEN_TILDE:
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool expr_requires_shared_identity(Expr* expr, const char* name, bool scalar_context = false) {
+    if (!expr) return false;
+
+    switch (expr->type) {
+        case EXPR_LITERAL:
+        case EXPR_ENUM_ACCESS:
+            return false;
+
+        case EXPR_VARIABLE:
+            return strcmp(expr->as.variable.name.identifier, name) == 0 && !scalar_context;
+
+        case EXPR_GROUPING:
+            return expr_requires_shared_identity(expr->as.grouping.expression, name, scalar_context);
+
+        case EXPR_BINARY: {
+            bool child_scalar = is_scalar_binary_context(expr->as.binary.op.type);
+            return expr_requires_shared_identity(expr->as.binary.left, name, child_scalar) ||
+                   expr_requires_shared_identity(expr->as.binary.right, name, child_scalar);
+        }
+
+        case EXPR_UNARY:
+            return expr_requires_shared_identity(expr->as.unary.right, name,
+                                                 is_scalar_unary_context(expr->as.unary.op.type));
+
+        case EXPR_TERNARY:
+            return expr_requires_shared_identity(expr->as.ternary.condition, name, true) ||
+                   expr_requires_shared_identity(expr->as.ternary.then_expr, name, scalar_context) ||
+                   expr_requires_shared_identity(expr->as.ternary.else_expr, name, scalar_context);
+
+        case EXPR_ASSIGNMENT:
+            if (expr->as.assignment.target->type == EXPR_VARIABLE &&
+                strcmp(expr->as.assignment.target->as.variable.name.identifier, name) == 0) {
+                return true;
+            }
+            return expr_requires_shared_identity(expr->as.assignment.target, name, false) ||
+                   expr_requires_shared_identity(expr->as.assignment.value, name, false);
+
+        case EXPR_INCREMENT:
+        case EXPR_DECREMENT:
+            return strcmp(expr->as.increment.name.identifier, name) == 0;
+
+        case EXPR_CALL: {
+            if (expr_requires_shared_identity(expr->as.call.callee, name, false)) return true;
+            for (size_t i = 0; i < expr->as.call.arg_count; i++) {
+                if (expr_requires_shared_identity(expr->as.call.arguments[i], name, false)) return true;
+            }
+            return false;
+        }
+
+        case EXPR_ARRAY_LITERAL:
+            for (size_t i = 0; i < expr->as.array_literal.element_count; i++) {
+                if (expr_requires_shared_identity(expr->as.array_literal.elements[i], name, false)) return true;
+            }
+            return false;
+
+        case EXPR_ARRAY_INDEX:
+            return expr_requires_shared_identity(expr->as.array_index.array, name, false) ||
+                   expr_requires_shared_identity(expr->as.array_index.index, name, true);
+
+        case EXPR_TABLE_LITERAL:
+            for (size_t i = 0; i < expr->as.table_literal.pair_count; i++) {
+                TablePair& pair = expr->as.table_literal.pairs[i];
+                if (pair.key && expr_requires_shared_identity(pair.key, name, false)) return true;
+                if (expr_requires_shared_identity(pair.value, name, false)) return true;
+            }
+            return false;
+
+        case EXPR_TABLE_INDEX:
+            return expr_requires_shared_identity(expr->as.table_index.table, name, false) ||
+                   expr_requires_shared_identity(expr->as.table_index.index, name, true);
+
+        case EXPR_TABLE_DOT:
+        case EXPR_METHOD_DOT:
+            return expr_requires_shared_identity(expr->as.table_dot.table, name, false);
+
+        case EXPR_FUNCTION:
+        case EXPR_SPAWN:
+        case EXPR_AWAIT:
+        case EXPR_SHARED:
+        case EXPR_ATOMIC:
+            return true;
+    }
+
+    return true;
+}
+
+bool stmt_requires_shared_identity(Stmt* stmt, const char* name) {
+    if (!stmt) return false;
+
+    switch (stmt->type) {
+        case STMT_EXPRESSION:
+            return expr_requires_shared_identity(stmt->as.expression.expression, name, false);
+        case STMT_PRINT:
+            return expr_requires_shared_identity(stmt->as.print.expression, name, false);
+        case STMT_VAR:
+            return expr_requires_shared_identity(stmt->as.var.initializer, name, false);
+        case STMT_BLOCK:
+            for (size_t i = 0; i < stmt->as.block.count; i++) {
+                if (stmt_requires_shared_identity(stmt->as.block.statements[i], name)) return true;
+            }
+            return false;
+        case STMT_IF:
+            return expr_requires_shared_identity(stmt->as.if_stmt.condition, name, true) ||
+                   stmt_requires_shared_identity(stmt->as.if_stmt.then_branch, name) ||
+                   stmt_requires_shared_identity(stmt->as.if_stmt.else_branch, name);
+        case STMT_WHILE:
+            return expr_requires_shared_identity(stmt->as.while_stmt.condition, name, true) ||
+                   stmt_requires_shared_identity(stmt->as.while_stmt.body, name);
+        case STMT_FOR:
+            return stmt_requires_shared_identity(stmt->as.for_stmt.initializer, name) ||
+                   expr_requires_shared_identity(stmt->as.for_stmt.condition, name, true) ||
+                   expr_requires_shared_identity(stmt->as.for_stmt.increment, name, false) ||
+                   stmt_requires_shared_identity(stmt->as.for_stmt.body, name);
+        case STMT_RETURN:
+            return expr_requires_shared_identity(stmt->as.return_stmt.value, name, false);
+        case STMT_SWITCH:
+            if (expr_requires_shared_identity(stmt->as.switch_stmt.discriminant, name, false)) return true;
+            for (size_t i = 0; i < stmt->as.switch_stmt.case_count; i++) {
+                SwitchCase* case_clause = stmt->as.switch_stmt.cases[i];
+                if (case_clause->guard && expr_requires_shared_identity(case_clause->guard, name, true)) return true;
+                for (size_t j = 0; j < case_clause->body_count; j++) {
+                    if (stmt_requires_shared_identity(case_clause->body[j], name)) return true;
+                }
+            }
+            for (size_t i = 0; i < stmt->as.switch_stmt.default_body_count; i++) {
+                if (stmt_requires_shared_identity(stmt->as.switch_stmt.default_body[i], name)) return true;
+            }
+            return false;
+        case STMT_FOR_IN:
+            return expr_requires_shared_identity(stmt->as.for_in_stmt.iterable, name, false) ||
+                   stmt_requires_shared_identity(stmt->as.for_in_stmt.body, name);
+        case STMT_TRY_CATCH:
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.try_body_count; i++) {
+                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.try_body[i], name)) return true;
+            }
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.catch_body_count; i++) {
+                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.catch_body[i], name)) return true;
+            }
+            for (size_t i = 0; i < stmt->as.try_catch_stmt.finally_body_count; i++) {
+                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.finally_body[i], name)) return true;
+            }
+            return false;
+        case STMT_THROW:
+            return expr_requires_shared_identity(stmt->as.throw_stmt.value, name, false);
+        default:
+            return false;
+    }
+}
+
+std::vector<bool> compute_param_shared_identity_flags(Token* params, size_t param_count, Stmt** body, size_t body_count) {
+    std::vector<bool> needs_identity(param_count, false);
+    for (size_t i = 0; i < param_count; i++) {
+        const char* name = params[i].identifier;
+        for (size_t j = 0; j < body_count; j++) {
+            if (stmt_requires_shared_identity(body[j], name)) {
+                needs_identity[i] = true;
+                break;
+            }
+        }
+    }
+    return needs_identity;
+}
+} // namespace
+
 int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
     currentLine_ = assignment_target_line(expr->target);
 
@@ -1243,6 +1525,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
     switch (expr->target->type) {
         case EXPR_VARIABLE: {
             const char* name = expr->target->as.variable.name.identifier;
+            bool rhs_maybe_shared = exprMayBeShared(expr->value);
 
             int local = resolveLocal(name);
             if (local >= 0) {
@@ -1257,10 +1540,17 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                 }
 
                 int save_reg = current_->free_reg;
-                emitABC(OP_LOCK_SHARED, (uint8_t)local, 0, 0);
-                int value_reg = compileExpr(expr->value);
-                emitABC(OP_SHARED_STORE, (uint8_t)local, (uint8_t)value_reg, 0);
-                emitABC(OP_UNLOCK_SHARED, (uint8_t)local, 0, 0);
+                bool target_maybe_shared = current_->locals[local].maybe_shared || rhs_maybe_shared;
+                current_->locals[local].maybe_shared = target_maybe_shared;
+                int value_reg;
+                if (target_maybe_shared) {
+                    value_reg = compileExpr(expr->value);
+                    emitABC(OP_LOCK_SHARED, (uint8_t)local, 0, 0);
+                    emitABC(OP_SHARED_STORE, (uint8_t)local, (uint8_t)value_reg, 0);
+                    emitABC(OP_UNLOCK_SHARED, (uint8_t)local, 0, 0);
+                } else {
+                    value_reg = compileExpr(expr->value, local);
+                }
 
                 if (target_t != VAL_UNKNOWN && rhs_t == VAL_UNKNOWN) {
                     emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, 0, 0);
@@ -1283,24 +1573,36 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             if (upvalue >= 0) {
                 int save_reg = current_->free_reg;
                 int lock_reg = allocReg();
-                emitABC(OP_GETUPVAL, (uint8_t)lock_reg, (uint8_t)upvalue, 0);
-                emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
                 int reg = (dest >= 0) ? dest : allocReg();
                 compileExpr(expr->value, reg);
+                bool target_maybe_shared = current_->proto->upvalues[upvalue].maybe_shared || rhs_maybe_shared;
+                current_->proto->upvalues[upvalue].maybe_shared = target_maybe_shared;
+                emitABC(OP_GETUPVAL, (uint8_t)lock_reg, (uint8_t)upvalue, 0);
+                if (target_maybe_shared) {
+                    emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+                }
                 emitABC(OP_SETUPVAL, (uint8_t)reg, (uint8_t)upvalue, 0);
-                emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+                if (target_maybe_shared) {
+                    emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+                }
                 setFreeReg(save_reg);
                 return reg;
             }
 
             int save_reg = current_->free_reg;
             int lock_reg = allocReg();
-            emitGetGlobal(lock_reg, name);
-            emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
             int reg = (dest >= 0) ? dest : allocReg();
             compileExpr(expr->value, reg);
+            bool target_maybe_shared = globalMayBeShared(name) || rhs_maybe_shared;
+            if (target_maybe_shared) {
+                global_maybe_shared_[name] = true;
+                emitGetGlobal(lock_reg, name);
+                emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+            }
             emitSetGlobal(reg, name);
-            emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+            if (target_maybe_shared) {
+                emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+            }
             setFreeReg(save_reg);
             return reg;
         }
@@ -1772,11 +2074,12 @@ void Compiler::compilePrintStmt(PrintStmt* stmt) {
 void Compiler::compileVarStmt(VarStmt* stmt) {
     currentLine_ = stmt->name.line;
     const char* name = stmt->name.identifier;
+    bool maybe_shared = stmt->initializer ? exprMayBeShared(stmt->initializer) : false;
 
     if (current_->scope_depth > 0) {
         // Local variable
         ValueType inferred = stmt->initializer ? inferExprType(stmt->initializer) : VAL_UNKNOWN;
-        int reg = addLocal(name);
+        int reg = addLocal(name, maybe_shared);
         current_->locals.back().inferred_type = inferred;
 
         if (stmt->initializer) {
@@ -1808,6 +2111,9 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
         emitSetGlobal(reg, name);
         if (inferred != VAL_UNKNOWN) {
             global_types_[name] = inferred;
+        }
+        if (maybe_shared) {
+            global_maybe_shared_[name] = true;
         }
         setFreeReg(save);
     }
@@ -1841,13 +2147,16 @@ int Compiler::compileConditionJump(Expr* condition) {
 
             currentLine_ = bin->op.line;
 
+            bool left_maybe_shared = exprMayBeShared(bin->left);
+            bool right_maybe_shared = exprMayBeShared(bin->right);
+
             // Try compare-with-immediate: RHS is an integer literal in sBx range
             if (bin->right->type == EXPR_LITERAL &&
                 bin->right->as.literal.value.type == VAL_INT64) {
                 int64_t iv = bin->right->as.literal.value.as.i64;
                 if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                     int save = current_->free_reg;
-                    int left = compileExpr(bin->left);
+                    int left = compileUnwrappedExpr(bin->left);
                     int imm = (int)iv;
 
                     switch (op) {
@@ -1878,7 +2187,7 @@ int Compiler::compileConditionJump(Expr* condition) {
                 int64_t iv = bin->left->as.literal.value.as.i64;
                 if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                     int save = current_->free_reg;
-                    int right = compileExpr(bin->right);
+                    int right = compileUnwrappedExpr(bin->right);
                     int imm = (int)iv;
 
                     // Swap: (imm < R) == (R > imm), etc.
@@ -1907,12 +2216,14 @@ int Compiler::compileConditionJump(Expr* condition) {
             // General compare path — use RK encoding when possible
             int save = current_->free_reg;
             uint8_t rk_left, rk_right;
-            if (!tryExprAsRK(bin->left, &rk_left)) {
-                int left = compileExpr(bin->left);
+            if (!left_maybe_shared && tryExprAsRK(bin->left, &rk_left)) {
+            } else {
+                int left = compileUnwrappedExpr(bin->left);
                 rk_left = (uint8_t)left;
             }
-            if (!tryExprAsRK(bin->right, &rk_right)) {
-                int right = compileExpr(bin->right);
+            if (!right_maybe_shared && tryExprAsRK(bin->right, &rk_right)) {
+            } else {
+                int right = compileUnwrappedExpr(bin->right);
                 rk_right = (uint8_t)right;
             }
 
@@ -2275,10 +2586,17 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     beginScope();
 
     child_fs.proto->num_params = (int)stmt->param_count;
+    std::vector<bool> param_needs_identity =
+        compute_param_shared_identity_flags(stmt->params, stmt->param_count,
+                                            stmt->body, stmt->body_count);
     for (size_t i = 0; i < stmt->param_count; i++) {
-        addLocal(stmt->params[i].identifier);
+        bool maybe_shared = param_needs_identity[i];
+        addLocal(stmt->params[i].identifier, maybe_shared);
         if (stmt->param_types && stmt->param_types[i] != VAL_UNKNOWN)
             current_->locals.back().inferred_type = stmt->param_types[i];
+        if (!maybe_shared) {
+            emitABC(OP_SHARED_LOAD, (uint8_t)i, (uint8_t)i, 0);
+        }
     }
 
     // Compile function body
@@ -3242,10 +3560,17 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     beginScope();
 
     child_fs.proto->num_params = (int)expr->param_count;
+    std::vector<bool> param_needs_identity =
+        compute_param_shared_identity_flags(expr->params, expr->param_count,
+                                            expr->body, expr->body_count);
     for (size_t i = 0; i < expr->param_count; i++) {
-        addLocal(expr->params[i].identifier);
+        bool maybe_shared = param_needs_identity[i];
+        addLocal(expr->params[i].identifier, maybe_shared);
         if (expr->param_types && expr->param_types[i] != VAL_UNKNOWN)
             current_->locals.back().inferred_type = expr->param_types[i];
+        if (!maybe_shared) {
+            emitABC(OP_SHARED_LOAD, (uint8_t)i, (uint8_t)i, 0);
+        }
     }
 
     compileBlock(expr->body, expr->body_count);

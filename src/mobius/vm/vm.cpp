@@ -1273,7 +1273,7 @@ MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) 
 
 #define VM_CMP_IMM_HANDLER(name, cmp_op, err_msg) \
 MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
-    Value lhs = shared_unwrap(f.regs[DECODE_A(inst)]); \
+    const Value& lhs = f.regs[DECODE_A(inst)]; \
     int imm = DECODE_sBx(inst); \
     bool result; \
     if (lhs.type == VAL_INT64) result = lhs.as.i64 cmp_op imm; \
@@ -1293,7 +1293,7 @@ VM_CMP_IMM_HANDLER(vm_op_gei, >=, "GEI")
 
 MOBIUS_FORCEINLINE static int vm_op_eqi(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value lhs = shared_unwrap(f.regs[DECODE_A(inst)]);
+    const Value& lhs = f.regs[DECODE_A(inst)];
     int imm = DECODE_sBx(inst);
     bool result;
     if (lhs.type == VAL_INT64) result = lhs.as.i64 == imm;
@@ -1306,7 +1306,7 @@ MOBIUS_FORCEINLINE static int vm_op_eqi(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 MOBIUS_FORCEINLINE static int vm_op_nei(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value lhs = shared_unwrap(f.regs[DECODE_A(inst)]);
+    const Value& lhs = f.regs[DECODE_A(inst)];
     int imm = DECODE_sBx(inst);
     bool result;
     if (lhs.type == VAL_INT64) result = lhs.as.i64 != imm;
@@ -1413,7 +1413,7 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     uint8_t tag = DECODE_C(inst); \
     uint64_t raw = READ_INLINE64(f); \
     Value& dst = RA(inst); \
-    Value src = shared_unwrap(f.regs[DECODE_B(inst)]); \
+    const Value& src = f.regs[DECODE_B(inst)]; \
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) { \
         int64_t k; memcpy(&k, &raw, 8); \
         if (is_mod && MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, #name ": division/modulo by zero"); return -1; } \
@@ -1445,7 +1445,7 @@ MOBIUS_FORCEINLINE static int vm_op_divk(MobiusVM* vm, VMFrame& f, uint32_t inst
     uint8_t tag = DECODE_C(inst);
     uint64_t raw = READ_INLINE64(f);
     Value& dst = RA(inst);
-    Value src = shared_unwrap(f.regs[DECODE_B(inst)]);
+    const Value& src = f.regs[DECODE_B(inst)];
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
         if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
@@ -1467,7 +1467,7 @@ MOBIUS_FORCEINLINE static int vm_op_modk(MobiusVM* vm, VMFrame& f, uint32_t inst
     uint8_t tag = DECODE_C(inst);
     uint64_t raw = READ_INLINE64(f);
     Value& dst = RA(inst);
-    Value src = shared_unwrap(f.regs[DECODE_B(inst)]);
+    const Value& src = f.regs[DECODE_B(inst)];
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
         if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
@@ -1495,12 +1495,10 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     int imm = DECODE_sBx(inst); \
     if (check_zero && MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; } \
     Value& val = f.regs[a]; \
-    Value unwrapped = shared_unwrap(val); \
-    if (MOBIUS_LIKELY(unwrapped.type == VAL_INT64)) { unwrapped.as.i64 op_char##= imm; } \
-    else if (unwrapped.type == VAL_UINT64) unwrapped.as.u64 op_char##= (uint64_t)(int64_t)imm; \
-    else if (unwrapped.type == VAL_FLOAT64) unwrapped.as.double_val op_char##= imm; \
+    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 op_char##= imm; } \
+    else if (val.type == VAL_UINT64) val.as.u64 op_char##= (uint64_t)(int64_t)imm; \
+    else if (val.type == VAL_FLOAT64) val.as.double_val op_char##= imm; \
     else { VM_ERROR(vm, f, err_msg " requires numeric operand"); return -1; } \
-    val = unwrapped; \
     return 0; \
 }
 
@@ -1516,12 +1514,10 @@ MOBIUS_FORCEINLINE static int vm_op_modi(MobiusVM* vm, VMFrame& f, uint32_t inst
     int imm = DECODE_sBx(inst);
     if (MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
     Value& val = f.regs[a];
-    Value unwrapped = shared_unwrap(val);
-    if (MOBIUS_LIKELY(unwrapped.type == VAL_INT64)) { unwrapped.as.i64 %= imm; }
-    else if (unwrapped.type == VAL_UINT64) unwrapped.as.u64 %= (uint64_t)(int64_t)imm;
-    else if (unwrapped.type == VAL_FLOAT64) unwrapped.as.double_val = fmod(unwrapped.as.double_val, (double)imm);
+    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 %= imm; }
+    else if (val.type == VAL_UINT64) val.as.u64 %= (uint64_t)(int64_t)imm;
+    else if (val.type == VAL_FLOAT64) val.as.double_val = fmod(val.as.double_val, (double)imm);
     else { VM_ERROR(vm, f, "MODI requires numeric operand"); return -1; }
-    val = unwrapped;
     return 0;
 }
 

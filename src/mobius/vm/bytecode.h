@@ -19,6 +19,7 @@ struct UpvalueDesc {
     bool    in_stack;  // true = captured from enclosing function's registers
                        // false = captured from enclosing function's upvalues
     ValueType type = VAL_UNKNOWN;  // inferred type of captured value
+    bool maybe_shared = false;     // true if the captured binding may hold a SharedCell
 };
 
 // ============================================================================
