@@ -44,49 +44,59 @@ func producer(id: int, ch, counter, items_per) {
     return id
 }
 
-// --- Worker: blocking recv from dispatch, compute, blocking send to results ---
+// --- Worker: poll dispatch until closed and drained, then exit cleanly ---
 func worker(id: int, in_ch, out_ch, counter, err, total) {
     var processed = 0
-    try {
-        while (true) {
-            var work_id = in_ch:recv()
-
-            if (work_id < 0 || work_id >= total) {
-                atomic(err[0] = 1)
+    while (true) {
+        var recv = in_ch:try_recv()
+        if (!recv.ok) {
+            if (in_ch:is_closed()) {
+                break
             }
-
-            var result = 0
-            var iterations = (work_id % 13) + 5
-            for (var j = 0; j < iterations; j += 1) {
-                result = result + work_id + j
-            }
-
-            out_ch:send(work_id * 1000 + result)
-            atomic(counter[0] = counter[0] + 1)
-            processed = processed + 1
+            yield
+            continue
         }
-    } catch e {
-        // dispatch channel closed and drained
+
+        var work_id = recv.value
+
+        if (work_id < 0 || work_id >= total) {
+            atomic(err[0] = 1)
+        }
+
+        var result = 0
+        var iterations = (work_id % 13) + 5
+        for (var j = 0; j < iterations; j += 1) {
+            result = result + work_id + j
+        }
+
+        out_ch:send(work_id * 1000 + result)
+        atomic(counter[0] = counter[0] + 1)
+        processed = processed + 1
     }
     return processed
 }
 
-// --- Aggregator: blocking recv from results, accumulate into buckets ---
+// --- Aggregator: poll results until closed and drained, then exit cleanly ---
 func aggregator(id: int, ch, buckets_arr, counter, num_agg) {
     var aggregated = 0
-    try {
-        while (true) {
-            var encoded = ch:recv()
-            var work_id = encoded / 1000
-
-            var bucket = work_id % num_agg
-            atomic(buckets_arr[bucket] = buckets_arr[bucket] + 1)
-
-            atomic(counter[0] = counter[0] + 1)
-            aggregated = aggregated + 1
+    while (true) {
+        var recv = ch:try_recv()
+        if (!recv.ok) {
+            if (ch:is_closed()) {
+                break
+            }
+            yield
+            continue
         }
-    } catch e {
-        // results channel closed and drained
+
+        var encoded = recv.value
+        var work_id = encoded / 1000
+
+        var bucket = work_id % num_agg
+        atomic(buckets_arr[bucket] = buckets_arr[bucket] + 1)
+
+        atomic(counter[0] = counter[0] + 1)
+        aggregated = aggregated + 1
     }
     return aggregated
 }

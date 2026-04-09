@@ -1,5 +1,6 @@
 #include "library/array.h"
 #include "data/array.h"
+#include "data/shared_cell.h"
 #include "data/table.h"
 #include "data/value.h"
 #include "state/mobius_state.h"
@@ -13,13 +14,39 @@
 // HELPER: extract ArrayValue* from self (first argument via : syntax)
 // =============================================================================
 
-static ArrayValue* extract_array_self(MobiusState* state, const char* err_msg) {
+struct ArraySelfAccess {
+    Value self_value;
+    ArrayValue* array = nullptr;
+    SharedCell* cell = nullptr;
+    std::unique_lock<std::recursive_mutex> lock;
+};
+
+static ArrayValue* extract_array_self(MobiusState* state, const char* err_msg, ArraySelfAccess* access = nullptr) {
     const Value& self = state->npeek_self();
-    if (self.type != VAL_ARRAY || !self.as.array) {
-        state->error(err_msg);
-        return nullptr;
+    if (access) access->self_value = self;
+    if (self.type == VAL_ARRAY && self.as.array) {
+        if (access) access->array = self.as.array;
+        return self.as.array;
     }
-    return self.as.array;
+    if (self.type == VAL_SHARED_CELL && self.as.shared_cell) {
+        if (access) {
+            access->cell = self.as.shared_cell;
+            access->lock = std::unique_lock<std::recursive_mutex>(self.as.shared_cell->mutex());
+            Value& inner = self.as.shared_cell->unsafeValue();
+            if (inner.type == VAL_ARRAY && inner.as.array) {
+                access->array = inner.as.array;
+                return inner.as.array;
+            }
+        } else {
+            std::lock_guard<std::recursive_mutex> lock(self.as.shared_cell->mutex());
+            Value& inner = self.as.shared_cell->unsafeValue();
+            if (inner.type == VAL_ARRAY && inner.as.array) {
+                return inner.as.array;
+            }
+        }
+    }
+    state->error(err_msg);
+    return nullptr;
 }
 
 // =============================================================================
@@ -68,12 +95,16 @@ int lib_array_create(MobiusState* state, int arg_count) {
 int array_method_push(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:push expects 1 argument (value)");
 
-    ArrayValue* arr = extract_array_self(state, "arr:push: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:push: self is not an array", &access);
     if (!arr) return -1;
 
     Value val = state->npop();
     state->npop();
 
+    if (arr->hasActiveSlices()) {
+        return state->error("cannot resize array while slices are alive");
+    }
     arr->push(val);
     return 0;
 }
@@ -81,11 +112,15 @@ int array_method_push(MobiusState* state, int arg_count) {
 int array_method_pop(MobiusState* state, int arg_count) {
     if (arg_count != 1) return state->error("arr:pop expects 0 arguments");
 
-    ArrayValue* arr = extract_array_self(state, "arr:pop: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:pop: self is not an array", &access);
     if (!arr) return -1;
 
     state->npop();
 
+    if (arr->hasActiveSlices()) {
+        return state->error("cannot resize array while slices are alive");
+    }
     if (arr->length() == 0) {
         state->npush(make_nil_value());
     } else {
@@ -97,7 +132,8 @@ int array_method_pop(MobiusState* state, int arg_count) {
 int array_method_get(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:get expects 1 argument (index)");
 
-    ArrayValue* arr = extract_array_self(state, "arr:get: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:get: self is not an array", &access);
     if (!arr) return -1;
 
     Value index_val = state->npop();
@@ -119,7 +155,8 @@ int array_method_get(MobiusState* state, int arg_count) {
 int array_method_set(MobiusState* state, int arg_count) {
     if (arg_count != 3) return state->error("arr:set expects 2 arguments (index, value)");
 
-    ArrayValue* arr = extract_array_self(state, "arr:set: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:set: self is not an array", &access);
     if (!arr) return -1;
 
     Value value = state->npop();
@@ -142,7 +179,8 @@ int array_method_set(MobiusState* state, int arg_count) {
 int array_method_length(MobiusState* state, int arg_count) {
     if (arg_count != 1) return state->error("arr:length expects 0 arguments");
 
-    ArrayValue* arr = extract_array_self(state, "arr:length: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:length: self is not an array", &access);
     if (!arr) return -1;
 
     state->npop();
@@ -154,7 +192,8 @@ int array_method_length(MobiusState* state, int arg_count) {
 int array_method_slice(MobiusState* state, int arg_count) {
     if (arg_count != 3) return state->error("arr:slice expects 2 arguments (start, end)");
 
-    ArrayValue* arr = extract_array_self(state, "arr:slice: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:slice: self is not an array", &access);
     if (!arr) return -1;
 
     Value end_val = state->npop();
@@ -188,7 +227,8 @@ int array_method_slice(MobiusState* state, int arg_count) {
 int array_method_concat(MobiusState* state, int arg_count) {
     if (arg_count < 2) return state->error("arr:concat expects at least 1 argument");
 
-    ArrayValue* self_arr = extract_array_self(state, "arr:concat: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* self_arr = extract_array_self(state, "arr:concat: self is not an array", &access);
     if (!self_arr) return -1;
 
     int other_count = arg_count - 1;
@@ -226,12 +266,12 @@ int array_method_concat(MobiusState* state, int arg_count) {
 int array_method_reverse(MobiusState* state, int arg_count) {
     if (arg_count != 1) return state->error("arr:reverse expects 0 arguments");
 
-    const Value& self = state->npeek_self();
-    if (self.type != VAL_ARRAY || !self.as.array) {
-        return state->error("arr:reverse: self is not an array");
-    }
-    Value self_val = self;
-    self_val.as.array->reverse();
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:reverse: self is not an array", &access);
+    if (!arr) return -1;
+
+    Value self_val = state->npeek_self();
+    arr->reverse();
 
     state->npop();
     state->npush(self_val);
@@ -241,7 +281,8 @@ int array_method_reverse(MobiusState* state, int arg_count) {
 int array_method_find(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:find expects 1 argument (value)");
 
-    ArrayValue* arr = extract_array_self(state, "arr:find: self is not an array");
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:find: self is not an array", &access);
     if (!arr) return -1;
 
     Value search_val = state->npop();
@@ -273,12 +314,10 @@ int array_method_sort(MobiusState* state, int arg_count) {
     if (arg_count < 1 || arg_count > 2)
         return state->error("arr:sort expects 0 or 1 arguments ([comparator])");
 
-    const Value& self = state->npeek_self();
-    if (self.type != VAL_ARRAY || !self.as.array) {
-        return state->error("arr:sort: self is not an array");
-    }
-    Value self_val = self;
-    ArrayValue* arr = self_val.as.array;
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:sort: self is not an array", &access);
+    if (!arr) return -1;
+    Value self_val = state->npeek_self();
     size_t len = arr->length();
 
     Value comp_val;
@@ -316,12 +355,9 @@ int array_method_sort(MobiusState* state, int arg_count) {
 int array_method_map(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:map expects 1 argument (function)");
 
-    const Value& self_ref = state->npeek_self();
-    if (self_ref.type != VAL_ARRAY || !self_ref.as.array) {
-        return state->error("arr:map: self is not an array");
-    }
-    Value self_val = self_ref;
-    ArrayValue* arr = self_val.as.array;
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:map: self is not an array", &access);
+    if (!arr) return -1;
 
     Value func_val = state->npop();
     state->npop();
@@ -350,12 +386,9 @@ int array_method_map(MobiusState* state, int arg_count) {
 int array_method_filter(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:filter expects 1 argument (function)");
 
-    const Value& self_ref = state->npeek_self();
-    if (self_ref.type != VAL_ARRAY || !self_ref.as.array) {
-        return state->error("arr:filter: self is not an array");
-    }
-    Value self_val = self_ref;
-    ArrayValue* arr = self_val.as.array;
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:filter: self is not an array", &access);
+    if (!arr) return -1;
 
     Value func_val = state->npop();
     state->npop();
@@ -387,12 +420,9 @@ int array_method_filter(MobiusState* state, int arg_count) {
 int array_method_reduce(MobiusState* state, int arg_count) {
     if (arg_count != 3) return state->error("arr:reduce expects 2 arguments (function, initial)");
 
-    const Value& self_ref = state->npeek_self();
-    if (self_ref.type != VAL_ARRAY || !self_ref.as.array) {
-        return state->error("arr:reduce: self is not an array");
-    }
-    Value self_val = self_ref;
-    ArrayValue* arr = self_val.as.array;
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:reduce: self is not an array", &access);
+    if (!arr) return -1;
 
     Value initial = state->npop();
     Value func_val = state->npop();
@@ -422,12 +452,9 @@ int array_method_reduce(MobiusState* state, int arg_count) {
 int array_method_foreach(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:foreach expects 1 argument (function)");
 
-    const Value& self_ref = state->npeek_self();
-    if (self_ref.type != VAL_ARRAY || !self_ref.as.array) {
-        return state->error("arr:foreach: self is not an array");
-    }
-    Value self_val = self_ref;
-    ArrayValue* arr = self_val.as.array;
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:foreach: self is not an array", &access);
+    if (!arr) return -1;
 
     Value func_val = state->npop();
     state->npop();
@@ -453,12 +480,9 @@ int array_method_foreach(MobiusState* state, int arg_count) {
 int array_method_any(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:any expects 1 argument (function)");
 
-    const Value& self_ref = state->npeek_self();
-    if (self_ref.type != VAL_ARRAY || !self_ref.as.array) {
-        return state->error("arr:any: self is not an array");
-    }
-    Value self_val = self_ref;
-    ArrayValue* arr = self_val.as.array;
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:any: self is not an array", &access);
+    if (!arr) return -1;
 
     Value func_val = state->npop();
     state->npop();
@@ -488,12 +512,9 @@ int array_method_any(MobiusState* state, int arg_count) {
 int array_method_all(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("arr:all expects 1 argument (function)");
 
-    const Value& self_ref = state->npeek_self();
-    if (self_ref.type != VAL_ARRAY || !self_ref.as.array) {
-        return state->error("arr:all: self is not an array");
-    }
-    Value self_val = self_ref;
-    ArrayValue* arr = self_val.as.array;
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:all: self is not an array", &access);
+    if (!arr) return -1;
 
     Value func_val = state->npop();
     state->npop();

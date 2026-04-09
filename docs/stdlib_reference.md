@@ -582,7 +582,8 @@ ch:send(42)
 
 ### ch:recv() -> value
 
-Receives a value from the channel. Blocks if the channel is empty until a value is available. Returns `nil` if the channel is closed and empty.
+Receives a value from the channel. Blocks if the channel is empty until a value
+is available. Raises `ChannelClosedError` if the channel is closed and empty.
 
 ```mobius
 var msg = ch:recv()
@@ -616,22 +617,24 @@ ch:close()
 
 ### shared var
 
-Declares a variable whose container (array or table) is safe for concurrent
-access by multiple fibers. All reads and writes are mutex-protected. The
-`shared` keyword must prefix `var`.
+Declares a variable that is safe for concurrent access by multiple fibers. The
+binding is wrapped in a synchronized shared cell, and the `shared` keyword must
+prefix `var`.
 
 ```mobius
+shared var total = 0
 shared var counter = [0]
 shared var config = { debug: false }
 ```
 
-`shared` propagates deeply — nested arrays and tables inside a shared
-container are also marked shared.
+Reads and writes through the shared variable are synchronized. This applies to
+scalars, arrays, and tables. Sharing is attached to the binding, not
+recursively to every nested mutable value reachable through it.
 
 ### atomic(expression)
 
 Executes a compound read-modify-write expression atomically on a shared
-container. The container's mutex is held across the entire expression,
+value. The shared cell lock is held across the entire expression,
 preventing lost updates from concurrent fibers.
 
 ```mobius
@@ -640,6 +643,9 @@ atomic(counter[0] = counter[0] + 1)
 
 shared var stats = { hits: 0 }
 atomic(stats["hits"] = stats["hits"] + 1)
+
+shared var total = 0
+atomic(total = total + 1)
 ```
 
 Without `atomic()`, `counter[0] = counter[0] + 1` compiles to separate read
@@ -647,60 +653,67 @@ and write instructions — two fibers can read the same value, both increment,
 and one update is lost. `atomic()` prevents this.
 
 **Rules:**
-- The expression must operate on a shared array or table element.
+- Shared scalar `++`, `--`, `+=`, and `-=` are already atomic.
+- The expression inside `atomic()` must operate on a shared variable or a
+  shared array/table element.
 - Using `atomic()` on a non-shared variable is a runtime error.
-- Nested `atomic()` calls on the same container do not deadlock (recursive
+- Nested `atomic()` calls on the same target do not deadlock (recursive
   mutex).
 
-### fiber_cancel(future)
+### fiber.cancel(future)
 
 Requests cancellation of the fiber associated with the given future. The fiber will throw a `CancellationError` at its next cancellation check point (loop back-edges, yield points).
 
 ```mobius
 var f = spawn long_task()
-fiber_cancel(f)
+fiber.cancel(f)
 ```
 
-### fiber_all(futures)
+### fiber.all(futures)
 
 Waits for all futures in the given array to resolve. Returns an array of results in the same order. If any future rejects with an error, the error is propagated.
 
 ```mobius
-var results = fiber_all([spawn a(), spawn b(), spawn c()])
+var results = fiber.all([spawn a(), spawn b(), spawn c()])
 // results == [a_result, b_result, c_result]
 ```
 
-### fiber_any(futures)
+### fiber.any(futures)
 
 Waits for the first future in the array to resolve and returns its result. If a future errors, it is skipped (unless all futures error).
 
 ```mobius
-var fastest = fiber_any([spawn route_a(), spawn route_b()])
+var fastest = fiber.any([spawn route_a(), spawn route_b()])
 ```
 
-### fiber_sleep(milliseconds)
+### fiber.sleep(milliseconds)
 
 Suspends the current fiber for at least the given number of milliseconds. Other fibers can execute during this time.
 
 ```mobius
-fiber_sleep(100)  // sleep for ~100ms
+fiber.sleep(100)  // sleep for ~100ms
 ```
 
-### fiber_slice(array, start, length)
+### fiber.slice(array, start, length)
 
 Creates a lightweight array slice (a view into the parent array). Reads and writes through the slice pass through to the underlying array. Useful for dividing work among fibers.
 
 ```mobius
 shared var data = [1, 2, 3, 4, 5, 6]
-var first_half = fiber_slice(data, 0, 3)
-var second_half = fiber_slice(data, 3, 3)
+var first_half = fiber.slice(data, 0, 3)
+var second_half = fiber.slice(data, 3, 3)
 print(first_half[0])  // 1
 first_half[0] = 99
 print(data[0])        // 99 (write-through)
 ```
 
+Slices are always views, even when the source array is not shared. While any
+slice is alive, structural mutations that resize the parent array fail at
+runtime. If the parent array is shared, slice access synchronizes through that
+shared parent.
+
 **Parameters:**
-- `array` — The source array (should be `shared` for concurrent access).
+- `array` — The source array.
 - `start` — Zero-based starting index.
 - `length` — Number of elements in the slice.
 

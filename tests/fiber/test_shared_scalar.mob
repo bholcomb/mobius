@@ -1,0 +1,62 @@
+print("=== Shared Scalar Tests ===")
+
+import "fiber"
+
+var NUM_FIBERS = 8
+var INCREMENTS = 250
+var EXPECTED = NUM_FIBERS * INCREMENTS
+
+shared var counter = 0
+
+func add_many(counter, count) {
+    for (var i = 0; i < count; i += 1) {
+        counter += 1
+    }
+    return count
+}
+
+var futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    futures:push(spawn add_many(counter, INCREMENTS))
+}
+fiber.all(futures)
+
+if (counter != EXPECTED) {
+    print("FAIL: shared scalar += expected", EXPECTED, "got", counter)
+    exit(1)
+}
+
+shared var post = 0
+
+func add_post(counter, count) {
+    for (var i = 0; i < count; i += 1) {
+        counter++
+    }
+    return count
+}
+
+var post_futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    post_futures:push(spawn add_post(post, INCREMENTS))
+}
+fiber.all(post_futures)
+
+if (post != EXPECTED) {
+    print("FAIL: shared scalar ++ expected", EXPECTED, "got", post)
+    exit(1)
+}
+
+shared var flag = false
+
+func flip(flag) {
+    flag = true
+    return flag
+}
+
+var done = await spawn flip(flag)
+if (!done || !flag) {
+    print("FAIL: shared scalar bool assignment")
+    exit(1)
+}
+
+print("=== Shared scalar tests passed! ===")

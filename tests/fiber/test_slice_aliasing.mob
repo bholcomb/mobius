@@ -1,0 +1,59 @@
+print("=== Slice Aliasing Tests ===")
+
+import "fiber"
+
+var arr = [0, 1, 2, 3]
+var slice = fiber.slice(arr, 1, 2)
+slice[0] = 99
+if (arr[1] != 99) {
+    print("FAIL: slice should write through to parent")
+    exit(1)
+}
+
+func fill_slice(s) {
+    s[0] = 7
+    s[1] = 8
+    return len(s)
+}
+
+var filled = await spawn fill_slice(slice)
+if (filled != 2) {
+    print("FAIL: slice length in spawned fiber")
+    exit(1)
+}
+if (arr[1] != 7 || arr[2] != 8) {
+    print("FAIL: non-shared slice should alias parent across spawn")
+    exit(1)
+}
+
+var caught = false
+try {
+    arr:push(5)
+} catch e {
+    caught = true
+}
+if (!caught) {
+    print("FAIL: structural mutation should fail while slice is alive")
+    exit(1)
+}
+
+shared var shared_arr = [10, 20, 30, 40]
+var shared_slice = fiber.slice(shared_arr, 1, 2)
+
+func write_shared(s) {
+    s[0] = 55
+    s[1] = 66
+    return len(s)
+}
+
+var shared_len = await spawn write_shared(shared_slice)
+if (shared_len != 2) {
+    print("FAIL: shared slice length in fiber")
+    exit(1)
+}
+if (shared_arr[1] != 55 || shared_arr[2] != 66) {
+    print("FAIL: shared slice should write through to shared parent")
+    exit(1)
+}
+
+print("=== Slice aliasing tests passed! ===")

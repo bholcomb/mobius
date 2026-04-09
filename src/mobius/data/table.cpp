@@ -79,6 +79,18 @@ size_t hash_value_raw(const Value& value) {
             hash = (size_t)(uintptr_t)value.as.enum_def;
             hash ^= (size_t)value.aux;
             break;
+        case VAL_FUTURE:
+            hash = (size_t)(uintptr_t)value.as.future;
+            break;
+        case VAL_ARRAY_SLICE:
+            hash = (size_t)(uintptr_t)value.as.array_slice;
+            break;
+        case VAL_CHANNEL:
+            hash = (size_t)(uintptr_t)value.as.channel;
+            break;
+        case VAL_SHARED_CELL:
+            hash = (size_t)(uintptr_t)value.as.shared_cell;
+            break;
     }
 
     return hash;

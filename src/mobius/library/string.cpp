@@ -2,6 +2,7 @@
 #include "data/value.h"
 #include "data/array.h"
 #include "data/array_slice.h"
+#include "data/shared_cell.h"
 #include "state/mobius_state.h"
 
 #include <stdio.h>
@@ -20,6 +21,10 @@ int lib_len(MobiusState* state, int arg_count) {
     
     Value arg = state->npeek(0);
     state->npop(); // Remove argument
+
+    if (arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+        arg = arg.as.shared_cell->load();
+    }
     
     if (arg.type == VAL_STRING && arg.as.string) {
         state->npush(make_int64_value((int64_t)arg.as.string->length));

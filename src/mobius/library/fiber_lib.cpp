@@ -3,6 +3,7 @@
 #include "data/future.h"
 #include "data/array.h"
 #include "data/array_slice.h"
+#include "data/shared_cell.h"
 #include "data/table.h"
 #include "data/value.h"
 #include "internal/string_intern.h"
@@ -170,22 +171,33 @@ int lib_fiber_slice(MobiusState* state, int arg_count) {
     state->npop();
     state->npop();
 
-    if (arr_val.type != VAL_ARRAY || !arr_val.as.array) {
-        return state->error("fiber.slice: first argument must be an array");
-    }
     if (start_val.type != VAL_INT64 || len_val.type != VAL_INT64) {
         return state->error("fiber.slice: start and length must be integers");
     }
 
     int64_t start = start_val.as.i64;
     int64_t length = len_val.as.i64;
-    ArrayValue* arr = arr_val.as.array;
+    ArrayValue* arr = nullptr;
+    SharedCell* owner_cell = nullptr;
+    if (arr_val.type == VAL_ARRAY && arr_val.as.array) {
+        arr = arr_val.as.array;
+    } else if (arr_val.type == VAL_SHARED_CELL && arr_val.as.shared_cell) {
+        owner_cell = arr_val.as.shared_cell;
+        std::lock_guard<std::recursive_mutex> lock(owner_cell->mutex());
+        Value& inner = owner_cell->unsafeValue();
+        if (inner.type != VAL_ARRAY || !inner.as.array) {
+            return state->error("fiber.slice: first argument must be an array");
+        }
+        arr = inner.as.array;
+    } else {
+        return state->error("fiber.slice: first argument must be an array");
+    }
 
     if (start < 0 || length < 0 || (size_t)(start + length) > arr->length()) {
         return state->error("fiber.slice: range out of bounds for array");
     }
 
-    ArraySlice* slice = new ArraySlice(arr, (size_t)start, (size_t)length);
+    ArraySlice* slice = new ArraySlice(arr, (size_t)start, (size_t)length, owner_cell);
     state->npush(make_array_slice_value(slice));
     return 1;
 }

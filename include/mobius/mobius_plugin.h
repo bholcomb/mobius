@@ -69,7 +69,8 @@ typedef enum {
     MOBIUS_VAL_ENUM,
     MOBIUS_VAL_FUTURE,
     MOBIUS_VAL_ARRAY_SLICE,
-    MOBIUS_VAL_CHANNEL
+    MOBIUS_VAL_CHANNEL,
+    MOBIUS_VAL_SHARED_CELL
 } MobiusValueType;
 
 /* ====================================================================== */

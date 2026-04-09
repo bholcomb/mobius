@@ -2,6 +2,7 @@
 #include "state/stack.h"
 #include "state/mobius_state.h"
 #include "vm/vm.h"
+#include "data/shared_cell.h"
 #include "data/value.h"
 #include "data/table.h"
 #include "data/array.h"
@@ -159,6 +160,10 @@ bool mobius_stack_isFunction(MobiusState* state, int idx) {
 // ============================================================================
 
 static bool value_to_int64(Value* val, int64_t* out) {
+    if (val->type == VAL_SHARED_CELL && val->as.shared_cell) {
+        Value inner = val->as.shared_cell->load();
+        return value_to_int64(&inner, out);
+    }
     switch (val->type) {
         case VAL_INT64:
             *out = val->as.i64;
@@ -185,6 +190,10 @@ static bool value_to_int64(Value* val, int64_t* out) {
 }
 
 static bool value_to_double(Value* val, double* out) {
+    if (val->type == VAL_SHARED_CELL && val->as.shared_cell) {
+        Value inner = val->as.shared_cell->load();
+        return value_to_double(&inner, out);
+    }
     switch (val->type) {
         case VAL_INT64:
             *out = (double)val->as.i64;
@@ -208,6 +217,10 @@ static bool value_to_double(Value* val, double* out) {
 }
 
 static bool value_to_bool(Value* val) {
+    if (val->type == VAL_SHARED_CELL && val->as.shared_cell) {
+        Value inner = val->as.shared_cell->load();
+        return value_to_bool(&inner);
+    }
     switch (val->type) {
         case VAL_NIL:    return false;
         case VAL_BOOL:   return val->as.boolean;
@@ -224,6 +237,11 @@ static bool value_to_bool(Value* val) {
 
 static const char* stack_value_to_string(Value* val) {
     static thread_local char buffer[256];
+
+    if (val->type == VAL_SHARED_CELL && val->as.shared_cell) {
+        Value inner = val->as.shared_cell->load();
+        return stack_value_to_string(&inner);
+    }
 
     switch (val->type) {
         case VAL_STRING:

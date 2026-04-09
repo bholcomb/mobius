@@ -3,6 +3,7 @@
 #include "data/enum.h"
 #include "data/future.h"
 #include "data/array_slice.h"
+#include "data/shared_cell.h"
 #include "data/table.h"
 #include "data/array.h"
 #include "data/function.h"
@@ -13,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unordered_map>
 
 // ============================================================================
 // Value refcount slow path — release (called only for heap-allocated types)
@@ -71,6 +73,11 @@ void Value::releaseRefSlow() {
                 ((RefCounted*)as.channel)->release();
             }
             break;
+        case VAL_SHARED_CELL:
+            if (as.shared_cell) {
+                ((RefCounted*)as.shared_cell)->release();
+            }
+            break;
         default:
             break;
     }
@@ -113,6 +120,13 @@ Value make_table_value(Table* table) {
     Value value;
     value.type = VAL_TABLE;
     value.as.table = table;
+    return value;
+}
+
+Value make_shared_cell_value(SharedCell* shared_cell) {
+    Value value;
+    value.type = VAL_SHARED_CELL;
+    value.as.shared_cell = shared_cell;
     return value;
 }
 
@@ -164,8 +178,74 @@ bool Value::operator==(const Value& other) const {
                    as.userdata->type_name == other.as.userdata->type_name;
         case VAL_ENUM:
             return as.enum_def == other.as.enum_def && aux == other.aux;
+        case VAL_FUTURE:
+            return as.future == other.as.future;
+        case VAL_ARRAY_SLICE:
+            return as.array_slice == other.as.array_slice;
+        case VAL_CHANNEL:
+            return as.channel == other.as.channel;
+        case VAL_SHARED_CELL:
+            return as.shared_cell == other.as.shared_cell;
         default: return false;
     }
+}
+
+namespace {
+Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, Value>& memo) {
+    switch (value.type) {
+        case VAL_ARRAY: {
+            if (!value.as.array) return make_nil_value();
+            auto it = memo.find(value.as.array);
+            if (it != memo.end()) return it->second;
+
+            ArrayValue* clone = new ArrayValue(value.as.array->length());
+            Value copy = make_array_value(clone);
+            copy.flags = (int8_t)(value.flags & ~VAL_FLAG_SHARED);
+            copy.aux = value.aux;
+            memo.emplace(value.as.array, copy);
+
+            for (size_t i = 0; i < value.as.array->length(); i++) {
+                clone->push(deep_copy_value_impl((*value.as.array)[i], memo));
+            }
+            return copy;
+        }
+        case VAL_TABLE: {
+            if (!value.as.table) return make_nil_value();
+            auto it = memo.find(value.as.table);
+            if (it != memo.end()) return it->second;
+
+            Table* clone = new Table(value.as.table->getState(), value.as.table->entries().size());
+            Value copy = make_table_value(clone);
+            copy.flags = (int8_t)(value.flags & ~VAL_FLAG_SHARED);
+            copy.aux = value.aux;
+            memo.emplace(value.as.table, copy);
+
+            if (Table* mt = value.as.table->getMetatable()) {
+                Value mt_copy = deep_copy_value_impl(make_table_value(mt), memo);
+                if (mt_copy.type == VAL_TABLE && mt_copy.as.table) {
+                    clone->setMetatable(mt_copy.as.table);
+                }
+            }
+
+            for (const auto& entry : value.as.table->entries()) {
+                if (!entry.occupied()) continue;
+                clone->set(deep_copy_value_impl(entry.key, memo),
+                           deep_copy_value_impl(entry.value, memo));
+            }
+            return copy;
+        }
+        default: {
+            Value copy = value;
+            copy.flags = (int8_t)(value.flags & ~VAL_FLAG_SHARED);
+            return copy;
+        }
+    }
+}
+} // namespace
+
+Value deep_copy_value_for_spawn(const Value& value) {
+    std::unordered_map<const void*, Value> memo;
+    return deep_copy_value_impl(value, memo);
 }
 
 
@@ -256,6 +336,13 @@ void print_value(const Value& value) {
         case VAL_CHANNEL:
             printf("<channel %p>", (void*)value.as.channel);
             break;
+        case VAL_SHARED_CELL:
+            if (value.as.shared_cell) {
+                print_value(value.as.shared_cell->load());
+            } else {
+                printf("<shared (null)>");
+            }
+            break;
         default:
             printf("unknown_value");
             break;
@@ -327,6 +414,11 @@ char* value_to_string(const Value& value) {
             result = (char*)malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
+        case VAL_ARRAY:
+            snprintf(buffer, sizeof(buffer), "<array>");
+            result = (char*)malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
         case VAL_USERDATA:
             if (value.as.userdata && value.as.userdata->ptr) {
                 snprintf(buffer, sizeof(buffer), "<%s userdata %p>",
@@ -349,6 +441,29 @@ char* value_to_string(const Value& value) {
             if (result) strcpy(result, buffer);
             break;
         }
+        case VAL_FUTURE:
+            snprintf(buffer, sizeof(buffer), "<future %p>", (void*)value.as.future);
+            result = (char*)malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
+        case VAL_ARRAY_SLICE:
+            snprintf(buffer, sizeof(buffer), "<slice len=%zu>",
+                     value.as.array_slice ? value.as.array_slice->length() : 0);
+            result = (char*)malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
+        case VAL_CHANNEL:
+            snprintf(buffer, sizeof(buffer), "<channel %p>", (void*)value.as.channel);
+            result = (char*)malloc(strlen(buffer) + 1);
+            if (result) strcpy(result, buffer);
+            break;
+        case VAL_SHARED_CELL:
+            if (value.as.shared_cell) {
+                return value_to_string(value.as.shared_cell->load());
+            }
+            result = (char*)malloc(15);
+            if (result) strcpy(result, "<shared null>");
+            break;
         default:
             result = (char*)malloc(8);
             if (result) strcpy(result, "unknown");
@@ -376,6 +491,7 @@ const char* value_type_name(ValueType type) {
         case VAL_FUTURE: return "future";
         case VAL_ARRAY_SLICE: return "array_slice";
         case VAL_CHANNEL: return "channel";
+        case VAL_SHARED_CELL: return "shared";
         default: return "unknown";
     }
 }

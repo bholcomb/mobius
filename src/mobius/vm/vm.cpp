@@ -3,6 +3,7 @@
 #include "data/table.h"
 #include "data/array.h"
 #include "data/array_slice.h"
+#include "data/shared_cell.h"
 #include "data/enum.h"
 #include "data/function.h"
 #include "data/future.h"
@@ -484,6 +485,21 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
     : f.regs[DECODE_C(inst)])
 #define KBx(inst) f.proto->constants[DECODE_Bx(inst)]
 
+static MOBIUS_FORCEINLINE Value shared_unwrap(const Value& value) {
+    if (value.type == VAL_SHARED_CELL && value.as.shared_cell) {
+        return value.as.shared_cell->load();
+    }
+    return value;
+}
+
+static MOBIUS_FORCEINLINE bool shared_store(Value& dst, const Value& src) {
+    if (dst.type == VAL_SHARED_CELL && dst.as.shared_cell) {
+        dst.as.shared_cell->store(shared_unwrap(src));
+        return true;
+    }
+    return false;
+}
+
 // ---- Data movement ----
 
 MOBIUS_FORCEINLINE static int vm_op_move(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -533,6 +549,52 @@ MOBIUS_FORCEINLINE static int vm_op_loadint(MobiusVM* vm, VMFrame& f, uint32_t i
     return 0;
 }
 
+MOBIUS_FORCEINLINE static int vm_op_shared_load(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    RA(inst) = shared_unwrap(RB(inst));
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_shared_store(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    Value& dst = RA(inst);
+    const Value& src = RB(inst);
+    if (!shared_store(dst, src)) {
+        dst = src;
+    }
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_lock_shared(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    Value& val = RA(inst);
+    if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
+        val.as.shared_cell->mutex().lock();
+    } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice && val.as.array_slice->ownerCell()) {
+        val.as.array_slice->ownerCell()->mutex().lock();
+    } else if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
+        val.as.array->mutex().lock();
+    } else if (val.type == VAL_TABLE && val.as.table && val.as.table->isShared()) {
+        val.as.table->mutex().lock();
+    }
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_unlock_shared(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
+    Value& val = RA(inst);
+    if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
+        val.as.shared_cell->mutex().unlock();
+    } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice && val.as.array_slice->ownerCell()) {
+        val.as.array_slice->ownerCell()->mutex().unlock();
+    } else if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
+        val.as.array->mutex().unlock();
+    } else if (val.type == VAL_TABLE && val.as.table && val.as.table->isShared()) {
+        val.as.table->mutex().unlock();
+    }
+    return 0;
+}
+
 // ---- Globals ----
 
 MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -553,7 +615,9 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
         VM_ERROR(vm, f, "Cannot assign to read-only variable '%s'", vm->state_->globalSlotName(slot));
         return -1;
     }
-    gv = RA(inst);
+    if (!shared_store(gv, RA(inst))) {
+        gv = RA(inst);
+    }
     gv.flags |= VAL_FLAG_DEFINED;
     if (gv.type == VAL_ENUM && gv.aux == -1) {
         gv.flags |= VAL_FLAG_READONLY;
@@ -578,7 +642,10 @@ MOBIUS_FORCEINLINE static int vm_op_setupval(MobiusVM* vm, VMFrame& f, uint32_t 
     (void)vm;
     int b = DECODE_B(inst);
     if (b < f.ci->upvalue_count && f.ci->upvalues[b]) {
-        *f.ci->upvalues[b]->location = RA(inst);
+        Value& dst = *f.ci->upvalues[b]->location;
+        if (!shared_store(dst, RA(inst))) {
+            dst = RA(inst);
+        }
     }
     return 0;
 }
@@ -602,7 +669,34 @@ MOBIUS_FORCEINLINE static int vm_op_newarray(MobiusVM* vm, VMFrame& f, uint32_t 
 MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& obj = RB(inst);
     const Value& key = RKC(inst);
-    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+    if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+        const Value& inner = obj.as.shared_cell->unsafeValue();
+        if (inner.type == VAL_ARRAY && inner.as.array) {
+            ArrayValue* arr = inner.as.array;
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
+                RA(inst) = arr->unsafeGet((size_t)idx);
+            } else {
+                RA(inst) = Value();
+            }
+        } else if (inner.type == VAL_TABLE && inner.as.table) {
+            if (MOBIUS_LIKELY(key.type == VAL_STRING))
+                RA(inst) = inner.as.table->getByString(key.as.string);
+            else
+                RA(inst) = inner.as.table->get(key);
+        } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.array_slice->length())) {
+                RA(inst) = inner.as.array_slice->get((size_t)idx);
+            } else {
+                RA(inst) = Value();
+            }
+        } else {
+            VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
+            return -1;
+        }
+    } else if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
         ArrayValue* arr = obj.as.array;
         int64_t idx = MobiusVM::vm_extract_int64(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
@@ -647,10 +741,47 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
     Value& obj = RA(inst);
     const Value& key = RKB(inst);
     const Value& val = RKC(inst);
-    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+    if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+        Value& inner = obj.as.shared_cell->unsafeValue();
+        if (inner.type == VAL_ARRAY && inner.as.array) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (MOBIUS_LIKELY(idx >= 0)) {
+                ArrayValue* arr = inner.as.array;
+                if ((int64_t)arr->length() <= idx && arr->hasActiveSlices()) {
+                    VM_ERROR(vm, f, "cannot resize array while slices are alive");
+                    return -1;
+                }
+                while ((int64_t)arr->length() <= idx)
+                    arr->push(Value());
+                arr->set((size_t)idx, val);
+            }
+        } else if (inner.type == VAL_TABLE && inner.as.table) {
+            if (MOBIUS_LIKELY(key.type == VAL_STRING))
+                inner.as.table->setByString(key.as.string, val);
+            else
+                inner.as.table->set(key, val);
+        } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (idx >= 0 && idx < (int64_t)inner.as.array_slice->length()) {
+                inner.as.array_slice->set((size_t)idx, val);
+            } else {
+                VM_ERROR(vm, f, "Array slice index %ld out of range [0, %zu)",
+                                 (long)idx, inner.as.array_slice->length());
+                return -1;
+            }
+        } else {
+            VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
+            return -1;
+        }
+    } else if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
         int64_t idx = MobiusVM::vm_extract_int64(key);
         if (MOBIUS_LIKELY(idx >= 0)) {
             ArrayValue* arr = obj.as.array;
+            if ((int64_t)arr->length() <= idx && arr->hasActiveSlices()) {
+                VM_ERROR(vm, f, "cannot resize array while slices are alive");
+                return -1;
+            }
             while ((int64_t)arr->length() <= idx)
                 arr->push(Value());
             arr->set((size_t)idx, val);
@@ -684,6 +815,32 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
 
     f.regs[a + 1] = obj;
 
+    if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+        const Value& inner = obj.as.shared_cell->unsafeValue();
+        Table* mt = vm->state_->typeMetatable(inner.type);
+        if (mt && key.type == VAL_STRING) {
+            const Value& method = mt->getByString(key.as.string);
+            if (method.type != VAL_NIL) {
+                f.regs[a] = method;
+                return 0;
+            }
+        }
+        if (inner.type == VAL_TABLE && inner.as.table) {
+            Value method;
+            if (MOBIUS_LIKELY(key.type == VAL_STRING))
+                method = inner.as.table->getByString(key.as.string);
+            else
+                method = inner.as.table->get(key);
+            if (method.type != VAL_NIL) {
+                f.regs[a] = method;
+                return 0;
+            }
+        }
+        VM_ERROR(vm, f, "Attempt to call method on a shared %s value", value_type_name(inner.type));
+        return -1;
+    }
+
     if (obj.type == VAL_TABLE && obj.as.table) {
         Value method;
         if (MOBIUS_LIKELY(key.type == VAL_STRING))
@@ -715,7 +872,23 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
 MOBIUS_FORCEINLINE static int vm_op_array_push(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& arr_val = RA(inst);
     const Value& val = RB(inst);
-    if (MOBIUS_LIKELY(arr_val.type == VAL_ARRAY && arr_val.as.array)) {
+    if (arr_val.type == VAL_SHARED_CELL && arr_val.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(arr_val.as.shared_cell->mutex());
+        Value& inner = arr_val.as.shared_cell->unsafeValue();
+        if (inner.type != VAL_ARRAY || !inner.as.array) {
+            VM_ERROR(vm, f, "OP_ARRAY_PUSH applied to non-array (%s)", value_type_name(inner.type));
+            return -1;
+        }
+        if (inner.as.array->hasActiveSlices()) {
+            VM_ERROR(vm, f, "cannot resize array while slices are alive");
+            return -1;
+        }
+        inner.as.array->push(val);
+    } else if (MOBIUS_LIKELY(arr_val.type == VAL_ARRAY && arr_val.as.array)) {
+        if (arr_val.as.array->hasActiveSlices()) {
+            VM_ERROR(vm, f, "cannot resize array while slices are alive");
+            return -1;
+        }
         arr_val.as.array->push(val);
     } else {
         VM_ERROR(vm, f, "OP_ARRAY_PUSH applied to non-array (%s)", value_type_name(arr_val.type));
@@ -734,8 +907,8 @@ MOBIUS_FORCEINLINE static int vm_arith_generic(
         IntOp int_op, UIntOp uint_op, FloatOp float_op,
         MobiusString* (Metamethods::*mm)() const,
         const char* verb, bool supports_string_concat = false) {
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         Value& dst = RA(inst);
         dst.as.i64 = int_op(lhs.as.i64, rhs.as.i64);
@@ -815,8 +988,8 @@ MOBIUS_FORCEINLINE static int vm_op_mul(MobiusVM* vm, VMFrame& f, uint32_t inst)
 }
 
 MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
@@ -844,8 +1017,8 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
 }
 
 MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
@@ -895,7 +1068,7 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
 }
 
 MOBIUS_FORCEINLINE static int vm_op_unm(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& val = RB(inst);
+    Value val = shared_unwrap(RB(inst));
     if (val.type == VAL_INT64) {
         RA(inst) = make_int64_value(-MobiusVM::vm_extract_int64(val));
     } else if (val.type == VAL_FLOAT64) {
@@ -917,15 +1090,15 @@ MOBIUS_FORCEINLINE static int vm_op_unm(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 MOBIUS_FORCEINLINE static int vm_op_not(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    RA(inst) = make_bool_value(!is_truthy(RB(inst)));
+    RA(inst) = make_bool_value(!is_truthy(shared_unwrap(RB(inst))));
     return 0;
 }
 
 // ---- Bitwise ----
 
 MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t inst, char op) {
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     if ((lhs.type != VAL_INT64 && lhs.type != VAL_UINT64) ||
         (rhs.type != VAL_INT64 && rhs.type != VAL_UINT64)) {
         if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
@@ -984,7 +1157,7 @@ MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t i
 }
 
 MOBIUS_FORCEINLINE static int vm_op_bnot(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& val = RB(inst);
+    Value val = shared_unwrap(RB(inst));
     if (val.type == VAL_UINT64) {
         RA(inst) = make_uint64_value(~MobiusVM::vm_extract_uint64(val));
     } else if (val.type == VAL_INT64) {
@@ -1008,8 +1181,8 @@ MOBIUS_FORCEINLINE static int vm_op_bnot(MobiusVM* vm, VMFrame& f, uint32_t inst
 
 MOBIUS_FORCEINLINE static int vm_op_eq(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     bool eq;
     if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
         const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
@@ -1028,8 +1201,8 @@ MOBIUS_FORCEINLINE static int vm_op_eq(MobiusVM* vm, VMFrame& f, uint32_t inst) 
 
 MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
     bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
     bool lt;
@@ -1063,8 +1236,8 @@ MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) 
 
 MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
     bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
     bool le;
@@ -1100,7 +1273,7 @@ MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) 
 
 #define VM_CMP_IMM_HANDLER(name, cmp_op, err_msg) \
 MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
-    const Value& lhs = f.regs[DECODE_A(inst)]; \
+    Value lhs = shared_unwrap(f.regs[DECODE_A(inst)]); \
     int imm = DECODE_sBx(inst); \
     bool result; \
     if (lhs.type == VAL_INT64) result = lhs.as.i64 cmp_op imm; \
@@ -1120,7 +1293,7 @@ VM_CMP_IMM_HANDLER(vm_op_gei, >=, "GEI")
 
 MOBIUS_FORCEINLINE static int vm_op_eqi(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    const Value& lhs = f.regs[DECODE_A(inst)];
+    Value lhs = shared_unwrap(f.regs[DECODE_A(inst)]);
     int imm = DECODE_sBx(inst);
     bool result;
     if (lhs.type == VAL_INT64) result = lhs.as.i64 == imm;
@@ -1133,7 +1306,7 @@ MOBIUS_FORCEINLINE static int vm_op_eqi(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 MOBIUS_FORCEINLINE static int vm_op_nei(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    const Value& lhs = f.regs[DECODE_A(inst)];
+    Value lhs = shared_unwrap(f.regs[DECODE_A(inst)]);
     int imm = DECODE_sBx(inst);
     bool result;
     if (lhs.type == VAL_INT64) result = lhs.as.i64 != imm;
@@ -1148,7 +1321,7 @@ MOBIUS_FORCEINLINE static int vm_op_nei(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 MOBIUS_FORCEINLINE static int vm_op_test(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    bool truthy = is_truthy(RA(inst));
+    bool truthy = is_truthy(shared_unwrap(RA(inst)));
     int c = DECODE_C(inst);
     if (truthy != (c != 0)) f.ip++;
     return 0;
@@ -1156,14 +1329,14 @@ MOBIUS_FORCEINLINE static int vm_op_test(MobiusVM* vm, VMFrame& f, uint32_t inst
 
 MOBIUS_FORCEINLINE static int vm_op_testjmp(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    if (!is_truthy(f.regs[DECODE_A(inst)]))
+    if (!is_truthy(shared_unwrap(f.regs[DECODE_A(inst)])))
         f.ip += DECODE_sBx(inst);
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_testset(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    const Value& rb = RB(inst);
+    Value rb = shared_unwrap(RB(inst));
     bool truthy = is_truthy(rb);
     int c = DECODE_C(inst);
     if (truthy == (c != 0)) {
@@ -1240,7 +1413,7 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     uint8_t tag = DECODE_C(inst); \
     uint64_t raw = READ_INLINE64(f); \
     Value& dst = RA(inst); \
-    const Value& src = f.regs[DECODE_B(inst)]; \
+    Value src = shared_unwrap(f.regs[DECODE_B(inst)]); \
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) { \
         int64_t k; memcpy(&k, &raw, 8); \
         if (is_mod && MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, #name ": division/modulo by zero"); return -1; } \
@@ -1272,7 +1445,7 @@ MOBIUS_FORCEINLINE static int vm_op_divk(MobiusVM* vm, VMFrame& f, uint32_t inst
     uint8_t tag = DECODE_C(inst);
     uint64_t raw = READ_INLINE64(f);
     Value& dst = RA(inst);
-    const Value& src = f.regs[DECODE_B(inst)];
+    Value src = shared_unwrap(f.regs[DECODE_B(inst)]);
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
         if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
@@ -1294,7 +1467,7 @@ MOBIUS_FORCEINLINE static int vm_op_modk(MobiusVM* vm, VMFrame& f, uint32_t inst
     uint8_t tag = DECODE_C(inst);
     uint64_t raw = READ_INLINE64(f);
     Value& dst = RA(inst);
-    const Value& src = f.regs[DECODE_B(inst)];
+    Value src = shared_unwrap(f.regs[DECODE_B(inst)]);
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
         if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
@@ -1322,10 +1495,12 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     int imm = DECODE_sBx(inst); \
     if (check_zero && MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; } \
     Value& val = f.regs[a]; \
-    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 op_char##= imm; } \
-    else if (val.type == VAL_UINT64) val.as.u64 op_char##= (uint64_t)(int64_t)imm; \
-    else if (val.type == VAL_FLOAT64) val.as.double_val op_char##= imm; \
+    Value unwrapped = shared_unwrap(val); \
+    if (MOBIUS_LIKELY(unwrapped.type == VAL_INT64)) { unwrapped.as.i64 op_char##= imm; } \
+    else if (unwrapped.type == VAL_UINT64) unwrapped.as.u64 op_char##= (uint64_t)(int64_t)imm; \
+    else if (unwrapped.type == VAL_FLOAT64) unwrapped.as.double_val op_char##= imm; \
     else { VM_ERROR(vm, f, err_msg " requires numeric operand"); return -1; } \
+    val = unwrapped; \
     return 0; \
 }
 
@@ -1341,10 +1516,12 @@ MOBIUS_FORCEINLINE static int vm_op_modi(MobiusVM* vm, VMFrame& f, uint32_t inst
     int imm = DECODE_sBx(inst);
     if (MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
     Value& val = f.regs[a];
-    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 %= imm; }
-    else if (val.type == VAL_UINT64) val.as.u64 %= (uint64_t)(int64_t)imm;
-    else if (val.type == VAL_FLOAT64) val.as.double_val = fmod(val.as.double_val, (double)imm);
+    Value unwrapped = shared_unwrap(val);
+    if (MOBIUS_LIKELY(unwrapped.type == VAL_INT64)) { unwrapped.as.i64 %= imm; }
+    else if (unwrapped.type == VAL_UINT64) unwrapped.as.u64 %= (uint64_t)(int64_t)imm;
+    else if (unwrapped.type == VAL_FLOAT64) unwrapped.as.double_val = fmod(unwrapped.as.double_val, (double)imm);
     else { VM_ERROR(vm, f, "MODI requires numeric operand"); return -1; }
+    val = unwrapped;
     return 0;
 }
 
@@ -1359,19 +1536,51 @@ MOBIUS_FORCEINLINE static int vm_op_jmp(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // ---- Increment / Decrement ----
 
 MOBIUS_FORCEINLINE static int vm_op_inc(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& val = RB(inst);
-    if (val.type != VAL_INT64) { VM_ERROR(vm, f, "Increment requires an integer operand"); return -1; }
+    Value& dst = RA(inst);
+    const Value& src = RB(inst);
+    if (&dst == &src && dst.type == VAL_SHARED_CELL && dst.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(dst.as.shared_cell->mutex());
+        Value current = dst.as.shared_cell->unsafeValue();
+        if (current.type != VAL_INT64 && current.type != VAL_UINT64) {
+            VM_ERROR(vm, f, "Increment requires an integer operand");
+            return -1;
+        }
+        bool success;
+        Value next = increment_integer(current, true, &success);
+        if (!success) { VM_ERROR(vm, f, "Failed to increment value"); return -1; }
+        dst.as.shared_cell->unsafeValue() = next;
+        return 0;
+    }
+
+    Value val = shared_unwrap(src);
+    if (val.type != VAL_INT64 && val.type != VAL_UINT64) { VM_ERROR(vm, f, "Increment requires an integer operand"); return -1; }
     bool success;
-    RA(inst) = increment_integer(val, true, &success);
+    dst = increment_integer(val, true, &success);
     if (!success) { VM_ERROR(vm, f, "Failed to increment value"); return -1; }
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_dec(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& val = RB(inst);
-    if (val.type != VAL_INT64) { VM_ERROR(vm, f, "Decrement requires an integer operand"); return -1; }
+    Value& dst = RA(inst);
+    const Value& src = RB(inst);
+    if (&dst == &src && dst.type == VAL_SHARED_CELL && dst.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(dst.as.shared_cell->mutex());
+        Value current = dst.as.shared_cell->unsafeValue();
+        if (current.type != VAL_INT64 && current.type != VAL_UINT64) {
+            VM_ERROR(vm, f, "Decrement requires an integer operand");
+            return -1;
+        }
+        bool success;
+        Value next = increment_integer(current, false, &success);
+        if (!success) { VM_ERROR(vm, f, "Failed to decrement value"); return -1; }
+        dst.as.shared_cell->unsafeValue() = next;
+        return 0;
+    }
+
+    Value val = shared_unwrap(src);
+    if (val.type != VAL_INT64 && val.type != VAL_UINT64) { VM_ERROR(vm, f, "Decrement requires an integer operand"); return -1; }
     bool success;
-    RA(inst) = increment_integer(val, false, &success);
+    dst = increment_integer(val, false, &success);
     if (!success) { VM_ERROR(vm, f, "Failed to decrement value"); return -1; }
     return 0;
 }
@@ -1380,11 +1589,12 @@ MOBIUS_FORCEINLINE static int vm_op_dec(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 MOBIUS_FORCEINLINE static int vm_op_typecheck(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     NumberType target = (NumberType)DECODE_B(inst);
+    Value input = shared_unwrap(RA(inst));
     TypeCheckConfig tc = {
         vm->strict_mode_,
         vm->warn_on_conversion_
     };
-    TypeConversionResult conv = validate_and_convert_value(RA(inst), target, true, tc);
+    TypeConversionResult conv = validate_and_convert_value(input, target, true, tc);
     if (!conv.success) {
         VM_ERROR(vm, f, "%s", conv.error_message ? conv.error_message : "Type validation failed");
         free(conv.error_message);
@@ -1393,14 +1603,16 @@ MOBIUS_FORCEINLINE static int vm_op_typecheck(MobiusVM* vm, VMFrame& f, uint32_t
     if (conv.was_converted && vm->warn_on_conversion_) {
         fprintf(stderr, "Warning: Implicit type conversion at line %d\n", vm->currentLine());
     }
-    RA(inst) = conv.converted_value;
+    if (!shared_store(RA(inst), conv.converted_value)) {
+        RA(inst) = conv.converted_value;
+    }
     free(conv.error_message);
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_isnum(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    const Value& v = RB(inst);
+    Value v = shared_unwrap(RB(inst));
     RA(inst) = make_bool_value(v.type == VAL_INT64 || v.type == VAL_FLOAT64);
     return 0;
 }
@@ -1408,8 +1620,8 @@ MOBIUS_FORCEINLINE static int vm_op_isnum(MobiusVM* vm, VMFrame& f, uint32_t ins
 MOBIUS_FORCEINLINE static int vm_op_typecompat(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
     int a = DECODE_A(inst);
-    const Value& lhs = RKB(inst);
-    const Value& rhs = RKC(inst);
+    Value lhs = shared_unwrap(RKB(inst));
+    Value rhs = shared_unwrap(RKC(inst));
     bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_FLOAT64);
     bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_FLOAT64);
     bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
@@ -1510,17 +1722,32 @@ MOBIUS_FORCEINLINE static int vm_op_eq_ff(MobiusVM* vm, VMFrame& f, uint32_t ins
 // ---- Length ----
 
 MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    const Value& val = RB(inst);
-    if (val.type == VAL_ARRAY && val.as.array) {
-        RA(inst) = make_int64_value((int64_t)val.as.array->length());
-    } else if (val.type == VAL_TABLE && val.as.table) {
-        RA(inst) = make_int64_value((int64_t)val.as.table->size());
-    } else if (val.type == VAL_STRING && val.as.string) {
-        RA(inst) = make_int64_value((int64_t)val.as.string->length);
-    } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice) {
-        RA(inst) = make_int64_value((int64_t)val.as.array_slice->length());
+    const Value& raw = RB(inst);
+    if (raw.type == VAL_SHARED_CELL && raw.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(raw.as.shared_cell->mutex());
+        const Value& inner = raw.as.shared_cell->unsafeValue();
+        if (inner.type == VAL_ARRAY && inner.as.array) {
+            RA(inst) = make_int64_value((int64_t)inner.as.array->length());
+        } else if (inner.type == VAL_TABLE && inner.as.table) {
+            RA(inst) = make_int64_value((int64_t)inner.as.table->size());
+        } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
+            RA(inst) = make_int64_value((int64_t)inner.as.array_slice->length());
+        } else if (inner.type == VAL_STRING && inner.as.string) {
+            RA(inst) = make_int64_value((int64_t)inner.as.string->length);
+        } else {
+            VM_ERROR(vm, f, "Attempt to get length of a shared %s value", value_type_name(inner.type));
+            return -1;
+        }
+    } else if (raw.type == VAL_ARRAY && raw.as.array) {
+        RA(inst) = make_int64_value((int64_t)raw.as.array->length());
+    } else if (raw.type == VAL_TABLE && raw.as.table) {
+        RA(inst) = make_int64_value((int64_t)raw.as.table->size());
+    } else if (raw.type == VAL_STRING && raw.as.string) {
+        RA(inst) = make_int64_value((int64_t)raw.as.string->length);
+    } else if (raw.type == VAL_ARRAY_SLICE && raw.as.array_slice) {
+        RA(inst) = make_int64_value((int64_t)raw.as.array_slice->length());
     } else {
-        VM_ERROR(vm, f, "Attempt to get length of a %s value", value_type_name(val.type));
+        VM_ERROR(vm, f, "Attempt to get length of a %s value", value_type_name(raw.type));
         return -1;
     }
     return 0;
@@ -1581,7 +1808,46 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
         ? f.ci->proto->constants[RK_AS_CONSTANT(c2)]
         : f.regs[c2];
     const Value& obj = f.regs[a];
-    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+    if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+        const Value& inner = obj.as.shared_cell->unsafeValue();
+        if (inner.type == VAL_ARRAY && inner.as.array) {
+            ArrayValue* arr = inner.as.array;
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length()))
+                f.regs[a] = arr->unsafeGet((size_t)idx);
+            else
+                f.regs[a] = Value();
+        } else if (inner.type == VAL_TABLE && inner.as.table) {
+            if (MOBIUS_LIKELY(key.type == VAL_STRING))
+                f.regs[a] = inner.as.table->getByString(key.as.string);
+            else
+                f.regs[a] = inner.as.table->get(key);
+        } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
+            int64_t idx = MobiusVM::vm_extract_int64(key);
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.array_slice->length()))
+                f.regs[a] = inner.as.array_slice->get((size_t)idx);
+            else
+                f.regs[a] = Value();
+        } else if (inner.type == VAL_STRING && inner.as.string) {
+            if (key.type == VAL_INT64) {
+                int64_t idx = MobiusVM::vm_extract_int64(key);
+                MobiusString* s = inner.as.string;
+                if (idx >= 0 && idx < (int64_t)s->length) {
+                    char buf[2] = { s->data[idx], '\0' };
+                    f.regs[a] = make_string_value(vm->state_->stringPool()->intern(buf, 1));
+                } else {
+                    f.regs[a] = Value();
+                }
+            } else {
+                VM_ERROR(vm, f, "String index must be an integer");
+                return -1;
+            }
+        } else {
+            VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
+            return -1;
+        }
+    } else if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
         ArrayValue* arr = obj.as.array;
         int64_t idx = MobiusVM::vm_extract_int64(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length()))
@@ -2235,7 +2501,13 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
         std::vector<Value> args;
         args.reserve(nargs);
         for (int i = 0; i < nargs; i++) {
-            args.push_back(f.regs[b + 1 + i]);
+            const Value& arg = f.regs[b + 1 + i];
+            if ((arg.type == VAL_ARRAY && arg.as.array) ||
+                (arg.type == VAL_TABLE && arg.as.table)) {
+                args.push_back(deep_copy_value_for_spawn(arg));
+            } else {
+                args.push_back(arg);
+            }
         }
 
         Prototype* proto = mf->proto;
@@ -2356,21 +2628,23 @@ MOBIUS_FORCEINLINE static int vm_op_cancel_check(MobiusVM* vm, VMFrame& f, uint3
     return 0;
 }
 
-// OP_SHARE A -- mark R[A] as shared, deeply propagating to nested containers
+// OP_SHARE A -- wrap R[A] in a SharedCell
 MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t a = DECODE_A(inst);
     Value& val = f.regs[a];
 
-    if (val.type == VAL_ARRAY && val.as.array) {
-        val.as.array->markShared();
+    if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
         val.flags |= VAL_FLAG_SHARED;
-    } else if (val.type == VAL_TABLE && val.as.table) {
-        val.as.table->markShared();
-        val.flags |= VAL_FLAG_SHARED;
-    } else {
-        VM_ERROR(vm, f, "shared: expected an array or table, got %s", value_type_name(val.type));
+        return 0;
+    }
+
+    SharedCell* cell = new (std::nothrow) SharedCell(val);
+    if (!cell) {
+        VM_ERROR(vm, f, "shared: failed to allocate shared cell");
         return -1;
     }
+    val = make_shared_cell_value(cell);
+    val.flags |= VAL_FLAG_SHARED;
     return 0;
 }
 
@@ -2378,7 +2652,15 @@ MOBIUS_FORCEINLINE static int vm_op_atomic_begin(MobiusVM* vm, VMFrame& f, uint3
     uint8_t a = DECODE_A(inst);
     Value& val = f.regs[a];
 
-    if (val.type == VAL_ARRAY && val.as.array) {
+    if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
+        val.as.shared_cell->mutex().lock();
+    } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice) {
+        if (!val.as.array_slice->ownerCell()) {
+            VM_ERROR(vm, f, "atomic: slice is not shared; use 'shared var' to declare the parent array");
+            return -1;
+        }
+        val.as.array_slice->ownerCell()->mutex().lock();
+    } else if (val.type == VAL_ARRAY && val.as.array) {
         if (!val.as.array->isShared()) {
             VM_ERROR(vm, f, "atomic: array is not shared; use 'shared var' to declare it");
             return -1;
@@ -2402,7 +2684,11 @@ MOBIUS_FORCEINLINE static int vm_op_atomic_end(MobiusVM* vm, VMFrame& f, uint32_
     uint8_t a = DECODE_A(inst);
     Value& val = f.regs[a];
 
-    if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
+    if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
+        val.as.shared_cell->mutex().unlock();
+    } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice && val.as.array_slice->ownerCell()) {
+        val.as.array_slice->ownerCell()->mutex().unlock();
+    } else if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
         val.as.array->mutex().unlock();
     } else if (val.type == VAL_TABLE && val.as.table && val.as.table->isShared()) {
         val.as.table->mutex().unlock();
@@ -2469,7 +2755,8 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_LEN,
         &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
         &&L_OP_SPAWN, &&L_OP_AWAIT, &&L_OP_YIELD,
-        &&L_OP_SHARE,
+        &&L_OP_SHARE, &&L_OP_SHARED_LOAD, &&L_OP_SHARED_STORE,
+        &&L_OP_LOCK_SHARED, &&L_OP_UNLOCK_SHARED,
         &&L_OP_CANCEL_CHECK,
         &&L_OP_ATOMIC_BEGIN,
         &&L_OP_ATOMIC_END,
@@ -2665,6 +2952,10 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_AWAIT, vm_op_await)
     VM_HANDLER(OP_YIELD, vm_op_yield)
     VM_HANDLER(OP_SHARE, vm_op_share)
+    VM_HANDLER(OP_SHARED_LOAD, vm_op_shared_load)
+    VM_HANDLER(OP_SHARED_STORE, vm_op_shared_store)
+    VM_HANDLER(OP_LOCK_SHARED, vm_op_lock_shared)
+    VM_HANDLER(OP_UNLOCK_SHARED, vm_op_unlock_shared)
     VM_HANDLER(OP_CANCEL_CHECK, vm_op_cancel_check)
     VM_HANDLER(OP_ATOMIC_BEGIN, vm_op_atomic_begin)
     VM_HANDLER(OP_ATOMIC_END, vm_op_atomic_end)
