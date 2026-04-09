@@ -1,4 +1,5 @@
 import "toml"
+import "os"
 
 var pass_count = 0
 var fail_count = 0
@@ -209,6 +210,9 @@ var spec_str = toml.stringify(spec)
 assert_test("stringify inf roundtrip", contains(spec_str, "inf"))
 assert_test("stringify nan roundtrip", contains(spec_str, "nan"))
 
+var sorted_toml = toml.stringify({z: 1, a: 2}, {sort_keys: true})
+assert_test("stringify sort_keys exact order", sorted_toml == "a = 2\nz = 1\n")
+
 // ============================================================================
 // toml.stringify — array of tables round-trip
 // ============================================================================
@@ -227,13 +231,15 @@ assert_test("aot roundtrip[1] price", aot_doc2.products[1].price == 1)
 // ============================================================================
 
 var pf_toml = "title = \"Test Config\"\n\n[[servers]]\nname = \"alpha\"\n\n[[servers]]\nname = \"beta\"\n\n[settings]\ntimeout = 30\n"
-writefile("/tmp/test_toml_parsefile.toml", pf_toml)
+var pf_path = os.tmpfile()
+writefile(pf_path, pf_toml)
 
-var pf_doc = toml.parsefile("/tmp/test_toml_parsefile.toml")
+var pf_doc = toml.parsefile(pf_path)
 assert_test("parsefile title", pf_doc.title == "Test Config")
 assert_test("parsefile servers len", len(pf_doc.servers) == 2)
 assert_test("parsefile servers[0] name", pf_doc.servers[0].name == "alpha")
 assert_test("parsefile settings timeout", pf_doc.settings.timeout == 30)
+os.remove(pf_path)
 
 // ============================================================================
 // Edge cases

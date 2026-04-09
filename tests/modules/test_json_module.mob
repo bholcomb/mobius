@@ -179,6 +179,19 @@ var pretty_arr = json.stringify(arr, 2)
 assert_test("pretty array has newlines", contains(pretty_arr, "\n"))
 assert_test("pretty array has indent", contains(pretty_arr, "  1"))
 
+var sorted_json = json.stringify({z: 1, a: 2}, {sort_keys: true})
+assert_test("stringify options sort_keys", sorted_json == "{\"a\":2,\"z\":1}")
+
+var pretty_json = json.stringify({z: 1, a: 2}, {pretty: true, sort_keys: true})
+assert_test("stringify options pretty newline", contains(pretty_json, "\n"))
+assert_test("stringify options pretty default indent", contains(pretty_json, "\n  \"a\": 2"))
+
+var pretty_json4 = json.stringify({z: 1, a: 2}, {indent: 4, sort_keys: true})
+assert_test("stringify options explicit indent", contains(pretty_json4, "\n    \"a\": 2"))
+
+var compact_json = json.stringify({z: 1, a: 2}, {compact: true, sort_keys: true})
+assert_test("stringify options compact", compact_json == "{\"a\":2,\"z\":1}")
+
 // ============================================================================
 // json.stringify — special float values
 // ============================================================================

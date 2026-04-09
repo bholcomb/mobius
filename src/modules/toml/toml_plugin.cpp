@@ -7,6 +7,7 @@
 #include <cinttypes>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <climits>
 #include <cerrno>
 #include <fstream>
@@ -842,6 +843,7 @@ struct TomlParser {
 struct TomlSerializer {
     MobiusState* state;
     std::string  out;
+    bool         sort_keys;
     char         error[512];
 
     void escape_string(const char* s) {
@@ -898,6 +900,29 @@ struct TomlSerializer {
         }
         mobius_stack_pop(state, 1);
         return result;
+    }
+
+    std::vector<std::string> collect_table_keys(int tbl_idx) {
+        mobius_stack_getTableKeys(state, tbl_idx);
+        int keys_arr = mobius_stack_size(state) - 1;
+        size_t count = mobius_stack_getArrayLength(state, keys_arr);
+        std::vector<std::string> keys;
+        keys.reserve(count);
+
+        for (size_t i = 0; i < count; i++) {
+            mobius_stack_getArrayElement(state, keys_arr, i);
+            if (mobius_stack_isString(state, -1)) {
+                keys.emplace_back(mobius_stack_asString(state, -1));
+            }
+            mobius_stack_pop(state, 1);
+        }
+
+        mobius_stack_pop(state, 1); // keys array
+
+        if (sort_keys) {
+            std::sort(keys.begin(), keys.end());
+        }
+        return keys;
     }
 
     bool write_datetime(int tbl_idx) {
@@ -1053,28 +1078,23 @@ struct TomlSerializer {
                 if (is_datetime_table(idx)) return write_datetime(idx);
                 // Inline table
                 out.push_back('{');
-                mobius_stack_getTableKeys(state, idx);
-                int keys = mobius_stack_size(state) - 1;
-                size_t count = mobius_stack_getArrayLength(state, keys);
+                std::vector<std::string> keys = collect_table_keys(idx);
                 bool first = true;
-                for (size_t i = 0; i < count; i++) {
-                    mobius_stack_getArrayElement(state, keys, i);
-                    if (!mobius_stack_isString(state, -1)) { mobius_stack_pop(state, 1); continue; }
-                    const char* k = mobius_stack_asString(state, -1);
-                    if (strcmp(k, "__toml_type") == 0) { mobius_stack_pop(state, 1); continue; }
+                for (const std::string& key : keys) {
+                    const char* k = key.c_str();
+                    if (strcmp(k, "__toml_type") == 0) continue;
                     if (!first) out.append(", ");
                     write_key(k);
                     out.append(" = ");
                     mobius_stack_getTableField(state, idx, k);
                     int val = mobius_stack_size(state) - 1;
                     if (!serialize_inline_value(val, depth + 1)) {
-                        mobius_stack_pop(state, 3); // val, key, keys
+                        mobius_stack_pop(state, 1); // val
                         return false;
                     }
-                    mobius_stack_pop(state, 2); // val, key
+                    mobius_stack_pop(state, 1); // val
                     first = false;
                 }
-                mobius_stack_pop(state, 1); // keys
                 out.push_back('}');
                 return true;
             }
@@ -1091,23 +1111,19 @@ struct TomlSerializer {
             return false;
         }
 
-        mobius_stack_getTableKeys(state, tbl_idx);
-        int keys_arr = mobius_stack_size(state) - 1;
-        size_t count = mobius_stack_getArrayLength(state, keys_arr);
+        std::vector<std::string> keys = collect_table_keys(tbl_idx);
 
         // First pass: simple key-value pairs
-        for (size_t i = 0; i < count; i++) {
-            mobius_stack_getArrayElement(state, keys_arr, i);
-            if (!mobius_stack_isString(state, -1)) { mobius_stack_pop(state, 1); continue; }
-            const char* k = mobius_stack_asString(state, -1);
-            if (strcmp(k, "__toml_type") == 0) { mobius_stack_pop(state, 1); continue; }
+        for (const std::string& key : keys) {
+            const char* k = key.c_str();
+            if (strcmp(k, "__toml_type") == 0) continue;
 
             mobius_stack_getTableField(state, tbl_idx, k);
             int val = mobius_stack_size(state) - 1;
             MobiusValueType vt = mobius_stack_type(state, val);
 
             if (vt == MOBIUS_VAL_TABLE && !is_datetime_table(val)) {
-                mobius_stack_pop(state, 2); // val, key
+                mobius_stack_pop(state, 1); // val
                 continue;
             }
             if (vt == MOBIUS_VAL_ARRAY) {
@@ -1117,7 +1133,7 @@ struct TomlSerializer {
                     bool is_aot = (mobius_stack_type(state, -1) == MOBIUS_VAL_TABLE);
                     mobius_stack_pop(state, 1);
                     if (is_aot) {
-                        mobius_stack_pop(state, 2);
+                        mobius_stack_pop(state, 1); // val
                         continue;
                     }
                 }
@@ -1126,21 +1142,17 @@ struct TomlSerializer {
             write_key(k);
             out.append(" = ");
             if (!serialize_inline_value(val, depth + 1)) {
-                mobius_stack_pop(state, 2);
-                mobius_stack_pop(state, 1);
+                mobius_stack_pop(state, 1); // val
                 return false;
             }
             out.push_back('\n');
-            mobius_stack_pop(state, 2); // val, key
+            mobius_stack_pop(state, 1); // val
         }
 
         // Second pass: sub-tables
-        for (size_t i = 0; i < count; i++) {
-            mobius_stack_getArrayElement(state, keys_arr, i);
-            if (!mobius_stack_isString(state, -1)) { mobius_stack_pop(state, 1); continue; }
-            const char* k = mobius_stack_asString(state, -1);
-            if (strcmp(k, "__toml_type") == 0) { mobius_stack_pop(state, 1); continue; }
-
+        for (const std::string& key : keys) {
+            const char* k = key.c_str();
+            if (strcmp(k, "__toml_type") == 0) continue;
             std::string key_str(k);
             mobius_stack_getTableField(state, tbl_idx, k);
             int val = mobius_stack_size(state) - 1;
@@ -1153,21 +1165,17 @@ struct TomlSerializer {
                 out.append(full_key);
                 out.append("]\n");
                 if (!serialize_table_body(val, full_key, depth + 1)) {
-                    mobius_stack_pop(state, 2);
-                    mobius_stack_pop(state, 1);
+                    mobius_stack_pop(state, 1); // val
                     return false;
                 }
             }
-            mobius_stack_pop(state, 2); // val, key
+            mobius_stack_pop(state, 1); // val
         }
 
         // Third pass: arrays of tables
-        for (size_t i = 0; i < count; i++) {
-            mobius_stack_getArrayElement(state, keys_arr, i);
-            if (!mobius_stack_isString(state, -1)) { mobius_stack_pop(state, 1); continue; }
-            const char* k = mobius_stack_asString(state, -1);
-            if (strcmp(k, "__toml_type") == 0) { mobius_stack_pop(state, 1); continue; }
-
+        for (const std::string& key : keys) {
+            const char* k = key.c_str();
+            if (strcmp(k, "__toml_type") == 0) continue;
             std::string key_str(k);
             mobius_stack_getTableField(state, tbl_idx, k);
             int val = mobius_stack_size(state) - 1;
@@ -1189,8 +1197,7 @@ struct TomlSerializer {
                             mobius_stack_getArrayElement(state, val, j);
                             int elem = mobius_stack_size(state) - 1;
                             if (!serialize_table_body(elem, full_key, depth + 1)) {
-                                mobius_stack_pop(state, 3); // elem, val, key
-                                mobius_stack_pop(state, 1); // keys
+                                mobius_stack_pop(state, 2); // elem, val
                                 return false;
                             }
                             mobius_stack_pop(state, 1); // elem
@@ -1198,13 +1205,31 @@ struct TomlSerializer {
                     }
                 }
             }
-            mobius_stack_pop(state, 2); // val, key
+            mobius_stack_pop(state, 1); // val
         }
-
-        mobius_stack_pop(state, 1); // keys array
         return true;
     }
 };
+
+struct TomlStringifyOptions {
+    bool sort_keys = false;
+};
+
+static bool toml_read_stringify_options(MobiusState* state, int options_idx,
+                                        TomlStringifyOptions& options,
+                                        char* error, size_t error_size) {
+    mobius_stack_getTableField(state, options_idx, "sort_keys");
+    if (!mobius_stack_isNil(state, -1)) {
+        if (!mobius_stack_isBool(state, -1)) {
+            snprintf(error, error_size, "toml.stringify() options.sort_keys must be a bool");
+            mobius_stack_pop(state, 1);
+            return false;
+        }
+        options.sort_keys = mobius_stack_asBool(state, -1);
+    }
+    mobius_stack_pop(state, 1);
+    return true;
+}
 
 // ============================================================================
 // toml.parse(string) -> table
@@ -1280,15 +1305,28 @@ static int toml_parsefile(MobiusState* state, int arg_count) {
 // ============================================================================
 
 static int toml_stringify(MobiusState* state, int arg_count) {
-    if (arg_count != 1)
-        return mobius_error(state, "toml.stringify() expects 1 argument (table)");
-    if (!mobius_stack_isTable(state, -1))
-        return mobius_error(state, "toml.stringify() argument must be a table");
+    if (arg_count < 1 || arg_count > 2)
+        return mobius_error(state, "toml.stringify() expects 1 or 2 arguments (table [, options])");
+    if (!mobius_stack_isTable(state, -arg_count))
+        return mobius_error(state, "toml.stringify() first argument must be a table");
 
-    int tbl_idx = mobius_stack_size(state) - 1;
+    TomlStringifyOptions options;
+    if (arg_count == 2) {
+        if (!mobius_stack_isTable(state, -1)) {
+            return mobius_error(state, "toml.stringify() second argument must be an options table");
+        }
+        char error[256];
+        if (!toml_read_stringify_options(state, mobius_stack_size(state) - 1, options,
+                                         error, sizeof(error))) {
+            return mobius_error(state, error);
+        }
+    }
+
+    int tbl_idx = mobius_stack_size(state) - arg_count;
 
     TomlSerializer ser;
     ser.state = state;
+    ser.sort_keys = options.sort_keys;
     ser.error[0] = '\0';
 
     if (!ser.serialize_table_body(tbl_idx, "", 0)) {
@@ -1310,7 +1348,7 @@ static void cleanup_toml_plugin(void) {}
 static MobiusPluginFunction toml_functions[] = {
     {"parse",     toml_parse,     1, MOBIUS_VAL_TABLE,  "Parse a TOML string into Mobius tables"},
     {"parsefile", toml_parsefile, 1, MOBIUS_VAL_TABLE,  "Parse a TOML file into Mobius tables"},
-    {"stringify", toml_stringify, 1, MOBIUS_VAL_STRING, "Serialize a Mobius table to TOML string"},
+    {"stringify", toml_stringify, SIZE_MAX, MOBIUS_VAL_STRING, "Serialize a Mobius table to TOML string"},
 };
 
 static MobiusPlugin toml_plugin = {

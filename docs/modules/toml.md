@@ -13,6 +13,7 @@ Functions:
 | `toml.parse(string)` | Parse a TOML string into a table. |
 | `toml.parsefile(path)` | Read and parse a TOML file from disk. |
 | `toml.stringify(table)` | Serialize a table to TOML. |
+| `toml.stringify(table, options)` | Serialize with options such as stable key ordering via `sort_keys`. |
 
 Notes:
 
@@ -33,4 +34,7 @@ var out = toml.stringify({
     }
 })
 print(out)
+
+var stable = toml.stringify({z: 1, a: 2}, {sort_keys: true})
+print(stable)
 ```
