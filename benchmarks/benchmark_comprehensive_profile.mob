@@ -6,6 +6,10 @@ print("=== Mobius Comprehensive Profiling Benchmark ===\n");
 
 var PROFILE_ITERATIONS = 100;
 
+func ns_to_sec(ns) {
+    return float(ns) / 1000000000.0;
+}
+
 // ============================================================================
 // 1. Arithmetic Operations
 // ============================================================================
@@ -169,7 +173,8 @@ for (var iteration = 0; iteration < PROFILE_ITERATIONS; iteration = iteration + 
     checksum = checksum + run_suite();
 }
 
-var overall_duration = clock() - overall_start;
+var overall_duration_ns = clock() - overall_start;
+var overall_duration = ns_to_sec(overall_duration_ns);
 
 print("=== Profiling Results ===");
 print("Total time: ", overall_duration, "s");
