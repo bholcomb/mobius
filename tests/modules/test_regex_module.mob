@@ -29,7 +29,9 @@ assert_test("search returns nil on no match", r2 == nil)
 var r3 = regex.search("(\\w+)@(\\w+)", "user@host")
 assert_test("search with groups", r3 != nil)
 assert_test("search groups match", r3.match == "user@host")
+assert_test("search full alias", r3.full == "user@host")
 assert_test("search groups array", r3.groups != nil)
+assert_test("search group_count", r3.group_count == 2)
 assert_test("search group 1", r3.groups[0] == "user")
 assert_test("search group 2", r3.groups[1] == "host")
 
@@ -48,6 +50,14 @@ var r7 = regex.search("[a-z]+", "ABC def GHI")
 assert_test("search lowercase", r7 != nil)
 assert_test("search lowercase match", r7.match == "def")
 
+var r8 = regex.search("hello", "HeLLo world", "i")
+assert_test("search ignore case flag", r8 != nil)
+assert_test("search ignore case match", r8.match == "HeLLo")
+
+var r9 = regex.search("hello", "HeLLo world", {ignore_case: true})
+assert_test("search ignore case options", r9 != nil)
+assert_test("search ignore case options match", r9.match == "HeLLo")
+
 // ============================================================================
 // regex.match — full string match
 // ============================================================================
@@ -55,6 +65,8 @@ assert_test("search lowercase match", r7.match == "def")
 var m1 = regex.match("[0-9]+", "12345")
 assert_test("match full digits", m1 != nil)
 assert_test("match full digits value", m1.match == "12345")
+assert_test("match empty groups array exists", m1.groups != nil)
+assert_test("match empty groups count", m1.group_count == 0)
 
 var m2 = regex.match("[0-9]+", "abc 123")
 assert_test("match rejects partial", m2 == nil)
@@ -92,6 +104,8 @@ assert_test("findall lc third", f3[2].match == "oo")
 var f4 = regex.findall("(\\w+)=(\\w+)", "a=1 b=2 c=3")
 assert_test("findall with groups count", len(f4) == 3)
 assert_test("findall groups first match", f4[0].match == "a=1")
+assert_test("findall groups first full", f4[0].full == "a=1")
+assert_test("findall groups first count", f4[0].group_count == 2)
 assert_test("findall groups first g0", f4[0].groups[0] == "a")
 assert_test("findall groups first g1", f4[0].groups[1] == "1")
 assert_test("findall groups third match", f4[2].match == "c=3")
@@ -120,6 +134,9 @@ assert_test("replace vowels", rp4 == "h*ll*")
 var rp5 = regex.replace("^", "hello", ">>")
 assert_test("replace start anchor", rp5 == ">>hello")
 
+var rp6 = regex.replace("hello", "HeLLo there", "hi", "i")
+assert_test("replace ignore case flag", rp6 == "hi there")
+
 // ============================================================================
 // regex.split — split by pattern
 // ============================================================================
@@ -147,6 +164,12 @@ assert_test("split digits[2]", s3[2] == "ghi")
 var s4 = regex.split(",", "single")
 assert_test("split no delimiter", len(s4) == 1)
 assert_test("split no delim value", s4[0] == "single")
+
+var s5 = regex.split("x", "aXbxc", "i")
+assert_test("split ignore case flag count", len(s5) == 3)
+assert_test("split ignore case flag first", s5[0] == "a")
+assert_test("split ignore case flag second", s5[1] == "b")
+assert_test("split ignore case flag third", s5[2] == "c")
 
 // ============================================================================
 // Edge cases

@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cinttypes>
 #include <string>
+#include <vector>
+#include <algorithm>
 #include <climits>
 #include <cerrno>
 
@@ -331,6 +333,7 @@ struct JsonSerializer {
     MobiusState* state;
     std::string  out;
     int          indent_size; // 0 = compact
+    bool         sort_keys;
     char         error[256];
 
     void write_indent(int depth) {
@@ -465,28 +468,31 @@ struct JsonSerializer {
             return true;
         }
 
-        // Get keys array
         mobius_stack_getTableKeys(state, tbl_idx);
         int keys_arr_idx = mobius_stack_size(state) - 1;
         size_t key_count = mobius_stack_getArrayLength(state, keys_arr_idx);
+        std::vector<std::string> keys;
+        keys.reserve(key_count);
+
+        for (size_t i = 0; i < key_count; i++) {
+            mobius_stack_getArrayElement(state, keys_arr_idx, i);
+            int key_idx = mobius_stack_size(state) - 1;
+            if (mobius_stack_type(state, key_idx) == MOBIUS_VAL_STRING) {
+                keys.emplace_back(mobius_stack_asString(state, key_idx));
+            }
+            mobius_stack_pop(state, 1);
+        }
+        mobius_stack_pop(state, 1); // keys array
+
+        if (sort_keys) {
+            std::sort(keys.begin(), keys.end());
+        }
 
         out.push_back('{');
         bool first = true;
 
-        for (size_t i = 0; i < key_count; i++) {
-            // Get key
-            mobius_stack_getArrayElement(state, keys_arr_idx, i);
-            int key_idx = mobius_stack_size(state) - 1;
-
-            // Keys must be strings for JSON
-            if (mobius_stack_type(state, key_idx) != MOBIUS_VAL_STRING) {
-                mobius_stack_pop(state, 1); // pop key
-                continue; // skip non-string keys
-            }
-
-            const char* key_str = mobius_stack_asString(state, key_idx);
-
-            // Get value
+        for (const std::string& key : keys) {
+            const char* key_str = key.c_str();
             mobius_stack_getTableField(state, tbl_idx, key_str);
             int val_idx = mobius_stack_size(state) - 1;
 
@@ -498,21 +504,96 @@ struct JsonSerializer {
             if (indent_size > 0) out.push_back(' ');
 
             if (!serialize_value(val_idx, depth + 1)) {
-                mobius_stack_pop(state, 2); // pop value, key
-                mobius_stack_pop(state, 1); // pop keys array
+                mobius_stack_pop(state, 1); // value
                 return false;
             }
 
-            mobius_stack_pop(state, 2); // pop value, key
+            mobius_stack_pop(state, 1); // value
             first = false;
         }
 
-        mobius_stack_pop(state, 1); // pop keys array
         write_indent(depth);
         out.push_back('}');
         return true;
     }
 };
+
+struct JsonStringifyOptions {
+    int indent_size = 0;
+    bool sort_keys = false;
+};
+
+static bool json_read_stringify_options(MobiusState* state, int options_idx,
+                                        JsonStringifyOptions& options,
+                                        char* error, size_t error_size) {
+    bool has_indent = false;
+    bool pretty = false;
+    bool compact = false;
+
+    mobius_stack_getTableField(state, options_idx, "indent");
+    if (!mobius_stack_isNil(state, -1)) {
+        if (!mobius_stack_isInteger(state, -1)) {
+            snprintf(error, error_size, "json.stringify() options.indent must be an integer");
+            mobius_stack_pop(state, 1);
+            return false;
+        }
+        options.indent_size = (int)mobius_stack_asInt64(state, -1);
+        has_indent = true;
+    }
+    mobius_stack_pop(state, 1);
+
+    mobius_stack_getTableField(state, options_idx, "pretty");
+    if (!mobius_stack_isNil(state, -1)) {
+        if (!mobius_stack_isBool(state, -1)) {
+            snprintf(error, error_size, "json.stringify() options.pretty must be a bool");
+            mobius_stack_pop(state, 1);
+            return false;
+        }
+        pretty = mobius_stack_asBool(state, -1);
+    }
+    mobius_stack_pop(state, 1);
+
+    mobius_stack_getTableField(state, options_idx, "compact");
+    if (!mobius_stack_isNil(state, -1)) {
+        if (!mobius_stack_isBool(state, -1)) {
+            snprintf(error, error_size, "json.stringify() options.compact must be a bool");
+            mobius_stack_pop(state, 1);
+            return false;
+        }
+        compact = mobius_stack_asBool(state, -1);
+    }
+    mobius_stack_pop(state, 1);
+
+    mobius_stack_getTableField(state, options_idx, "sort_keys");
+    if (!mobius_stack_isNil(state, -1)) {
+        if (!mobius_stack_isBool(state, -1)) {
+            snprintf(error, error_size, "json.stringify() options.sort_keys must be a bool");
+            mobius_stack_pop(state, 1);
+            return false;
+        }
+        options.sort_keys = mobius_stack_asBool(state, -1);
+    }
+    mobius_stack_pop(state, 1);
+
+    if (pretty && compact) {
+        snprintf(error, error_size, "json.stringify() options.pretty and options.compact cannot both be true");
+        return false;
+    }
+    if (compact && has_indent) {
+        snprintf(error, error_size, "json.stringify() options.compact cannot be combined with options.indent");
+        return false;
+    }
+
+    if (compact) {
+        options.indent_size = 0;
+    } else if (!has_indent && pretty) {
+        options.indent_size = 2;
+    }
+
+    if (options.indent_size < 0) options.indent_size = 0;
+    if (options.indent_size > 16) options.indent_size = 16;
+    return true;
+}
 
 static int json_parse_input(MobiusState* state, const char* input) {
     JsonParser parser;
@@ -599,15 +680,23 @@ static int json_parsefile(MobiusState* state, int arg_count) {
 
 static int json_stringify(MobiusState* state, int arg_count) {
     if (arg_count < 1 || arg_count > 2)
-        return mobius_error(state, "json.stringify() expects 1 or 2 arguments (value [, indent])");
+        return mobius_error(state, "json.stringify() expects 1 or 2 arguments (value [, indent|options])");
 
-    int indent_size = 0;
+    JsonStringifyOptions options;
     if (arg_count == 2) {
-        if (!mobius_stack_isInteger(state, -1))
-            return mobius_error(state, "json.stringify() indent must be an integer");
-        indent_size = (int)mobius_stack_asInt64(state, -1);
-        if (indent_size < 0) indent_size = 0;
-        if (indent_size > 16) indent_size = 16;
+        if (mobius_stack_isInteger(state, -1)) {
+            options.indent_size = (int)mobius_stack_asInt64(state, -1);
+            if (options.indent_size < 0) options.indent_size = 0;
+            if (options.indent_size > 16) options.indent_size = 16;
+        } else if (mobius_stack_isTable(state, -1)) {
+            char error[256];
+            if (!json_read_stringify_options(state, mobius_stack_size(state) - 1, options,
+                                             error, sizeof(error))) {
+                return mobius_error(state, error);
+            }
+        } else {
+            return mobius_error(state, "json.stringify() second argument must be an integer indent or options table");
+        }
     }
 
     // Convert to absolute stack index so it remains valid as we push/pop during serialization
@@ -615,14 +704,15 @@ static int json_stringify(MobiusState* state, int arg_count) {
 
     JsonSerializer ser;
     ser.state = state;
-    ser.indent_size = indent_size;
+    ser.indent_size = options.indent_size;
+    ser.sort_keys = options.sort_keys;
     ser.error[0] = '\0';
 
     if (!ser.serialize_value(value_idx, 0)) {
         return mobius_error(state, ser.error);
     }
 
-    if (indent_size > 0) ser.out.push_back('\n');
+    if (options.indent_size > 0) ser.out.push_back('\n');
 
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushString(state, ser.out.c_str());

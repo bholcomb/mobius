@@ -40,9 +40,9 @@ if (p1 != s1 || p2 != s2 || p3 != s3 || p4 != s4) {
     exit(1)
 }
 
-var seq_ms = seq_ns / 1000000
-var par_ms = par_ns / 1000000
-var speedup = seq_ns / par_ns
+var seq_ms = seq_ns / 1000000.0
+var par_ms = par_ns / 1000000.0
+var speedup = seq_ns / float64(par_ns)
 
 print("  Sequential:", seq_ms, "ms")
 print("  Parallel:  ", par_ms, "ms")
