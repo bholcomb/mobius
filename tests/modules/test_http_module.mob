@@ -1,0 +1,82 @@
+import "http"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var request_raw = "POST /submit?x=1 HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 5\r\n\r\nhello"
+var request = http.parse_request(request_raw)
+assert_test("parse_request method", request.method == "POST")
+assert_test("parse_request target", request.target == "/submit?x=1")
+assert_test("parse_request path", request.path == "/submit")
+assert_test("parse_request query", request.query == "x=1")
+assert_test("parse_request host header", request.headers.host == "example.com")
+assert_test("parse_request body", request.body == "hello")
+assert_test("parse_request content length", request.content_length == 5)
+assert_test("parse_request keep_alive false", request.keep_alive == false)
+
+var response_raw = "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nno!"
+var response = http.parse_response(response_raw)
+assert_test("parse_response status", response.status == 404)
+assert_test("parse_response reason", response.reason == "Not Found")
+assert_test("parse_response body", response.body == "no!")
+assert_test("parse_response content type", response.headers["content-type"] == "text/plain")
+assert_test("status_text 404", http.status_text(404) == "Not Found")
+
+var header_spec = {}
+header_spec["content-type"] = "application/json"
+header_spec["x-test"] = "1"
+var built_headers = http.build_headers(header_spec)
+var reparsed_headers = http.parse_headers(built_headers)
+assert_test("build_headers roundtrip content-type", reparsed_headers["content-type"] == "application/json")
+assert_test("build_headers roundtrip x-test", reparsed_headers["x-test"] == "1")
+
+var request_headers = {}
+request_headers["content-type"] = "application/json"
+request_headers["x-id"] = "42"
+
+var built_request = http.build_request({
+    method: "PUT",
+    path: "/api/item",
+    query: "mode=fast",
+    host: "api.example.com",
+    headers: request_headers,
+    body: "{\"ok\":true}"
+})
+var parsed_built_request = http.parse_request(built_request)
+assert_test("build_request method", parsed_built_request.method == "PUT")
+assert_test("build_request path", parsed_built_request.path == "/api/item")
+assert_test("build_request query", parsed_built_request.query == "mode=fast")
+assert_test("build_request host", parsed_built_request.headers.host == "api.example.com")
+assert_test("build_request content-type", parsed_built_request.headers["content-type"] == "application/json")
+assert_test("build_request x-id", parsed_built_request.headers["x-id"] == "42")
+assert_test("build_request body", parsed_built_request.body == "{\"ok\":true}")
+assert_test("build_request content-length auto", parsed_built_request.content_length == len("{\"ok\":true}"))
+
+var built_response = http.build_response({
+    status: 101,
+    headers: {
+        upgrade: "websocket",
+        connection: "Upgrade"
+    }
+})
+var parsed_built_response = http.parse_response(built_response)
+assert_test("build_response status", parsed_built_response.status == 101)
+assert_test("build_response reason default", parsed_built_response.reason == "Switching Protocols")
+assert_test("build_response upgrade header", parsed_built_response.headers.upgrade == "websocket")
+assert_test("build_response connection header", parsed_built_response.headers.connection == "Upgrade")
+
+print("")
+print("HTTP Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

@@ -111,3 +111,27 @@ targets:
       libs: ["mobius-core", "dl"]
       depends_on:
         targets: ["mobius-core"]
+
+    - name: http
+      language: cpp
+      output_prefix: ""
+      sources: ["http/http_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]
+
+    - name: websocket
+      language: cpp
+      output_prefix: ""
+      sources: ["websocket/websocket_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]

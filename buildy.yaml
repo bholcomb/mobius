@@ -48,4 +48,6 @@ staging:
         - "${out_dir}/bin/url.so"
         - "${out_dir}/bin/crypto.so"
         - "${out_dir}/bin/yaml.so"
+        - "${out_dir}/bin/http.so"
+        - "${out_dir}/bin/websocket.so"
         - "${out_dir}/bin/text_processing.so"
