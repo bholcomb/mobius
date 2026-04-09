@@ -1,0 +1,51 @@
+print("=== Spawn Copy Tests ===")
+
+import "fiber"
+
+func mutate_array(arr) {
+    arr[0] = 99
+    arr:push(4)
+    return len(arr)
+}
+
+var plain = [1, 2, 3]
+var array_len = await spawn mutate_array(plain)
+if (array_len != 4) {
+    print("FAIL: child array length expected 4, got", array_len)
+    exit(1)
+}
+if (len(plain) != 3 || plain[0] != 1) {
+    print("FAIL: parent array was mutated by spawn")
+    exit(1)
+}
+
+func mutate_table(tbl) {
+    tbl.count = 2
+    tbl.items[0] = 7
+    return tbl.count
+}
+
+var tbl = { count: 1, items: [1, 2] }
+var table_count = await spawn mutate_table(tbl)
+if (table_count != 2) {
+    print("FAIL: child table mutation result")
+    exit(1)
+}
+if (tbl.count != 1 || tbl.items[0] != 1) {
+    print("FAIL: parent table was mutated by spawn")
+    exit(1)
+}
+
+func cycle_ok(t) {
+    return t.self == t
+}
+
+var cyc = {}
+cyc.self = cyc
+var cycle_result = await spawn cycle_ok(cyc)
+if (!cycle_result) {
+    print("FAIL: cycle was not preserved in spawn deep copy")
+    exit(1)
+}
+
+print("=== Spawn copy tests passed! ===")

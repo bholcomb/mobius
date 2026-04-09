@@ -1207,6 +1207,13 @@ print(await a, await b, await c)  // 20 40 60
 
 Awaiting a future that has already resolved returns the cached result immediately. Futures are single-assignment: once resolved or rejected, they never change.
 
+Arguments passed to `spawn` follow Mobius value semantics:
+
+- Scalars are copied by value.
+- Non-shared arrays and tables are deep-copied when crossing the fiber boundary.
+- `shared` variables are passed by reference to the same synchronized cell.
+- `fiber.slice(...)` values are explicit views and stay aliased to their parent array, even across `spawn`.
+
 **Restrictions:**
 - Only functions without captured upvalues can be spawned. Pass data as arguments instead.
 - Native (C) functions cannot be spawned.
@@ -1222,29 +1229,35 @@ for (var i = 0; i < 1000; i += 1) {
 }
 ```
 
-### Shared Containers
+### Shared Variables
 
-By default, arrays and tables are **not** thread-safe. The `shared` keyword
-prefixes a `var` declaration to mark the container for concurrent access by
-adding mutex protection:
+By default, Mobius values are not synchronized across fibers. The `shared`
+keyword prefixes a `var` declaration and stores the variable in a synchronized
+shared cell:
 
 ```mobius
+shared var counter = 0
 shared var data = [0, 0, 0, 0]
+shared var config = { debug: false }
 ```
 
-`shared` propagates deeply — nested arrays and tables are also marked shared.
-All reads and writes to a shared container are automatically synchronized.
+Reads and writes through a shared variable are automatically synchronized.
+This applies to scalars, arrays, and tables.
 
-Note that individual reads and writes are safe, but compound operations like
-`counter[0] = counter[0] + 1` are **not** atomic — the read and write are
-separate operations, so concurrent fibers can lose updates. Use `atomic()` for
-compound operations (see below).
+Sharing is attached to the declared binding, not recursively to every nested
+mutable object reachable through it. Access that goes through the shared
+variable is synchronized; if you want to share a nested mutable value
+independently, share that binding too.
+
+Individual reads and writes are safe. Shared scalar `++`, `--`, `+=`, and `-=`
+operations are atomic. Compound updates on array or table elements still need
+`atomic()` because they involve multiple steps.
 
 ### Atomic Operations
 
 The `atomic()` expression ensures that a compound read-modify-write operation
-on a shared container is executed atomically. The container's mutex is held for
-the duration of the entire expression, preventing other fibers from interleaving.
+on a shared value is executed atomically. The shared cell lock is held for the
+duration of the entire expression, preventing other fibers from interleaving.
 
 ```mobius
 shared var counter = [0]
@@ -1262,20 +1275,23 @@ separate read and write instructions. Two fibers could both read the same
 value, increment it, and write back the same result — losing one update.
 `atomic()` prevents this by holding the lock across the entire expression.
 
-`atomic()` works with both shared arrays and shared tables:
+`atomic()` works with shared scalars, shared arrays, and shared tables:
 
 ```mobius
 shared var stats = { hits: 0 }
 atomic(stats["hits"] = stats["hits"] + 1)
+
+shared var total = 0
+atomic(total = total + 1)
 ```
 
 **Rules:**
 
-- The expression inside `atomic()` must operate on a shared array or table
-  element (e.g., `arr[i] = arr[i] + 1` or `tbl["key"] = tbl["key"] + 1`).
+- The expression inside `atomic()` must operate on a shared variable or a
+  shared array/table element.
 - Using `atomic()` on a non-shared variable is a **runtime error**.
-- The container uses a recursive mutex, so nested `atomic()` calls on the same
-  container will not deadlock.
+- The shared cell uses a recursive mutex, so nested `atomic()` calls on the
+  same target will not deadlock.
 
 ### Channels
 
@@ -1306,30 +1322,37 @@ See the [Standard Library Reference](stdlib_reference.md#fiber--concurrency-func
 
 ### Structured Concurrency
 
-`fiber_all` waits for an array of futures to resolve and returns all results:
+`fiber.all(...)` waits for an array of futures to resolve and returns all results:
 
 ```mobius
 func work(id) { return id * 10 }
 
 var futures = [spawn work(1), spawn work(2), spawn work(3)]
-var results = fiber_all(futures)  // [10, 20, 30]
+var results = fiber.all(futures)  // [10, 20, 30]
 ```
 
-`fiber_any` returns the result of the first future to resolve.
+`fiber.any(...)` returns the result of the first future to resolve.
 
 ### Cancellation
 
-Spawned fibers can be cancelled via `fiber_cancel(future)`. A cancelled fiber will throw a `CancellationError` at its next cancellation check point.
+Spawned fibers can be cancelled via `fiber.cancel(future)`. A cancelled fiber will throw a `CancellationError` at its next cancellation check point.
 
 ### Array Slices
 
-`fiber_slice(array, start, length)` creates a lightweight view into an existing array. Reads and writes through the slice affect the underlying array, making slices ideal for data-parallel decomposition:
+`fiber.slice(array, start, length)` creates a lightweight view into an existing
+array. Reads and writes through the slice affect the underlying array, making
+slices ideal for data-parallel decomposition:
 
 ```mobius
 shared var data = [1, 2, 3, 4, 5, 6, 7, 8]
-var left  = fiber_slice(data, 0, 4)  // view of [1,2,3,4]
-var right = fiber_slice(data, 4, 4)  // view of [5,6,7,8]
+var left  = fiber.slice(data, 0, 4)  // view of [1,2,3,4]
+var right = fiber.slice(data, 4, 4)  // view of [5,6,7,8]
 ```
+
+Slices are always views, even when created from a non-shared array. While any
+slice is alive, structural mutations that resize the parent array (such as
+`push` or `pop`) fail with a runtime error. If the parent array is shared,
+slice reads and writes synchronize through that shared parent.
 
 ---
 

@@ -254,6 +254,10 @@ enum OpCode : uint8_t {
     OP_AWAIT,       // A B       R[A] = await FutureValue in R[B]; yields fiber if not ready
     OP_YIELD,       // A         cooperatively yield current fiber (reschedule)
     OP_SHARE,       // A         mark R[A] as shared (deep); sets VAL_FLAG_SHARED
+    OP_SHARED_LOAD, // A B       if R[B] is SharedCell, R[A] = load(R[B]); else R[A] = R[B]
+    OP_SHARED_STORE,// A B       if R[A] is SharedCell, store unwrap(R[B]) into it; else R[A] = R[B]
+    OP_LOCK_SHARED, // A         lock shared value in R[A] if it is share-backed; otherwise no-op
+    OP_UNLOCK_SHARED,// A        unlock shared value in R[A] if it is share-backed; otherwise no-op
     OP_CANCEL_CHECK,// --        check if current fiber is cancelled; throw CancellationError if so
     OP_ATOMIC_BEGIN,// A         acquire unique lock on shared container R[A]
     OP_ATOMIC_END,  // A         release unique lock on shared container R[A]
@@ -413,6 +417,10 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"AWAIT",     FMT_ABC},
         {"YIELD",     FMT_ABC},
         {"SHARE",     FMT_ABC},
+        {"SHARED_LOAD", FMT_ABC},
+        {"SHARED_STORE", FMT_ABC},
+        {"LOCK_SHARED", FMT_ABC},
+        {"UNLOCK_SHARED", FMT_ABC},
         {"CANCEL_CHECK", FMT_ABC},
         {"ATOMIC_BEGIN", FMT_ABC},
         {"ATOMIC_END",   FMT_ABC},

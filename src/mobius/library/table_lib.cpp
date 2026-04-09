@@ -1,6 +1,7 @@
 #include "library/table_lib.h"
 #include "data/table.h"
 #include "data/array.h"
+#include "data/shared_cell.h"
 #include "data/value.h"
 #include "state/mobius_state.h"
 
@@ -11,13 +12,39 @@
 // HELPER: extract Table* from self (first argument via : syntax)
 // =============================================================================
 
-static Table* extract_table_self(MobiusState* state, const char* err_msg) {
+struct TableSelfAccess {
+    Value self_value;
+    Table* table = nullptr;
+    SharedCell* cell = nullptr;
+    std::unique_lock<std::recursive_mutex> lock;
+};
+
+static Table* extract_table_self(MobiusState* state, const char* err_msg, TableSelfAccess* access = nullptr) {
     const Value& self = state->npeek_self();
-    if (self.type != VAL_TABLE || !self.as.table) {
-        state->error(err_msg);
-        return nullptr;
+    if (access) access->self_value = self;
+    if (self.type == VAL_TABLE && self.as.table) {
+        if (access) access->table = self.as.table;
+        return self.as.table;
     }
-    return self.as.table;
+    if (self.type == VAL_SHARED_CELL && self.as.shared_cell) {
+        if (access) {
+            access->cell = self.as.shared_cell;
+            access->lock = std::unique_lock<std::recursive_mutex>(self.as.shared_cell->mutex());
+            Value& inner = self.as.shared_cell->unsafeValue();
+            if (inner.type == VAL_TABLE && inner.as.table) {
+                access->table = inner.as.table;
+                return inner.as.table;
+            }
+        } else {
+            std::lock_guard<std::recursive_mutex> lock(self.as.shared_cell->mutex());
+            Value& inner = self.as.shared_cell->unsafeValue();
+            if (inner.type == VAL_TABLE && inner.as.table) {
+                return inner.as.table;
+            }
+        }
+    }
+    state->error(err_msg);
+    return nullptr;
 }
 
 // =============================================================================
@@ -27,7 +54,8 @@ static Table* extract_table_self(MobiusState* state, const char* err_msg) {
 int table_method_remove(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("tbl:remove expects 1 argument (key)");
 
-    Table* tbl = extract_table_self(state, "tbl:remove: self is not a table");
+    TableSelfAccess access;
+    Table* tbl = extract_table_self(state, "tbl:remove: self is not a table", &access);
     if (!tbl) return -1;
 
     Value key = state->npop();
@@ -41,7 +69,8 @@ int table_method_remove(MobiusState* state, int arg_count) {
 int table_method_has_key(MobiusState* state, int arg_count) {
     if (arg_count != 2) return state->error("tbl:has_key expects 1 argument (key)");
 
-    Table* tbl = extract_table_self(state, "tbl:has_key: self is not a table");
+    TableSelfAccess access;
+    Table* tbl = extract_table_self(state, "tbl:has_key: self is not a table", &access);
     if (!tbl) return -1;
 
     Value key = state->npop();
@@ -54,7 +83,8 @@ int table_method_has_key(MobiusState* state, int arg_count) {
 int table_method_size(MobiusState* state, int arg_count) {
     if (arg_count != 1) return state->error("tbl:size expects 0 arguments");
 
-    Table* tbl = extract_table_self(state, "tbl:size: self is not a table");
+    TableSelfAccess access;
+    Table* tbl = extract_table_self(state, "tbl:size: self is not a table", &access);
     if (!tbl) return -1;
 
     state->npop();
@@ -66,7 +96,8 @@ int table_method_size(MobiusState* state, int arg_count) {
 int table_method_pairs(MobiusState* state, int arg_count) {
     if (arg_count != 1) return state->error("tbl:pairs expects 0 arguments");
 
-    Table* tbl = extract_table_self(state, "tbl:pairs: self is not a table");
+    TableSelfAccess access;
+    Table* tbl = extract_table_self(state, "tbl:pairs: self is not a table", &access);
     if (!tbl) return -1;
 
     state->npop();

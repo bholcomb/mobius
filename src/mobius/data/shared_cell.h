@@ -14,6 +14,8 @@ public:
 
     Value load();
     void store(const Value& val);
+    Value& unsafeValue() { return *value_; }
+    const Value& unsafeValue() const { return *value_; }
 
     std::recursive_mutex& mutex() { return mutex_; }
 

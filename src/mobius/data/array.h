@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <vector>
 #include <algorithm>
+#include <atomic>
 #include <mutex>
 
 #include "data/value.h"
@@ -45,11 +46,15 @@ public:
     void markShared();
     bool isShared() const { return shared_; }
     std::recursive_mutex& mutex() { return mutex_; }
+    void acquireSlice() { active_slice_count_.fetch_add(1, std::memory_order_relaxed); }
+    void releaseSlice() { active_slice_count_.fetch_sub(1, std::memory_order_relaxed); }
+    bool hasActiveSlices() const { return active_slice_count_.load(std::memory_order_acquire) > 0; }
 
 private:
     std::vector<Value> elements;
     bool shared_ = false;
     mutable std::recursive_mutex mutex_;
+    std::atomic<size_t> active_slice_count_{0};
 };
 
 #endif // MOBIUS_ARRAY_H

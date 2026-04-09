@@ -1256,7 +1256,11 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                             (int)rhs_t, name, (int)target_t);
                 }
 
-                compileExpr(expr->value, local);
+                int save_reg = current_->free_reg;
+                emitABC(OP_LOCK_SHARED, (uint8_t)local, 0, 0);
+                int value_reg = compileExpr(expr->value);
+                emitABC(OP_SHARED_STORE, (uint8_t)local, (uint8_t)value_reg, 0);
+                emitABC(OP_UNLOCK_SHARED, (uint8_t)local, 0, 0);
 
                 if (target_t != VAL_UNKNOWN && rhs_t == VAL_UNKNOWN) {
                     emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, 0, 0);
@@ -1267,6 +1271,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                     current_->proto->has_type_locks = true;
                 }
 
+                setFreeReg(save_reg);
                 if (dest >= 0 && dest != local) {
                     emitABC(OP_MOVE, (uint8_t)dest, (uint8_t)local, 0);
                     return dest;
@@ -1276,15 +1281,27 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 
             int upvalue = resolveUpvalue(current_, name);
             if (upvalue >= 0) {
+                int save_reg = current_->free_reg;
+                int lock_reg = allocReg();
+                emitABC(OP_GETUPVAL, (uint8_t)lock_reg, (uint8_t)upvalue, 0);
+                emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
                 int reg = (dest >= 0) ? dest : allocReg();
                 compileExpr(expr->value, reg);
                 emitABC(OP_SETUPVAL, (uint8_t)reg, (uint8_t)upvalue, 0);
+                emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+                setFreeReg(save_reg);
                 return reg;
             }
 
+            int save_reg = current_->free_reg;
+            int lock_reg = allocReg();
+            emitGetGlobal(lock_reg, name);
+            emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
             int reg = (dest >= 0) ? dest : allocReg();
             compileExpr(expr->value, reg);
             emitSetGlobal(reg, name);
+            emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+            setFreeReg(save_reg);
             return reg;
         }
 
@@ -1579,35 +1596,53 @@ int Compiler::compileIncrement(IncrementExpr* expr, int dest) {
     OpCode op = expr->is_increment ? OP_INC : OP_DEC;
 
     if (local >= 0) {
+        int save = current_->free_reg;
         if (expr->is_prefix) {
-            emitABC(op, (uint8_t)local, (uint8_t)local, 0);
-            if (dest >= 0 && dest != local)
-                emitABC(OP_MOVE, (uint8_t)dest, (uint8_t)local, 0);
-            return (dest >= 0) ? dest : local;
+            int result_reg = (dest >= 0) ? dest : allocReg();
+            emitABC(OP_LOCK_SHARED, (uint8_t)local, 0, 0);
+            emitABC(OP_SHARED_LOAD, (uint8_t)result_reg, (uint8_t)local, 0);
+            emitABC(op, (uint8_t)result_reg, (uint8_t)result_reg, 0);
+            emitABC(OP_SHARED_STORE, (uint8_t)local, (uint8_t)result_reg, 0);
+            emitABC(OP_UNLOCK_SHARED, (uint8_t)local, 0, 0);
+            if (dest < 0) setFreeReg(result_reg + 1);
+            else setFreeReg(save);
+            return result_reg;
         } else {
             int reg = (dest >= 0) ? dest : allocReg();
-            emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)local, 0);
-            emitABC(op, (uint8_t)local, (uint8_t)local, 0);
+            int work_reg = allocReg();
+            emitABC(OP_LOCK_SHARED, (uint8_t)local, 0, 0);
+            emitABC(OP_SHARED_LOAD, (uint8_t)reg, (uint8_t)local, 0);
+            emitABC(OP_SHARED_LOAD, (uint8_t)work_reg, (uint8_t)local, 0);
+            emitABC(op, (uint8_t)work_reg, (uint8_t)work_reg, 0);
+            emitABC(OP_SHARED_STORE, (uint8_t)local, (uint8_t)work_reg, 0);
+            emitABC(OP_UNLOCK_SHARED, (uint8_t)local, 0, 0);
+            if (dest < 0) setFreeReg(reg + 1);
+            else setFreeReg(save);
             return reg;
         }
     }
 
     // Global increment: load, modify, store
+    int save = current_->free_reg;
     int reg = (dest >= 0) ? dest : allocReg();
     int tmp = allocReg();
 
     emitGetGlobal(tmp, name);
+    emitABC(OP_LOCK_SHARED, (uint8_t)tmp, 0, 0);
     if (expr->is_prefix) {
-        emitABC(op, (uint8_t)tmp, (uint8_t)tmp, 0);
-        emitSetGlobal(tmp, name);
-        if (reg != tmp) emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)tmp, 0);
+        emitABC(OP_SHARED_LOAD, (uint8_t)reg, (uint8_t)tmp, 0);
+        emitABC(op, (uint8_t)reg, (uint8_t)reg, 0);
+        emitSetGlobal(reg, name);
     } else {
-        emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)tmp, 0);
+        emitABC(OP_SHARED_LOAD, (uint8_t)reg, (uint8_t)tmp, 0);
+        emitABC(OP_SHARED_LOAD, (uint8_t)tmp, (uint8_t)tmp, 0);
         emitABC(op, (uint8_t)tmp, (uint8_t)tmp, 0);
         emitSetGlobal(tmp, name);
     }
-
-    freeReg(); // tmp
+    emitGetGlobal(tmp, name);
+    emitABC(OP_UNLOCK_SHARED, (uint8_t)tmp, 0, 0);
+    if (dest < 0) setFreeReg(reg + 1);
+    else setFreeReg(save);
     return reg;
 }
 
@@ -3385,10 +3420,12 @@ static Expr* findAtomicContainer(Expr* body) {
     if (!body) return nullptr;
     if (body->type == EXPR_ASSIGNMENT) {
         Expr* target = body->as.assignment.target;
+        if (target->type == EXPR_VARIABLE) return target;
         if (target->type == EXPR_ARRAY_INDEX) return target->as.array_index.array;
         if (target->type == EXPR_TABLE_INDEX) return target->as.table_index.table;
         if (target->type == EXPR_TABLE_DOT)   return target->as.table_dot.table;
     }
+    if (body->type == EXPR_VARIABLE) return body;
     if (body->type == EXPR_ARRAY_INDEX) return body->as.array_index.array;
     if (body->type == EXPR_TABLE_INDEX) return body->as.table_index.table;
     if (body->type == EXPR_TABLE_DOT)   return body->as.table_dot.table;
@@ -3399,7 +3436,7 @@ int Compiler::compileAtomic(AtomicExpr* expr, int dest) {
     Expr* container_expr = findAtomicContainer(expr->body);
     if (!container_expr) {
         fprintf(stderr, "Compile error [%s:%d]: atomic() requires an expression on a "
-                "shared array or table element (e.g. atomic(arr[i] = arr[i] + 1))\n",
+                "shared value or shared array/table element (e.g. atomic(counter = counter + 1))\n",
                 current_->proto->source.c_str(), currentLine_);
         had_error_ = true;
         return -1;

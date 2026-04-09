@@ -97,6 +97,7 @@ public:
         FutureValue* future;         // VAL_FUTURE
         ArraySlice* array_slice;     // VAL_ARRAY_SLICE
         Channel* channel;            // VAL_CHANNEL
+        SharedCell* shared_cell;     // VAL_SHARED_CELL
 
         ValueData() : i64(0) {}
     } as;
@@ -183,6 +184,8 @@ public:
                 return as.array_slice == other.as.array_slice;
             case VAL_CHANNEL:
                 return as.channel == other.as.channel;
+            case VAL_SHARED_CELL:
+                return as.shared_cell == other.as.shared_cell;
             default: return false;
         }
     }
@@ -201,6 +204,7 @@ private:
             case VAL_FUTURE:   if (as.future) ((RefCounted*)as.future)->retain(); break;
             case VAL_ARRAY_SLICE: if (as.array_slice) ((RefCounted*)as.array_slice)->retain(); break;
             case VAL_CHANNEL: if (as.channel) ((RefCounted*)as.channel)->retain(); break;
+            case VAL_SHARED_CELL: if (as.shared_cell) ((RefCounted*)as.shared_cell)->retain(); break;
             default: break;
         }
     }
@@ -262,6 +266,8 @@ MOBIUS_API Value make_native_function_value(MobiusCFunction function);
 MOBIUS_API Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
 MOBIUS_API Value make_array_value(ArrayValue* array);
 MOBIUS_API Value make_table_value(struct Table* table);
+MOBIUS_API Value make_shared_cell_value(SharedCell* shared_cell);
+MOBIUS_API Value deep_copy_value_for_spawn(const Value& value);
 
 inline bool is_truthy(const Value& value) {
     switch (value.type) {
@@ -281,6 +287,7 @@ inline bool is_truthy(const Value& value) {
         case VAL_FUTURE: return value.as.future != nullptr;
         case VAL_ARRAY_SLICE: return value.as.array_slice != nullptr;
         case VAL_CHANNEL: return value.as.channel != nullptr;
+        case VAL_SHARED_CELL: return value.as.shared_cell != nullptr;
         default: return false;
     }
 }
