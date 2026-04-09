@@ -1,4 +1,5 @@
 import "json"
+import "os"
 
 var pass_count = 0
 var fail_count = 0
@@ -104,6 +105,19 @@ assert_test("parse with extra whitespace b", ws.b == 2)
 
 var nl = json.parse("{\n  \"x\": 1,\n  \"y\": 2\n}")
 assert_test("parse with newlines", nl.x == 1)
+
+// ============================================================================
+// json.parsefile
+// ============================================================================
+
+var json_tmp = os.tmpfile()
+assert_test("tmp json path", json_tmp is string)
+assert_test("write json fixture", writefile(json_tmp, "{\"file\": true, \"items\": [1, 2, 3]}"))
+var from_file = json.parsefile(json_tmp)
+assert_test("parsefile object field", from_file.file == true)
+assert_test("parsefile array len", len(from_file.items) == 3)
+assert_test("parsefile array[2]", from_file.items[2] == 3)
+os.remove(json_tmp)
 
 // ============================================================================
 // json.parse — large integers

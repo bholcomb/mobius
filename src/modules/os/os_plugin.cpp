@@ -1053,29 +1053,52 @@ static int os_extname(MobiusState* state, int arg_count) {
 }
 
 static int os_join(MobiusState* state, int arg_count) {
-    if (arg_count != 2)
-        return mobius_error(state, "join() expects 2 arguments");
-    if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2))
-        return mobius_error(state, "join() expects string arguments");
-    const char* b = mobius_stack_asString(state, -1);
-    const char* a = mobius_stack_asString(state, -2);
-    mobius_stack_pop(state, 2);
-    size_t alen = strlen(a);
-    if (alen == 0) { mobius_stack_pushString(state, b); return 1; }
-    if (strlen(b) == 0) { mobius_stack_pushString(state, a); return 1; }
-    char buf[PATH_MAX];
+    if (arg_count < 1)
+        return mobius_error(state, "join() expects at least 1 argument");
+    for (int i = 1; i <= arg_count; i++) {
+        if (!mobius_stack_isString(state, -i))
+            return mobius_error(state, "join() expects string arguments");
+    }
+
 #ifdef _WIN32
     char sep = '\\';
-    bool has_sep = (a[alen - 1] == '/' || a[alen - 1] == '\\');
 #else
     char sep = '/';
-    bool has_sep = (a[alen - 1] == '/');
 #endif
-    if (has_sep)
-        snprintf(buf, sizeof(buf), "%s%s", a, b);
-    else
-        snprintf(buf, sizeof(buf), "%s%c%s", a, sep, b);
-    mobius_stack_pushString(state, buf);
+
+    std::string joined;
+    for (int i = arg_count; i >= 1; i--) {
+        const char* part = mobius_stack_asString(state, -i);
+        if (!part || part[0] == '\0') continue;
+
+        if (joined.empty()) {
+            joined = part;
+            continue;
+        }
+
+        bool left_has_sep = joined.back() == '/'
+#ifdef _WIN32
+                         || joined.back() == '\\'
+#endif
+            ;
+        bool right_has_sep = part[0] == '/'
+#ifdef _WIN32
+                          || part[0] == '\\'
+#endif
+            ;
+
+        if (!left_has_sep && !right_has_sep) {
+            joined.push_back(sep);
+            joined += part;
+        } else if (left_has_sep && right_has_sep) {
+            joined += (part + 1);
+        } else {
+            joined += part;
+        }
+    }
+
+    mobius_stack_pop(state, arg_count);
+    mobius_stack_pushString(state, joined.c_str());
     return 1;
 }
 

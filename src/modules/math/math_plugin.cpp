@@ -499,9 +499,9 @@ int math_sign(MobiusState* state, int arg_count) {
     }
     
     double val = mobius_stack_asFloat64(state, -1);
-    double sign = (val > 0.0) ? 1.0 : (val < 0.0) ? -1.0 : 0.0;
+    int64_t sign = (val > 0.0) ? 1 : (val < 0.0) ? -1 : 0;
     mobius_stack_pop(state, 1);
-    mobius_stack_pushFloat64(state, sign);
+    mobius_stack_pushInt64(state, sign);
     return 1;
 }
 

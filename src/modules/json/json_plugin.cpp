@@ -514,26 +514,13 @@ struct JsonSerializer {
     }
 };
 
-// ============================================================================
-// json.parse(string) -> value
-// ============================================================================
-
-static int json_parse(MobiusState* state, int arg_count) {
-    if (arg_count != 1)
-        return mobius_error(state, "json.parse() expects 1 argument (string)");
-    if (!mobius_stack_isString(state, -1))
-        return mobius_error(state, "json.parse() argument must be a string");
-
-    const char* input = mobius_stack_asString(state, -1);
-
+static int json_parse_input(MobiusState* state, const char* input) {
     JsonParser parser;
     parser.state = state;
     parser.src = input;
     parser.pos = 0;
     parser.len = strlen(input);
     parser.error[0] = '\0';
-
-    mobius_stack_pop(state, arg_count);
 
     if (!parser.parse_value(0)) {
         return mobius_error(state, parser.error);
@@ -547,6 +534,63 @@ static int json_parse(MobiusState* state, int arg_count) {
     }
 
     return 1;
+}
+
+// ============================================================================
+// json.parse(string) -> value
+// ============================================================================
+
+static int json_parse(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "json.parse() expects 1 argument (string)");
+    if (!mobius_stack_isString(state, -1))
+        return mobius_error(state, "json.parse() argument must be a string");
+
+    const char* input = mobius_stack_asString(state, -1);
+    mobius_stack_pop(state, arg_count);
+    return json_parse_input(state, input);
+}
+
+// ============================================================================
+// json.parsefile(path) -> value
+// ============================================================================
+
+static int json_parsefile(MobiusState* state, int arg_count) {
+    if (arg_count != 1)
+        return mobius_error(state, "json.parsefile() expects 1 argument (path)");
+    if (!mobius_stack_isString(state, -1))
+        return mobius_error(state, "json.parsefile() argument must be a string");
+
+    const char* path = mobius_stack_asString(state, -1);
+    FILE* file = fopen(path, "rb");
+    if (!file) {
+        return mobius_error(state, "json.parsefile() could not open file");
+    }
+
+    if (fseek(file, 0, SEEK_END) != 0) {
+        fclose(file);
+        return mobius_error(state, "json.parsefile() could not seek file");
+    }
+    long size = ftell(file);
+    if (size < 0) {
+        fclose(file);
+        return mobius_error(state, "json.parsefile() could not determine file size");
+    }
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        fclose(file);
+        return mobius_error(state, "json.parsefile() could not rewind file");
+    }
+
+    std::string input;
+    input.resize((size_t)size);
+    size_t nread = size > 0 ? fread(&input[0], 1, (size_t)size, file) : 0;
+    fclose(file);
+    if (nread != (size_t)size) {
+        return mobius_error(state, "json.parsefile() could not read file");
+    }
+
+    mobius_stack_pop(state, arg_count);
+    return json_parse_input(state, input.c_str());
 }
 
 // ============================================================================
@@ -593,8 +637,9 @@ static int init_json_plugin(MobiusState* /*state*/) { return 0; }
 static void cleanup_json_plugin(void) {}
 
 static MobiusPluginFunction json_functions[] = {
-    {"parse",     json_parse,     1,        MOBIUS_VAL_UNKNOWN, "Parse a JSON string into Mobius values"},
-    {"stringify", json_stringify, SIZE_MAX, MOBIUS_VAL_STRING,  "Serialize a Mobius value to JSON string"},
+    {"parse",      json_parse,      1,        MOBIUS_VAL_UNKNOWN, "Parse a JSON string into Mobius values"},
+    {"parsefile",  json_parsefile,  1,        MOBIUS_VAL_UNKNOWN, "Parse a JSON file into Mobius values"},
+    {"stringify",  json_stringify,  SIZE_MAX, MOBIUS_VAL_STRING,  "Serialize a Mobius value to JSON string"},
 };
 
 static MobiusPlugin json_plugin = {

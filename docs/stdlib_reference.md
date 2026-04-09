@@ -15,9 +15,8 @@ Array, table, and channel operations use the `:` method syntax. Global
 utility functions like `len`, `setmetatable`, and `array_create` remain
 as plain function calls.
 
-For functions provided by **plugins** (such as the `math` plugin's
-trigonometric functions), see
-[Modules and Imports](language_reference.md#modules-and-imports).
+For namespaced module APIs (such as `math.sin(...)`, `json.parse(...)`, or
+`os.join(...)`), see the [Module Reference](modules/index.md).
 
 ---
 
@@ -31,7 +30,7 @@ trigonometric functions), see
 6. [Type System Functions](#type-system-functions)
 7. [Utility Functions](#utility-functions)
 8. [Fiber / Concurrency Functions](#fiber--concurrency-functions)
-9. [Math Plugin Functions](#math-plugin-functions)
+9. [Module Reference](#module-reference)
 
 ---
 
@@ -725,100 +724,13 @@ shared parent.
 
 ---
 
-## Math Plugin Functions
+## Module Reference
 
-These additional functions are provided by the built-in `math` plugin module.
-They require an import statement:
+Namespaced modules live under [`docs/modules`](modules/index.md):
 
-```mobius
-import "math"
-```
-
-### Trigonometric
-
-| Function              | Description                     |
-|-----------------------|---------------------------------|
-| `math.sin(x)`        | Sine (radians)                  |
-| `math.cos(x)`        | Cosine (radians)                |
-| `math.tan(x)`        | Tangent (radians)               |
-| `math.asin(x)`       | Arcsine (x in [-1, 1])         |
-| `math.acos(x)`       | Arccosine (x in [-1, 1])       |
-| `math.atan(x)`       | Arctangent                      |
-| `math.atan2(y, x)`   | Two-argument arctangent         |
-
-### Hyperbolic
-
-| Function              | Description                     |
-|-----------------------|---------------------------------|
-| `math.sinh(x)`       | Hyperbolic sine                 |
-| `math.cosh(x)`       | Hyperbolic cosine               |
-| `math.tanh(x)`       | Hyperbolic tangent              |
-
-### Logarithmic and Exponential
-
-| Function              | Description                     |
-|-----------------------|---------------------------------|
-| `math.log(x)`        | Natural logarithm (x > 0)      |
-| `math.log10(x)`      | Base-10 logarithm (x > 0)      |
-| `math.exp(x)`        | e raised to the power x        |
-
-### Rounding and Clamping
-
-| Function                   | Description                          |
-|----------------------------|--------------------------------------|
-| `math.sqrt(x)`             | Square root                          |
-| `math.pow(base, exp)`      | Exponentiation                       |
-| `math.abs(x)`              | Absolute value                       |
-| `math.floor(x)`            | Round down                           |
-| `math.ceil(x)`             | Round up                             |
-| `math.round(x)`            | Round to nearest                     |
-| `math.min(a, b, ...)`      | Minimum of arguments                 |
-| `math.max(a, b, ...)`      | Maximum of arguments                 |
-| `math.clamp(val, min, max)`| Clamp value to range                 |
-| `math.sign(x)`             | Returns -1, 0, or 1                  |
-
-### Conversion
-
-| Function              | Description                                |
-|-----------------------|--------------------------------------------|
-| `math.deg2rad(deg)`   | Convert degrees to radians                 |
-| `math.rad2deg(rad)`   | Convert radians to degrees                 |
-
-### Number Theory
-
-| Function              | Description                                |
-|-----------------------|--------------------------------------------|
-| `math.factorial(n)`   | Factorial (0 <= n <= 20)                   |
-| `math.gcd(a, b)`      | Greatest common divisor                    |
-| `math.lcm(a, b)`      | Least common multiple                      |
-
-### Constants
-
-| Function              | Returns                                    |
-|-----------------------|--------------------------------------------|
-| `math.pi()`           | 3.14159265358979...                        |
-| `math.e()`            | 2.71828182845904...                        |
-
-### Random
-
-| Function              | Description                                |
-|-----------------------|--------------------------------------------|
-| `math.random()`       | Random float in [0, 1)                     |
-
-### Example
-
-```mobius
-import "math"
-
-var angle = math.deg2rad(45)
-print("sin(45°) =", math.sin(angle))
-print("cos(45°) =", math.cos(angle))
-
-print("5! =", math.factorial(5))
-print("gcd(12, 8) =", math.gcd(12, 8))
-
-print("π =", math.pi())
-print("e =", math.e())
-
-print("clamp(15, 0, 10) =", math.clamp(15, 0, 10))
-```
+- [`fiber`](modules/fiber.md)
+- [`json`](modules/json.md)
+- [`math`](modules/math.md)
+- [`os`](modules/os.md)
+- [`regex`](modules/regex.md)
+- [`toml`](modules/toml.md)
