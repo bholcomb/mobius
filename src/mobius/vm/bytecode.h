@@ -54,6 +54,8 @@ struct Prototype {
     bool is_vararg   = false;
     bool has_type_locks = false;  // true if any OP_TYPELOCK/OP_TYPECHECK_LOCKED emitted
     ValueType return_type = VAL_UNKNOWN;  // inferred from return statements
+    bool return_maybe_shared = false;     // true if any return path may produce a SharedCell
+    std::vector<uint8_t> param_unwrap_on_entry;  // 1 when the call boundary should unwrap a shared argument
 
     // -- Debug information --
     // One entry per instruction in `code`, recording the source line.
