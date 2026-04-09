@@ -9,6 +9,12 @@
 //
 // 3. Atomic table: multiple fibers increment a shared table field
 //    WITH atomic() — exact total must be preserved.
+//
+// 4. Atomic shared scalar: multiple fibers increment a shared scalar
+//    WITH atomic() — exact total must be preserved.
+//
+// 5. Atomic shared slice: multiple fibers increment through a shared slice
+//    WITH atomic() — exact total must be preserved.
 
 print("=== Shared Variables and Atomic Operations ===")
 
@@ -134,7 +140,58 @@ if (bucket_sum != EXPECTED_TOTAL) {
 print("  Atomic bucket scatter: sum =", bucket_sum, "(exact)")
 
 // ---------------------------------------------------------------------------
-// Test 5: verify atomic() on non-shared is an error
+// Test 5: shared scalar WITH atomic — exact count required
+// ---------------------------------------------------------------------------
+
+shared var atomic_scalar = 0
+
+func atomic_scalar_increment(counter, n) {
+    for (var i = 0; i < n; i += 1) {
+        atomic(counter = counter + 1)
+    }
+    return n
+}
+
+var scalar_futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    scalar_futures:push(spawn atomic_scalar_increment(atomic_scalar, INCREMENTS_PER_FIBER))
+}
+fiber.all(scalar_futures)
+
+if (atomic_scalar != EXPECTED_TOTAL) {
+    print("FAIL: atomic_scalar =", atomic_scalar, "expected", EXPECTED_TOTAL)
+    exit(1)
+}
+print("  Atomic shared scalar:", atomic_scalar, "(exact)")
+
+// ---------------------------------------------------------------------------
+// Test 6: shared slice WITH atomic — exact count required
+// ---------------------------------------------------------------------------
+
+shared var slice_parent = [0, 0]
+var shared_slice = fiber.slice(slice_parent, 0, 1)
+
+func atomic_slice_increment(s, n) {
+    for (var i = 0; i < n; i += 1) {
+        atomic(s[0] = s[0] + 1)
+    }
+    return n
+}
+
+var slice_futures = []
+for (var i = 0; i < NUM_FIBERS; i += 1) {
+    slice_futures:push(spawn atomic_slice_increment(shared_slice, INCREMENTS_PER_FIBER))
+}
+fiber.all(slice_futures)
+
+if (slice_parent[0] != EXPECTED_TOTAL) {
+    print("FAIL: shared slice atomic count =", slice_parent[0], "expected", EXPECTED_TOTAL)
+    exit(1)
+}
+print("  Atomic shared slice:", slice_parent[0], "(exact)")
+
+// ---------------------------------------------------------------------------
+// Test 7: verify atomic() on non-shared is an error
 // ---------------------------------------------------------------------------
 
 var caught_error = false
@@ -149,5 +206,19 @@ if (!caught_error) {
     exit(1)
 }
 print("  atomic() on non-shared correctly raised error")
+
+var slice_caught_error = false
+try {
+    var local_arr = [0, 1]
+    var local_slice = fiber.slice(local_arr, 0, 1)
+    atomic(local_slice[0] = local_slice[0] + 1)
+} catch e {
+    slice_caught_error = true
+}
+if (!slice_caught_error) {
+    print("FAIL: atomic() on non-shared slice should throw an error")
+    exit(1)
+}
+print("  atomic() on non-shared slice correctly raised error")
 
 print("=== All shared/atomic tests passed! ===")
