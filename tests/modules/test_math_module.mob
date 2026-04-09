@@ -1,0 +1,78 @@
+import "math"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+func approx_eq(a, b, epsilon) {
+    return abs(a - b) <= epsilon
+}
+
+// ============================================================================
+// Constants
+// ============================================================================
+
+assert_test("pi close to expected", approx_eq(math.pi, 3.141592653589793, 0.000000000001))
+assert_test("e close to expected", approx_eq(math.e, 2.718281828459045, 0.000000000001))
+assert_test("tau equals 2*pi", approx_eq(math.tau, math.pi * 2.0, 0.000000000001))
+
+// ============================================================================
+// Utility helpers
+// ============================================================================
+
+assert_test("deg2rad 180", approx_eq(math.deg2rad(180), math.pi, 0.000000000001))
+assert_test("rad2deg pi", approx_eq(math.rad2deg(math.pi), 180.0, 0.000000000001))
+assert_test("sign negative", math.sign(-42) == -1)
+assert_test("sign zero", math.sign(0) == 0)
+assert_test("sign positive", math.sign(42.5) == 1)
+assert_test("clamp inside range", math.clamp(5, 0, 10) == 5)
+assert_test("clamp low", math.clamp(-5, 0, 10) == 0)
+assert_test("clamp high", math.clamp(25, 0, 10) == 10)
+
+// ============================================================================
+// Advanced helpers
+// ============================================================================
+
+assert_test("hypot 3 4", approx_eq(math.hypot(3, 4), 5.0, 0.000000000001))
+assert_test("cbrt positive", approx_eq(math.cbrt(27), 3.0, 0.000000000001))
+assert_test("cbrt negative", approx_eq(math.cbrt(-8), -2.0, 0.000000000001))
+assert_test("trunc positive", math.trunc(3.9) == 3.0)
+assert_test("trunc negative", math.trunc(-3.9) == -3.0)
+
+// ============================================================================
+// Number theory
+// ============================================================================
+
+assert_test("factorial value", math.factorial(5) == 120)
+assert_test("factorial return type", typeof(math.factorial(5)) == "integer")
+assert_test("gcd basic", math.gcd(54, 24) == 6)
+assert_test("lcm basic", math.lcm(12, 18) == 36)
+assert_test("lcm zero", math.lcm(12, 0) == 0)
+
+// ============================================================================
+// Existing advanced log/exp helpers
+// ============================================================================
+
+assert_test("log2 8", approx_eq(math.log2(8), 3.0, 0.000000000001))
+assert_test("exp2 4", approx_eq(math.exp2(4), 16.0, 0.000000000001))
+assert_test("log1p small", approx_eq(math.log1p(0.5), 0.4054651081081644, 0.000000000001))
+assert_test("expm1 small", approx_eq(math.expm1(1), math.e - 1.0, 0.000000000001))
+
+// ============================================================================
+// Summary
+// ============================================================================
+
+print("")
+print("Math Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

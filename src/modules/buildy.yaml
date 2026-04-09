@@ -63,3 +63,27 @@ targets:
       libs: ["mobius-core", "dl"]
       depends_on:
         targets: ["mobius-core"]
+
+    - name: datetime
+      language: cpp
+      output_prefix: ""
+      sources: ["datetime/datetime_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]
+
+    - name: url
+      language: cpp
+      output_prefix: ""
+      sources: ["url/url_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]

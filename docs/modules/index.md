@@ -8,12 +8,14 @@ import "module_name"
 
 Current built-in first-party modules:
 
+- [`datetime`](datetime.md) - structured date/time conversion and ISO helpers
 - [`fiber`](fiber.md) - concurrency helpers, channels, and slices
 - [`json`](json.md) - JSON parsing and serialization
 - [`math`](math.md) - extended mathematical functions and constants
 - [`os`](os.md) - filesystem, path, process, and host time utilities
 - [`regex`](regex.md) - regular expression matching and replacement
 - [`toml`](toml.md) - TOML parsing and serialization
+- [`url`](url.md) - URL parsing, encoding, and query helpers
 
 Notes:
 
