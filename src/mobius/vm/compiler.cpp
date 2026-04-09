@@ -317,6 +317,40 @@ ValueType Compiler::nativeReturnType(const char* name) {
     return VAL_UNKNOWN;
 }
 
+bool Compiler::callMayBeShared(CallExpr* expr) {
+    if (!expr) return true;
+
+    Expr* callee = expr->callee;
+    if (callee->type != EXPR_VARIABLE) return true;
+
+    const char* name = callee->as.variable.name.identifier;
+    if (!name) return true;
+
+    if (current_->proto->name == name &&
+        current_->proto->return_type != VAL_UNKNOWN) {
+        return current_->proto->return_maybe_shared;
+    }
+
+    ValueType native_type = nativeReturnType(name);
+    if (native_type != VAL_UNKNOWN) return false;
+
+    for (auto* p : current_->proto->protos) {
+        if (p->name == name && p->return_type != VAL_UNKNOWN) {
+            return p->return_maybe_shared;
+        }
+    }
+
+    for (FunctionState* fs = current_->enclosing; fs; fs = fs->enclosing) {
+        for (auto* p : fs->proto->protos) {
+            if (p->name == name && p->return_type != VAL_UNKNOWN) {
+                return p->return_maybe_shared;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool Compiler::exprMayBeShared(Expr* expr) {
     if (!expr) return false;
 
@@ -346,6 +380,7 @@ bool Compiler::exprMayBeShared(Expr* expr) {
             return exprMayBeShared(expr->as.assignment.value);
 
         case EXPR_CALL:
+            return callMayBeShared(&expr->as.call);
         case EXPR_AWAIT:
         case EXPR_ARRAY_INDEX:
         case EXPR_TABLE_INDEX:
@@ -1278,6 +1313,20 @@ static int assignment_target_line(Expr* target) {
 }
 
 namespace {
+bool type_prefers_plain_binding(ValueType type) {
+    switch (type) {
+        case VAL_BOOL:
+        case VAL_INT64:
+        case VAL_UINT64:
+        case VAL_FLOAT64:
+        case VAL_CHAR:
+        case VAL_STRING:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool is_scalar_binary_context(TokenType op) {
     switch (op) {
         case TOKEN_PLUS:
@@ -1403,7 +1452,7 @@ bool expr_requires_shared_identity(Expr* expr, const char* name, bool scalar_con
     return true;
 }
 
-bool stmt_requires_shared_identity(Stmt* stmt, const char* name) {
+bool stmt_requires_shared_identity(Stmt* stmt, const char* name, ValueType return_type) {
     if (!stmt) return false;
 
     switch (stmt->type) {
@@ -1415,48 +1464,49 @@ bool stmt_requires_shared_identity(Stmt* stmt, const char* name) {
             return expr_requires_shared_identity(stmt->as.var.initializer, name, false);
         case STMT_BLOCK:
             for (size_t i = 0; i < stmt->as.block.count; i++) {
-                if (stmt_requires_shared_identity(stmt->as.block.statements[i], name)) return true;
+                if (stmt_requires_shared_identity(stmt->as.block.statements[i], name, return_type)) return true;
             }
             return false;
         case STMT_IF:
             return expr_requires_shared_identity(stmt->as.if_stmt.condition, name, true) ||
-                   stmt_requires_shared_identity(stmt->as.if_stmt.then_branch, name) ||
-                   stmt_requires_shared_identity(stmt->as.if_stmt.else_branch, name);
+                   stmt_requires_shared_identity(stmt->as.if_stmt.then_branch, name, return_type) ||
+                   stmt_requires_shared_identity(stmt->as.if_stmt.else_branch, name, return_type);
         case STMT_WHILE:
             return expr_requires_shared_identity(stmt->as.while_stmt.condition, name, true) ||
-                   stmt_requires_shared_identity(stmt->as.while_stmt.body, name);
+                   stmt_requires_shared_identity(stmt->as.while_stmt.body, name, return_type);
         case STMT_FOR:
-            return stmt_requires_shared_identity(stmt->as.for_stmt.initializer, name) ||
+            return stmt_requires_shared_identity(stmt->as.for_stmt.initializer, name, return_type) ||
                    expr_requires_shared_identity(stmt->as.for_stmt.condition, name, true) ||
                    expr_requires_shared_identity(stmt->as.for_stmt.increment, name, false) ||
-                   stmt_requires_shared_identity(stmt->as.for_stmt.body, name);
+                   stmt_requires_shared_identity(stmt->as.for_stmt.body, name, return_type);
         case STMT_RETURN:
-            return expr_requires_shared_identity(stmt->as.return_stmt.value, name, false);
+            return expr_requires_shared_identity(stmt->as.return_stmt.value, name,
+                                                 type_prefers_plain_binding(return_type));
         case STMT_SWITCH:
             if (expr_requires_shared_identity(stmt->as.switch_stmt.discriminant, name, false)) return true;
             for (size_t i = 0; i < stmt->as.switch_stmt.case_count; i++) {
                 SwitchCase* case_clause = stmt->as.switch_stmt.cases[i];
                 if (case_clause->guard && expr_requires_shared_identity(case_clause->guard, name, true)) return true;
                 for (size_t j = 0; j < case_clause->body_count; j++) {
-                    if (stmt_requires_shared_identity(case_clause->body[j], name)) return true;
+                    if (stmt_requires_shared_identity(case_clause->body[j], name, return_type)) return true;
                 }
             }
             for (size_t i = 0; i < stmt->as.switch_stmt.default_body_count; i++) {
-                if (stmt_requires_shared_identity(stmt->as.switch_stmt.default_body[i], name)) return true;
+                if (stmt_requires_shared_identity(stmt->as.switch_stmt.default_body[i], name, return_type)) return true;
             }
             return false;
         case STMT_FOR_IN:
             return expr_requires_shared_identity(stmt->as.for_in_stmt.iterable, name, false) ||
-                   stmt_requires_shared_identity(stmt->as.for_in_stmt.body, name);
+                   stmt_requires_shared_identity(stmt->as.for_in_stmt.body, name, return_type);
         case STMT_TRY_CATCH:
             for (size_t i = 0; i < stmt->as.try_catch_stmt.try_body_count; i++) {
-                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.try_body[i], name)) return true;
+                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.try_body[i], name, return_type)) return true;
             }
             for (size_t i = 0; i < stmt->as.try_catch_stmt.catch_body_count; i++) {
-                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.catch_body[i], name)) return true;
+                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.catch_body[i], name, return_type)) return true;
             }
             for (size_t i = 0; i < stmt->as.try_catch_stmt.finally_body_count; i++) {
-                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.finally_body[i], name)) return true;
+                if (stmt_requires_shared_identity(stmt->as.try_catch_stmt.finally_body[i], name, return_type)) return true;
             }
             return false;
         case STMT_THROW:
@@ -1466,12 +1516,14 @@ bool stmt_requires_shared_identity(Stmt* stmt, const char* name) {
     }
 }
 
-std::vector<bool> compute_param_shared_identity_flags(Token* params, size_t param_count, Stmt** body, size_t body_count) {
+std::vector<bool> compute_param_shared_identity_flags(Token* params, size_t param_count,
+                                                      Stmt** body, size_t body_count,
+                                                      ValueType return_type) {
     std::vector<bool> needs_identity(param_count, false);
     for (size_t i = 0; i < param_count; i++) {
         const char* name = params[i].identifier;
         for (size_t j = 0; j < body_count; j++) {
-            if (stmt_requires_shared_identity(body[j], name)) {
+            if (stmt_requires_shared_identity(body[j], name, return_type)) {
                 needs_identity[i] = true;
                 break;
             }
@@ -1531,6 +1583,9 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             if (local >= 0) {
                 ValueType target_t = localType(local);
                 ValueType rhs_t = inferExprType(expr->value);
+                bool keep_plain = !current_->locals[local].maybe_shared &&
+                                  rhs_maybe_shared &&
+                                  type_prefers_plain_binding(target_t);
 
                 if (target_t != VAL_UNKNOWN && rhs_t != VAL_UNKNOWN && rhs_t != target_t) {
                     fprintf(stderr, "Compile error [%s:%d]: cannot assign type %d to variable '%s' "
@@ -1540,14 +1595,18 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                 }
 
                 int save_reg = current_->free_reg;
-                bool target_maybe_shared = current_->locals[local].maybe_shared || rhs_maybe_shared;
+                bool target_maybe_shared = keep_plain
+                    ? false
+                    : (current_->locals[local].maybe_shared || rhs_maybe_shared);
                 current_->locals[local].maybe_shared = target_maybe_shared;
                 int value_reg;
                 if (target_maybe_shared) {
-                    value_reg = compileExpr(expr->value);
                     emitABC(OP_LOCK_SHARED, (uint8_t)local, 0, 0);
+                    value_reg = compileExpr(expr->value);
                     emitABC(OP_SHARED_STORE, (uint8_t)local, (uint8_t)value_reg, 0);
                     emitABC(OP_UNLOCK_SHARED, (uint8_t)local, 0, 0);
+                } else if (keep_plain) {
+                    value_reg = compileUnwrappedExpr(expr->value, local);
                 } else {
                     value_reg = compileExpr(expr->value, local);
                 }
@@ -1574,13 +1633,13 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                 int save_reg = current_->free_reg;
                 int lock_reg = allocReg();
                 int reg = (dest >= 0) ? dest : allocReg();
-                compileExpr(expr->value, reg);
                 bool target_maybe_shared = current_->proto->upvalues[upvalue].maybe_shared || rhs_maybe_shared;
                 current_->proto->upvalues[upvalue].maybe_shared = target_maybe_shared;
                 emitABC(OP_GETUPVAL, (uint8_t)lock_reg, (uint8_t)upvalue, 0);
                 if (target_maybe_shared) {
                     emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
                 }
+                compileExpr(expr->value, reg);
                 emitABC(OP_SETUPVAL, (uint8_t)reg, (uint8_t)upvalue, 0);
                 if (target_maybe_shared) {
                     emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
@@ -1592,12 +1651,20 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             int save_reg = current_->free_reg;
             int lock_reg = allocReg();
             int reg = (dest >= 0) ? dest : allocReg();
-            compileExpr(expr->value, reg);
-            bool target_maybe_shared = globalMayBeShared(name) || rhs_maybe_shared;
+            ValueType target_t = globalType(name);
+            bool keep_plain = !globalMayBeShared(name) &&
+                              rhs_maybe_shared &&
+                              type_prefers_plain_binding(target_t);
+            bool target_maybe_shared = keep_plain ? false : (globalMayBeShared(name) || rhs_maybe_shared);
             if (target_maybe_shared) {
                 global_maybe_shared_[name] = true;
                 emitGetGlobal(lock_reg, name);
                 emitABC(OP_LOCK_SHARED, (uint8_t)lock_reg, 0, 0);
+            }
+            if (keep_plain) {
+                compileUnwrappedExpr(expr->value, reg);
+            } else {
+                compileExpr(expr->value, reg);
             }
             emitSetGlobal(reg, name);
             if (target_maybe_shared) {
@@ -2074,16 +2141,22 @@ void Compiler::compilePrintStmt(PrintStmt* stmt) {
 void Compiler::compileVarStmt(VarStmt* stmt) {
     currentLine_ = stmt->name.line;
     const char* name = stmt->name.identifier;
-    bool maybe_shared = stmt->initializer ? exprMayBeShared(stmt->initializer) : false;
 
     if (current_->scope_depth > 0) {
         // Local variable
         ValueType inferred = stmt->initializer ? inferExprType(stmt->initializer) : VAL_UNKNOWN;
+        bool rhs_maybe_shared = stmt->initializer ? exprMayBeShared(stmt->initializer) : false;
+        bool keep_plain = rhs_maybe_shared && type_prefers_plain_binding(inferred);
+        bool maybe_shared = rhs_maybe_shared && !keep_plain;
         int reg = addLocal(name, maybe_shared);
         current_->locals.back().inferred_type = inferred;
 
         if (stmt->initializer) {
-            compileExpr(stmt->initializer, reg);
+            if (keep_plain) {
+                compileUnwrappedExpr(stmt->initializer, reg);
+            } else {
+                compileExpr(stmt->initializer, reg);
+            }
         } else {
             emitABC(OP_LOADNIL, (uint8_t)reg, 0, 0);
         }
@@ -2097,10 +2170,17 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
     } else {
         // Global variable
         ValueType inferred = stmt->initializer ? inferExprType(stmt->initializer) : VAL_UNKNOWN;
+        bool rhs_maybe_shared = stmt->initializer ? exprMayBeShared(stmt->initializer) : false;
+        bool keep_plain = rhs_maybe_shared && type_prefers_plain_binding(inferred);
+        bool maybe_shared = rhs_maybe_shared && !keep_plain;
         int save = current_->free_reg;
         int reg = allocReg();
         if (stmt->initializer) {
-            compileExpr(stmt->initializer, reg);
+            if (keep_plain) {
+                compileUnwrappedExpr(stmt->initializer, reg);
+            } else {
+                compileExpr(stmt->initializer, reg);
+            }
         } else {
             emitABC(OP_LOADNIL, (uint8_t)reg, 0, 0);
         }
@@ -2586,17 +2666,17 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     beginScope();
 
     child_fs.proto->num_params = (int)stmt->param_count;
+    child_fs.proto->param_unwrap_on_entry.assign(stmt->param_count, 0);
     std::vector<bool> param_needs_identity =
         compute_param_shared_identity_flags(stmt->params, stmt->param_count,
-                                            stmt->body, stmt->body_count);
+                                            stmt->body, stmt->body_count,
+                                            child_fs.proto->return_type);
     for (size_t i = 0; i < stmt->param_count; i++) {
         bool maybe_shared = param_needs_identity[i];
         addLocal(stmt->params[i].identifier, maybe_shared);
         if (stmt->param_types && stmt->param_types[i] != VAL_UNKNOWN)
             current_->locals.back().inferred_type = stmt->param_types[i];
-        if (!maybe_shared) {
-            emitABC(OP_SHARED_LOAD, (uint8_t)i, (uint8_t)i, 0);
-        }
+        child_fs.proto->param_unwrap_on_entry[i] = maybe_shared ? 0 : 1;
     }
 
     // Compile function body
@@ -2640,6 +2720,9 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
 
     if (stmt->value) {
         ValueType ret_t = inferExprType(stmt->value);
+        if (exprMayBeShared(stmt->value)) {
+            current_->proto->return_maybe_shared = true;
+        }
         if (ret_t != VAL_UNKNOWN) {
             if (current_->proto->return_type == VAL_UNKNOWN) {
                 current_->proto->return_type = ret_t;
@@ -3392,15 +3475,17 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             }
         }
 
-        // Pattern 3: GETGLOBAL A,Bx + CALL A,B,C  =>  GETGLOBAL_CALL
+        // Pattern 3: GETGLOBAL A,Bx + CALL/CALL_PLAIN A,B,C  =>  fused GETGLOBAL_CALL(_PLAIN)
         if (op == OP_GETGLOBAL && i + 1 < n && !is_target[i + 1]) {
             OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
-            if (op2 == OP_CALL) {
+            if (op2 == OP_CALL || op2 == OP_CALL_PLAIN) {
                 uint8_t gg_a = DECODE_A(code[i]);
                 uint16_t gg_bx = DECODE_Bx(code[i]);
                 uint8_t call_a = DECODE_A(code[i + 1]);
                 if (gg_a == call_a) {
-                    new_code.push_back(ENCODE_ABx(OP_GETGLOBAL_CALL, gg_a, gg_bx));
+                    OpCode fused = (op2 == OP_CALL_PLAIN) ? OP_GETGLOBAL_CALL_PLAIN
+                                                          : OP_GETGLOBAL_CALL;
+                    new_code.push_back(ENCODE_ABx(fused, gg_a, gg_bx));
                     new_lines.push_back(lines[i]);
                     remap[i + 1] = (int)new_code.size();
                     new_code.push_back(code[i + 1]); // keep CALL encoding as data word
@@ -3560,17 +3645,17 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     beginScope();
 
     child_fs.proto->num_params = (int)expr->param_count;
+    child_fs.proto->param_unwrap_on_entry.assign(expr->param_count, 0);
     std::vector<bool> param_needs_identity =
         compute_param_shared_identity_flags(expr->params, expr->param_count,
-                                            expr->body, expr->body_count);
+                                            expr->body, expr->body_count,
+                                            child_fs.proto->return_type);
     for (size_t i = 0; i < expr->param_count; i++) {
         bool maybe_shared = param_needs_identity[i];
         addLocal(expr->params[i].identifier, maybe_shared);
         if (expr->param_types && expr->param_types[i] != VAL_UNKNOWN)
             current_->locals.back().inferred_type = expr->param_types[i];
-        if (!maybe_shared) {
-            emitABC(OP_SHARED_LOAD, (uint8_t)i, (uint8_t)i, 0);
-        }
+        child_fs.proto->param_unwrap_on_entry[i] = maybe_shared ? 0 : 1;
     }
 
     compileBlock(expr->body, expr->body_count);

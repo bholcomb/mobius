@@ -184,6 +184,7 @@ private:
     ValueType nativeReturnType(const char* name);
     bool localMayBeShared(int reg);
     bool globalMayBeShared(const char* name);
+    bool callMayBeShared(CallExpr* expr);
     bool exprMayBeShared(Expr* expr);
 
     // Global type tracking: maps global name → value type for user-defined

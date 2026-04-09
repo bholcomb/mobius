@@ -161,6 +161,7 @@ enum OpCode : uint8_t {
     OP_CALL,        // A B C     call R[A] with B-1 args (R[A+1]..R[A+B-1]);
                     //           C-1 results into R[A]..R[A+C-2]
                     //           B=0: args are R[A+1]..top; C=0: multiple returns
+    OP_CALL_PLAIN,  // A B C     same as OP_CALL, but explicit args are statically known non-shared
     OP_TAILCALL,    // A B       tail-call R[A] with B-1 args (same as CALL but reuses frame)
     OP_RETURN,      // A B       return R[A], ..., R[A+B-2]; B=0: return R[A]..top; B=1: return nothing
 
@@ -237,6 +238,7 @@ enum OpCode : uint8_t {
     OP_MOVE_ADDI,   // A B + next word is AsBx(ADDI): R[A]=R[B]; R[A]+=sBx; ip+=1
     OP_GETGLOBAL_INDEX_GET, // consumes 2 words: GETGLOBAL(A,Bx) then INDEX_GET(A,A,RK(C))
     OP_GETGLOBAL_CALL, // consumes 2 words: GETGLOBAL(A,Bx) then CALL(A,B,C)
+    OP_GETGLOBAL_CALL_PLAIN, // consumes 2 words: GETGLOBAL(A,Bx) then CALL_PLAIN(A,B,C)
 
     // -- Array fast-path --
     OP_ARRAY_PUSH,  // A B       R[A].array.push(R[B])     (array-only append)
@@ -344,6 +346,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"JMP",       FMT_sBx},
 
         {"CALL",      FMT_ABC},
+        {"CALL_PLAIN",FMT_ABC},
         {"TAILCALL",  FMT_ABC},
         {"RETURN",    FMT_ABC},
 
@@ -404,6 +407,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"MOVE_ADDI", FMT_FUSED2},
         {"GETGLOBAL_INDEX_GET", FMT_FUSED2},
         {"GETGLOBAL_CALL", FMT_FUSED2},
+        {"GETGLOBAL_CALL_PLAIN", FMT_FUSED2},
 
         {"ARRAY_PUSH",FMT_ABC},
 

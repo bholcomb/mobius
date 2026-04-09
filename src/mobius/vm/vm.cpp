@@ -312,6 +312,17 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
     int needed = child_base + child->num_registers + 16;
     ensureRegisters(needed);
 
+    if (!child->param_unwrap_on_entry.empty()) {
+        for (int i = 0; i < nargs; i++) {
+            Value& arg = registers_[child_base + i];
+            if (i < (int)child->param_unwrap_on_entry.size() &&
+                child->param_unwrap_on_entry[i] &&
+                arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+                arg = arg.as.shared_cell->load();
+            }
+        }
+    }
+
     if (MOBIUS_UNLIKELY(child->has_type_locks)) {
         memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
     }
@@ -414,6 +425,16 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         registers_[scratch + 2] = rhs;
 
         int child_base = scratch + 1;
+        if (!child->param_unwrap_on_entry.empty()) {
+            for (int i = 0; i < 2; i++) {
+                Value& arg = registers_[child_base + i];
+                if (i < (int)child->param_unwrap_on_entry.size() &&
+                    child->param_unwrap_on_entry[i] &&
+                    arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+                    arg = arg.as.shared_cell->load();
+                }
+            }
+        }
         if (MOBIUS_UNLIKELY(child->has_type_locks)) {
             memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
         }
@@ -498,6 +519,17 @@ static MOBIUS_FORCEINLINE bool shared_store(Value& dst, const Value& src) {
         return true;
     }
     return false;
+}
+
+static MOBIUS_FORCEINLINE Value prepare_param_value(const Prototype* proto, int param_idx,
+                                                   const Value& value) {
+    if (proto &&
+        param_idx >= 0 &&
+        param_idx < (int)proto->param_unwrap_on_entry.size() &&
+        proto->param_unwrap_on_entry[param_idx]) {
+        return shared_unwrap(value);
+    }
+    return value;
 }
 
 // ---- Data movement ----
@@ -1877,7 +1909,8 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
 }
 
 // ---- Call / Tailcall ----
-MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t inst,
+                                              bool prepare_params) {
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
     int c = DECODE_C(inst);
@@ -1903,6 +1936,17 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
         int child_base = f.ci->base + a + 1;
         vm->ensureRegisters(child_base + child->num_registers + 16);
 
+        if (prepare_params && !child->param_unwrap_on_entry.empty()) {
+            for (int i = 0; i < nargs; i++) {
+                Value& arg = vm->registers_[child_base + i];
+                if (i < (int)child->param_unwrap_on_entry.size() &&
+                    child->param_unwrap_on_entry[i] &&
+                    arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+                    arg = shared_unwrap(arg);
+                }
+            }
+        }
+
         if (MOBIUS_UNLIKELY(child->has_type_locks)) {
             memset(&vm->type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
         }
@@ -1927,6 +1971,14 @@ MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst
     return 0;
 }
 
+MOBIUS_FORCEINLINE static int vm_op_call(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_call_impl(vm, f, inst, true);
+}
+
+MOBIUS_FORCEINLINE static int vm_op_call_plain(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_call_impl(vm, f, inst, false);
+}
+
 MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
@@ -1938,6 +1990,19 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uin
     f.regs[a] = gv;
     uint32_t inst2 = *f.ip++;
     return vm_op_call(vm, f, inst2);
+}
+
+MOBIUS_FORCEINLINE static int vm_op_getglobal_call_plain(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    int a = DECODE_A(inst);
+    int slot = DECODE_Bx(inst);
+    const Value& gv = vm->state_->globalSlot(slot);
+    if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        return -1;
+    }
+    f.regs[a] = gv;
+    uint32_t inst2 = *f.ip++;
+    return vm_op_call_plain(vm, f, inst2);
 }
 
 MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t inst, size_t base_depth) {
@@ -1993,7 +2058,7 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     Value* args = (nargs <= 256) ? arg_buf : new Value[nargs];
     int src_base = f.ci->base + a + 1;
     for (int i = 0; i < nargs; i++) {
-        args[i] = vm->registers_[src_base + i];
+        args[i] = prepare_param_value(child, i, vm->registers_[src_base + i]);
     }
 
     if (MOBIUS_UNLIKELY(f.ci->upvalue_count > 0)) vm->closeUpvalues(*f.ci, 0);
@@ -2521,7 +2586,7 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
 
             int base = 1;
             for (int i = 0; i < nargs; i++) {
-                fiber_vm.registers_[base + i] = std::move(args_copy[i]);
+                fiber_vm.registers_[base + i] = prepare_param_value(proto, i, args_copy[i]);
             }
 
             if (MOBIUS_UNLIKELY(proto->has_type_locks)) {
@@ -2731,7 +2796,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_EQ, &&L_OP_LT, &&L_OP_LE,
         &&L_OP_TEST, &&L_OP_TESTSET,
         &&L_OP_JMP,
-        &&L_OP_CALL, &&L_OP_TAILCALL, &&L_OP_RETURN,
+        &&L_OP_CALL, &&L_OP_CALL_PLAIN, &&L_OP_TAILCALL, &&L_OP_RETURN,
         &&L_OP_CLOSURE, &&L_OP_CLOSE,
         &&L_OP_IFORPREP, &&L_OP_IFORLOOP,
         &&L_OP_TFORLOOP,
@@ -2747,6 +2812,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_DIV_II, &&L_OP_DIV_FF, &&L_OP_MOD_FF,
         &&L_OP_ADDK, &&L_OP_SUBK, &&L_OP_MULK, &&L_OP_DIVK, &&L_OP_MODK,
         &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
+        &&L_OP_GETGLOBAL_CALL_PLAIN,
         &&L_OP_ARRAY_PUSH,
         &&L_OP_LEN,
         &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
@@ -2893,10 +2959,12 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_MOVE_ADDI, vm_op_move_addi)
     VM_HANDLER(OP_GETGLOBAL_INDEX_GET, vm_op_getglobal_index_get)
     VM_HANDLER(OP_GETGLOBAL_CALL, vm_op_getglobal_call)
+    VM_HANDLER(OP_GETGLOBAL_CALL_PLAIN, vm_op_getglobal_call_plain)
 
     VM_HANDLER(OP_ARRAY_PUSH, vm_op_array_push)
 
     VM_HANDLER(OP_CALL, vm_op_call)
+    VM_HANDLER(OP_CALL_PLAIN, vm_op_call_plain)
 
     VM_CASE(OP_TAILCALL) {
         int rc = vm_op_tailcall(this, f, inst, base_depth);
