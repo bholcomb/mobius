@@ -570,7 +570,8 @@ void mobius_stack_pushNewArray(MobiusState* state, size_t capacity) {
 
 void mobius_stack_pushNewBuffer(MobiusState* state, size_t size) {
     BufferValue* buffer = new (std::nothrow) BufferValue(size, 0, false, false);
-    if (!buffer) {
+    if (!buffer || !buffer->ok()) {
+        if (buffer) buffer->release();
         state->setError(MOBIUS_ERROR_MEMORY, "Failed to create buffer",
                         nullptr, 0, 0, nullptr);
         return;
@@ -580,7 +581,8 @@ void mobius_stack_pushNewBuffer(MobiusState* state, size_t size) {
 
 void mobius_stack_pushBufferCopy(MobiusState* state, const void* data, size_t size) {
     BufferValue* buffer = new (std::nothrow) BufferValue(0, 0, false, false);
-    if (!buffer) {
+    if (!buffer || !buffer->ok()) {
+        if (buffer) buffer->release();
         state->setError(MOBIUS_ERROR_MEMORY, "Failed to create buffer",
                         nullptr, 0, 0, nullptr);
         return;
@@ -600,7 +602,8 @@ void mobius_stack_pushBufferExternal(MobiusState* state, void* data, size_t size
     BufferValue* buffer = new (std::nothrow) BufferValue(data, size,
                                                          (BufferValue::ReleaseFn)release,
                                                          userdata, readonly);
-    if (!buffer) {
+    if (!buffer || !buffer->ok()) {
+        if (buffer) buffer->release();
         state->setError(MOBIUS_ERROR_MEMORY, "Failed to wrap external buffer",
                         nullptr, 0, 0, nullptr);
         return;

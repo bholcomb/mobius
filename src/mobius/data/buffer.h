@@ -22,6 +22,7 @@ public:
     bool isFixed() const { return fixed_; }
     bool isReadonly() const { return readonly_; }
     bool isExternal() const { return external_; }
+    bool ok() const { return ok_; }
 
     uint8_t* data() { return data_; }
     const uint8_t* data() const { return data_; }
@@ -46,6 +47,7 @@ private:
     bool fixed_ = false;
     bool readonly_ = false;
     bool external_ = false;
+    bool ok_ = true;
     ReleaseFn release_fn_ = nullptr;
     void* release_userdata_ = nullptr;
 };
