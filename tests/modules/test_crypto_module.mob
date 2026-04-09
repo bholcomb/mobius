@@ -1,0 +1,48 @@
+import "crypto"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+assert_test("sha256 abc", crypto.sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+assert_test("sha1 abc", crypto.sha1("abc") == "a9993e364706816aba3e25717850c26c9cd0d89d")
+assert_test("md5 abc", crypto.md5("abc") == "900150983cd24fb0d6963f7d28e17f72")
+assert_test("hmac sha256 known vector", crypto.hmac_sha256("key", "The quick brown fox jumps over the lazy dog") == "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8")
+assert_test("crc32 known vector", crypto.crc32("123456789") == 3421780262)
+
+var b64 = crypto.base64_encode("hello world")
+assert_test("base64 encode", b64 == "aGVsbG8gd29ybGQ=")
+assert_test("base64 decode", crypto.base64_decode(b64) == "hello world")
+
+var uuid = crypto.uuid4()
+assert_test("uuid length", len(uuid) == 36)
+assert_test("uuid dashes", uuid[8] == "-" && uuid[13] == "-" && uuid[18] == "-" && uuid[23] == "-")
+assert_test("uuid version 4", uuid[14] == "4")
+
+var rnd = crypto.random_hex(16)
+assert_test("random_hex length", len(rnd) == 32)
+assert_test("random_hex differs", rnd != crypto.random_hex(16))
+
+var ok_range = true
+for (var i = 0; i < 32; i += 1) {
+    var value = crypto.random_int(5, 9)
+    if (value < 5 || value > 9) {
+        ok_range = false
+    }
+}
+assert_test("random_int in range", ok_range)
+
+print("")
+print("Crypto Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

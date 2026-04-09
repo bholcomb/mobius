@@ -8,6 +8,7 @@ import "module_name"
 
 Current built-in first-party modules:
 
+- [`crypto`](crypto.md) - dependency-free hashing, encoding, UUID, and random helpers
 - [`datetime`](datetime.md) - structured date/time conversion and ISO helpers
 - [`fiber`](fiber.md) - concurrency helpers, channels, and slices
 - [`json`](json.md) - JSON parsing and serialization
@@ -16,6 +17,7 @@ Current built-in first-party modules:
 - [`regex`](regex.md) - regular expression matching and replacement
 - [`toml`](toml.md) - TOML parsing and serialization
 - [`url`](url.md) - URL parsing, encoding, and query helpers
+- [`yaml`](yaml.md) - dependency-free YAML subset parser and serializer
 
 Notes:
 

@@ -728,6 +728,7 @@ shared parent.
 
 Namespaced modules live under [`docs/modules`](modules/index.md):
 
+- [`crypto`](modules/crypto.md)
 - [`datetime`](modules/datetime.md)
 - [`fiber`](modules/fiber.md)
 - [`json`](modules/json.md)
@@ -736,3 +737,4 @@ Namespaced modules live under [`docs/modules`](modules/index.md):
 - [`regex`](modules/regex.md)
 - [`toml`](modules/toml.md)
 - [`url`](modules/url.md)
+- [`yaml`](modules/yaml.md)
