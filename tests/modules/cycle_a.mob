@@ -1,0 +1,3 @@
+import "cycle_b" as cycle_b
+
+var VALUE = cycle_b.VALUE + 1

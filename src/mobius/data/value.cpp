@@ -144,12 +144,14 @@ Value make_buffer_value(BufferValue* buffer) {
     return value;
 }
 
-Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size) {
+Value make_userdata_value(MobiusState* state, void* ptr, UserdataDestructor destructor,
+                         const char* type_name, size_t size) {
     UserdataObject* ud = new UserdataObject();
     ud->ref_count.store(1, std::memory_order_relaxed);
     ud->ptr        = ptr;
     ud->destructor = destructor;
-    ud->type_name  = type_name;
+    ud->type_tag   = (state && type_name) ? state->stringPool()->intern(type_name) : nullptr;
+    ud->type_name  = ud->type_tag ? ud->type_tag->data : type_name;
     ud->size       = size;
     Value value;
     value.type = VAL_USERDATA;

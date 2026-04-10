@@ -13,6 +13,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <mutex>
+#include <thread>
 #include <libgen.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -55,6 +56,109 @@ void mobius_clear_plugin_directories(MobiusState* state) {
 
 } // extern "C"
 
+namespace {
+
+thread_local std::vector<std::string> g_module_load_stack;
+
+struct ModulePaths {
+    bool found = false;
+    bool has_mob = false;
+    bool has_so = false;
+    std::string mob_path;
+    std::string so_path;
+};
+
+static ModulePaths resolve_module_paths(const char* name, const char* caller_source, MobiusState* state) {
+    ModulePaths out;
+    const char* default_dirs[] = {
+        "./modules",
+        "./bin/modules",
+        "/usr/local/lib/mobius/modules",
+        nullptr
+    };
+
+    std::string mob_filename = std::string(name) + ".mob";
+    std::string so_filename  = std::string(name) + ".so";
+    std::vector<std::string> search_dirs;
+
+    if (caller_source && caller_source[0] != '\0' && strcmp(caller_source, "<string>") != 0) {
+        char* buf = strdup(caller_source);
+        if (buf) {
+            char* dir = dirname(buf);
+            if (dir && dir[0] != '\0') search_dirs.emplace_back(dir);
+            free(buf);
+        }
+    }
+
+    for (const auto& d : state->pluginDirectories()) search_dirs.push_back(d);
+    for (int i = 0; default_dirs[i]; i++) search_dirs.emplace_back(default_dirs[i]);
+
+    for (const auto& dir : search_dirs) {
+        char mob_path[1024], so_path[1024];
+        snprintf(mob_path, sizeof(mob_path), "%s/%s", dir.c_str(), mob_filename.c_str());
+        snprintf(so_path,  sizeof(so_path),  "%s/%s", dir.c_str(), so_filename.c_str());
+
+        struct stat st_mob, st_so;
+        bool has_mob = (stat(mob_path, &st_mob) == 0 && S_ISREG(st_mob.st_mode));
+        bool has_so  = (stat(so_path,  &st_so)  == 0 && S_ISREG(st_so.st_mode));
+        if (!has_mob && !has_so) continue;
+
+        out.found = true;
+        out.has_mob = has_mob;
+        out.has_so = has_so;
+        if (has_mob) out.mob_path = mob_path;
+        if (has_so) out.so_path = so_path;
+        break;
+    }
+
+    return out;
+}
+
+static std::string format_import_cycle_error(const std::string& module_name) {
+    std::string message = "Import cycle detected: ";
+    bool found_start = false;
+    for (const std::string& name : g_module_load_stack) {
+        if (!found_start && name == module_name) found_start = true;
+        if (!found_start) continue;
+        if (message.back() != ' ') message += " -> ";
+        message += name;
+    }
+    if (message.back() != ' ') message += " -> ";
+    message += module_name;
+    return message;
+}
+
+static void run_plugin_post_init(Plugin* plugin, Table* mod_table, MobiusState* state) {
+    if (!plugin || !plugin->post_init || !mod_table) return;
+
+    Value scratch[32];
+    mod_table->retain();
+    scratch[0] = make_table_value(mod_table);
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    if (vm) {
+        int saved_base = vm->native_ctx_.base;
+        int saved_top  = vm->native_ctx_.top;
+        Value* saved_regs = vm->native_ctx_.registers;
+        int saved_cap  = vm->native_ctx_.capacity;
+
+        vm->native_ctx_.registers = scratch;
+        vm->native_ctx_.base      = 0;
+        vm->native_ctx_.top       = 1;
+        vm->native_ctx_.capacity  = 32;
+
+        plugin->post_init(state);
+
+        vm->native_ctx_.registers = saved_regs;
+        vm->native_ctx_.base      = saved_base;
+        vm->native_ctx_.top       = saved_top;
+        vm->native_ctx_.capacity  = saved_cap;
+    } else {
+        plugin->post_init(state);
+    }
+}
+
+} // namespace
+
 // ============================================================================
 // ModuleRegistry implementation
 // ============================================================================
@@ -83,7 +187,10 @@ LoadedModule* ModuleRegistry::findModule(const char* name) {
 void ModuleRegistry::registerBuiltinModule(const char* name, Table* module_table) {
     if (!name || !module_table) return;
     std::unique_lock<std::shared_mutex> lock(registry_mutex_);
-    module_tables_[name] = module_table;
+    ModuleRecord record;
+    record.table = module_table;
+    record.state = ModuleLoadState::loaded;
+    module_records_[name] = std::move(record);
 }
 
 // ============================================================================
@@ -146,6 +253,27 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         return result;
     }
 
+    for (size_t i = 0; i < plugin->metadata.depends_on_count; i++) {
+        const char* dep_name = plugin->metadata.depends_on ? plugin->metadata.depends_on[i] : nullptr;
+        if (!dep_name || dep_name[0] == '\0') continue;
+        if (strcmp(dep_name, plugin->metadata.name) == 0) {
+            dlclose(handle);
+            last_error_ = std::string("Module '") + plugin->metadata.name + "' cannot depend on itself";
+            result.error_message = last_error_.c_str();
+            return result;
+        }
+        Table* dep_table = resolveModule(dep_name, path, state);
+        if (!dep_table) {
+            std::string dep_error = last_error_;
+            dlclose(handle);
+            last_error_ = std::string("Failed to load dependency '") + dep_name +
+                          "' for module '" + plugin->metadata.name + "'" +
+                          (dep_error.empty() ? "" : std::string(": ") + dep_error);
+            result.error_message = last_error_.c_str();
+            return result;
+        }
+    }
+
     if (plugin->init_plugin && plugin->init_plugin(state) != 0) {
         dlclose(handle);
         last_error_ = "Plugin initialization failed";
@@ -179,77 +307,81 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
 
 Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source, MobiusState* state) {
     if (!name || !state) return nullptr;
+    const std::string module_name(name);
+    const std::thread::id current_thread = std::this_thread::get_id();
 
     {
-        std::shared_lock<std::shared_mutex> rlock(registry_mutex_);
-        auto it = module_tables_.find(name);
-        if (it != module_tables_.end()) {
-            return it->second;
-        }
-    }
+        std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+        while (true) {
+            auto it = module_records_.find(module_name);
+            if (it == module_records_.end()) break;
 
-    std::unique_lock<std::shared_mutex> wlock(registry_mutex_);
-
-    auto it = module_tables_.find(name);
-    if (it != module_tables_.end()) {
-        return it->second;
-    }
-
-    const char* default_dirs[] = {
-        "./modules",
-        "./bin/modules",
-        "/usr/local/lib/mobius/modules",
-        nullptr
-    };
-
-    std::string mob_filename = std::string(name) + ".mob";
-    std::string so_filename  = std::string(name) + ".so";
-
-    std::vector<std::string> search_dirs;
-
-    if (caller_source && caller_source[0] != '\0'
-        && strcmp(caller_source, "<string>") != 0) {
-        char* buf = strdup(caller_source);
-        if (buf) {
-            char* dir = dirname(buf);
-            if (dir && dir[0] != '\0') {
-                search_dirs.emplace_back(dir);
+            ModuleRecord& record = it->second;
+            if (record.state == ModuleLoadState::loaded) {
+                last_error_.clear();
+                return record.table;
             }
-            free(buf);
+            if (record.state == ModuleLoadState::failed) {
+                last_error_ = record.error_message;
+                return nullptr;
+            }
+            if (record.owner_thread == current_thread) {
+                last_error_ = format_import_cycle_error(module_name);
+                return nullptr;
+            }
+            module_cv_.wait(lock);
         }
-    }
 
-    for (const auto& d : state->pluginDirectories()) {
-        search_dirs.push_back(d);
-    }
-
-    for (int i = 0; default_dirs[i]; i++) {
-        search_dirs.emplace_back(default_dirs[i]);
-    }
-
-    for (const auto& dir : search_dirs) {
-        char mob_path[1024], so_path[1024];
-        snprintf(mob_path, sizeof(mob_path), "%s/%s", dir.c_str(), mob_filename.c_str());
-        snprintf(so_path,  sizeof(so_path),  "%s/%s", dir.c_str(), so_filename.c_str());
-
-        struct stat st_mob, st_so;
-        bool has_mob = (stat(mob_path, &st_mob) == 0 && S_ISREG(st_mob.st_mode));
-        bool has_so  = (stat(so_path,  &st_so)  == 0 && S_ISREG(st_so.st_mode));
-
-        if (!has_mob && !has_so) continue;
+        ModulePaths paths = resolve_module_paths(name, caller_source, state);
+        if (!paths.found) {
+            last_error_ = std::string("Module '") + name + "' not found";
+            return nullptr;
+        }
 
         Table* mod_table = new (std::nothrow) Table(state, 16);
-        if (!mod_table) return nullptr;
+        if (!mod_table) {
+            last_error_ = "Failed to allocate module table";
+            return nullptr;
+        }
 
-        if (has_so) {
+        ModuleRecord record;
+        record.table = mod_table;
+        record.state = ModuleLoadState::loading;
+        record.path = paths.has_mob ? paths.mob_path : paths.so_path;
+        record.owner_thread = current_thread;
+        record.error_message.clear();
+        record.globals = std::make_unique<GlobalEnvironment>();
+        const GlobalEnvironment* root_globals = state->rootGlobalEnvironment();
+        record.globals->slots = root_globals->slots;
+        record.globals->count.store(root_globals->count.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        record.globals->slot_map = root_globals->slot_map;
+        record.globals->backing_table = mod_table;
+        module_records_[module_name] = std::move(record);
+        GlobalEnvironment* module_globals = module_records_[module_name].globals.get();
+
+        lock.unlock();
+
+        g_module_load_stack.push_back(module_name);
+
+        bool ok = true;
+        std::string error_message;
+
+        if (paths.has_so) {
             LoadedModule* lm = findModule(name);
             if (!lm) {
-                PluginLoadResult result = loadPlugin(so_path, state);
+                PluginLoadResult result = loadPlugin(paths.so_path.c_str(), state);
                 if (result.status == PLUGIN_STATUS_LOADED && result.plugin) {
                     lm = findModule(result.plugin->metadata.name);
+                } else if (result.error_message) {
+                    ok = false;
+                    error_message = result.error_message;
+                } else {
+                    ok = false;
+                    error_message = "Plugin load failed";
                 }
             }
-            if (lm && lm->plugin) {
+
+            if (ok && lm && lm->plugin) {
                 for (size_t i = 0; i < lm->plugin->function_count; i++) {
                     PluginFunction* func = &lm->plugin->functions[i];
                     if (!func || !func->name || !func->function) continue;
@@ -257,65 +389,45 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
                     Value func_val = make_native_function_value(func->function);
                     mod_table->set(func_key, func_val);
                 }
-
-                if (lm->plugin->post_init) {
-                    // Prevent the scratch Value from dropping the last
-                    // reference when it goes out of scope.
-                    mod_table->retain();
-
-                    Value scratch[32];
-                    scratch[0] = make_table_value(mod_table);
-                    MobiusVM* vm = MobiusVM::t_current_vm;
-                    if (vm) {
-                        int saved_base = vm->native_ctx_.base;
-                        int saved_top  = vm->native_ctx_.top;
-                        Value* saved_regs = vm->native_ctx_.registers;
-                        int saved_cap  = vm->native_ctx_.capacity;
-
-                        vm->native_ctx_.registers = scratch;
-                        vm->native_ctx_.base      = 0;
-                        vm->native_ctx_.top       = 1;
-                        vm->native_ctx_.capacity  = 32;
-
-                        lm->plugin->post_init(state);
-
-                        vm->native_ctx_.registers = saved_regs;
-                        vm->native_ctx_.base      = saved_base;
-                        vm->native_ctx_.top       = saved_top;
-                        vm->native_ctx_.capacity  = saved_cap;
-                    } else {
-                        lm->plugin->post_init(state);
-                    }
-                }
+                state->seedGlobalEnvironmentFromTable(module_globals, mod_table);
+                run_plugin_post_init(lm->plugin, mod_table, state);
+                state->seedGlobalEnvironmentFromTable(module_globals, mod_table);
             }
         }
 
-        if (has_mob) {
-            int snapshot = state->globalSlotCount();
-            int rc = state->execFile(mob_path);
+        if (ok && paths.has_mob) {
+            int rc = state->execFileInEnvironment(paths.mob_path.c_str(), module_globals);
             if (rc != 0) {
-                state->removeGlobalSlots(snapshot);
-                if (!has_so) {
-                    delete mod_table;
-                    return nullptr;
-                }
-            } else {
-                int new_count = state->globalSlotCount();
-                for (int i = snapshot; i < new_count; i++) {
-                    const Value& val = state->globalSlot(i);
-                    if (!(val.flags & VAL_FLAG_DEFINED)) continue;
-                    const char* slot_name = state->globalSlotName(i);
-                    if (!slot_name || strcmp(slot_name, "<unknown>") == 0) continue;
-                    Value key = make_string_value_from_cstr(state, slot_name);
-                    mod_table->set(key, val);
-                }
-                state->removeGlobalSlots(snapshot);
+                ok = false;
+                error_message = last_error_.empty() ? std::string("Failed to execute module '") + name + "'" : last_error_;
             }
         }
 
-        module_tables_[name] = mod_table;
-        return mod_table;
-    }
+        g_module_load_stack.pop_back();
 
-    return nullptr;
+        lock.lock();
+        auto final_it = module_records_.find(module_name);
+        if (final_it == module_records_.end()) {
+            last_error_ = std::string("Module '") + name + "' vanished during load";
+            module_cv_.notify_all();
+            return nullptr;
+        }
+
+        if (ok) {
+            final_it->second.state = ModuleLoadState::loaded;
+            final_it->second.error_message.clear();
+            final_it->second.owner_thread = std::thread::id();
+            last_error_.clear();
+            Table* table = final_it->second.table;
+            module_cv_.notify_all();
+            return table;
+        }
+
+        final_it->second.state = ModuleLoadState::failed;
+        final_it->second.error_message = error_message;
+        final_it->second.owner_thread = std::thread::id();
+        last_error_ = error_message;
+        module_cv_.notify_all();
+        return nullptr;
+    }
 }

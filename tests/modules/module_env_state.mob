@@ -1,0 +1,10 @@
+var counter = 0
+
+func next() {
+    counter = counter + 1
+    return counter
+}
+
+func read() {
+    return counter
+}

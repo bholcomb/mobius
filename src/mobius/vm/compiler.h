@@ -12,6 +12,7 @@
 #include <cstdint>
 
 class MobiusState;
+struct GlobalEnvironment;
 
 // ============================================================================
 // Compiler — translates an AST into a Prototype (bytecode + constants)
@@ -26,7 +27,8 @@ class MobiusState;
 
 class Compiler {
 public:
-    explicit Compiler(StringInternPool* pool, MobiusState* state = nullptr);
+    explicit Compiler(StringInternPool* pool, MobiusState* state = nullptr,
+                      GlobalEnvironment* globals = nullptr);
 
     Prototype* compile(Stmt** statements, size_t count, const char* source_name);
 
@@ -65,6 +67,7 @@ private:
     FunctionState* current_;
     StringInternPool* pool_;
     MobiusState* state_;
+    GlobalEnvironment* globals_;
     std::unordered_set<std::string> enum_names_;
     bool had_error_ = false;
     bool unreachable_ = false;  // DCE: set after return/break/continue/throw

@@ -71,7 +71,9 @@ size_t hash_value_raw(const Value& value) {
         case VAL_USERDATA:
             if (value.as.userdata) {
                 hash = (size_t)(uintptr_t)value.as.userdata->ptr;
-                if (value.as.userdata->type_name)
+                if (value.as.userdata->type_tag)
+                    hash ^= (size_t)value.as.userdata->type_tag->hash;
+                else if (value.as.userdata->type_name)
                     hash ^= hash_string_for_table(value.as.userdata->type_name);
             }
             break;

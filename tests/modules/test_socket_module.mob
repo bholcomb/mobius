@@ -1,0 +1,103 @@
+import "socket"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var listener = socket.listen("127.0.0.1", 0)
+assert_test("listener is userdata", typeof(listener) == "userdata")
+assert_test("listener open", listener:is_closed() == false)
+
+var local = listener:local_addr()
+assert_test("listener local addr table", typeof(local) == "table")
+assert_test("listener local addr host", local.host == "127.0.0.1")
+assert_test("listener local addr port", local.port > 0)
+
+func client_task(port) {
+    var client = socket.connect("127.0.0.1", port)
+    client:set_timeout(1000)
+    var sent = client:send(buffer_from_string("hello"))
+    if (sent != 5) {
+        return "bad-send"
+    }
+    var reply = client:recv(64)
+    var peer = client:peer_addr()
+    client:shutdown(true, true)
+    client:close()
+    if (reply == nil) {
+        return "no-reply"
+    }
+    return reply:to_string() + "|" + peer.host
+}
+
+var client_future = spawn client_task(local.port)
+
+var server = listener:accept()
+server:set_timeout(1000)
+assert_test("accepted socket userdata", typeof(server) == "userdata")
+assert_test("accepted socket open", server:is_closed() == false)
+
+var peer = server:peer_addr()
+assert_test("accepted peer host", peer.host == "127.0.0.1")
+assert_test("accepted peer port", peer.port > 0)
+
+var incoming = server:recv(64)
+assert_test("recv returned buffer", typeof(incoming) == "buffer")
+assert_test("recv payload", incoming:to_string() == "hello")
+
+var sent_back = server:send("world")
+assert_test("send string count", sent_back == 5)
+server:close()
+listener:close()
+assert_test("listener closed", listener:is_closed() == true)
+assert_test("server closed", server:is_closed() == true)
+
+var client_result = await client_future
+assert_test("client roundtrip result", client_result == "world|127.0.0.1")
+
+var udp_server = socket.udp("127.0.0.1", 0)
+udp_server:set_timeout(1000)
+var udp_addr = udp_server:local_addr()
+
+var udp_client = socket.udp()
+udp_client:set_timeout(1000)
+var udp_sent = udp_client:send_to("127.0.0.1", udp_addr.port, "ping")
+assert_test("udp send_to count", udp_sent == 4)
+
+var udp_packet = udp_server:recv_from(64)
+assert_test("udp recv_from payload buffer", typeof(udp_packet.payload) == "buffer")
+assert_test("udp recv_from text helper", udp_packet.text == "ping")
+assert_test("udp recv_from host", udp_packet.host == "127.0.0.1")
+assert_test("udp recv_from port", udp_packet.port > 0)
+
+udp_server:connect(udp_packet.host, udp_packet.port)
+assert_test("udp peer addr host", udp_server:peer_addr().host == "127.0.0.1")
+assert_test("udp connected send count", udp_server:send("pong") == 4)
+
+var udp_reply = udp_client:recv_from(64)
+assert_test("udp client recv_from text", udp_reply.text == "pong")
+udp_client:connect("127.0.0.1", udp_addr.port)
+assert_test("udp connected send count", udp_client:send("done") == 4)
+var udp_done = udp_server:recv(64)
+assert_test("udp connected recv buffer", typeof(udp_done) == "buffer")
+assert_test("udp connected recv text", udp_done:to_string() == "done")
+
+udp_client:close()
+udp_server:close()
+assert_test("udp client closed", udp_client:is_closed() == true)
+assert_test("udp server closed", udp_server:is_closed() == true)
+
+print("")
+print("Socket Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+}

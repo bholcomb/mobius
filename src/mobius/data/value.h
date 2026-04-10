@@ -42,6 +42,7 @@ struct UserdataObject {
     std::atomic<int> ref_count;
     void*        ptr;
     UserdataDestructor destructor;
+    MobiusString* type_tag;
     const char*  type_name;
     size_t       size;
 };
@@ -54,6 +55,7 @@ struct UserdataObject {
 #define VAL_FLAG_MARKED    0x10  // reserved: GC mark phase
 #define VAL_FLAG_FROZEN    0x20  // reserved: container contents are immutable
 #define VAL_FLAG_SHARED    0x40  // container is shared across fibers; mutations are mutex-protected
+#define VAL_FLAG_UNUSED    0x80  // container is shared across fibers; mutations are mutex-protected
 
 enum ValueType : int8_t {
     // Internal sentinel — type not yet determined (compiler/VM only, never user-visible)
@@ -181,7 +183,7 @@ public:
             case VAL_USERDATA:
                 return as.userdata && other.as.userdata &&
                        as.userdata->ptr == other.as.userdata->ptr &&
-                       as.userdata->type_name == other.as.userdata->type_name;
+                       as.userdata->type_tag == other.as.userdata->type_tag;
             case VAL_ENUM:
                 return as.enum_def == other.as.enum_def && aux == other.aux;
             case VAL_FUTURE:
@@ -272,7 +274,8 @@ MOBIUS_API Value make_string_value(MobiusString* string);
 MOBIUS_API Value make_string_value_from_cstr(MobiusState* state, const char* cstr);
 MOBIUS_API Value make_function_value(struct MobiusFunction* function);
 MOBIUS_API Value make_native_function_value(MobiusCFunction function);
-MOBIUS_API Value make_userdata_value(void* ptr, UserdataDestructor destructor, const char* type_name, size_t size);
+MOBIUS_API Value make_userdata_value(MobiusState* state, void* ptr, UserdataDestructor destructor,
+                                     const char* type_name, size_t size);
 MOBIUS_API Value make_array_value(ArrayValue* array);
 MOBIUS_API Value make_table_value(struct Table* table);
 MOBIUS_API Value make_shared_cell_value(SharedCell* shared_cell);

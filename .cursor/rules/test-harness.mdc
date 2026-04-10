@@ -9,3 +9,4 @@ alwaysApply: false
 - **Run Single Test**: `bin/mobius <file_path>`
 - **Permissions**: You do not need to ask to run test commands
 - **Verification**: When asked to "fix a bug," always run the relevant test file first to confirm the failure, then run it again after the fix to verify.
+- **Failures**: Tests that fail should immediatly be investigated and fixed.  We always have a 100% pass rate on tests.

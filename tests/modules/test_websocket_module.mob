@@ -1,4 +1,5 @@
 import "http"
+import "socket"
 import "websocket"
 
 var pass_count = 0
@@ -12,6 +13,18 @@ func assert_test(name, cond) {
         fail_count = fail_count + 1
         print("FAIL: " + name)
     }
+}
+
+func assert_buffer_equals(name, buf, expected) {
+    var ok = typeof(buf) == "buffer" && len(buf) == len(expected)
+    var i = 0
+    while (ok && i < len(expected)) {
+        if (buf[i] != expected[i]) {
+            ok = false
+        }
+        i = i + 1
+    }
+    assert_test(name, ok)
 }
 
 var client_key = "dGhlIHNhbXBsZSBub25jZQ=="
@@ -37,35 +50,120 @@ assert_test("handshake request parses", websocket.is_upgrade_request(parsed_hand
 assert_test("handshake request protocol header", parsed_handshake_request.headers["sec-websocket-protocol"] == "chat")
 
 var text_frame = websocket.build_frame({
-    type: "text",
-    payload: "Hello"
+    text: "Hello"
 })
-assert_test("build unmasked text frame hex", text_frame == "810548656c6c6f")
+assert_buffer_equals("build unmasked text frame bytes", text_frame, [129, 5, 72, 101, 108, 108, 111])
 var parsed_text_frame = websocket.parse_frame(text_frame)
 assert_test("parse frame opcode", parsed_text_frame.opcode == 1)
-assert_test("parse frame payload", parsed_text_frame.payload == "Hello")
-assert_test("parse frame payload hex", parsed_text_frame.payload_hex == "48656c6c6f")
+assert_test("parse frame payload buffer", typeof(parsed_text_frame.payload) == "buffer")
+assert_buffer_equals("parse frame payload bytes", parsed_text_frame.payload, [72, 101, 108, 108, 111])
+assert_test("parse frame text", parsed_text_frame.text == "Hello")
 assert_test("parse frame fin", parsed_text_frame.fin == true)
+assert_test("parse frame frame_length", parsed_text_frame.frame_length == 7)
 
+var mask_key = buffer_create(4)
+mask_key[0] = 55
+mask_key[1] = 250
+mask_key[2] = 33
+mask_key[3] = 61
 var masked_frame = websocket.build_frame({
-    type: "text",
-    payload: "Hello",
+    text: "Hello",
     mask: true,
-    masking_key: "37fa213d"
+    masking_key: mask_key
 })
-assert_test("build masked text frame hex", masked_frame == "818537fa213d7f9f4d5158")
+assert_buffer_equals("build masked text frame bytes", masked_frame, [129, 133, 55, 250, 33, 61, 127, 159, 77, 81, 88])
 var parsed_masked_frame = websocket.parse_frame(masked_frame)
-assert_test("parse masked payload", parsed_masked_frame.payload == "Hello")
-assert_test("parse masked key", parsed_masked_frame.masking_key == "37fa213d")
+assert_test("parse masked payload text", parsed_masked_frame.text == "Hello")
+assert_buffer_equals("parse masked key", parsed_masked_frame.masking_key, [55, 250, 33, 61])
 assert_test("parse masked flag", parsed_masked_frame.masked == true)
+
+var binary_payload = buffer_create(4)
+binary_payload[0] = 0
+binary_payload[1] = 1
+binary_payload[2] = 255
+binary_payload[3] = 16
+var binary_frame = websocket.build_frame({
+    payload: binary_payload
+})
+var parsed_binary_frame = websocket.parse_frame(binary_frame)
+assert_test("binary frame default opcode", parsed_binary_frame.opcode == 2)
+assert_test("binary frame text absent", parsed_binary_frame.text == nil)
+assert_buffer_equals("binary frame payload", parsed_binary_frame.payload, [0, 1, 255, 16])
 
 var close_frame = websocket.build_frame({
     type: "close",
-    payload_hex: "03e8"
+    close_code: 1000,
+    close_reason: "bye"
 })
+assert_buffer_equals("build close frame bytes", close_frame, [136, 5, 3, 232, 98, 121, 101])
 var parsed_close_frame = websocket.parse_frame(close_frame)
 assert_test("parse close opcode", parsed_close_frame.opcode == 8)
 assert_test("parse close code", parsed_close_frame.close_code == 1000)
+assert_test("parse close reason", parsed_close_frame.close_reason == "bye")
+assert_buffer_equals("parse close payload", parsed_close_frame.payload, [3, 232, 98, 121, 101])
+
+func websocket_server(listener) {
+    var conn = listener:accept()
+    conn:set_timeout(1000)
+    var request = http.parse_request(conn:recv(4096):to_string())
+    var response = websocket.handshake_response(request, "chat")
+    conn:send(http.build_response(response))
+
+    var first_frame = websocket.parse_frame(conn:recv(4096))
+    var second_frame = nil
+    conn:send(websocket.build_frame({ text: "world" }))
+
+    second_frame = websocket.parse_frame(conn:recv(4096))
+    conn:send(websocket.build_frame({ payload: second_frame.payload }))
+    conn:send(websocket.build_frame({ type: "close", close_code: 1000, close_reason: "bye" }))
+    conn:close()
+    listener:close()
+    return {
+        first_text: first_frame.text,
+        first_masked: first_frame.masked,
+        second_payload: second_frame.payload
+    }
+}
+
+var ws_listener = socket.listen("127.0.0.1", 0)
+var ws_port = ws_listener:local_addr().port
+var ws_server = spawn websocket_server(ws_listener)
+
+var ws = websocket.connect({
+    host: "127.0.0.1",
+    port: ws_port,
+    path: "/chat",
+    protocol: "chat",
+    timeout_ms: 1000
+})
+assert_test("websocket connect returns userdata", typeof(ws) == "userdata")
+assert_test("websocket negotiated protocol", ws:protocol() == "chat")
+assert_test("websocket peer host", ws:peer_addr().host == "127.0.0.1")
+assert_test("websocket send text count", ws:send("hello") > 0)
+
+var ws_text = ws:recv()
+assert_test("websocket recv text frame", ws_text.text == "world")
+
+var ws_binary_payload = buffer_create(3)
+ws_binary_payload[0] = 1
+ws_binary_payload[1] = 2
+ws_binary_payload[2] = 3
+assert_test("websocket send binary count", ws:send(ws_binary_payload) > 0)
+var ws_binary = ws:recv()
+assert_test("websocket recv binary frame", ws_binary.opcode == 2)
+assert_buffer_equals("websocket recv binary payload", ws_binary.payload, [1, 2, 3])
+
+var ws_close = ws:recv()
+assert_test("websocket recv close opcode", ws_close.opcode == 8)
+assert_test("websocket recv close code", ws_close.close_code == 1000)
+assert_test("websocket recv close reason", ws_close.close_reason == "bye")
+assert_test("websocket close returns true", ws:close() == true)
+assert_test("websocket closed state", ws:is_closed() == true)
+
+var ws_server_result = await ws_server
+assert_test("server saw masked client frame", ws_server_result.first_masked == true)
+assert_test("server saw first text", ws_server_result.first_text == "hello")
+assert_buffer_equals("server saw second payload", ws_server_result.second_payload, [1, 2, 3])
 
 print("")
 print("WebSocket Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")

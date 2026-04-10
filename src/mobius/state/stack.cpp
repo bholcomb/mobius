@@ -366,6 +366,33 @@ const char* mobius_stack_asString(MobiusState* state, int idx) {
     return stack_value_to_string(val);
 }
 
+const char* mobius_stack_getStringData(MobiusState* state, int idx, size_t* out_length) {
+    Value* val = get_value_at(state, idx);
+    if (!val) {
+        if (out_length) *out_length = 0;
+        return "";
+    }
+
+    if (val->type == VAL_SHARED_CELL && val->as.shared_cell) {
+        Value inner = val->as.shared_cell->load();
+        if (inner.type == VAL_STRING && inner.as.string) {
+            if (out_length) *out_length = inner.as.string->length;
+            return inner.as.string->data;
+        }
+        if (out_length) *out_length = 0;
+        return stack_value_to_string(&inner);
+    }
+
+    if (val->type == VAL_STRING && val->as.string) {
+        if (out_length) *out_length = val->as.string->length;
+        return val->as.string->data;
+    }
+
+    const char* coerced = stack_value_to_string(val);
+    if (out_length) *out_length = strlen(coerced);
+    return coerced;
+}
+
 // ============================================================================
 // STACK GETTERS - STRICT (respects strict_types pragma)
 // ============================================================================
@@ -544,6 +571,14 @@ void mobius_stack_pushString(MobiusState* state, const char* str) {
     stack_push(state, make_string_value_from_cstr(state, str));
 }
 
+void mobius_stack_pushStringLength(MobiusState* state, const char* str, size_t length) {
+    if (!str) {
+        stack_push(state, make_nil_value());
+        return;
+    }
+    stack_push(state, make_string_value(state->stringPool()->intern(str, length)));
+}
+
 void mobius_stack_pushNil(MobiusState* state) {
     stack_push(state, make_nil_value());
 }
@@ -695,8 +730,7 @@ void mobius_stack_setVariable(MobiusState* state, const char* name) {
 
     Value val = nctx->registers[--nctx->top];
     int slot = state->assignGlobalSlot(name);
-    val.flags |= VAL_FLAG_DEFINED;
-    state->globalSlot(slot) = val;
+    state->setGlobalValue(slot, val);
 }
 
 void mobius_stack_setGlobal(MobiusState* state, const char* name) {
@@ -718,8 +752,7 @@ void mobius_stack_setGlobal(MobiusState* state, const char* name) {
 
     Value val = nctx->registers[--nctx->top];
     int slot = state->assignGlobalSlot(name);
-    val.flags |= VAL_FLAG_DEFINED;
-    state->globalSlot(slot) = val;
+    state->setGlobalValue(slot, val);
 }
 
 // ============================================================================
@@ -996,6 +1029,44 @@ void mobius_set_type_metatable(MobiusState* state, MobiusValueType type) {
     }
 }
 
+void mobius_push_userdata_type_metatable(MobiusState* state, const char* type_name) {
+    if (!state || !type_name) {
+        if (state) stack_push(state, make_nil_value());
+        return;
+    }
+    MobiusString* type_tag = state->stringPool()->intern(type_name);
+    Table* mt = state->userdataTypeMetatable(type_tag);
+    if (mt) {
+        stack_push(state, make_table_value(mt));
+    } else {
+        stack_push(state, make_nil_value());
+    }
+}
+
+void mobius_set_userdata_type_metatable(MobiusState* state, const char* type_name) {
+    if (!state || !type_name) return;
+    NativeCallContext* nctx = get_nctx(state);
+    if (!nctx) return;
+    if (nctx->top <= nctx->base) {
+        state->setError(MOBIUS_ERROR_RUNTIME,
+                        "mobius_set_userdata_type_metatable() - Stack is empty",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
+
+    Value val = nctx->registers[--nctx->top];
+    MobiusString* type_tag = state->stringPool()->intern(type_name);
+    if (val.type == VAL_TABLE) {
+        state->setUserdataTypeMetatable(type_tag, val.as.table);
+    } else if (val.type == VAL_NIL) {
+        state->setUserdataTypeMetatable(type_tag, nullptr);
+    } else {
+        state->setError(MOBIUS_ERROR_TYPE,
+                        "mobius_set_userdata_type_metatable() - Expected table or nil",
+                        nullptr, 0, 0, nullptr);
+    }
+}
+
 // ============================================================================
 // PUBLIC API — Native function registration
 // ============================================================================
@@ -1005,8 +1076,7 @@ void mobius_register_function(MobiusState* state, const char* name,
     if (!state || !name || !func) return;
     Value fval = make_native_function_value(func);
     int slot = state->assignGlobalSlot(name);
-    fval.flags |= VAL_FLAG_DEFINED;
-    state->globalSlot(slot) = fval;
+    state->setGlobalValue(slot, fval);
 }
 
 // ============================================================================
@@ -1125,7 +1195,7 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
 void mobius_stack_pushUserdata(MobiusState* state, void* ptr,
                                void (*destructor)(void*),
                                const char* type_name, size_t size) {
-    stack_push(state, make_userdata_value(ptr, destructor, type_name, size));
+    stack_push(state, make_userdata_value(state, ptr, destructor, type_name, size));
 }
 
 bool mobius_stack_isUserdata(MobiusState* state, int idx) {

@@ -49,5 +49,8 @@ staging:
         - "${out_dir}/bin/crypto.so"
         - "${out_dir}/bin/yaml.so"
         - "${out_dir}/bin/http.so"
+        - "src/modules/http/http.mob"
         - "${out_dir}/bin/websocket.so"
+        - "src/modules/websocket/websocket.mob"
+        - "${out_dir}/bin/socket.so"
         - "${out_dir}/bin/text_processing.so"
