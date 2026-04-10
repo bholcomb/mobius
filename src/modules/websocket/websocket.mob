@@ -1,74 +1,273 @@
 import "http" as __http
 import "socket" as __socket
+import "crypto" as __crypto
 
-func __make_connect(http_mod, socket_mod, adopt_socket) {
-    return func(spec) {
-        if (typeof(spec) != "table") {
-            throw "websocket.connect() expects a table argument"
-        }
+var __WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
-        var port = spec.port
-        if (port == nil) {
-            port = 80
-        }
-        if (port < 0 || port > 65535) {
-            throw "websocket.connect() port must be in [0, 65535]"
-        }
+func accept_key(client_key) {
+    if (typeof(client_key) != "string") {
+        throw "websocket.accept_key() expects a string argument"
+    }
+    return __crypto.base64_encode(__crypto.sha1(client_key + __WS_GUID))
+}
 
-        var timeout_ms = spec.timeout_ms
-        if (timeout_ms != nil && timeout_ms < -1) {
-            throw "websocket.connect() timeout_ms must be >= -1"
-        }
+func handshake_request(spec) {
+    if (typeof(spec) != "table") {
+        throw "websocket.handshake_request() expects a table argument"
+    }
 
-        var request = handshake_request(spec)
-        var sock = socket_mod.connect(spec.host, port)
-        try {
-            if (timeout_ms != nil && timeout_ms >= 0) {
-                sock:set_timeout(timeout_ms)
-            }
+    var host = spec.host
+    if (host == nil || host == "") {
+        throw "websocket.handshake_request() host is required"
+    }
 
-            sock:send(request.request)
-            var head_state = http_mod.__read_response_head(sock)
-            var response = http_mod.__parse_response_head(head_state.head)
-            if (response.status != 101) {
-                throw "websocket.connect() expected HTTP 101 response"
-            }
+    var path = spec.path
+    if (path == nil || path == "") {
+        path = "/"
+    }
 
-            var upgrade = response.headers.upgrade
-            if (upgrade == nil || lower(trim(upgrade)) != "websocket") {
-                throw "websocket.connect() invalid upgrade response"
-            }
+    var version = spec.version
+    if (version == nil || version == "") {
+        version = "HTTP/1.1"
+    }
 
-            var connection = response.headers.connection
-            if (connection == nil || !contains(lower(connection), "upgrade")) {
-                throw "websocket.connect() invalid upgrade response"
-            }
+    var query = spec.query
+    if (query != nil && query != "") {
+        path = path + "?" + query
+    }
 
-            if (response.headers["sec-websocket-accept"] != accept_key(request.key)) {
-                throw "websocket.connect() invalid accept key"
-            }
+    var key = spec.key
+    if (key == nil || key == "") {
+        key = __crypto.base64_encode(__crypto.random_bytes(16))
+    }
 
-            var protocol = spec.protocol
-            var selected_protocol = response.headers["sec-websocket-protocol"]
-            if (protocol != nil && selected_protocol != nil && selected_protocol != "" && selected_protocol != protocol) {
-                throw "websocket.connect() server selected unexpected protocol"
-            }
+    var request = "GET " + path + " " + version + "\r\n"
+    request = request + "Host: " + host + "\r\n"
+    request = request + "Upgrade: websocket\r\n"
+    request = request + "Connection: Upgrade\r\n"
+    request = request + "Sec-WebSocket-Version: 13\r\n"
+    request = request + "Sec-WebSocket-Key: " + key + "\r\n"
 
-            var conn = adopt_socket(sock, selected_protocol, head_state.body)
-            sock = nil
-            return conn
-        } catch err {
-            throw err
-        } finally {
-            if (sock != nil && !sock:is_closed()) {
-                sock:close()
-            }
-        }
+    if (spec.origin != nil && spec.origin != "") {
+        request = request + "Origin: " + spec.origin + "\r\n"
+    }
+    if (spec.protocol != nil && spec.protocol != "") {
+        request = request + "Sec-WebSocket-Protocol: " + spec.protocol + "\r\n"
+    }
+    request = request + "\r\n"
+
+    return {
+        request: request,
+        key: key,
+        path: path
     }
 }
 
-connect = __make_connect(__http, __socket, __adopt_socket)
+func __copy_buffer(buf) {
+    var out = buffer_create(0)
+    if (buf != nil && len(buf) > 0) {
+        out:append(buf)
+    }
+    return out
+}
 
-__http = nil
-__socket = nil
-__adopt_socket = nil
+func __buffer_tail(buf, offset) {
+    var out = buffer_create(0)
+    if (buf == nil) {
+        return out
+    }
+    var remaining = len(buf) - offset
+    if (remaining > 0) {
+        out:append(buf:slice(offset, remaining))
+    }
+    return out
+}
+
+func __conn_send(self, value) {
+    if (self.closed) {
+        throw "websocket:send() connection is closed"
+    }
+
+    var frame = nil
+    if (typeof(value) == "string") {
+        frame = build_frame({ text: value, mask: true })
+    } else if (typeof(value) == "buffer") {
+        frame = build_frame({ payload: value, mask: true })
+    } else {
+        throw "websocket:send() expects a string or buffer"
+    }
+
+    self.socket:send(frame)
+    return len(frame)
+}
+
+func __conn_recv(self) {
+    if (self.closed) {
+        throw "websocket:recv() connection is closed"
+    }
+
+    while (true) {
+        var frame = __try_parse_frame(self.read_buffer)
+        if (frame != nil) {
+            self.read_buffer = __buffer_tail(self.read_buffer, frame.frame_length)
+            if (frame.opcode == 8) {
+                self.close_received = true
+            }
+            return frame
+        }
+
+        var chunk = self.socket:recv(4096)
+        if (chunk == nil) {
+            throw "websocket connection closed"
+        }
+        self.read_buffer:append(chunk)
+    }
+}
+
+func __conn_close(self, close_code, close_reason) {
+    if (!self.closed && !self.close_sent) {
+        var frame_spec = { type: "close" }
+        if (close_code != nil) {
+            frame_spec.close_code = close_code
+        }
+        if (close_reason != nil) {
+            frame_spec.close_reason = close_reason
+        }
+
+        try {
+            self.socket:send(build_frame(frame_spec))
+        } catch err {
+        }
+        self.close_sent = true
+    }
+
+    if (!self.closed) {
+        self.socket:close()
+        self.closed = true
+    }
+    return true
+}
+
+func __conn_is_closed(self) {
+    return self.closed
+}
+
+func __conn_set_timeout(self, timeout_ms) {
+    if (self.closed) {
+        throw "websocket:set_timeout() connection is closed"
+    }
+    self.socket:set_timeout(timeout_ms)
+    return self
+}
+
+func __conn_local_addr(self) {
+    if (self.closed) {
+        throw "websocket:local_addr() connection is closed"
+    }
+    return self.socket:local_addr()
+}
+
+func __conn_peer_addr(self) {
+    if (self.closed) {
+        throw "websocket:peer_addr() connection is closed"
+    }
+    return self.socket:peer_addr()
+}
+
+func __conn_protocol(self) {
+    return self.protocol_value
+}
+
+func __conn_close_default(self) {
+    return __conn_close(self, nil, nil)
+}
+
+func __conn_close_with(self, close_code, close_reason) {
+    return __conn_close(self, close_code, close_reason)
+}
+
+func __make_connection(sock, protocol, initial_data) {
+    var conn = {
+        socket: sock,
+        protocol_value: protocol,
+        closed: false,
+        close_sent: false,
+        close_received: false,
+        read_buffer: __copy_buffer(initial_data)
+    }
+
+    conn.send = __conn_send
+    conn.recv = __conn_recv
+    conn.close = __conn_close_default
+    conn.close_with = __conn_close_with
+    conn.is_closed = __conn_is_closed
+    conn.set_timeout = __conn_set_timeout
+    conn.local_addr = __conn_local_addr
+    conn.peer_addr = __conn_peer_addr
+    conn.protocol = __conn_protocol
+    return conn
+}
+
+func connect(spec) {
+    if (typeof(spec) != "table") {
+        throw "websocket.connect() expects a table argument"
+    }
+
+    var port = spec.port
+    if (port == nil) {
+        port = 80
+    }
+    if (port < 0 || port > 65535) {
+        throw "websocket.connect() port must be in [0, 65535]"
+    }
+
+    var timeout_ms = spec.timeout_ms
+    if (timeout_ms != nil && timeout_ms < -1) {
+        throw "websocket.connect() timeout_ms must be >= -1"
+    }
+
+    var request = handshake_request(spec)
+    var sock = __socket.connect(spec.host, port)
+    try {
+        if (timeout_ms != nil && timeout_ms >= 0) {
+            sock:set_timeout(timeout_ms)
+        }
+
+        sock:send(request.request)
+        var head_state = __http.__read_response_head(sock)
+        var response = __http.__parse_response_head(head_state.head)
+        if (response.status != 101) {
+            throw "websocket.connect() expected HTTP 101 response"
+        }
+
+        var upgrade = response.headers.upgrade
+        if (upgrade == nil || lower(trim(upgrade)) != "websocket") {
+            throw "websocket.connect() invalid upgrade response"
+        }
+
+        var connection = response.headers.connection
+        if (connection == nil || !contains(lower(connection), "upgrade")) {
+            throw "websocket.connect() invalid upgrade response"
+        }
+
+        if (response.headers["sec-websocket-accept"] != accept_key(request.key)) {
+            throw "websocket.connect() invalid accept key"
+        }
+
+        var protocol = spec.protocol
+        var selected_protocol = response.headers["sec-websocket-protocol"]
+        if (protocol != nil && selected_protocol != nil && selected_protocol != "" && selected_protocol != protocol) {
+            throw "websocket.connect() server selected unexpected protocol"
+        }
+
+        var conn = __make_connection(sock, selected_protocol, head_state.body)
+        sock = nil
+        return conn
+    } catch err {
+        throw err
+    } finally {
+        if (sock != nil && !sock:is_closed()) {
+            sock:close()
+        }
+    }
+}

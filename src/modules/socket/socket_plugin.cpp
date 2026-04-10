@@ -7,8 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "modules/socket/socket_internal.h"
-
 #ifdef _WIN32
   #define WIN32_LEAN_AND_MEAN
   #include <winsock2.h>
@@ -36,8 +34,18 @@ namespace {
 static const char* TCP_SOCKET_TYPE = "tcp_socket";
 static const char* TCP_LISTENER_TYPE = "tcp_listener";
 static const char* UDP_SOCKET_TYPE = "udp_socket";
-using mobius_socket_internal::SocketKind;
-using mobius_socket_internal::SocketObject;
+
+enum class SocketKind {
+    tcp_socket,
+    tcp_listener,
+    udp_socket,
+};
+
+struct SocketObject {
+    mobius_socket_handle handle = MOBIUS_INVALID_SOCKET_HANDLE;
+    SocketKind kind = SocketKind::tcp_socket;
+    bool closed = false;
+};
 
 #ifdef _WIN32
 static bool g_winsock_initialized = false;

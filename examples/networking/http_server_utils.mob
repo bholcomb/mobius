@@ -1,0 +1,161 @@
+import "http"
+import "json"
+
+func __find_header_separator(raw) {
+    var pos = find(raw, "\r\n\r\n")
+    if (pos >= 0) {
+        return { index: pos, len: 4 }
+    }
+
+    pos = find(raw, "\n\n")
+    if (pos >= 0) {
+        return { index: pos, len: 2 }
+    }
+
+    return nil
+}
+
+func read_http_request(conn) {
+    var raw = buffer_create(0)
+
+    while (true) {
+        var text = raw:to_string()
+        var sep = __find_header_separator(text)
+        if (sep != nil) {
+            var header_text = substr(text, 0, sep.index + sep.len)
+            var request = http.parse_request(header_text)
+            var body_offset = sep.index + sep.len
+            var body = buffer_create(0)
+            if (len(raw) > body_offset) {
+                body:append(raw:slice(body_offset, len(raw) - body_offset))
+            }
+
+            if (request.content_length != nil) {
+                while (len(body) < request.content_length) {
+                    var chunk = conn:recv(4096)
+                    if (chunk == nil) {
+                        throw "request body ended before content-length bytes were read"
+                    }
+                    body:append(chunk)
+                }
+                if (len(body) > request.content_length) {
+                    body = body:slice(0, request.content_length)
+                }
+            }
+
+            request.body_buffer = body
+            request.body = body:to_string()
+            return request
+        }
+
+        var chunk = conn:recv(4096)
+        if (chunk == nil) {
+            if (len(raw) == 0) {
+                return nil
+            }
+            throw "connection closed before request headers completed"
+        }
+        raw:append(chunk)
+    }
+}
+
+func send_response(conn, response) {
+    conn:send(http.build_response(response))
+}
+
+func html_response(conn, status, html) {
+    send_response(conn, {
+        status: status,
+        headers: {
+            ["content-type"]: "text/html; charset=utf-8",
+            ["connection"]: "close"
+        },
+        body: html
+    })
+}
+
+func text_response(conn, status, text) {
+    send_response(conn, {
+        status: status,
+        headers: {
+            ["content-type"]: "text/plain; charset=utf-8",
+            ["connection"]: "close"
+        },
+        body: text
+    })
+}
+
+func json_response(conn, status, value) {
+    send_response(conn, {
+        status: status,
+        headers: {
+            ["content-type"]: "application/json; charset=utf-8",
+            ["connection"]: "close"
+        },
+        body: json.stringify(value, 2)
+    })
+}
+
+func redirect_response(conn, location) {
+    send_response(conn, {
+        status: 303,
+        headers: {
+            location: location,
+            ["connection"]: "close"
+        },
+        body: ""
+    })
+}
+
+func bad_request(conn, message) {
+    text_response(conn, 400, message + "\n")
+}
+
+func not_found(conn, path) {
+    text_response(conn, 404, "No route for " + path + "\n")
+}
+
+func server_error(conn, err) {
+    text_response(conn, 500, "Internal server error\n" + str(err) + "\n")
+}
+
+func html_escape(text) {
+    var out = replace(text, "&", "&amp;")
+    out = replace(out, "<", "&lt;")
+    out = replace(out, ">", "&gt;")
+    out = replace(out, "\"", "&quot;")
+    return out
+}
+
+func starts_with(text, prefix) {
+    if (len(text) < len(prefix)) {
+        return false
+    }
+    return substr(text, 0, len(prefix)) == prefix
+}
+
+func ends_with(text, suffix) {
+    if (len(text) < len(suffix)) {
+        return false
+    }
+    return substr(text, len(text) - len(suffix), len(suffix)) == suffix
+}
+
+func strip_prefix(text, prefix) {
+    if (!starts_with(text, prefix)) {
+        return nil
+    }
+    return substr(text, len(prefix), len(text) - len(prefix))
+}
+
+func between_prefix_and_suffix(text, prefix, suffix) {
+    if (!starts_with(text, prefix) || !ends_with(text, suffix)) {
+        return nil
+    }
+    var start = len(prefix)
+    var count = len(text) - len(prefix) - len(suffix)
+    if (count < 0) {
+        return nil
+    }
+    return substr(text, start, count)
+}

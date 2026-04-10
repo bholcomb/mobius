@@ -1,0 +1,63 @@
+import "socket"
+import "http_server_utils" as web
+
+var HOST = "127.0.0.1"
+var PORT = 8080
+
+func render_page(request) {
+    var path = request.path
+    var user_agent = request.headers["user-agent"]
+    if (user_agent == nil || user_agent == "") {
+        user_agent = "(none)"
+    }
+    return "<!doctype html>\n"
+        + "<html><head><title>Mobius Hello</title></head><body>"
+        + "<h1>Hello from Mobius</h1>"
+        + "<p>This page was generated dynamically by a Mobius HTTP server.</p>"
+        + "<ul>"
+        + "<li>method: " + web.html_escape(request.method) + "</li>"
+        + "<li>path: " + web.html_escape(path) + "</li>"
+        + "<li>user-agent: " + web.html_escape(user_agent) + "</li>"
+        + "</ul>"
+        + "<p>Try <a href=\"/hello?name=mobius\">/hello?name=mobius</a></p>"
+        + "</body></html>"
+}
+
+func handle_client(conn) {
+    conn:set_timeout(5000)
+    var request = web.read_http_request(conn)
+    if (request == nil) {
+        return
+    }
+
+    if (request.path != "/" && request.path != "/hello") {
+        web.not_found(conn, request.path)
+        return
+    }
+
+    web.html_response(conn, 200, render_page(request))
+}
+
+func main() {
+    var listener = socket.listen(HOST, PORT)
+    print("Mobius hello server listening on http://" + HOST + ":" + str(PORT))
+    print("Press Ctrl+C to stop.")
+
+    while (true) {
+        var conn = listener:accept()
+        try {
+            handle_client(conn)
+        } catch err {
+            try {
+                web.server_error(conn, err)
+            } catch inner_err {
+            }
+        } finally {
+            if (!conn:is_closed()) {
+                conn:close()
+            }
+        }
+    }
+}
+
+main()
