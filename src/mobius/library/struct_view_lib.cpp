@@ -11,6 +11,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <mutex>
 #include <new>
 #include <string>
 #include <unordered_map>
@@ -99,18 +101,47 @@ struct LayoutBuildResult {
     size_t align = 1;
 };
 
+struct BufferViewSelfAccess {
+    BufferValue* buffer = nullptr;
+    SharedCell* cell = nullptr;
+    std::unique_lock<std::recursive_mutex> lock;
+};
+
 static size_t align_up(size_t value, size_t alignment) {
     if (alignment <= 1) return value;
     size_t rem = value % alignment;
     return rem == 0 ? value : value + (alignment - rem);
 }
 
+static bool checked_add_size(size_t lhs, size_t rhs, size_t* out) {
+    if (rhs > (std::numeric_limits<size_t>::max() - lhs)) return false;
+    *out = lhs + rhs;
+    return true;
+}
+
+static bool checked_mul_size(size_t lhs, size_t rhs, size_t* out) {
+    if (lhs != 0 && rhs > (std::numeric_limits<size_t>::max() / lhs)) return false;
+    *out = lhs * rhs;
+    return true;
+}
+
+static void release_struct_fields(std::vector<StructFieldDesc>& fields) {
+    for (StructFieldDesc& field : fields) {
+        if (field.nested_layout) {
+            field.nested_layout->release();
+            field.nested_layout = nullptr;
+        }
+    }
+}
+
 static bool value_to_size(const Value& value, size_t* out) {
     if (value.type == VAL_INT64 && value.as.i64 >= 0) {
+        if ((uint64_t)value.as.i64 > (uint64_t)std::numeric_limits<size_t>::max()) return false;
         *out = (size_t)value.as.i64;
         return true;
     }
     if (value.type == VAL_UINT64) {
+        if (value.as.u64 > (uint64_t)std::numeric_limits<size_t>::max()) return false;
         *out = (size_t)value.as.u64;
         return true;
     }
@@ -184,13 +215,27 @@ static BufferValue* extract_buffer_value(const Value& value) {
     return (value.type == VAL_BUFFER && value.as.buffer) ? value.as.buffer : nullptr;
 }
 
-static BufferValue* extract_buffer_self_or_shared(MobiusState* state, const char* err) {
+static BufferValue* extract_buffer_self_or_shared(MobiusState* state, const char* err,
+                                                  BufferViewSelfAccess* access = nullptr) {
     const Value& self = state->npeek_self();
-    if (self.type == VAL_BUFFER && self.as.buffer) return self.as.buffer;
+    if (self.type == VAL_BUFFER && self.as.buffer) {
+        if (access) access->buffer = self.as.buffer;
+        return self.as.buffer;
+    }
     if (self.type == VAL_SHARED_CELL && self.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(self.as.shared_cell->mutex());
-        Value& inner = self.as.shared_cell->unsafeValue();
-        if (inner.type == VAL_BUFFER && inner.as.buffer) return inner.as.buffer;
+        if (access) {
+            access->cell = self.as.shared_cell;
+            access->lock = std::unique_lock<std::recursive_mutex>(self.as.shared_cell->mutex());
+            Value& inner = self.as.shared_cell->unsafeValue();
+            if (inner.type == VAL_BUFFER && inner.as.buffer) {
+                access->buffer = inner.as.buffer;
+                return inner.as.buffer;
+            }
+        } else {
+            std::lock_guard<std::recursive_mutex> lock(self.as.shared_cell->mutex());
+            Value& inner = self.as.shared_cell->unsafeValue();
+            if (inner.type == VAL_BUFFER && inner.as.buffer) return inner.as.buffer;
+        }
     }
     state->error(err);
     return nullptr;
@@ -248,10 +293,10 @@ static void destroy_struct_layout_userdata(void* ptr);
 static void destroy_struct_view_userdata(void* ptr);
 static void destroy_struct_array_view_userdata(void* ptr);
 
-static Value make_struct_view_value(MobiusState* state, StructLayout* layout,
-                                    BufferValue* buffer, size_t base_offset);
-static Value make_struct_array_view_value(MobiusState* state, const StructFieldDesc& field,
-                                          BufferValue* buffer, size_t base_offset);
+static bool make_struct_view_value(MobiusState* state, StructLayout* layout,
+                                   BufferValue* buffer, size_t base_offset, Value* out);
+static bool make_struct_array_view_value(MobiusState* state, const StructFieldDesc& field,
+                                         BufferValue* buffer, size_t base_offset, Value* out);
 
 template<typename T>
 static T load_unaligned(const uint8_t* ptr) {
@@ -350,18 +395,23 @@ static bool write_scalar_value(MobiusState* state, const StructFieldDesc& field,
     return false;
 }
 
-static Value read_field_value(MobiusState* state, const StructFieldDesc& field,
-                              BufferValue* buffer, size_t base_offset) {
-    size_t absolute = base_offset + field.offset;
-    if (!ensure_view_span(state, buffer, absolute, field.size)) return Value();
+static bool read_field_value(MobiusState* state, const StructFieldDesc& field,
+                             BufferValue* buffer, size_t base_offset, Value* out) {
+    size_t absolute = 0;
+    if (!checked_add_size(base_offset, field.offset, &absolute)) {
+        state->error("struct field address overflowed");
+        return false;
+    }
+    if (!ensure_view_span(state, buffer, absolute, field.size)) return false;
     const uint8_t* ptr = buffer->data() + absolute;
     if (field.count > 1) {
-        return make_struct_array_view_value(state, field, buffer, absolute);
+        return make_struct_array_view_value(state, field, buffer, absolute, out);
     }
     if (field.kind == StructFieldKind::SCALAR) {
-        return read_scalar_value(field, ptr);
+        *out = read_scalar_value(field, ptr);
+        return true;
     }
-    return make_struct_view_value(state, field.nested_layout, buffer, absolute);
+    return make_struct_view_value(state, field.nested_layout, buffer, absolute, out);
 }
 
 static bool write_field_value(MobiusState* state, const StructFieldDesc& field,
@@ -374,7 +424,11 @@ static bool write_field_value(MobiusState* state, const StructFieldDesc& field,
         state->error("nested struct fields are read-only views");
         return false;
     }
-    size_t absolute = base_offset + field.offset;
+    size_t absolute = 0;
+    if (!checked_add_size(base_offset, field.offset, &absolute)) {
+        state->error("struct field address overflowed");
+        return false;
+    }
     if (!ensure_view_span(state, buffer, absolute, field.size)) return false;
     return write_scalar_value(state, field, buffer->data() + absolute, value);
 }
@@ -449,7 +503,11 @@ static int view_method_index(MobiusState* state, int arg_count) {
         return 1;
     }
 
-    state->npush(read_field_value(state, view->layout->fields[it->second], view->buffer, view->base_offset));
+    Value result;
+    if (!read_field_value(state, view->layout->fields[it->second], view->buffer, view->base_offset, &result)) {
+        return -1;
+    }
+    state->npush(result);
     return 1;
 }
 
@@ -510,13 +568,19 @@ static int array_view_method_index(MobiusState* state, int arg_count) {
     field.kind = view->kind;
     field.scalar = view->scalar;
     field.nested_layout = view->nested_layout;
-    field.offset = idx * view->stride;
+    if (!checked_mul_size(idx, view->stride, &field.offset)) {
+        return state->error("struct array index address overflowed");
+    }
     field.size = view->kind == StructFieldKind::SCALAR ? view->stride : view->nested_layout->size;
     field.align = 1;
     field.stride = view->stride;
     field.count = 1;
 
-    state->npush(read_field_value(state, field, view->buffer, view->base_offset));
+    Value result;
+    if (!read_field_value(state, field, view->buffer, view->base_offset, &result)) {
+        return -1;
+    }
+    state->npush(result);
     return 1;
 }
 
@@ -540,7 +604,9 @@ static int array_view_method_newindex(MobiusState* state, int arg_count) {
     StructFieldDesc field = {};
     field.kind = view->kind;
     field.scalar = view->scalar;
-    field.offset = idx * view->stride;
+    if (!checked_mul_size(idx, view->stride, &field.offset)) {
+        return state->error("struct array index address overflowed");
+    }
     field.size = view->stride;
     field.stride = view->stride;
     field.count = 1;
@@ -568,27 +634,28 @@ static void destroy_struct_array_view_userdata(void* ptr) {
     delete view;
 }
 
-static Value make_struct_view_value(MobiusState* state, StructLayout* layout,
-                                    BufferValue* buffer, size_t base_offset) {
+static bool make_struct_view_value(MobiusState* state, StructLayout* layout,
+                                   BufferValue* buffer, size_t base_offset, Value* out) {
     StructView* view = new (std::nothrow) StructView();
     if (!view) {
         state->error("failed to allocate struct view");
-        return Value();
+        return false;
     }
     view->layout = layout;
     view->buffer = buffer;
     view->base_offset = base_offset;
     layout->retain();
     buffer->retain();
-    return make_userdata_value(state, view, destroy_struct_view_userdata, STRUCT_VIEW_TYPE, sizeof(StructView));
+    *out = make_userdata_value(state, view, destroy_struct_view_userdata, STRUCT_VIEW_TYPE, sizeof(StructView));
+    return true;
 }
 
-static Value make_struct_array_view_value(MobiusState* state, const StructFieldDesc& field,
-                                          BufferValue* buffer, size_t base_offset) {
+static bool make_struct_array_view_value(MobiusState* state, const StructFieldDesc& field,
+                                         BufferValue* buffer, size_t base_offset, Value* out) {
     StructArrayView* view = new (std::nothrow) StructArrayView();
     if (!view) {
         state->error("failed to allocate struct array view");
-        return Value();
+        return false;
     }
     view->nested_layout = field.nested_layout;
     view->buffer = buffer;
@@ -599,8 +666,9 @@ static Value make_struct_array_view_value(MobiusState* state, const StructFieldD
     view->count = field.count;
     if (view->nested_layout) view->nested_layout->retain();
     buffer->retain();
-    return make_userdata_value(state, view, destroy_struct_array_view_userdata,
+    *out = make_userdata_value(state, view, destroy_struct_array_view_userdata,
                                STRUCT_ARRAY_VIEW_TYPE, sizeof(StructArrayView));
+    return true;
 }
 
 static bool resolve_type_info(MobiusState* /*state*/, const Value& type_value,
@@ -686,13 +754,21 @@ static bool build_field_from_spec(MobiusState* state, Table* spec, bool packed, 
     field.align = align;
     field.count = count;
     field.stride = type_info.size;
-    field.size = type_info.size * count;
+    if (!checked_mul_size(type_info.size, count, &field.size)) {
+        *error = "struct field size overflowed";
+        return false;
+    }
     if (field.nested_layout) field.nested_layout->retain();
 
     out->fields.push_back(field);
     out->align = std::max(out->align, align);
-    out->size = std::max(out->size, offset + field.size);
-    if (!is_union) *cursor = std::max(*cursor, offset + field.size);
+    size_t field_end = 0;
+    if (!checked_add_size(offset, field.size, &field_end)) {
+        *error = "struct field end offset overflowed";
+        return false;
+    }
+    out->size = std::max(out->size, field_end);
+    if (!is_union) *cursor = std::max(*cursor, field_end);
     return true;
 }
 
@@ -730,17 +806,30 @@ static bool build_layout_from_member_array(MobiusState* state, ArrayValue* membe
             bool child_is_union = strcmp(kind.as.string->data, "union") == 0;
             LayoutBuildResult group_result = {};
             if (!build_layout_from_member_array(state, child_members.as.array, packed, child_is_union, &group_result, error)) {
+                release_struct_fields(group_result.fields);
                 return false;
             }
 
             size_t group_offset = is_union ? 0 : (packed ? cursor : align_up(cursor, group_result.align));
             for (StructFieldDesc& field : group_result.fields) {
-                field.offset += group_offset;
+                size_t adjusted_offset = 0;
+                if (!checked_add_size(field.offset, group_offset, &adjusted_offset)) {
+                    release_struct_fields(group_result.fields);
+                    *error = "nested struct field offset overflowed";
+                    return false;
+                }
+                field.offset = adjusted_offset;
                 out->fields.push_back(field);
+                field.nested_layout = nullptr;
             }
-            out->size = std::max(out->size, group_offset + group_result.size);
+            size_t group_end = 0;
+            if (!checked_add_size(group_offset, group_result.size, &group_end)) {
+                *error = "nested struct layout size overflowed";
+                return false;
+            }
+            out->size = std::max(out->size, group_end);
             out->align = std::max(out->align, group_result.align);
-            if (!is_union) cursor = std::max(cursor, group_offset + group_result.size);
+            if (!is_union) cursor = std::max(cursor, group_end);
             continue;
         }
 
@@ -825,7 +914,8 @@ int buffer_method_view_as(MobiusState* state, int arg_count) {
     if (arg_count < 2 || arg_count > 3) {
         return state->error("buffer:view_as expects layout [, offset]");
     }
-    BufferValue* buffer = extract_buffer_self_or_shared(state, "buffer:view_as: self is not a buffer");
+    BufferViewSelfAccess access;
+    BufferValue* buffer = extract_buffer_self_or_shared(state, "buffer:view_as: self is not a buffer", &access);
     if (!buffer) return -1;
 
     Value offset_value = make_int64_value(0);
@@ -841,7 +931,9 @@ int buffer_method_view_as(MobiusState* state, int arg_count) {
         return state->error("buffer:view_as offset must be a non-negative integer");
     }
     if (!ensure_view_span(state, buffer, offset, layout->size)) return -1;
-    state->npush(make_struct_view_value(state, layout, buffer, offset));
+    Value result;
+    if (!make_struct_view_value(state, layout, buffer, offset, &result)) return -1;
+    state->npush(result);
     return 1;
 }
 
@@ -849,7 +941,8 @@ int buffer_method_array_view_as(MobiusState* state, int arg_count) {
     if (arg_count < 2 || arg_count > 4) {
         return state->error("buffer:array_view_as expects layout [, offset [, count]]");
     }
-    BufferValue* buffer = extract_buffer_self_or_shared(state, "buffer:array_view_as: self is not a buffer");
+    BufferViewSelfAccess access;
+    BufferValue* buffer = extract_buffer_self_or_shared(state, "buffer:array_view_as: self is not a buffer", &access);
     if (!buffer) return -1;
 
     Value count_value = make_nil_value();
@@ -880,7 +973,10 @@ int buffer_method_array_view_as(MobiusState* state, int arg_count) {
             return state->error("buffer:array_view_as count must be a non-negative integer");
         }
     }
-    size_t needed = count * layout->size;
+    size_t needed = 0;
+    if (!checked_mul_size(count, layout->size, &needed)) {
+        return state->error("buffer:array_view_as count overflowed view size");
+    }
     if (needed > available) {
         return state->error("buffer:array_view_as view exceeds buffer bounds");
     }
@@ -892,7 +988,9 @@ int buffer_method_array_view_as(MobiusState* state, int arg_count) {
     field.align = layout->align;
     field.stride = layout->size;
     field.count = count;
-    state->npush(make_struct_array_view_value(state, field, buffer, offset));
+    Value result;
+    if (!make_struct_array_view_value(state, field, buffer, offset, &result)) return -1;
+    state->npush(result);
     return 1;
 }
 
