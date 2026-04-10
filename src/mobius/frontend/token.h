@@ -98,6 +98,9 @@ typedef enum {
     TOKEN_YIELD,            // yield
     TOKEN_SHARED,           // shared
     TOKEN_ATOMIC,           // atomic
+    TOKEN_STRUCT,           // struct
+    TOKEN_UNION,            // union
+    TOKEN_AT,               // at
 
     // Type annotation tokens
     TOKEN_TYPE_INT64,       // int64

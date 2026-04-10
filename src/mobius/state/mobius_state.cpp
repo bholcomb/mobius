@@ -10,6 +10,7 @@
 #include "library/array.h"
 #include "library/buffer_lib.h"
 #include "library/fiber_lib.h"
+#include "library/struct_view_lib.h"
 #include "library/table_lib.h"
 #include "internal/string_intern.h"
 #include "data/table.h"
@@ -540,6 +541,18 @@ int MobiusState::initStdlib() {
     Table* buffer_mt = create_buffer_type_metatable(this);
     setTypeMetatable(VAL_BUFFER, buffer_mt);
     buffer_mt->release();
+
+    Table* struct_layout_mt = create_struct_layout_metatable(this);
+    setUserdataTypeMetatable(string_pool_->intern("StructLayout"), struct_layout_mt);
+    struct_layout_mt->release();
+
+    Table* struct_view_mt = create_struct_view_metatable(this);
+    setUserdataTypeMetatable(string_pool_->intern("StructView"), struct_view_mt);
+    struct_view_mt->release();
+
+    Table* struct_array_view_mt = create_struct_array_view_metatable(this);
+    setUserdataTypeMetatable(string_pool_->intern("StructArrayView"), struct_array_view_mt);
+    struct_array_view_mt->release();
 
     initialized_ = true;
     return MOBIUS_OK;

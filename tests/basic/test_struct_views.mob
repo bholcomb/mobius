@@ -1,0 +1,100 @@
+func assert_test(name, cond) {
+    if (!cond) {
+        print("FAIL:", name)
+        exit(1)
+    }
+    print("PASS:", name)
+}
+
+struct Vec2 packed {
+    x: float32
+    y: float32
+}
+
+struct Vertex packed {
+    position: Vec2
+    intensity: float32
+}
+
+struct Header packed {
+    tag: uint16
+    version at 4: uint16
+}
+
+struct Alias packed {
+    union {
+        first: uint32
+        second: uint32
+    }
+}
+
+struct Pixel packed {
+    rgba: uint8[4]
+}
+
+struct NativePair native {
+    left: uint8
+    right: uint32
+}
+
+struct RGBA packed {
+    union {
+        rgba: uint32
+        bytes: uint8[4]
+        struct {
+            r: uint8
+            g: uint8
+            b: uint8
+            a: uint8
+        }
+    }
+}
+
+assert_test("vec2 size", Vec2.size == 8)
+assert_test("header explicit offset size", Header.size == 6)
+assert_test("alias union size", Alias.size == 4)
+assert_test("native layout reports alignment", NativePair.align >= 4 && NativePair.size >= 8)
+assert_test("packed flag", Vec2.packed == true && NativePair.packed == false)
+
+var vec_buffer = buffer_create(Vec2.size)
+var vec = vec_buffer:view_as(Vec2)
+vec.x = 1.5
+vec.y = -2.25
+assert_test("packed scalar fields roundtrip", vec.x == 1.5 && vec.y == -2.25)
+assert_test("view metadata access", vec.offset == 0 && vec.buffer:length() == Vec2.size)
+
+var vertex_buffer = buffer_create(Vertex.size)
+var vertex = vertex_buffer:view_as(Vertex)
+vertex.position.x = 3.25
+vertex.position.y = 9.5
+vertex.intensity = 7.0
+assert_test("nested struct field read", vertex.position.x == 3.25 && vertex.position.y == 9.5)
+assert_test("nested struct sibling field", vertex.intensity == 7.0)
+
+var alias_buffer = buffer_create(Alias.size)
+var alias = alias_buffer:view_as(Alias)
+alias.first = 99
+assert_test("union aliases same memory", alias.second == 99)
+
+var pixel_buffer = buffer_create(RGBA.size * 4)
+var pixels = pixel_buffer:array_view_as(RGBA)
+assert_test("array view infers count", pixels.length == 4)
+pixels[0].r = 10
+pixels[0].g = 20
+pixels[0].b = 30
+pixels[0].a = 40
+assert_test("anonymous struct fields write through", pixels[0].bytes[0] == 10 && pixels[0].bytes[3] == 40)
+pixels[1].bytes[2] = 77
+assert_test("array field indexing aliases struct fields", pixels[1].b == 77)
+
+var header_buffer = buffer_create(16)
+var header = header_buffer:view_as(Header, 2)
+header.tag = 42
+header.version = 7
+var header2 = header_buffer:view_as(Header, 2)
+assert_test("views share underlying buffer", header2.tag == 42 && header2.version == 7)
+
+var tail = pixel_buffer:array_view_as(RGBA, RGBA.size)
+assert_test("offset array view count", tail.length == 3)
+
+print("ALL STRUCT VIEW TESTS PASSED")

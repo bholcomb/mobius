@@ -162,11 +162,14 @@ private:
     void compileContinueStmt();
     void compileImportStmt(ImportStmt* stmt);
     void compileEnumStmt(EnumStmt* stmt);
+    void compileStructStmt(StructStmt* stmt);
     void compilePragmaStmt(PragmaStmt* stmt);
     void compilePrintStmt(PrintStmt* stmt);
     void compileForInStmt(ForInStmt* stmt);
     void compileTryCatchStmt(TryCatchStmt* stmt);
     void compileThrowStmt(ThrowStmt* stmt);
+    void compileStructMembersArray(StructMemberDef* members, size_t count, int array_reg);
+    void compileStructTypeRefValue(const StructTypeRef& type, int dest);
 
     int compileSpawn(SpawnExpr* expr, int dest);
     int compileAwait(AwaitExpr* expr, int dest);

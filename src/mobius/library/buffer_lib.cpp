@@ -1,4 +1,5 @@
 #include "library/buffer_lib.h"
+#include "library/struct_view_lib.h"
 
 #include "data/buffer.h"
 #include "data/shared_cell.h"
@@ -352,5 +353,7 @@ Table* create_buffer_type_metatable(MobiusState* state) {
     mt->setByString(state->stringPool()->intern("to_string"), make_native_function_value(buffer_method_to_string));
     mt->setByString(state->stringPool()->intern("address"),   make_native_function_value(buffer_method_address));
     mt->setByString(state->stringPool()->intern("is_fixed"),  make_native_function_value(buffer_method_is_fixed));
+    mt->setByString(state->stringPool()->intern("view_as"),   make_native_function_value(buffer_method_view_as));
+    mt->setByString(state->stringPool()->intern("array_view_as"), make_native_function_value(buffer_method_array_view_as));
     return mt;
 }

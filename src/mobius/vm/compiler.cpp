@@ -2069,6 +2069,9 @@ void Compiler::compileStmt(Stmt* stmt) {
         case STMT_ENUM:
             compileEnumStmt(&stmt->as.enum_stmt);
             break;
+        case STMT_STRUCT:
+            compileStructStmt(&stmt->as.struct_stmt);
+            break;
         case STMT_PRAGMA:
             compilePragmaStmt(&stmt->as.pragma_stmt);
             break;
@@ -3193,6 +3196,136 @@ void Compiler::compileEnumStmt(EnumStmt* stmt) {
     emitSetGlobal(enum_reg, interned);
 
     setFreeReg(save);
+}
+
+void Compiler::compileStructTypeRefValue(const StructTypeRef& type, int dest) {
+    if (type.is_builtin_type ||
+        type.type_name.type == TOKEN_TYPE_INT64 ||
+        type.type_name.type == TOKEN_TYPE_UINT64 ||
+        type.type_name.type == TOKEN_TYPE_FLOAT64) {
+        const char* type_name = type.type_name.identifier;
+        switch (type.type_name.type) {
+            case TOKEN_TYPE_INT64: type_name = "int64"; break;
+            case TOKEN_TYPE_UINT64: type_name = "uint64"; break;
+            case TOKEN_TYPE_FLOAT64: type_name = "float64"; break;
+            default: break;
+        }
+        int ki = stringConstant(type_name);
+        emitLoadK(dest, ki);
+        return;
+    }
+
+    VariableExpr ref = {};
+    ref.name = type.type_name;
+    compileVariable(&ref, dest);
+}
+
+void Compiler::compileStructMembersArray(StructMemberDef* members, size_t count, int array_reg) {
+    emitABC(OP_NEWARRAY, (uint8_t)array_reg, (uint8_t)(count & 0xFF), 0);
+
+    for (size_t i = 0; i < count; i++) {
+        int save = current_->free_reg;
+        int member_reg = allocReg();
+        emitABC(OP_NEWTABLE, (uint8_t)member_reg, 0, 4);
+
+        auto set_field = [&](int table_reg, const char* key_name, int value_reg) {
+            int key_ki = stringConstant(key_name);
+            emitABC(OP_INDEX_SET, (uint8_t)table_reg, makeRK(key_ki), (uint8_t)value_reg);
+        };
+
+        int kind_reg = allocReg();
+        const char* kind_name = "field";
+        if (members[i].kind == STRUCT_MEMBER_UNION) kind_name = "union";
+        else if (members[i].kind == STRUCT_MEMBER_STRUCT) kind_name = "struct";
+        int kind_ki = stringConstant(kind_name);
+        emitLoadK(kind_reg, kind_ki);
+        set_field(member_reg, "kind", kind_reg);
+
+        if (members[i].kind == STRUCT_MEMBER_FIELD) {
+            const StructFieldDef& field = members[i].as.field;
+
+            int name_reg = allocReg();
+            int name_ki = stringConstant(field.name.identifier);
+            emitLoadK(name_reg, name_ki);
+            set_field(member_reg, "name", name_reg);
+
+            int type_reg = allocReg();
+            compileStructTypeRefValue(field.type, type_reg);
+            set_field(member_reg, "type", type_reg);
+
+            if (field.type.array_count > 0) {
+                int count_reg = allocReg();
+                int count_ki = current_->proto->addIntConstant((int64_t)field.type.array_count);
+                emitLoadK(count_reg, count_ki);
+                set_field(member_reg, "count", count_reg);
+            }
+
+            if (field.has_explicit_offset) {
+                int offset_reg = allocReg();
+                int offset_ki = current_->proto->addIntConstant(field.offset);
+                emitLoadK(offset_reg, offset_ki);
+                set_field(member_reg, "offset", offset_reg);
+            }
+        } else {
+            int nested_reg = allocReg();
+            compileStructMembersArray(members[i].as.group_def.members,
+                                      members[i].as.group_def.member_count,
+                                      nested_reg);
+            set_field(member_reg, "members", nested_reg);
+        }
+
+        int idx_ki = current_->proto->addIntConstant((int64_t)i);
+        emitABC(OP_INDEX_SET, (uint8_t)array_reg, makeRK(idx_ki), (uint8_t)member_reg);
+        setFreeReg(save);
+    }
+}
+
+void Compiler::compileStructStmt(StructStmt* stmt) {
+    currentLine_ = stmt->keyword.line;
+
+    int base = current_->free_reg;
+    int func_reg = allocReg();
+    emitGetGlobal(func_reg, "__define_struct");
+
+    int name_reg = allocReg();
+    int name_ki = stringConstant(stmt->name.identifier);
+    emitLoadK(name_reg, name_ki);
+
+    int spec_reg = allocReg();
+    emitABC(OP_NEWTABLE, (uint8_t)spec_reg, 0, 2);
+
+    auto set_spec_field = [&](const char* key_name, int value_reg) {
+        int key_ki = stringConstant(key_name);
+        emitABC(OP_INDEX_SET, (uint8_t)spec_reg, makeRK(key_ki), (uint8_t)value_reg);
+    };
+
+    int layout_reg = allocReg();
+    int layout_ki = stringConstant(stmt->layout_kind == STRUCT_LAYOUT_PACKED ? "packed" : "native");
+    emitLoadK(layout_reg, layout_ki);
+    set_spec_field("layout", layout_reg);
+
+    int members_reg = allocReg();
+    compileStructMembersArray(stmt->members, stmt->member_count, members_reg);
+    set_spec_field("members", members_reg);
+
+    emitABC(OP_CALL, (uint8_t)func_reg, 3, 2);
+    setFreeReg(base);
+
+    if (current_->scope_depth > 0) {
+        int reg = addLocal(stmt->name.identifier, false);
+        current_->locals.back().inferred_type = VAL_USERDATA;
+        if (reg != func_reg) {
+            emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)func_reg, 0);
+        }
+    } else {
+        int reg = allocReg();
+        if (reg != func_reg) {
+            emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)func_reg, 0);
+        }
+        emitSetGlobal(reg, stmt->name.identifier);
+        global_types_[stmt->name.identifier] = VAL_USERDATA;
+        setFreeReg(base);
+    }
 }
 
 // ============================================================================

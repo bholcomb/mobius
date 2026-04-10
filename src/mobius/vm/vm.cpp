@@ -67,21 +67,38 @@ static inline bool vm_value_to_byte(const Value& value, uint8_t* out) {
     return false;
 }
 
-static inline Value vm_userdata_lookup(MobiusState* state, const Value& value, const Value& key) {
-    if (value.type != VAL_USERDATA || !value.as.userdata) return Value();
+static inline Value make_retained_table_value(Table* table) {
+    if (!table) return Value();
+    table->retain();
+    return make_table_value(table);
+}
 
-    Table* specific = value.as.userdata->type_tag
-        ? state->userdataTypeMetatable(value.as.userdata->type_tag)
+static inline Value vm_userdata_lookup(MobiusVM* vm, const Value& value, const Value& key) {
+    MobiusState* state = vm->state_;
+    if (value.type != VAL_USERDATA || !value.as.userdata) return Value();
+    Value value_copy = value;
+    Value key_copy = key;
+
+    Table* specific = value_copy.as.userdata->type_tag
+        ? state->userdataTypeMetatable(value_copy.as.userdata->type_tag)
         : nullptr;
     if (specific) {
-        Value result = (key.type == VAL_STRING) ? specific->getByString(key.as.string) : specific->get(key);
+        Value result = (key_copy.type == VAL_STRING) ? specific->getByString(key_copy.as.string) : specific->get(key_copy);
         if (result.type != VAL_NIL) return result;
+        Value meta_result;
+        int meta_rc = vm->callMetamethod(make_retained_table_value(specific), state->metamethods()->index(),
+                                         value_copy, key_copy, meta_result);
+        if (meta_rc > 0) return meta_result;
     }
 
     Table* generic = state->typeMetatable(VAL_USERDATA);
     if (generic) {
-        Value result = (key.type == VAL_STRING) ? generic->getByString(key.as.string) : generic->get(key);
+        Value result = (key_copy.type == VAL_STRING) ? generic->getByString(key_copy.as.string) : generic->get(key_copy);
         if (result.type != VAL_NIL) return result;
+        Value meta_result;
+        int meta_rc = vm->callMetamethod(make_retained_table_value(generic), state->metamethods()->index(),
+                                         value_copy, key_copy, meta_result);
+        if (meta_rc > 0) return meta_result;
     }
 
     return Value();
@@ -397,18 +414,23 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
     if (table_val.type != VAL_TABLE || !table_val.as.table) return 0;
 
     Value method = table_val.as.table->getMetamethod(mm_name);
+    if (method.type == VAL_NIL) {
+        method = table_val.as.table->getByString(mm_name);
+    }
     if (method.type == VAL_NIL) return 0;
 
     if (method.type == VAL_NATIVE_FUNCTION) {
         int caller_base = callStackTop().base;
         int caller_regs = callStackTop().proto->num_registers;
         int scratch = caller_base + caller_regs;
+    Value lhs_copy = lhs;
+    Value rhs_copy = rhs;
 
         int needed = scratch + 4;
         ensureRegisters(needed);
 
-        registers_[scratch]     = lhs;
-        registers_[scratch + 1] = rhs;
+    registers_[scratch]     = lhs_copy;
+    registers_[scratch + 1] = rhs_copy;
 
         int saved_base = native_ctx_.base;
         int saved_top  = native_ctx_.top;
@@ -587,6 +609,55 @@ MOBIUS_FORCEINLINE static int vm_op_move(MobiusVM* vm, VMFrame& f, uint32_t inst
         RA(inst) = src;
     }
     return 0;
+}
+
+int MobiusVM::callTernaryMetamethod(const Value& table_val, MobiusString* mm_name,
+                                    const Value& a, const Value& b, const Value& c) {
+    if (table_val.type != VAL_TABLE || !table_val.as.table) return 0;
+
+    Value method = table_val.as.table->getMetamethod(mm_name);
+    if (method.type == VAL_NIL) {
+        method = table_val.as.table->getByString(mm_name);
+    }
+    if (method.type == VAL_NIL) return 0;
+
+    if (method.type != VAL_NATIVE_FUNCTION) {
+        runtimeError("Metamethod '%s' must be native", mm_name->data);
+        return -1;
+    }
+
+    int caller_base = callStackTop().base;
+    int caller_regs = callStackTop().proto->num_registers;
+    int scratch = caller_base + caller_regs;
+    Value a_copy = a;
+    Value b_copy = b;
+    Value c_copy = c;
+
+    int needed = scratch + 5;
+    ensureRegisters(needed);
+
+    registers_[scratch] = a_copy;
+    registers_[scratch + 1] = b_copy;
+    registers_[scratch + 2] = c_copy;
+
+    int saved_base = native_ctx_.base;
+    int saved_top = native_ctx_.top;
+
+    native_ctx_.registers = registers_.data();
+    native_ctx_.base = scratch;
+    native_ctx_.top = scratch + 3;
+    native_ctx_.capacity = (int)registers_.size();
+
+    int rc = method.as.native_function(state_, 3);
+
+    native_ctx_.base = saved_base;
+    native_ctx_.top = saved_top;
+
+    if (rc < 0) {
+        runtimeError("Metamethod '%s' failed", mm_name->data);
+        return -1;
+    }
+    return 1;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_loadk(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -774,7 +845,12 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
                 RA(inst) = Value();
             }
         } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
-            RA(inst) = vm_userdata_lookup(vm->state_, inner, key);
+            uint32_t* saved_ip = f.ip;
+            Value looked = vm_userdata_lookup(vm, inner, key);
+            vm->refreshFrame(f);
+            f.ip = saved_ip;
+            f.ci->ip = saved_ip;
+            RA(inst) = looked;
         } else {
             VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
             return -1;
@@ -807,7 +883,12 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             RA(inst) = Value();
         }
     } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
-        RA(inst) = vm_userdata_lookup(vm->state_, obj, key);
+        uint32_t* saved_ip = f.ip;
+        Value looked = vm_userdata_lookup(vm, obj, key);
+        vm->refreshFrame(f);
+        f.ip = saved_ip;
+        f.ci->ip = saved_ip;
+        RA(inst) = looked;
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -885,6 +966,29 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
                 VM_ERROR(vm, f, "failed to write buffer byte");
                 return -1;
             }
+        } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
+            Table* mt = inner.as.userdata->type_tag
+                ? vm->state_->userdataTypeMetatable(inner.as.userdata->type_tag)
+                : nullptr;
+            int rc = 0;
+            if (mt) {
+                rc = vm->callTernaryMetamethod(make_retained_table_value(mt),
+                                              vm->state_->metamethods()->newindex(),
+                                              inner, key, val);
+            }
+            if (rc == 0) {
+                Table* generic = vm->state_->typeMetatable(VAL_USERDATA);
+                if (generic) {
+                    rc = vm->callTernaryMetamethod(make_retained_table_value(generic),
+                                                  vm->state_->metamethods()->newindex(),
+                                                  inner, key, val);
+                }
+            }
+            if (rc < 0) return -1;
+            if (rc == 0) {
+                VM_ERROR(vm, f, "Attempt to assign field on a shared userdata value");
+                return -1;
+            }
         } else {
             VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
             return -1;
@@ -938,6 +1042,29 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
             VM_ERROR(vm, f, "failed to write buffer byte");
             return -1;
         }
+    } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
+        Table* mt = obj.as.userdata->type_tag
+            ? vm->state_->userdataTypeMetatable(obj.as.userdata->type_tag)
+            : nullptr;
+        int rc = 0;
+        if (mt) {
+            rc = vm->callTernaryMetamethod(make_retained_table_value(mt),
+                                          vm->state_->metamethods()->newindex(),
+                                          obj, key, val);
+        }
+        if (rc == 0) {
+            Table* generic = vm->state_->typeMetatable(VAL_USERDATA);
+            if (generic) {
+                rc = vm->callTernaryMetamethod(make_retained_table_value(generic),
+                                              vm->state_->metamethods()->newindex(),
+                                              obj, key, val);
+            }
+        }
+        if (rc < 0) return -1;
+        if (rc == 0) {
+            VM_ERROR(vm, f, "Attempt to assign field on a userdata value");
+            return -1;
+        }
     } else {
         VM_ERROR(vm, f, "Attempt to index a %s value", value_type_name(obj.type));
         return -1;
@@ -957,7 +1084,11 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
         const Value& inner = obj.as.shared_cell->unsafeValue();
         if (inner.type == VAL_USERDATA) {
-            Value method = vm_userdata_lookup(vm->state_, inner, key);
+            uint32_t* saved_ip = f.ip;
+            Value method = vm_userdata_lookup(vm, inner, key);
+            vm->refreshFrame(f);
+            f.ip = saved_ip;
+            f.ci->ip = saved_ip;
             if (method.type != VAL_NIL) {
                 f.regs[a] = method;
                 return 0;
@@ -1000,8 +1131,14 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         }
     }
 
-    Value method = (obj.type == VAL_USERDATA) ? vm_userdata_lookup(vm->state_, obj, key)
-                                              : Value();
+    Value method;
+    if (obj.type == VAL_USERDATA) {
+        uint32_t* saved_ip = f.ip;
+        method = vm_userdata_lookup(vm, obj, key);
+        vm->refreshFrame(f);
+        f.ip = saved_ip;
+        f.ci->ip = saved_ip;
+    }
     if (obj.type != VAL_USERDATA) {
         Table* mt = vm->state_->typeMetatable(obj.type);
         if (mt && key.type == VAL_STRING) {
@@ -1987,7 +2124,12 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
             else
                 f.regs[a] = Value();
         } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
-            f.regs[a] = vm_userdata_lookup(vm->state_, inner, key);
+            uint32_t* saved_ip = f.ip;
+            Value looked = vm_userdata_lookup(vm, inner, key);
+            vm->refreshFrame(f);
+            f.ip = saved_ip;
+            f.ci->ip = saved_ip;
+            f.regs[a] = looked;
         } else if (inner.type == VAL_STRING && inner.as.string) {
             if (key.type == VAL_INT64) {
                 int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -2025,7 +2167,12 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
         else
             f.regs[a] = Value();
     } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
-        f.regs[a] = vm_userdata_lookup(vm->state_, obj, key);
+        uint32_t* saved_ip = f.ip;
+        Value looked = vm_userdata_lookup(vm, obj, key);
+        vm->refreshFrame(f);
+        f.ip = saved_ip;
+        f.ci->ip = saved_ip;
+        f.regs[a] = looked;
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);

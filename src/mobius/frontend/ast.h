@@ -51,6 +51,7 @@ typedef enum {
     STMT_CONTINUE,
     STMT_IMPORT,
     STMT_ENUM,
+    STMT_STRUCT,
     STMT_PRAGMA,
     STMT_FOR_IN,
     STMT_TRY_CATCH,
@@ -384,6 +385,54 @@ typedef struct {
     EnumMemberDef* members;        // Linked list of enum members
 } EnumStmt;
 
+typedef struct {
+    Token type_name;
+    bool is_builtin_type;
+    size_t array_count;
+} StructTypeRef;
+
+typedef struct StructMemberDef StructMemberDef;
+
+typedef struct {
+    Token name;
+    StructTypeRef type;
+    bool has_explicit_offset;
+    int64_t offset;
+} StructFieldDef;
+
+typedef struct {
+    Token keyword;
+    StructMemberDef* members;
+    size_t member_count;
+} StructGroupDef;
+
+typedef enum {
+    STRUCT_LAYOUT_NATIVE,
+    STRUCT_LAYOUT_PACKED,
+} StructLayoutKind;
+
+typedef enum {
+    STRUCT_MEMBER_FIELD,
+    STRUCT_MEMBER_UNION,
+    STRUCT_MEMBER_STRUCT,
+} StructMemberKind;
+
+struct StructMemberDef {
+    StructMemberKind kind;
+    union {
+        StructFieldDef field;
+        StructGroupDef group_def;
+    } as;
+};
+
+typedef struct {
+    Token keyword;
+    Token name;
+    StructLayoutKind layout_kind;
+    StructMemberDef* members;
+    size_t member_count;
+} StructStmt;
+
 // For-in statement: for var x in expr { body }  or  for var k, v in expr { body }
 typedef struct {
     Token var_name;         // Loop variable (or first variable for k,v)
@@ -429,6 +478,7 @@ struct Stmt {
         ContinueStmt continue_stmt;
         ImportStmt import_stmt;
         EnumStmt enum_stmt;
+        StructStmt struct_stmt;
         PragmaStmt pragma_stmt;
         ForInStmt for_in_stmt;
         TryCatchStmt try_catch_stmt;
@@ -475,6 +525,8 @@ Stmt* make_continue_stmt(Token keyword);
 Stmt* make_import_stmt(Token keyword, Token module_name, Token alias, bool has_alias);
 Stmt* make_enum_stmt(Token keyword, Token name, NumberType underlying_type, 
                      bool has_explicit_type, EnumMemberDef* members);
+Stmt* make_struct_stmt(Token keyword, Token name, StructLayoutKind layout_kind,
+                       StructMemberDef* members, size_t member_count);
 Stmt* make_pragma_stmt(Token keyword, Token name, Token value);
 Stmt* make_for_in_stmt(Token var_name, Expr* iterable, Stmt* body);
 Stmt* make_for_in_stmt_kv(Token var_name, Token var_name2, Expr* iterable, Stmt* body);
@@ -491,6 +543,12 @@ Expr* make_atomic_expr(Expr* body);
 
 // Enum helper functions
 EnumMemberDef* make_enum_member(Token name, Expr* value);
+StructMemberDef make_struct_field_member(Token name, StructTypeRef type,
+                                         bool has_explicit_offset, int64_t offset);
+StructMemberDef make_struct_union_member(Token keyword, StructMemberDef* members,
+                                         size_t member_count);
+StructMemberDef make_struct_group_member(Token keyword, StructMemberDef* members,
+                                         size_t member_count, bool is_union);
 
 // Pattern and case creation functions
 CasePattern* make_value_pattern(Value literal);

@@ -447,9 +447,68 @@ Write a byte value in the range `[0, 255]` at `index`.
 
 Append a byte, string, or buffer to the end of the buffer.
 
+### buf:view_as(layout [, offset]) -> userdata
+
+Create a single struct view over the buffer. `layout` must be a `struct`
+declaration result, and `offset` defaults to `0`.
+
+```mobius
+struct Vec2 packed {
+    x: float32
+    y: float32
+}
+
+var buf = buffer_create(Vec2.size)
+var vec = buf:view_as(Vec2)
+vec.x = 1.5
+```
+
+### buf:array_view_as(layout [, offset [, count]]) -> userdata
+
+Create an indexed array of struct views over the buffer. If `count` is omitted,
+it is inferred from the remaining bytes after `offset`.
+
+```mobius
+struct Pixel packed {
+    rgba: uint8[4]
+}
+
+var buf = buffer_create(Pixel.size * 10)
+var pixels = buf:array_view_as(Pixel)
+print(pixels.length)    // 10
+```
+
 ### buf:to_string() -> string
 
 Return a string containing the buffer's raw bytes.
+
+### Struct Layouts And Views
+
+`struct` declarations produce layout objects with metadata fields:
+
+- `Layout.name`
+- `Layout.size`
+- `Layout.align`
+- `Layout.packed`
+
+Views created through `buf:view_as(...)` expose:
+
+- `view.field`
+- `view.buffer`
+- `view.offset`
+- `view.layout`
+- `view.size`
+
+Array views created through `buf:array_view_as(...)` expose:
+
+- `array_view[index]`
+- `array_view.length`
+- `array_view.buffer`
+- `array_view.offset`
+- `array_view.layout`
+
+For full syntax, packed/native layout rules, unions, and nested examples, see
+[`docs/struct_views.md`](struct_views.md).
 
 ---
 
