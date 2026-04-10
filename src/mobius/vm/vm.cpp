@@ -73,9 +73,10 @@ static inline Value make_retained_table_value(Table* table) {
     return make_table_value(table);
 }
 
-static inline Value vm_userdata_lookup(MobiusVM* vm, const Value& value, const Value& key) {
+static inline int vm_userdata_lookup(MobiusVM* vm, const Value& value, const Value& key, Value* out) {
     MobiusState* state = vm->state_;
-    if (value.type != VAL_USERDATA || !value.as.userdata) return Value();
+    if (out) *out = Value();
+    if (value.type != VAL_USERDATA || !value.as.userdata) return 0;
     Value value_copy = value;
     Value key_copy = key;
 
@@ -84,24 +85,38 @@ static inline Value vm_userdata_lookup(MobiusVM* vm, const Value& value, const V
         : nullptr;
     if (specific) {
         Value result = (key_copy.type == VAL_STRING) ? specific->getByString(key_copy.as.string) : specific->get(key_copy);
-        if (result.type != VAL_NIL) return result;
+        if (result.type != VAL_NIL) {
+            if (out) *out = result;
+            return 1;
+        }
         Value meta_result;
         int meta_rc = vm->callMetamethod(make_retained_table_value(specific), state->metamethods()->index(),
                                          value_copy, key_copy, meta_result);
-        if (meta_rc > 0) return meta_result;
+        if (meta_rc < 0) return -1;
+        if (meta_rc > 0) {
+            if (out) *out = meta_result;
+            return 1;
+        }
     }
 
     Table* generic = state->typeMetatable(VAL_USERDATA);
     if (generic) {
         Value result = (key_copy.type == VAL_STRING) ? generic->getByString(key_copy.as.string) : generic->get(key_copy);
-        if (result.type != VAL_NIL) return result;
+        if (result.type != VAL_NIL) {
+            if (out) *out = result;
+            return 1;
+        }
         Value meta_result;
         int meta_rc = vm->callMetamethod(make_retained_table_value(generic), state->metamethods()->index(),
                                          value_copy, key_copy, meta_result);
-        if (meta_rc > 0) return meta_result;
+        if (meta_rc < 0) return -1;
+        if (meta_rc > 0) {
+            if (out) *out = meta_result;
+            return 1;
+        }
     }
 
-    return Value();
+    return 0;
 }
 
 // ============================================================================
@@ -846,10 +861,12 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             }
         } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
             uint32_t* saved_ip = f.ip;
-            Value looked = vm_userdata_lookup(vm, inner, key);
+            Value looked;
+            int lookup_rc = vm_userdata_lookup(vm, inner, key, &looked);
             vm->refreshFrame(f);
             f.ip = saved_ip;
             f.ci->ip = saved_ip;
+            if (lookup_rc < 0) return -1;
             RA(inst) = looked;
         } else {
             VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
@@ -884,10 +901,12 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         }
     } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
         uint32_t* saved_ip = f.ip;
-        Value looked = vm_userdata_lookup(vm, obj, key);
+        Value looked;
+        int lookup_rc = vm_userdata_lookup(vm, obj, key, &looked);
         vm->refreshFrame(f);
         f.ip = saved_ip;
         f.ci->ip = saved_ip;
+        if (lookup_rc < 0) return -1;
         RA(inst) = looked;
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
@@ -1085,10 +1104,12 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         const Value& inner = obj.as.shared_cell->unsafeValue();
         if (inner.type == VAL_USERDATA) {
             uint32_t* saved_ip = f.ip;
-            Value method = vm_userdata_lookup(vm, inner, key);
+            Value method;
+            int lookup_rc = vm_userdata_lookup(vm, inner, key, &method);
             vm->refreshFrame(f);
             f.ip = saved_ip;
             f.ci->ip = saved_ip;
+            if (lookup_rc < 0) return -1;
             if (method.type != VAL_NIL) {
                 f.regs[a] = method;
                 return 0;
@@ -1134,10 +1155,11 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
     Value method;
     if (obj.type == VAL_USERDATA) {
         uint32_t* saved_ip = f.ip;
-        method = vm_userdata_lookup(vm, obj, key);
+        int lookup_rc = vm_userdata_lookup(vm, obj, key, &method);
         vm->refreshFrame(f);
         f.ip = saved_ip;
         f.ci->ip = saved_ip;
+        if (lookup_rc < 0) return -1;
     }
     if (obj.type != VAL_USERDATA) {
         Table* mt = vm->state_->typeMetatable(obj.type);
@@ -2125,10 +2147,12 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
                 f.regs[a] = Value();
         } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
             uint32_t* saved_ip = f.ip;
-            Value looked = vm_userdata_lookup(vm, inner, key);
+            Value looked;
+            int lookup_rc = vm_userdata_lookup(vm, inner, key, &looked);
             vm->refreshFrame(f);
             f.ip = saved_ip;
             f.ci->ip = saved_ip;
+            if (lookup_rc < 0) return -1;
             f.regs[a] = looked;
         } else if (inner.type == VAL_STRING && inner.as.string) {
             if (key.type == VAL_INT64) {
@@ -2168,10 +2192,12 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
             f.regs[a] = Value();
     } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
         uint32_t* saved_ip = f.ip;
-        Value looked = vm_userdata_lookup(vm, obj, key);
+        Value looked;
+        int lookup_rc = vm_userdata_lookup(vm, obj, key, &looked);
         vm->refreshFrame(f);
         f.ip = saved_ip;
         f.ci->ip = saved_ip;
+        if (lookup_rc < 0) return -1;
         f.regs[a] = looked;
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {

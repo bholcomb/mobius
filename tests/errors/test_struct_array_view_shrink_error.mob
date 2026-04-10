@@ -1,0 +1,18 @@
+struct RGBA packed {
+    union {
+        rgba: uint32
+        bytes: uint8[4]
+        struct {
+            r: uint8
+            g: uint8
+            b: uint8
+            a: uint8
+        }
+    }
+}
+
+var buf = buffer_create(RGBA.size * 2)
+var views = buf:array_view_as(RGBA)
+buf:resize(RGBA.size)
+
+var r = views[1].r
