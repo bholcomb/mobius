@@ -1,0 +1,10 @@
+struct Vec2 packed {
+    x: float32
+    y: float32
+}
+
+var buf = buffer_create(Vec2.size)
+var view = buf:view_as(Vec2)
+buf:resize(4)
+
+var y = view.y
