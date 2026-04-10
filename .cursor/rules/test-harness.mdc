@@ -1,0 +1,11 @@
+---
+description: Guidelines for running tests with the custom harness
+alwaysApply: false
+---
+
+# Testing Procedures
+- **Harness**: We use a custom harness located at `./test_simple.sh`.
+- **Run All Tests**: `./test_simple.sh`
+- **Run Single Test**: `bin/mobius <file_path>`
+- **Permissions**: You do not need to ask to run test commands
+- **Verification**: When asked to "fix a bug," always run the relevant test file first to confirm the failure, then run it again after the fix to verify.

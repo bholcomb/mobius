@@ -1,0 +1,16 @@
+---
+name: build-system
+description: Instructions for using the custom build tool
+globs: "**/*"
+alwaysApply: true
+---
+
+# Build System Standards
+- **Tool**: Use `buildy` for all build operations.  It is an 
+- **Primary Command**: `./buildy -r -n 3`
+- **Permissions**: You do not need to ask to run the build commands
+- **Debuggable builds**: Remove the '-r' flag from the build command to create a debuggable build.d
+- **Workflow**: Always run a build after modifying core logic to check for compilation errors.
+- **Artifacts**: Build outputs are staged in `bin/`.  They are built into `build/linux-x86_64-${config}/bin`.  Do not run them from the build directory, but use the staged directory `bin/`
+- **Build system documentation**: The build system documentation is in `/home/bholcomb/projects/side/buildy/docs`.  You only need to read this if modifying the buildy.yaml files that define the build.
+- **Notes**: Because we build the release build with link optimizations, it can take up to 10 seconds to link.

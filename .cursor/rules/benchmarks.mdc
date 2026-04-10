@@ -1,0 +1,10 @@
+---
+description: Guidelines for running benchmarks
+alwaysApply: false
+---
+
+# Benchmark Procedures
+- **Files to run**: Benchmark files are in `benchmarks/`
+- **Comparisons**: There are lua and python versions of the benchmarks to compare the mobius benchmark to
+- **Procedure**: Run the benchmarks for each language 5 times an average the times together to reduce noise.  Save the output of the lua and python benchmarks to files in the `benchmarks/` folder so you do not need to always re-run them.  
+- **Permissions**: You do not need to ask permission to run benchmarks
