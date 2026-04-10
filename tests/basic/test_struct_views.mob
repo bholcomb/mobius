@@ -97,4 +97,16 @@ assert_test("views share underlying buffer", header2.tag == 42 && header2.versio
 var tail = pixel_buffer:array_view_as(RGBA, RGBA.size)
 assert_test("offset array view count", tail.length == 3)
 
+shared var shared_vec_buffer = buffer_create(Vec2.size)
+var shared_vec = shared_vec_buffer:view_as(Vec2)
+shared_vec_buffer = buffer_create(Vec2.size)
+shared_vec.x = 11.25
+shared_vec.y = -4.5
+var fresh_shared_vec = shared_vec_buffer:view_as(Vec2)
+assert_test("shared buffer view retains original buffer",
+            shared_vec.x == 11.25 &&
+            shared_vec.y == -4.5 &&
+            fresh_shared_vec.x == 0 &&
+            fresh_shared_vec.y == 0)
+
 print("ALL STRUCT VIEW TESTS PASSED")
