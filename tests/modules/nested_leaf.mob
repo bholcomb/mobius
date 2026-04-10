@@ -1,0 +1,5 @@
+var VALUE = 41
+
+func plus_one(x) {
+    return x + 1
+}

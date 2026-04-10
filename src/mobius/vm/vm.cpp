@@ -67,6 +67,26 @@ static inline bool vm_value_to_byte(const Value& value, uint8_t* out) {
     return false;
 }
 
+static inline Value vm_userdata_lookup(MobiusState* state, const Value& value, const Value& key) {
+    if (value.type != VAL_USERDATA || !value.as.userdata) return Value();
+
+    Table* specific = value.as.userdata->type_tag
+        ? state->userdataTypeMetatable(value.as.userdata->type_tag)
+        : nullptr;
+    if (specific) {
+        Value result = (key.type == VAL_STRING) ? specific->getByString(key.as.string) : specific->get(key);
+        if (result.type != VAL_NIL) return result;
+    }
+
+    Table* generic = state->typeMetatable(VAL_USERDATA);
+    if (generic) {
+        Value result = (key.type == VAL_STRING) ? generic->getByString(key.as.string) : generic->get(key);
+        if (result.type != VAL_NIL) return result;
+    }
+
+    return Value();
+}
+
 // ============================================================================
 // Constructor / Destructor
 // ============================================================================
@@ -482,6 +502,10 @@ struct VMFrame {
     ValueType* __restrict__  tags;
 };
 
+static MOBIUS_FORCEINLINE GlobalEnvironment* frame_globals(MobiusVM* vm, const VMFrame& f) {
+    return f.proto && f.proto->globals ? f.proto->globals : vm->state_->rootGlobalEnvironment();
+}
+
 MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
     f.ci = &callStackTop();
     f.proto = f.ci->proto;
@@ -646,9 +670,10 @@ MOBIUS_FORCEINLINE static int vm_op_unlock_shared(MobiusVM* vm, VMFrame& f, uint
 
 MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int slot = DECODE_Bx(inst);
-    const Value& gv = vm->state_->globalSlot(slot);
+    GlobalEnvironment* globals = frame_globals(vm, f);
+    const Value& gv = vm->state_->globalSlot(slot, globals);
     if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
-        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
     RA(inst) = gv;
@@ -657,9 +682,10 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t
 
 MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int slot = DECODE_Bx(inst);
-    Value& gv = vm->state_->globalSlot(slot);
+    GlobalEnvironment* globals = frame_globals(vm, f);
+    Value& gv = vm->state_->globalSlot(slot, globals);
     if (MOBIUS_UNLIKELY(gv.flags & VAL_FLAG_READONLY)) {
-        VM_ERROR(vm, f, "Cannot assign to read-only variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Cannot assign to read-only variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
     if (!shared_store(gv, RA(inst))) {
@@ -669,6 +695,7 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
     if (gv.type == VAL_ENUM && gv.aux == -1) {
         gv.flags |= VAL_FLAG_READONLY;
     }
+    vm->state_->syncGlobalSlotToBackingTable(slot, globals);
     return 0;
 }
 
@@ -746,6 +773,8 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             } else {
                 RA(inst) = Value();
             }
+        } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
+            RA(inst) = vm_userdata_lookup(vm->state_, inner, key);
         } else {
             VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
             return -1;
@@ -777,6 +806,8 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         } else {
             RA(inst) = Value();
         }
+    } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
+        RA(inst) = vm_userdata_lookup(vm->state_, obj, key);
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -925,12 +956,20 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
     if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
         std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
         const Value& inner = obj.as.shared_cell->unsafeValue();
-        Table* mt = vm->state_->typeMetatable(inner.type);
-        if (mt && key.type == VAL_STRING) {
-            const Value& method = mt->getByString(key.as.string);
+        if (inner.type == VAL_USERDATA) {
+            Value method = vm_userdata_lookup(vm->state_, inner, key);
             if (method.type != VAL_NIL) {
                 f.regs[a] = method;
                 return 0;
+            }
+        } else {
+            Table* mt = vm->state_->typeMetatable(inner.type);
+            if (mt && key.type == VAL_STRING) {
+                const Value& method = mt->getByString(key.as.string);
+                if (method.type != VAL_NIL) {
+                    f.regs[a] = method;
+                    return 0;
+                }
             }
         }
         if (inner.type == VAL_TABLE && inner.as.table) {
@@ -961,13 +1000,17 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         }
     }
 
-    Table* mt = vm->state_->typeMetatable(obj.type);
-    if (mt && key.type == VAL_STRING) {
-        const Value& method = mt->getByString(key.as.string);
-        if (method.type != VAL_NIL) {
-            f.regs[a] = method;
-            return 0;
+    Value method = (obj.type == VAL_USERDATA) ? vm_userdata_lookup(vm->state_, obj, key)
+                                              : Value();
+    if (obj.type != VAL_USERDATA) {
+        Table* mt = vm->state_->typeMetatable(obj.type);
+        if (mt && key.type == VAL_STRING) {
+            method = mt->getByString(key.as.string);
         }
+    }
+    if (method.type != VAL_NIL) {
+        f.regs[a] = method;
+        return 0;
     }
 
     VM_ERROR(vm, f, "Attempt to call method on a %s value", value_type_name(obj.type));
@@ -1903,9 +1946,10 @@ MOBIUS_FORCEINLINE static int vm_op_move_addi(MobiusVM* vm, VMFrame& f, uint32_t
 MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
-    const Value& gv = vm->state_->globalSlot(slot);
+    GlobalEnvironment* globals = frame_globals(vm, f);
+    const Value& gv = vm->state_->globalSlot(slot, globals);
     if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
-        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
     f.regs[a] = gv;
@@ -1942,6 +1986,8 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
                 f.regs[a] = make_int64_value((int64_t)inner.as.buffer->get((size_t)idx));
             else
                 f.regs[a] = Value();
+        } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
+            f.regs[a] = vm_userdata_lookup(vm->state_, inner, key);
         } else if (inner.type == VAL_STRING && inner.as.string) {
             if (key.type == VAL_INT64) {
                 int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -1978,6 +2024,8 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
             f.regs[a] = make_int64_value((int64_t)obj.as.buffer->get((size_t)idx));
         else
             f.regs[a] = Value();
+    } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
+        f.regs[a] = vm_userdata_lookup(vm->state_, obj, key);
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
@@ -2073,9 +2121,10 @@ MOBIUS_FORCEINLINE static int vm_op_call_plain(MobiusVM* vm, VMFrame& f, uint32_
 MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
-    const Value& gv = vm->state_->globalSlot(slot);
+    GlobalEnvironment* globals = frame_globals(vm, f);
+    const Value& gv = vm->state_->globalSlot(slot, globals);
     if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
-        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
     f.regs[a] = gv;
@@ -2086,9 +2135,10 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uin
 MOBIUS_FORCEINLINE static int vm_op_getglobal_call_plain(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
-    const Value& gv = vm->state_->globalSlot(slot);
+    GlobalEnvironment* globals = frame_globals(vm, f);
+    const Value& gv = vm->state_->globalSlot(slot, globals);
     if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
-        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot));
+        VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
     f.regs[a] = gv;
@@ -2430,8 +2480,6 @@ MOBIUS_FORCEINLINE static int vm_op_getenum(MobiusVM* vm, VMFrame& f, uint32_t i
 
 // ---- Import ----
 MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    std::lock_guard<std::mutex> lock(vm->state_->importMutex());
-
     const Value& mod_name_val = IS_CONSTANT(DECODE_B(inst))
         ? f.ci->proto->constants[RK_AS_CONSTANT(DECODE_B(inst))]
         : f.regs[DECODE_B(inst)];
@@ -2455,7 +2503,12 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
     const char* caller_source = f.ci->proto->source.c_str();
     Table* mod_table = registry->resolveModule(module_name, caller_source, vm->state_);
     if (!mod_table) {
-        VM_ERROR(vm, f, "Import failed - module '%s' not found", module_name);
+        const std::string& registry_error = registry->lastError();
+        if (!registry_error.empty()) {
+            VM_ERROR(vm, f, "%s", registry_error.c_str());
+        } else {
+            VM_ERROR(vm, f, "Import failed - module '%s' not found", module_name);
+        }
         return -1;
     }
 
@@ -2464,6 +2517,7 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
     mod_table->retain();
 
     if (is_global) {
+        GlobalEnvironment* globals = frame_globals(vm, f);
         // Spread table entries into individual globals
         const auto& entries = mod_table->entries();
         const auto& tags = mod_table->tags();
@@ -2473,10 +2527,11 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             if (key.type != VAL_STRING || !key.as.string) continue;
             Value val = entries[i].value;
             val.flags |= VAL_FLAG_DEFINED;
-            int slot = vm->state_->assignGlobalSlot(key.as.string->data);
-            vm->state_->globalSlot(slot) = val;
+            int slot = vm->state_->assignGlobalSlot(key.as.string->data, globals);
+            vm->state_->setGlobalValue(slot, val, globals, false);
         }
     } else if (strchr(alias_name, '.') != nullptr) {
+        GlobalEnvironment* globals = frame_globals(vm, f);
         // Dotted path: walk/create nested tables, put module table at the leaf
         char buf[256];
         strncpy(buf, alias_name, sizeof(buf) - 1);
@@ -2487,10 +2542,10 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         while (tok && ncomps < 32) { components[ncomps++] = tok; tok = strtok(nullptr, "."); }
 
         Table* cur_table = nullptr;
-        int ns_slot = vm->state_->findGlobalSlot(components[0]);
-        bool first_exists = (ns_slot >= 0 && (vm->state_->globalSlot(ns_slot).flags & VAL_FLAG_DEFINED));
-        if (first_exists && vm->state_->globalSlot(ns_slot).type == VAL_TABLE) {
-            cur_table = vm->state_->globalSlot(ns_slot).as.table;
+        int ns_slot = vm->state_->findGlobalSlot(components[0], globals);
+        bool first_exists = (ns_slot >= 0 && (vm->state_->globalSlot(ns_slot, globals).flags & VAL_FLAG_DEFINED));
+        if (first_exists && vm->state_->globalSlot(ns_slot, globals).type == VAL_TABLE) {
+            cur_table = vm->state_->globalSlot(ns_slot, globals).as.table;
         } else if (first_exists) {
             VM_ERROR(vm, f, "Cannot create nested namespace '%s': '%s' is not a table",
                              alias_name, components[0]);
@@ -2500,8 +2555,8 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             if (!cur_table) { VM_ERROR(vm, f, "Failed to create namespace table"); return -1; }
             Value tval = make_table_value(cur_table);
             tval.flags |= VAL_FLAG_DEFINED;
-            int s = vm->state_->assignGlobalSlot(components[0]);
-            vm->state_->globalSlot(s) = tval;
+            int s = vm->state_->assignGlobalSlot(components[0], globals);
+            vm->state_->setGlobalValue(s, tval, globals, false);
         }
 
         // Walk/create intermediate tables
@@ -2524,11 +2579,12 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             cur_table->set(leaf_key, make_table_value(mod_table));
         }
     } else {
+        GlobalEnvironment* globals = frame_globals(vm, f);
         // Simple alias: bind module table to a single global
         Value tval = make_table_value(mod_table);
         tval.flags |= VAL_FLAG_DEFINED;
-        int s = vm->state_->assignGlobalSlot(alias_name);
-        vm->state_->globalSlot(s) = tval;
+        int s = vm->state_->assignGlobalSlot(alias_name, globals);
+        vm->state_->setGlobalValue(s, tval, globals, false);
     }
 
     return 0;

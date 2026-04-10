@@ -30,6 +30,14 @@
 #include <thread>
 #include <algorithm>
 
+static GlobalEnvironment* env_or_root(MobiusState* state, GlobalEnvironment* env) {
+    return env ? env : state->rootGlobalEnvironment();
+}
+
+static const GlobalEnvironment* env_or_root(const MobiusState* state, const GlobalEnvironment* env) {
+    return env ? env : state->rootGlobalEnvironment();
+}
+
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
@@ -267,7 +275,7 @@ MobiusState::MobiusState(MobiusConfig* config)
 
     config_ = config ? *config : mobius_default_config();
 
-    globals_.resize(4096);
+    root_globals_.slots.resize(4096);
 
     string_pool_ = new (std::nothrow) StringInternPool(256);
     if (!string_pool_) return;
@@ -285,7 +293,7 @@ MobiusState::MobiusState(MobiusConfig* config)
         int slot = assignGlobalSlot(name);
         val.flags |= VAL_FLAG_DEFINED;
         if (readonly) val.flags |= VAL_FLAG_READONLY;
-        globals_[slot] = val;
+        setGlobalValue(slot, val, nullptr, false);
     };
     defineGlobal("nil", make_nil_value(), true);
     defineGlobal("true", make_bool_value(true), true);
@@ -308,6 +316,13 @@ MobiusState::~MobiusState() {
             }
         }
     }
+    {
+        std::lock_guard<std::mutex> lock(userdata_type_metatables_mutex_);
+        for (auto& entry : userdata_type_metatables_) {
+            if (entry.second) entry.second->release();
+        }
+        userdata_type_metatables_.clear();
+    }
 
     for (Prototype* p : owned_protos_) {
         delete p;
@@ -325,8 +340,8 @@ MobiusState::~MobiusState() {
     main_vm_ = nullptr;
 
     // Clear all Value containers BEFORE destroying the string pool.
-    for (int i = 0; i < global_count_.load(std::memory_order_relaxed); i++)
-        globals_[i] = make_nil_value();
+    for (int i = 0; i < root_globals_.count.load(std::memory_order_relaxed); i++)
+        root_globals_.slots[i] = make_nil_value();
 
     delete string_pool_;
 
@@ -344,6 +359,33 @@ void MobiusState::setTypeMetatable(ValueType t, Table* mt) {
     if (mt) mt->retain();
 }
 
+Table* MobiusState::userdataTypeMetatable(MobiusString* type_tag) const {
+    if (!type_tag) return nullptr;
+    std::lock_guard<std::mutex> lock(userdata_type_metatables_mutex_);
+    auto it = userdata_type_metatables_.find(type_tag);
+    return it != userdata_type_metatables_.end() ? it->second : nullptr;
+}
+
+void MobiusState::setUserdataTypeMetatable(MobiusString* type_tag, Table* mt) {
+    if (!type_tag) return;
+    std::lock_guard<std::mutex> lock(userdata_type_metatables_mutex_);
+    auto it = userdata_type_metatables_.find(type_tag);
+    if (it != userdata_type_metatables_.end()) {
+        if (it->second) it->second->release();
+        if (mt) {
+            mt->retain();
+            it->second = mt;
+        } else {
+            userdata_type_metatables_.erase(it);
+        }
+        return;
+    }
+    if (mt) {
+        mt->retain();
+        userdata_type_metatables_[type_tag] = mt;
+    }
+}
+
 void MobiusState::clearErrorInternal() {
     MobiusVM* vm = boundVM();
     InternalError*& err = vm ? vm->last_error_ : fallback_last_error_;
@@ -353,80 +395,128 @@ void MobiusState::clearErrorInternal() {
     }
 }
 
-int MobiusState::assignGlobalSlot(const char* name) {
-    std::lock_guard<std::mutex> lock(global_slot_mutex_);
-    auto it = global_slot_map_.find(name);
-    if (it != global_slot_map_.end()) return it->second;
-    int slot = global_count_.load(std::memory_order_relaxed);
-    if (slot >= (int)globals_.size()) {
-        size_t new_cap = globals_.size() * 2;
-        globals_.resize(new_cap);
+int MobiusState::assignGlobalSlot(const char* name, GlobalEnvironment* env) {
+    GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    auto it = globals->slot_map.find(name);
+    if (it != globals->slot_map.end()) return it->second;
+    int slot = globals->count.load(std::memory_order_relaxed);
+    if (slot >= (int)globals->slots.size()) {
+        size_t new_cap = globals->slots.empty() ? 64 : globals->slots.size() * 2;
+        globals->slots.resize(new_cap);
         fprintf(stderr, "Warning: globals table resized from %zu to %zu slots\n",
                 new_cap / 2, new_cap);
     }
-    global_slot_map_[name] = slot;
-    global_count_.store(slot + 1, std::memory_order_release);
+    globals->slot_map[name] = slot;
+    globals->count.store(slot + 1, std::memory_order_release);
     if ((size_t)(slot + 1) > metrics_.peak_globals)
         metrics_.peak_globals = (size_t)(slot + 1);
     return slot;
 }
 
-int MobiusState::findGlobalSlot(const char* name) const {
-    std::lock_guard<std::mutex> lock(global_slot_mutex_);
-    auto it = global_slot_map_.find(name);
-    if (it != global_slot_map_.end()) return it->second;
+Value& MobiusState::globalSlot(int idx, GlobalEnvironment* env) {
+    return env_or_root(this, env)->slots[idx];
+}
+
+const Value& MobiusState::globalSlot(int idx, GlobalEnvironment* env) const {
+    return env_or_root(this, env)->slots[idx];
+}
+
+int MobiusState::globalSlotCount(GlobalEnvironment* env) const {
+    return env_or_root(this, env)->count.load(std::memory_order_relaxed);
+}
+
+int MobiusState::findGlobalSlot(const char* name, GlobalEnvironment* env) const {
+    const GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    auto it = globals->slot_map.find(name);
+    if (it != globals->slot_map.end()) return it->second;
     return -1;
 }
 
-const char* MobiusState::globalSlotName(int idx) const {
-    std::lock_guard<std::mutex> lock(global_slot_mutex_);
-    for (auto& kv : global_slot_map_) {
+const char* MobiusState::globalSlotName(int idx, GlobalEnvironment* env) const {
+    const GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    for (auto& kv : globals->slot_map) {
         if (kv.second == idx) return kv.first.c_str();
     }
     return "<unknown>";
 }
 
 void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
-    std::lock_guard<std::mutex> lock(global_slot_mutex_);
-    auto it = global_slot_map_.find(name);
-    if (it == global_slot_map_.end()) return;
+    GlobalEnvironment* globals = rootGlobalEnvironment();
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    auto it = globals->slot_map.find(name);
+    if (it == globals->slot_map.end()) return;
     int slot = it->second;
     if (readonly)
-        globals_[slot].flags |= VAL_FLAG_READONLY;
+        globals->slots[slot].flags |= VAL_FLAG_READONLY;
     else
-        globals_[slot].flags &= ~VAL_FLAG_READONLY;
+        globals->slots[slot].flags &= ~VAL_FLAG_READONLY;
 }
 
 bool MobiusState::removeGlobal(const char* name) {
-    std::lock_guard<std::mutex> lock(global_slot_mutex_);
-    auto it = global_slot_map_.find(name);
-    if (it == global_slot_map_.end()) return false;
+    GlobalEnvironment* globals = rootGlobalEnvironment();
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    auto it = globals->slot_map.find(name);
+    if (it == globals->slot_map.end()) return false;
     int slot = it->second;
-    globals_[slot] = Value();
-    globals_[slot].flags = 0;
-    global_slot_map_.erase(it);
+    globals->slots[slot] = Value();
+    globals->slots[slot].flags = 0;
+    globals->slot_map.erase(it);
     return true;
 }
 
-void MobiusState::removeGlobalSlots(int from_slot) {
-    std::lock_guard<std::mutex> lock(global_slot_mutex_);
-    int count = global_count_.load(std::memory_order_relaxed);
+void MobiusState::setGlobalValue(int slot, const Value& value, GlobalEnvironment* env, bool mark_defined) {
+    GlobalEnvironment* globals = env_or_root(this, env);
+    Value updated = value;
+    if (mark_defined) updated.flags |= VAL_FLAG_DEFINED;
+    globals->slots[slot] = updated;
+    syncGlobalSlotToBackingTable(slot, globals);
+}
+
+void MobiusState::syncGlobalSlotToBackingTable(int slot, GlobalEnvironment* env) {
+    GlobalEnvironment* globals = env_or_root(this, env);
+    if (!globals->backing_table) return;
+    const char* name = globalSlotName(slot, globals);
+    if (!name || strcmp(name, "<unknown>") == 0) return;
+    MobiusString* key = string_pool_->intern(name);
+    globals->backing_table->setByString(key, globals->slots[slot]);
+}
+
+void MobiusState::seedGlobalEnvironmentFromTable(GlobalEnvironment* env, Table* table) {
+    if (!env) return;
+    env->backing_table = table;
+    if (!table) return;
+    table->forEach([&](const Value& key, const Value& value) {
+        if (key.type != VAL_STRING || !key.as.string) return;
+        int slot = assignGlobalSlot(key.as.string->data, env);
+        Value defined_value = value;
+        if (!(defined_value.flags & VAL_FLAG_DEFINED)) defined_value.flags |= VAL_FLAG_DEFINED;
+        env->slots[slot] = defined_value;
+    });
+}
+
+void MobiusState::removeGlobalSlots(int from_slot, GlobalEnvironment* env) {
+    GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    int count = globals->count.load(std::memory_order_relaxed);
     if (from_slot < 0 || from_slot >= count) return;
 
     std::vector<std::string> to_remove;
-    for (auto& kv : global_slot_map_) {
+    for (auto& kv : globals->slot_map) {
         if (kv.second >= from_slot) {
             to_remove.push_back(kv.first);
         }
     }
     for (auto& name : to_remove) {
-        global_slot_map_.erase(name);
+        globals->slot_map.erase(name);
     }
 
     for (int i = from_slot; i < count; i++) {
-        globals_[i] = Value();
+        globals->slots[i] = Value();
     }
-    global_count_.store(from_slot, std::memory_order_release);
+    globals->count.store(from_slot, std::memory_order_release);
 }
 
 int MobiusState::initStdlib() {
@@ -472,6 +562,10 @@ void MobiusState::clearPluginDirectories() {
 }
 
 int MobiusState::execString(const char* code) {
+    return execStringInEnvironment(code, nullptr);
+}
+
+int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* env) {
     if (!code) return MOBIUS_ERROR_ARGUMENT;
 
     clearErrorInternal();
@@ -495,7 +589,7 @@ int MobiusState::execString(const char* code) {
     }
 
     const char* src = getSourceContext();
-    Compiler compiler(string_pool_, this);
+    Compiler compiler(string_pool_, this, env_or_root(this, env));
     Prototype* proto = compiler.compile(parse_result.statements,
                                         parse_result.count,
                                         src ? src : "<string>");
@@ -522,6 +616,10 @@ int MobiusState::execString(const char* code) {
 }
 
 int MobiusState::execFile(const char* filename) {
+    return execFileInEnvironment(filename, nullptr);
+}
+
+int MobiusState::execFileInEnvironment(const char* filename, GlobalEnvironment* env) {
     if (!filename) return MOBIUS_ERROR_ARGUMENT;
 
     FileResult file_result = read_file(filename);
@@ -535,7 +633,7 @@ int MobiusState::execFile(const char* filename) {
 
     const char* saved_source = getSourceContext();
     setSourceContext(filename);
-    int result = execString(file_result.content);
+    int result = execStringInEnvironment(file_result.content, env);
     setSourceContext(saved_source);
     free_file_result(&file_result);
     return result;

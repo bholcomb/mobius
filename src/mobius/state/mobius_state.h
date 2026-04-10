@@ -21,6 +21,19 @@ class MobiusState;
 class ModuleRegistry;
 class Metamethods;
 class JobSystem;
+class Table;
+
+struct GlobalEnvironment {
+    std::vector<Value> slots;
+    std::atomic<int> count{0};
+    mutable std::mutex mutex;
+    std::unordered_map<std::string, int> slot_map;
+    Table* backing_table = nullptr;
+
+    GlobalEnvironment() = default;
+    GlobalEnvironment(const GlobalEnvironment&) = delete;
+    GlobalEnvironment& operator=(const GlobalEnvironment&) = delete;
+};
 
 // Internal error structure with owned (heap-allocated) strings
 typedef struct InternalError {
@@ -147,7 +160,9 @@ public:
 
     // Execution
     int execString(const char* code);
+    int execStringInEnvironment(const char* code, GlobalEnvironment* env);
     int execFile(const char* filename);
+    int execFileInEnvironment(const char* filename, GlobalEnvironment* env);
 
     // Error handling
     InternalError* getLastError() const;
@@ -182,18 +197,20 @@ public:
     const MobiusMetrics& metrics() const { return metrics_; }
     void resetMetrics() { memset(&metrics_, 0, sizeof(metrics_)); }
 
-    // Flat global variable array — indexed by compile-time slot numbers.
-    // globals_ is pre-sized; globalSlot() is lock-free for reads.
-    // assignGlobalSlot() and map lookups are mutex-protected.
-    int assignGlobalSlot(const char* name);
-    Value& globalSlot(int idx) { return globals_[idx]; }
-    const Value& globalSlot(int idx) const { return globals_[idx]; }
-    int globalSlotCount() const { return global_count_.load(std::memory_order_relaxed); }
-    int findGlobalSlot(const char* name) const;
-    const char* globalSlotName(int idx) const;
-    void removeGlobalSlots(int from_slot);
+    int assignGlobalSlot(const char* name, GlobalEnvironment* env = nullptr);
+    Value& globalSlot(int idx, GlobalEnvironment* env = nullptr);
+    const Value& globalSlot(int idx, GlobalEnvironment* env = nullptr) const;
+    int globalSlotCount(GlobalEnvironment* env = nullptr) const;
+    int findGlobalSlot(const char* name, GlobalEnvironment* env = nullptr) const;
+    const char* globalSlotName(int idx, GlobalEnvironment* env = nullptr) const;
+    void removeGlobalSlots(int from_slot, GlobalEnvironment* env = nullptr);
     void setGlobalReadonly(const char* name, bool readonly);
     bool removeGlobal(const char* name);
+    void setGlobalValue(int slot, const Value& value, GlobalEnvironment* env = nullptr, bool mark_defined = true);
+    void syncGlobalSlotToBackingTable(int slot, GlobalEnvironment* env = nullptr);
+    void seedGlobalEnvironmentFromTable(GlobalEnvironment* env, Table* table);
+    GlobalEnvironment* rootGlobalEnvironment() { return &root_globals_; }
+    const GlobalEnvironment* rootGlobalEnvironment() const { return &root_globals_; }
 
     void addOwnedProto(struct Prototype* proto);
 
@@ -246,6 +263,8 @@ public:
         return type_metatables_[t];
     }
     void setTypeMetatable(ValueType t, Table* mt);
+    Table* userdataTypeMetatable(MobiusString* type_tag) const;
+    void setUserdataTypeMetatable(MobiusString* type_tag, Table* mt);
 
 private:
     class MobiusVM* boundVM() const;
@@ -265,11 +284,7 @@ private:
     InternalError* fallback_last_error_;
     const char* fallback_source_code_;
 
-    // Flat global variable array — pre-sized, lock-free reads by slot index.
-    std::vector<Value> globals_;
-    std::atomic<int> global_count_{0};
-    mutable std::mutex global_slot_mutex_;
-    std::unordered_map<std::string, int> global_slot_map_;
+    GlobalEnvironment root_globals_;
 
     // Prototypes compiled by the VM are owned here so they outlive any
     // MobiusFunction objects that reference them (e.g. functions defined
@@ -284,8 +299,11 @@ private:
 
     mutable std::mutex type_metatables_mutex_;
     Table* type_metatables_[VALUE_TYPE_COUNT] = {};
+    mutable std::mutex userdata_type_metatables_mutex_;
+    std::unordered_map<MobiusString*, Table*> userdata_type_metatables_;
 
     class MobiusVM* main_vm_;
+    GlobalEnvironment* current_compile_env_ = nullptr;
 
     void clearErrorInternal();
 };

@@ -1,0 +1,74 @@
+import "http" as __http
+import "socket" as __socket
+
+func __make_connect(http_mod, socket_mod, adopt_socket) {
+    return func(spec) {
+        if (typeof(spec) != "table") {
+            throw "websocket.connect() expects a table argument"
+        }
+
+        var port = spec.port
+        if (port == nil) {
+            port = 80
+        }
+        if (port < 0 || port > 65535) {
+            throw "websocket.connect() port must be in [0, 65535]"
+        }
+
+        var timeout_ms = spec.timeout_ms
+        if (timeout_ms != nil && timeout_ms < -1) {
+            throw "websocket.connect() timeout_ms must be >= -1"
+        }
+
+        var request = handshake_request(spec)
+        var sock = socket_mod.connect(spec.host, port)
+        try {
+            if (timeout_ms != nil && timeout_ms >= 0) {
+                sock:set_timeout(timeout_ms)
+            }
+
+            sock:send(request.request)
+            var head_state = http_mod.__read_response_head(sock)
+            var response = http_mod.__parse_response_head(head_state.head)
+            if (response.status != 101) {
+                throw "websocket.connect() expected HTTP 101 response"
+            }
+
+            var upgrade = response.headers.upgrade
+            if (upgrade == nil || lower(trim(upgrade)) != "websocket") {
+                throw "websocket.connect() invalid upgrade response"
+            }
+
+            var connection = response.headers.connection
+            if (connection == nil || !contains(lower(connection), "upgrade")) {
+                throw "websocket.connect() invalid upgrade response"
+            }
+
+            if (response.headers["sec-websocket-accept"] != accept_key(request.key)) {
+                throw "websocket.connect() invalid accept key"
+            }
+
+            var protocol = spec.protocol
+            var selected_protocol = response.headers["sec-websocket-protocol"]
+            if (protocol != nil && selected_protocol != nil && selected_protocol != "" && selected_protocol != protocol) {
+                throw "websocket.connect() server selected unexpected protocol"
+            }
+
+            var conn = adopt_socket(sock, selected_protocol, head_state.body)
+            sock = nil
+            return conn
+        } catch err {
+            throw err
+        } finally {
+            if (sock != nil && !sock:is_closed()) {
+                sock:close()
+            }
+        }
+    }
+}
+
+connect = __make_connect(__http, __socket, __adopt_socket)
+
+__http = nil
+__socket = nil
+__adopt_socket = nil

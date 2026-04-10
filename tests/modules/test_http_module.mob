@@ -1,4 +1,5 @@
 import "http"
+import "socket"
 
 var pass_count = 0
 var fail_count = 0
@@ -11,6 +12,18 @@ func assert_test(name, cond) {
         fail_count = fail_count + 1
         print("FAIL: " + name)
     }
+}
+
+func assert_buffer_equals(name, buf, expected) {
+    var ok = typeof(buf) == "buffer" && len(buf) == len(expected)
+    var i = 0
+    while (ok && i < len(expected)) {
+        if (buf[i] != expected[i]) {
+            ok = false
+        }
+        i = i + 1
+    }
+    assert_test(name, ok)
 }
 
 var request_raw = "POST /submit?x=1 HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: 5\r\n\r\nhello"
@@ -74,6 +87,90 @@ assert_test("build_response status", parsed_built_response.status == 101)
 assert_test("build_response reason default", parsed_built_response.reason == "Switching Protocols")
 assert_test("build_response upgrade header", parsed_built_response.headers.upgrade == "websocket")
 assert_test("build_response connection header", parsed_built_response.headers.connection == "Upgrade")
+
+func serve_http_once(listener, mode) {
+    var conn = listener:accept()
+    conn:set_timeout(1000)
+    var request_buf = conn:recv(4096)
+    var request = nil
+    if (request_buf != nil) {
+        request = http.parse_request(request_buf:to_string())
+    }
+
+    if (mode == "content-length") {
+        conn:send("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\nConnection: close\r\n\r\nhello client")
+    } else if (mode == "chunked") {
+        conn:send("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
+        conn:send("5\r\nhello\r\n")
+        conn:send("6\r\n world\r\n")
+        conn:send("0\r\n\r\n")
+    } else if (mode == "binary") {
+        var payload = buffer_create(3)
+        payload[0] = 0
+        payload[1] = 1
+        payload[2] = 255
+        conn:send("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 3\r\nConnection: close\r\n\r\n")
+        conn:send(payload)
+    }
+
+    conn:close()
+    listener:close()
+    return request
+}
+
+var listener1 = socket.listen("127.0.0.1", 0)
+var port1 = listener1:local_addr().port
+var server1 = spawn serve_http_once(listener1, "content-length")
+var transport_response = http.request({
+    method: "POST",
+    host: "127.0.0.1",
+    port: port1,
+    path: "/transport",
+    headers: {
+        ["content-type"] = "text/plain",
+        ["x-test"] = "transport"
+    },
+    body: "ping",
+    timeout_ms: 1000
+})
+var server_request = await server1
+assert_test("request transport status", transport_response.status == 200)
+assert_test("request transport content type", transport_response.content_type == "text/plain")
+assert_test("request transport text helper", transport_response.text == "hello client")
+assert_test("request transport body buffer", typeof(transport_response.body) == "buffer")
+assert_test("request transport body length", len(transport_response.body) == 12)
+assert_test("server saw request path", server_request.path == "/transport")
+assert_test("server saw request body", server_request.body == "ping")
+assert_test("server saw request header", server_request.headers["x-test"] == "transport")
+
+var listener2 = socket.listen("127.0.0.1", 0)
+var port2 = listener2:local_addr().port
+var server2 = spawn serve_http_once(listener2, "chunked")
+var chunked_response = http.request({
+    host: "127.0.0.1",
+    port: port2,
+    path: "/chunked",
+    timeout_ms: 1000
+})
+await server2
+assert_test("chunked response status", chunked_response.status == 200)
+assert_test("chunked response text", chunked_response.text == "hello world")
+assert_test("chunked response body buffer", typeof(chunked_response.body) == "buffer")
+assert_test("chunked response header preserved", chunked_response.headers["transfer-encoding"] == "chunked")
+
+var listener3 = socket.listen("127.0.0.1", 0)
+var port3 = listener3:local_addr().port
+var server3 = spawn serve_http_once(listener3, "binary")
+var binary_response = http.request({
+    host: "127.0.0.1",
+    port: port3,
+    path: "/binary",
+    timeout_ms: 1000
+})
+await server3
+assert_test("binary response body buffer", typeof(binary_response.body) == "buffer")
+assert_test("binary response no text helper", binary_response.text == nil)
+assert_buffer_equals("binary response bytes", binary_response.body, [0, 1, 255])
 
 print("")
 print("HTTP Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")

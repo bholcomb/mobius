@@ -31,10 +31,25 @@ is_expected_to_fail() {
     return 1  # false - expected to pass
 }
 
+should_run_test() {
+    local test_file="$1"
+    case "$test_file" in
+        tests/modules/*.mob)
+            [[ "$(basename "$test_file")" == test_* ]]
+            return
+            ;;
+    esac
+    return 0
+}
+
 # Find all .mob test files
 TEST_FILES=$(find tests -name "*.mob" | sort)
 
 for test_file in $TEST_FILES; do
+    if ! should_run_test "$test_file"; then
+        continue
+    fi
+
     printf "%-50s " "$test_file"
     
     # Run the test and capture output/exit code

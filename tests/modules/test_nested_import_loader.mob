@@ -1,0 +1,15 @@
+import "nested_middle" as nested_middle
+
+if (nested_middle.FROM_LEAF != 42) { exit(1) }
+
+var saw_cycle_error = false
+
+try {
+    import "cycle_a" as cycle_a
+} catch e {
+    saw_cycle_error = true
+}
+
+if (!saw_cycle_error) { exit(2) }
+
+exit(0)

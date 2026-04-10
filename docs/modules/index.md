@@ -16,6 +16,7 @@ Current built-in first-party modules:
 - [`math`](math.md) - extended mathematical functions and constants
 - [`os`](os.md) - filesystem, path, process, and host time utilities
 - [`regex`](regex.md) - regular expression matching and replacement
+- [`socket`](socket.md) - plain TCP client/listener APIs with buffer-first I/O
 - [`toml`](toml.md) - TOML parsing and serialization
 - [`url`](url.md) - URL parsing, encoding, and query helpers
 - [`websocket`](websocket.md) - websocket handshake and frame protocol helpers

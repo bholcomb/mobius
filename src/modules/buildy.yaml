@@ -135,3 +135,15 @@ targets:
       libs: ["mobius-core", "dl"]
       depends_on:
         targets: ["mobius-core"]
+
+    - name: socket
+      language: cpp
+      output_prefix: ""
+      sources: ["socket/socket_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]

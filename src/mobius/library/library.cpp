@@ -105,10 +105,9 @@ void register_stdlib_functions(MobiusState* state) {
         const PluginFunction* func = &library_registry[i];
         
         Value func_value = make_native_function_value(func->function);
-        
+
         int slot = state->assignGlobalSlot(func->name);
-        func_value.flags |= VAL_FLAG_DEFINED;
-        state->globalSlot(slot) = func_value;
+        state->setGlobalValue(slot, func_value);
     }
 }
 

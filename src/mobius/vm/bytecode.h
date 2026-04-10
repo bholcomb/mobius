@@ -22,6 +22,8 @@ struct UpvalueDesc {
     bool maybe_shared = false;     // true if the captured binding may hold a SharedCell
 };
 
+struct GlobalEnvironment;
+
 // ============================================================================
 // Prototype — the compiled representation of a function
 //
@@ -64,6 +66,7 @@ struct Prototype {
     // Source file and function name (for error messages and stack traces).
     std::string source;
     std::string name;
+    GlobalEnvironment* globals = nullptr;
 
     // -- Local variable debug info (optional, for debugger / disassembler) --
     struct LocalVar {

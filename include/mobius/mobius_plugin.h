@@ -109,6 +109,7 @@ MOBIUS_API float       mobius_stack_asFloat32(MobiusState* state, int idx);
 MOBIUS_API double      mobius_stack_asFloat64(MobiusState* state, int idx);
 MOBIUS_API bool        mobius_stack_asBool(MobiusState* state, int idx);
 MOBIUS_API const char* mobius_stack_asString(MobiusState* state, int idx);
+MOBIUS_API const char* mobius_stack_getStringData(MobiusState* state, int idx, size_t* out_length);
 
 /* ====================================================================== */
 /*  Stack getters — strict (respect strict_types pragma)                   */
@@ -144,6 +145,7 @@ MOBIUS_API void mobius_stack_pushUInt64(MobiusState* state, uint64_t value);
 MOBIUS_API void mobius_stack_pushFloat32(MobiusState* state, float value);
 MOBIUS_API void mobius_stack_pushFloat64(MobiusState* state, double value);
 MOBIUS_API void mobius_stack_pushString(MobiusState* state, const char* str);
+MOBIUS_API void mobius_stack_pushStringLength(MobiusState* state, const char* str, size_t length);
 MOBIUS_API void mobius_stack_pushNewTable(MobiusState* state, size_t capacity);
 MOBIUS_API void mobius_stack_pushNewArray(MobiusState* state, size_t capacity);
 MOBIUS_API void mobius_stack_pushNewBuffer(MobiusState* state, size_t size);
@@ -262,6 +264,20 @@ MOBIUS_API void mobius_push_type_metatable(MobiusState* state,
 MOBIUS_API void mobius_set_type_metatable(MobiusState* state,
                                          MobiusValueType type);
 
+/**
+ * Push the registered metatable/prototype table for a userdata type name.
+ * If no metatable has been registered, pushes nil.
+ */
+MOBIUS_API void mobius_push_userdata_type_metatable(MobiusState* state,
+                                                    const char* type_name);
+
+/**
+ * Pop the top of the stack and register it as the metatable/prototype table
+ * for the given userdata type name. The value must be a table or nil.
+ */
+MOBIUS_API void mobius_set_userdata_type_metatable(MobiusState* state,
+                                                   const char* type_name);
+
 /* ====================================================================== */
 /*  Register a native C function as a global                               */
 /* ====================================================================== */
@@ -292,6 +308,8 @@ typedef struct {
     const char* author;
     size_t      api_version;
     const char* license;        /* may be NULL */
+    const char** depends_on;    /* optional array of module names */
+    size_t       depends_on_count;
 } MobiusPluginMetadata;
 
 typedef struct {

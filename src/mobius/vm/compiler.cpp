@@ -11,8 +11,8 @@
 // Constructor
 // ============================================================================
 
-Compiler::Compiler(StringInternPool* pool, MobiusState* state)
-    : current_(nullptr), pool_(pool), state_(state)
+Compiler::Compiler(StringInternPool* pool, MobiusState* state, GlobalEnvironment* globals)
+    : current_(nullptr), pool_(pool), state_(state), globals_(globals)
 {
     const PluginFunction* reg = get_library_registry();
     if (reg) {
@@ -54,6 +54,7 @@ Compiler::FunctionState* Compiler::initCompiler(FunctionState* enclosing,
                                                 const char* name) {
     auto* fs = new FunctionState();
     fs->proto = new Prototype();
+    fs->proto->globals = globals_;
     fs->enclosing = enclosing;
     if (name) {
         fs->proto->name = name;
@@ -268,7 +269,7 @@ int Compiler::emitLoadK(int reg, int const_idx) {
 
 void Compiler::emitGetGlobal(int reg, const char* name) {
     if (state_) {
-        int slot = state_->assignGlobalSlot(name);
+        int slot = state_->assignGlobalSlot(name, globals_);
         emitABx(OP_GETGLOBAL, (uint8_t)reg, (uint16_t)slot);
     } else {
         int ki = stringConstant(name);
@@ -278,7 +279,7 @@ void Compiler::emitGetGlobal(int reg, const char* name) {
 
 void Compiler::emitSetGlobal(int reg, const char* name) {
     if (state_) {
-        int slot = state_->assignGlobalSlot(name);
+        int slot = state_->assignGlobalSlot(name, globals_);
         emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)slot);
     } else {
         int ki = stringConstant(name);
@@ -2650,6 +2651,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     FunctionState* enclosing = current_;
     FunctionState child_fs;
     child_fs.proto = new Prototype();
+    child_fs.proto->globals = globals_;
     child_fs.proto->name = name ? name : "";
     if (!enclosing->proto->source.empty())
         child_fs.proto->source = enclosing->proto->source;
@@ -3629,6 +3631,7 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     FunctionState* enclosing = current_;
     FunctionState child_fs;
     child_fs.proto = new Prototype();
+    child_fs.proto->globals = globals_;
     child_fs.proto->name = name;
     if (!enclosing->proto->source.empty())
         child_fs.proto->source = enclosing->proto->source;

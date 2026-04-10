@@ -1,0 +1,181 @@
+import "socket" as __socket
+
+func __find_header_separator(raw) {
+    var pos = find(raw, "\r\n\r\n")
+    if (pos >= 0) {
+        return { index: pos, len: 4 }
+    }
+
+    pos = find(raw, "\n\n")
+    if (pos >= 0) {
+        return { index: pos, len: 2 }
+    }
+
+    return nil
+}
+
+func __read_response_head(sock) {
+    var raw = buffer_create(0)
+
+    while (true) {
+        var text = raw:to_string()
+        var sep = __find_header_separator(text)
+        if (sep != nil) {
+            var body_offset = sep.index + sep.len
+            return {
+                head: substr(text, 0, sep.index),
+                body: raw:slice(body_offset, len(raw) - body_offset)
+            }
+        }
+
+        var chunk = sock:recv(4096)
+        if (chunk == nil) {
+            throw "http.request() connection closed before response headers completed"
+        }
+        raw:append(chunk)
+    }
+}
+
+func __response_has_no_body(method, status) {
+    if (upper(method) == "HEAD") { return true }
+    if (status >= 100 && status < 200) { return true }
+    return status == 204 || status == 304
+}
+
+func __read_exact(sock, body, needed) {
+    while (len(body) < needed) {
+        var chunk = sock:recv(4096)
+        if (chunk == nil) {
+            throw "http.request() connection closed before response body completed"
+        }
+        body:append(chunk)
+    }
+
+    if (len(body) == needed) {
+        return body
+    }
+    return body:slice(0, needed)
+}
+
+func __read_until_close(sock, body) {
+    while (true) {
+        var chunk = sock:recv(4096)
+        if (chunk == nil) {
+            return body
+        }
+        body:append(chunk)
+    }
+}
+
+func __read_chunked_body(sock, body) {
+    while (true) {
+        var decoded = __try_decode_chunked_body(body)
+        if (decoded != nil) {
+            return decoded
+        }
+
+        var chunk = sock:recv(4096)
+        if (chunk == nil) {
+            throw "http.request() incomplete chunked response"
+        }
+        body:append(chunk)
+    }
+}
+
+func __build_response(meta, body) {
+    var response = {
+        version: meta.version,
+        status: meta.status,
+        reason: meta.reason,
+        keep_alive: meta.keep_alive,
+        headers: meta.headers,
+        body: body
+    }
+
+    if (meta.content_length != nil) {
+        response.content_length = meta.content_length
+    }
+    if (meta.content_type != nil) {
+        response.content_type = meta.content_type
+    }
+
+    var text = __text_if_utf8(body)
+    if (text != nil) {
+        response.text = text
+    }
+
+    return response
+}
+
+func __read_response_body(sock, initial_body, meta, method) {
+    var body = initial_body:copy()
+    if (__response_has_no_body(method, meta.status)) {
+        return buffer_create(0)
+    }
+
+    var transfer_encoding = meta.headers["transfer-encoding"]
+    if (transfer_encoding != nil && contains(lower(transfer_encoding), "chunked")) {
+        return __read_chunked_body(sock, body)
+    }
+    if (transfer_encoding != nil && transfer_encoding != "") {
+        throw "http.request() unsupported transfer-encoding"
+    }
+
+    if (meta.content_length != nil) {
+        return __read_exact(sock, body, meta.content_length)
+    }
+
+    return __read_until_close(sock, body)
+}
+
+func request(spec) {
+    if (typeof(spec) != "table") {
+        throw "http.request() expects a table argument"
+    }
+
+    var method = spec.method
+    if (method == nil) {
+        method = "GET"
+    }
+
+    var host = spec.host
+    if (host == nil && spec.headers != nil) {
+        host = spec.headers.host
+    }
+    if (host == nil || host == "") {
+        throw "http.request() host is required"
+    }
+
+    var port = spec.port
+    if (port == nil) {
+        port = 80
+    }
+    if (port < 0 || port > 65535) {
+        throw "http.request() port must be in [0, 65535]"
+    }
+
+    var timeout_ms = spec.timeout_ms
+    if (timeout_ms != nil && timeout_ms < -1) {
+        throw "http.request() timeout_ms must be >= -1"
+    }
+
+    var sock = __socket.connect(host, port)
+    try {
+        if (timeout_ms != nil && timeout_ms >= 0) {
+            sock:set_timeout(timeout_ms)
+        }
+
+        sock:send(build_request(spec))
+        var head_state = __read_response_head(sock)
+        var meta = __parse_response_head(head_state.head)
+        var body = __read_response_body(sock, head_state.body, meta, method)
+        return __build_response(meta, body)
+    } catch err {
+        throw err
+    } finally {
+        if (sock != nil && !sock:is_closed()) {
+            sock:close()
+        }
+    }
+}
+

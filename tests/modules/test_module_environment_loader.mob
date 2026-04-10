@@ -1,0 +1,30 @@
+import "module_env_state" as first
+import "module_env_state" as second
+
+if (typeof(first) != "table") { exit(1) }
+if (typeof(first.read) != "function") { exit(2) }
+if (typeof(first.next) != "function") { exit(3) }
+if (first.read() != 0) { exit(4) }
+if (first.next() != 1) { exit(5) }
+if (second.read() != 1) { exit(6) }
+if (second.next() != 2) { exit(7) }
+
+var saw_hidden_counter = false
+try {
+    var x = counter
+} catch e {
+    saw_hidden_counter = true
+}
+
+if (!saw_hidden_counter) { exit(8) }
+
+var saw_hidden_function = false
+try {
+    next()
+} catch e {
+    saw_hidden_function = true
+}
+
+if (!saw_hidden_function) { exit(9) }
+
+exit(0)

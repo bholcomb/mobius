@@ -1,0 +1,3 @@
+import "nested_leaf" as leaf
+
+var FROM_LEAF = leaf.plus_one(leaf.VALUE)

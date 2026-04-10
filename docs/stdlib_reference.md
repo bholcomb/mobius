@@ -11,9 +11,9 @@ Mobius uses a **dual-syntax** convention inspired by Lua:
 - **`:`** (colon) calls a method, implicitly passing the object as the
   first argument (`self`).
 
-Array, table, and channel operations use the `:` method syntax. Global
-utility functions like `len`, `setmetatable`, and `array_create` remain
-as plain function calls.
+Array, buffer, table, and channel operations use the `:` method syntax.
+Global utility functions like `len`, `setmetatable`, `array_create`, and
+`buffer_create` remain as plain function calls.
 
 For namespaced module APIs (such as `math.sin(...)`, `json.parse(...)`, or
 `os.join(...)`), see the [Module Reference](modules/index.md).
@@ -26,11 +26,12 @@ For namespaced module APIs (such as `math.sin(...)`, `json.parse(...)`, or
 2. [Math Functions](#math-functions)
 3. [String Functions](#string-functions)
 4. [Array Functions](#array-functions)
-5. [Table Functions](#table-functions)
-6. [Type System Functions](#type-system-functions)
-7. [Utility Functions](#utility-functions)
-8. [Fiber / Concurrency Functions](#fiber--concurrency-functions)
-9. [Module Reference](#module-reference)
+5. [Buffer Functions](#buffer-functions)
+6. [Table Functions](#table-functions)
+7. [Type System Functions](#type-system-functions)
+8. [Utility Functions](#utility-functions)
+9. [Fiber / Concurrency Functions](#fiber--concurrency-functions)
+10. [Module Reference](#module-reference)
 
 ---
 
@@ -177,13 +178,14 @@ round(-2.5)   // -3
 
 ### len(value) -> integer
 
-Return the length of a string (in bytes) or the number of elements in an
-array.
+Return the length of a string (in bytes), buffer (in bytes), or the number of
+elements in an array.
 
 ```mobius
 len("Hello")       // 5
 len("")            // 0
 len([1, 2, 3])     // 3
+len(buffer_create(8)) // 8
 ```
 
 ### upper(str) -> string
@@ -403,6 +405,51 @@ Return `true` if `fn(element)` returns a truthy value for every element.
 ```mobius
 [2, 4, 6]:all(func(x) { return x % 2 == 0; })    // true
 ```
+
+---
+
+## Buffer Functions
+
+Buffers are fixed-width byte sequences for binary I/O and protocol work.
+They support bracket indexing plus method syntax using `:`.
+
+### Global: buffer_create(size [, fill_byte]) -> buffer
+
+Create a new mutable byte buffer with the requested size. When `fill_byte` is
+provided, every byte is initialized to that value.
+
+```mobius
+var buf = buffer_create(4)        // [0, 0, 0, 0]
+var magic = buffer_create(4, 255) // [255, 255, 255, 255]
+```
+
+### Global: buffer_from_string(str) -> buffer
+
+Copy the raw bytes of a string into a new buffer.
+
+```mobius
+var payload = buffer_from_string("PING")
+```
+
+### buf:length() -> integer
+
+Return the number of bytes in the buffer.
+
+### buf:get(index) -> integer
+
+Return the byte at `index`, or `nil` if out of bounds.
+
+### buf:set(index, byte)
+
+Write a byte value in the range `[0, 255]` at `index`.
+
+### buf:append(value)
+
+Append a byte, string, or buffer to the end of the buffer.
+
+### buf:to_string() -> string
+
+Return a string containing the buffer's raw bytes.
 
 ---
 
