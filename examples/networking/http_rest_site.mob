@@ -1,0 +1,257 @@
+import "json"
+import "socket"
+import "url"
+import "http_server_utils" as web
+
+var HOST = "127.0.0.1"
+var PORT = 8081
+
+var next_todo_id = 3
+var todos = [
+    {id: 1, title: "Write Mobius example", done: true},
+    {id: 2, title: "Serve HTML and JSON", done: false}
+]
+
+func todo_by_id(id) {
+    for (var i = 0; i < len(todos); i += 1) {
+        if (todos[i].id == id) {
+            return todos[i]
+        }
+    }
+    return nil
+}
+
+func todo_index_by_id(id) {
+    for (var i = 0; i < len(todos); i += 1) {
+        if (todos[i].id == id) {
+            return i
+        }
+    }
+    return -1
+}
+
+func create_todo(title) {
+    var todo = {
+        id: next_todo_id,
+        title: title,
+        done: false
+    }
+    next_todo_id += 1
+    todos:push(todo)
+    return todo
+}
+
+func toggle_todo(id) {
+    var idx = todo_index_by_id(id)
+    if (idx < 0) {
+        return nil
+    }
+    todos[idx].done = !todos[idx].done
+    return todos[idx]
+}
+
+func completed_count() {
+    var count = 0
+    for (var i = 0; i < len(todos); i += 1) {
+        if (todos[i].done) {
+            count += 1
+        }
+    }
+    return count
+}
+
+func render_todo_item(todo) {
+    var status = todo.done ? "done" : "open"
+    var button = todo.done ? "Mark open" : "Mark done"
+    return "<li>"
+        + "<strong>#" + str(todo.id) + "</strong> "
+        + web.html_escape(todo.title)
+        + " <em>(" + status + ")</em>"
+        + "<form method=\"POST\" action=\"/todos/" + str(todo.id) + "/toggle\" style=\"display:inline; margin-left:8px\">"
+        + "<button type=\"submit\">" + button + "</button>"
+        + "</form>"
+        + "</li>"
+}
+
+func render_home_page() {
+    var items = ""
+    for (var i = 0; i < len(todos); i += 1) {
+        items += render_todo_item(todos[i])
+    }
+
+    return "<!doctype html>\n"
+        + "<html><head><title>Mobius Todo App</title>"
+        + "<style>body{font-family:sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;} code,pre{background:#f5f5f5;} form{margin:0.5rem 0;} .panel{padding:1rem;border:1px solid #ddd;border-radius:8px;margin:1rem 0;}</style>"
+        + "</head><body>"
+        + "<h1>Mobius Todo App</h1>"
+        + "<p>This example serves both server-rendered HTML and a JSON REST API from the same Mobius process.</p>"
+        + "<div class=\"panel\"><strong>Total</strong>: " + str(len(todos)) + " | <strong>Done</strong>: " + str(completed_count()) + "</div>"
+        + "<div class=\"panel\">"
+        + "<h2>Create Todo</h2>"
+        + "<form method=\"POST\" action=\"/todos/create\">"
+        + "<input type=\"text\" name=\"title\" placeholder=\"What needs doing?\" style=\"width:22rem\"/>"
+        + "<button type=\"submit\">Create</button>"
+        + "</form>"
+        + "</div>"
+        + "<div class=\"panel\"><h2>Current Todos</h2><ul>" + items + "</ul></div>"
+        + "<div class=\"panel\">"
+        + "<h2>REST API</h2>"
+        + "<pre>GET  /api/health\nGET  /api/todos\nPOST /api/todos           {\"title\":\"Ship it\"}\nPOST /api/todos/{id}/toggle</pre>"
+        + "</div>"
+        + "</body></html>"
+}
+
+func parse_form_body(body) {
+    return url.parse_query(body)
+}
+
+func parse_json_body(request) {
+    if (request.body == "") {
+        return {}
+    }
+    return json.parse(request.body)
+}
+
+func parse_toggle_id(path, prefix, suffix) {
+    var middle = web.between_prefix_and_suffix(path, prefix, suffix)
+    if (middle == nil || middle == "") {
+        return nil
+    }
+
+    try {
+        return int(middle)
+    } catch err {
+        return nil
+    }
+}
+
+func handle_html(request, conn) {
+    var method = upper(request.method)
+
+    if (request.path == "/") {
+        web.redirect_response(conn, "/todos")
+        return
+    }
+    if (request.path == "/todos" && method == "GET") {
+        web.html_response(conn, 200, render_home_page())
+        return
+    }
+    if (request.path == "/todos/create" && method == "POST") {
+        var form = parse_form_body(request.body)
+        var title = form.title
+        if (title == nil) {
+            title = ""
+        }
+        title = trim(title)
+        if (title == "") {
+            web.bad_request(conn, "title is required")
+            return
+        }
+        create_todo(title)
+        web.redirect_response(conn, "/todos")
+        return
+    }
+
+    var toggle_id = parse_toggle_id(request.path, "/todos/", "/toggle")
+    if (toggle_id != nil && method == "POST") {
+        var todo = toggle_todo(toggle_id)
+        if (todo == nil) {
+            web.not_found(conn, request.path)
+            return
+        }
+        web.redirect_response(conn, "/todos")
+        return
+    }
+
+    web.not_found(conn, request.path)
+}
+
+func handle_api(request, conn) {
+    var method = upper(request.method)
+
+    if (request.path == "/api/health" && method == "GET") {
+        web.json_response(conn, 200, {
+            ok: true,
+            todos: len(todos),
+            completed: completed_count()
+        })
+        return
+    }
+
+    if (request.path == "/api/todos" && method == "GET") {
+        web.json_response(conn, 200, {
+            items: todos,
+            count: len(todos),
+            completed: completed_count()
+        })
+        return
+    }
+
+    if (request.path == "/api/todos" && method == "POST") {
+        var payload = parse_json_body(request)
+        var title = payload.title
+        if (title == nil) {
+            title = ""
+        }
+        title = trim(title)
+        if (title == "") {
+            web.json_response(conn, 400, {error: "title is required"})
+            return
+        }
+        var todo = create_todo(title)
+        web.json_response(conn, 201, todo)
+        return
+    }
+
+    var toggle_id = parse_toggle_id(request.path, "/api/todos/", "/toggle")
+    if (toggle_id != nil && method == "POST") {
+        var todo = toggle_todo(toggle_id)
+        if (todo == nil) {
+            web.json_response(conn, 404, {error: "todo not found"})
+            return
+        }
+        web.json_response(conn, 200, todo)
+        return
+    }
+
+    web.json_response(conn, 404, {error: "route not found", path: request.path})
+}
+
+func handle_client(conn) {
+    conn:set_timeout(5000)
+    var request = web.read_http_request(conn)
+    if (request == nil) {
+        return
+    }
+
+    if (web.starts_with(request.path, "/api/")) {
+        handle_api(request, conn)
+        return
+    }
+
+    handle_html(request, conn)
+}
+
+func main() {
+    var listener = socket.listen(HOST, PORT)
+    print("Mobius REST + HTML example listening on http://" + HOST + ":" + str(PORT))
+    print("Open /todos in a browser or call /api/todos with curl.")
+
+    while (true) {
+        var conn = listener:accept()
+        try {
+            handle_client(conn)
+        } catch err {
+            try {
+                web.server_error(conn, err)
+            } catch inner_err {
+            }
+        } finally {
+            if (!conn:is_closed()) {
+                conn:close()
+            }
+        }
+    }
+}
+
+main()

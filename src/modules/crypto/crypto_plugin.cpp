@@ -38,6 +38,26 @@ static std::string hex_encode(const std::vector<uint8_t>& data) {
     return hex_encode(data.data(), data.size());
 }
 
+static int hex_nibble(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+    return -1;
+}
+
+static bool hex_decode_bytes(const std::string& input, std::vector<uint8_t>& out) {
+    out.clear();
+    if ((input.size() & 1u) != 0) return false;
+    out.reserve(input.size() / 2);
+    for (size_t i = 0; i < input.size(); i += 2) {
+        int hi = hex_nibble(input[i]);
+        int lo = hex_nibble(input[i + 1]);
+        if (hi < 0 || lo < 0) return false;
+        out.push_back((uint8_t)((hi << 4) | lo));
+    }
+    return true;
+}
+
 static std::vector<uint8_t> sha256_bytes(const uint8_t* data, size_t len) {
     static const uint32_t K[64] = {
         0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
@@ -432,11 +452,82 @@ static int require_string_arg(MobiusState* state, int arg_count, const char* nam
     return 0;
 }
 
+static int require_bytes_arg(MobiusState* state, int arg_count, const char* name,
+                             std::vector<uint8_t>& out) {
+    char error[128];
+    if (arg_count != 1) {
+        snprintf(error, sizeof(error), "%s expects exactly 1 argument", name);
+        return mobius_error(state, error);
+    }
+
+    out.clear();
+    if (mobius_stack_isBuffer(state, -1)) {
+        size_t len = 0;
+        void* data = mobius_stack_getBufferData(state, -1, &len);
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        if (len > 0) out.assign(bytes, bytes + len);
+        return 0;
+    }
+    if (mobius_stack_isString(state, -1)) {
+        size_t len = 0;
+        const char* data = mobius_stack_getStringData(state, -1, &len);
+        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
+        if (len > 0) out.assign(bytes, bytes + len);
+        return 0;
+    }
+
+    snprintf(error, sizeof(error), "%s expects a string or buffer argument", name);
+    return mobius_error(state, error);
+}
+
+static bool bytes_from_value(MobiusState* state, int idx, std::vector<uint8_t>& out) {
+    out.clear();
+    if (mobius_stack_isBuffer(state, idx)) {
+        size_t len = 0;
+        void* data = mobius_stack_getBufferData(state, idx, &len);
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        if (len > 0) out.assign(bytes, bytes + len);
+        return true;
+    }
+    if (mobius_stack_isString(state, idx)) {
+        size_t len = 0;
+        const char* data = mobius_stack_getStringData(state, idx, &len);
+        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(data);
+        if (len > 0) out.assign(bytes, bytes + len);
+        return true;
+    }
+    return false;
+}
+
+static int require_two_bytes_args(MobiusState* state, int arg_count, const char* name,
+                                  std::vector<uint8_t>& first, std::vector<uint8_t>& second) {
+    char error[128];
+    if (arg_count != 2) {
+        snprintf(error, sizeof(error), "%s expects exactly 2 arguments", name);
+        return mobius_error(state, error);
+    }
+    if (!bytes_from_value(state, -2, first) || !bytes_from_value(state, -1, second)) {
+        snprintf(error, sizeof(error), "%s expects string or buffer arguments", name);
+        return mobius_error(state, error);
+    }
+    return 0;
+}
+
 static int crypto_sha256(MobiusState* state, int arg_count) {
-    const char* text = nullptr;
-    int rc = require_string_arg(state, arg_count, "sha256()", &text);
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "sha256()", input);
     if (rc != 0) return rc;
-    std::vector<uint8_t> hash = sha256_bytes(reinterpret_cast<const uint8_t*>(text), strlen(text));
+    std::vector<uint8_t> hash = sha256_bytes(input.data(), input.size());
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushBufferCopy(state, hash.data(), hash.size());
+    return 1;
+}
+
+static int crypto_sha256_hex(MobiusState* state, int arg_count) {
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "sha256_hex()", input);
+    if (rc != 0) return rc;
+    std::vector<uint8_t> hash = sha256_bytes(input.data(), input.size());
     mobius_stack_pop(state, 1);
     std::string hex = hex_encode(hash);
     mobius_stack_pushString(state, hex.c_str());
@@ -444,10 +535,20 @@ static int crypto_sha256(MobiusState* state, int arg_count) {
 }
 
 static int crypto_sha1(MobiusState* state, int arg_count) {
-    const char* text = nullptr;
-    int rc = require_string_arg(state, arg_count, "sha1()", &text);
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "sha1()", input);
     if (rc != 0) return rc;
-    std::vector<uint8_t> hash = sha1_bytes(reinterpret_cast<const uint8_t*>(text), strlen(text));
+    std::vector<uint8_t> hash = sha1_bytes(input.data(), input.size());
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushBufferCopy(state, hash.data(), hash.size());
+    return 1;
+}
+
+static int crypto_sha1_hex(MobiusState* state, int arg_count) {
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "sha1_hex()", input);
+    if (rc != 0) return rc;
+    std::vector<uint8_t> hash = sha1_bytes(input.data(), input.size());
     mobius_stack_pop(state, 1);
     std::string hex = hex_encode(hash);
     mobius_stack_pushString(state, hex.c_str());
@@ -455,10 +556,20 @@ static int crypto_sha1(MobiusState* state, int arg_count) {
 }
 
 static int crypto_md5(MobiusState* state, int arg_count) {
-    const char* text = nullptr;
-    int rc = require_string_arg(state, arg_count, "md5()", &text);
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "md5()", input);
     if (rc != 0) return rc;
-    std::vector<uint8_t> hash = md5_bytes(reinterpret_cast<const uint8_t*>(text), strlen(text));
+    std::vector<uint8_t> hash = md5_bytes(input.data(), input.size());
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushBufferCopy(state, hash.data(), hash.size());
+    return 1;
+}
+
+static int crypto_md5_hex(MobiusState* state, int arg_count) {
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "md5_hex()", input);
+    if (rc != 0) return rc;
+    std::vector<uint8_t> hash = md5_bytes(input.data(), input.size());
     mobius_stack_pop(state, 1);
     std::string hex = hex_encode(hash);
     mobius_stack_pushString(state, hex.c_str());
@@ -466,33 +577,46 @@ static int crypto_md5(MobiusState* state, int arg_count) {
 }
 
 static int crypto_hmac_sha256(MobiusState* state, int arg_count) {
-    if (arg_count != 2) return mobius_error(state, "hmac_sha256() expects exactly 2 arguments");
-    if (!mobius_stack_isString(state, -2) || !mobius_stack_isString(state, -1)) {
-        return mobius_error(state, "hmac_sha256() expects string arguments");
-    }
-    std::string key = mobius_stack_asString(state, -2);
-    std::string msg = mobius_stack_asString(state, -1);
+    std::vector<uint8_t> key;
+    std::vector<uint8_t> msg;
+    int rc = require_two_bytes_args(state, arg_count, "hmac_sha256()", key, msg);
+    if (rc != 0) return rc;
     mobius_stack_pop(state, 2);
-    std::string out = hmac_sha256_hex(key, msg);
+    std::string hex = hmac_sha256_hex(std::string(reinterpret_cast<const char*>(key.data()), key.size()),
+                                      std::string(reinterpret_cast<const char*>(msg.data()), msg.size()));
+    std::vector<uint8_t> bytes;
+    hex_decode_bytes(hex, bytes);
+    mobius_stack_pushBufferCopy(state, bytes.data(), bytes.size());
+    return 1;
+}
+
+static int crypto_hmac_sha256_hex_fn(MobiusState* state, int arg_count) {
+    std::vector<uint8_t> key;
+    std::vector<uint8_t> msg;
+    int rc = require_two_bytes_args(state, arg_count, "hmac_sha256_hex()", key, msg);
+    if (rc != 0) return rc;
+    mobius_stack_pop(state, 2);
+    std::string out = hmac_sha256_hex(std::string(reinterpret_cast<const char*>(key.data()), key.size()),
+                                      std::string(reinterpret_cast<const char*>(msg.data()), msg.size()));
     mobius_stack_pushString(state, out.c_str());
     return 1;
 }
 
 static int crypto_crc32(MobiusState* state, int arg_count) {
-    const char* text = nullptr;
-    int rc = require_string_arg(state, arg_count, "crc32()", &text);
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "crc32()", input);
     if (rc != 0) return rc;
-    uint32_t crc = crc32_value(reinterpret_cast<const uint8_t*>(text), strlen(text));
+    uint32_t crc = crc32_value(input.data(), input.size());
     mobius_stack_pop(state, 1);
     mobius_stack_pushInt64(state, (int64_t)crc);
     return 1;
 }
 
 static int crypto_base64_encode(MobiusState* state, int arg_count) {
-    const char* text = nullptr;
-    int rc = require_string_arg(state, arg_count, "base64_encode()", &text);
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "base64_encode()", input);
     if (rc != 0) return rc;
-    std::string out = base64_encode_bytes(reinterpret_cast<const uint8_t*>(text), strlen(text));
+    std::string out = base64_encode_bytes(input.data(), input.size());
     mobius_stack_pop(state, 1);
     mobius_stack_pushString(state, out.c_str());
     return 1;
@@ -506,11 +630,31 @@ static int crypto_base64_decode(MobiusState* state, int arg_count) {
     if (!base64_decode_string(text, decoded)) {
         return mobius_error(state, "base64_decode() invalid base64 input");
     }
-    if (decoded.find('\0') != std::string::npos) {
-        return mobius_error(state, "base64_decode() produced binary data with NUL bytes, unsupported by Mobius strings");
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushBufferCopy(state, decoded.data(), decoded.size());
+    return 1;
+}
+
+static int crypto_hex_encode_fn(MobiusState* state, int arg_count) {
+    std::vector<uint8_t> input;
+    int rc = require_bytes_arg(state, arg_count, "hex_encode()", input);
+    if (rc != 0) return rc;
+    mobius_stack_pop(state, 1);
+    std::string out = hex_encode(input);
+    mobius_stack_pushString(state, out.c_str());
+    return 1;
+}
+
+static int crypto_hex_decode_fn(MobiusState* state, int arg_count) {
+    const char* text = nullptr;
+    int rc = require_string_arg(state, arg_count, "hex_decode()", &text);
+    if (rc != 0) return rc;
+    std::vector<uint8_t> out;
+    if (!hex_decode_bytes(text ? text : "", out)) {
+        return mobius_error(state, "hex_decode() invalid hex input");
     }
     mobius_stack_pop(state, 1);
-    mobius_stack_pushString(state, decoded.c_str());
+    mobius_stack_pushBufferCopy(state, out.data(), out.size());
     return 1;
 }
 
@@ -532,6 +676,18 @@ static int crypto_random_hex(MobiusState* state, int arg_count) {
     mobius_stack_pop(state, 1);
     std::string out = hex_encode(buf);
     mobius_stack_pushString(state, out.c_str());
+    return 1;
+}
+
+static int crypto_random_bytes(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return mobius_error(state, "random_bytes() expects exactly 1 argument");
+    if (!mobius_stack_isInteger(state, -1)) return mobius_error(state, "random_bytes() expects an integer argument");
+    int64_t bytes = mobius_stack_asInt64(state, -1);
+    if (bytes < 0 || bytes > 4096) return mobius_error(state, "random_bytes() byte count must be between 0 and 4096");
+    std::vector<uint8_t> buf((size_t)bytes);
+    if (!secure_random_fill(buf.data(), buf.size())) return mobius_error(state, "random_bytes() secure random generation failed");
+    mobius_stack_pop(state, 1);
+    mobius_stack_pushBufferCopy(state, buf.data(), buf.size());
     return 1;
 }
 
@@ -560,15 +716,22 @@ static int init_crypto_plugin(MobiusState* /*state*/) { return 0; }
 static void cleanup_crypto_plugin(void) {}
 
 static MobiusPluginFunction crypto_functions[] = {
-    {"sha256",        crypto_sha256,        1, MOBIUS_VAL_STRING, "SHA-256 digest as lowercase hex"},
-    {"sha1",          crypto_sha1,          1, MOBIUS_VAL_STRING, "SHA-1 digest as lowercase hex"},
-    {"md5",           crypto_md5,           1, MOBIUS_VAL_STRING, "MD5 digest as lowercase hex (weak)"},
-    {"hmac_sha256",   crypto_hmac_sha256,   2, MOBIUS_VAL_STRING, "HMAC-SHA256 as lowercase hex"},
+    {"sha256",        crypto_sha256,        1, MOBIUS_VAL_BUFFER, "SHA-256 digest as raw bytes"},
+    {"sha256_hex",    crypto_sha256_hex,    1, MOBIUS_VAL_STRING, "SHA-256 digest as lowercase hex"},
+    {"sha1",          crypto_sha1,          1, MOBIUS_VAL_BUFFER, "SHA-1 digest as raw bytes"},
+    {"sha1_hex",      crypto_sha1_hex,      1, MOBIUS_VAL_STRING, "SHA-1 digest as lowercase hex"},
+    {"md5",           crypto_md5,           1, MOBIUS_VAL_BUFFER, "MD5 digest as raw bytes (weak)"},
+    {"md5_hex",       crypto_md5_hex,       1, MOBIUS_VAL_STRING, "MD5 digest as lowercase hex (weak)"},
+    {"hmac_sha256",   crypto_hmac_sha256,   2, MOBIUS_VAL_BUFFER, "HMAC-SHA256 as raw bytes"},
+    {"hmac_sha256_hex", crypto_hmac_sha256_hex_fn, 2, MOBIUS_VAL_STRING, "HMAC-SHA256 as lowercase hex"},
     {"crc32",         crypto_crc32,         1, MOBIUS_VAL_INT64,  "CRC32 checksum as integer"},
-    {"base64_encode", crypto_base64_encode, 1, MOBIUS_VAL_STRING, "Base64-encode a string"},
-    {"base64_decode", crypto_base64_decode, 1, MOBIUS_VAL_STRING, "Base64-decode a string"},
+    {"base64_encode", crypto_base64_encode, 1, MOBIUS_VAL_STRING, "Base64-encode a string or buffer"},
+    {"base64_decode", crypto_base64_decode, 1, MOBIUS_VAL_BUFFER, "Base64-decode a string into raw bytes"},
+    {"hex_encode",    crypto_hex_encode_fn, 1, MOBIUS_VAL_STRING, "Hex-encode a string or buffer"},
+    {"hex_decode",    crypto_hex_decode_fn, 1, MOBIUS_VAL_BUFFER, "Hex-decode a string into raw bytes"},
     {"uuid4",         crypto_uuid4,         0, MOBIUS_VAL_STRING, "Generate a random UUIDv4"},
     {"random_hex",    crypto_random_hex,    1, MOBIUS_VAL_STRING, "Generate secure random bytes encoded as hex"},
+    {"random_bytes",  crypto_random_bytes,  1, MOBIUS_VAL_BUFFER, "Generate secure random bytes as a buffer"},
     {"random_int",    crypto_random_int,    2, MOBIUS_VAL_INT64,  "Generate a secure random integer in [min, max]"},
 };
 

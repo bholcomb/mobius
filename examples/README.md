@@ -7,6 +7,12 @@ This directory contains comprehensive examples demonstrating how to use and exte
 ```
 examples/
 ├── README.md                    # This file - examples overview
+├── networking/                  # HTTP and WebSocket script servers
+│   ├── http_server_utils.mob    # Shared HTTP server helpers
+│   ├── http_hello_server.mob    # Minimal dynamic page example
+│   ├── http_rest_site.mob       # REST API + server-rendered HTML app
+│   ├── websocket_echo_server.mob # Plain WebSocket echo server
+│   └── README.md                # Networking guide
 ├── simple_embedding/           # Minimal embedding example
 │   ├── simple_embedding.c      # Basic C integration
 │   └── README.md               # Getting started guide
@@ -89,6 +95,7 @@ Demonstrate language features and best practices:
 | [Entity AI](demo_scripts/) | AI/Logic | State machines, behaviors |
 | [Multi-Script](demo_scripts/) | Organization | Module systems, imports |
 | [RISC-V Demo](demo_scripts/) | Performance | Low-level optimization |
+| [Networking](networking/) | Servers | HTTP, REST, HTML, and WebSocket examples |
 
 ### ⚡ Performance Examples
 Benchmark and optimize your usage:
@@ -118,6 +125,7 @@ make clean && make all
 # Script examples (interpreted)
 ./bin/mobius examples/demo_scripts/entity_ai.mob
 ./bin/mobius examples/performance_tests/performance_test_current.mob
+./bin/mobius examples/networking/http_rest_site.mob
 
 # Plugin examples (with dynamic loading)
 LD_LIBRARY_PATH=./bin/modules ./bin/mobius

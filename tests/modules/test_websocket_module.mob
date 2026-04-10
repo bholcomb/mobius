@@ -136,7 +136,7 @@ var ws = websocket.connect({
     protocol: "chat",
     timeout_ms: 1000
 })
-assert_test("websocket connect returns userdata", typeof(ws) == "userdata")
+assert_test("websocket connect returns table", typeof(ws) == "table")
 assert_test("websocket negotiated protocol", ws:protocol() == "chat")
 assert_test("websocket peer host", ws:peer_addr().host == "127.0.0.1")
 assert_test("websocket send text count", ws:send("hello") > 0)

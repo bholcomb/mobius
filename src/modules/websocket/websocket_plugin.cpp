@@ -1,7 +1,6 @@
 #include <mobius/mobius_plugin.h>
 
 #include "modules/net/protocol_common.h"
-#include "modules/socket/socket_internal.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -14,45 +13,9 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-  #define WIN32_LEAN_AND_MEAN
-  #include <winsock2.h>
-  #include <ws2tcpip.h>
-  #ifdef _MSC_VER
-    #pragma comment(lib, "Ws2_32.lib")
-  #endif
-  typedef SOCKET websocket_socket_handle;
-  static const websocket_socket_handle WEBSOCKET_INVALID_SOCKET_HANDLE = INVALID_SOCKET;
-#else
-  #include <arpa/inet.h>
-  #include <cerrno>
-  #include <netdb.h>
-  #include <netinet/in.h>
-  #include <netinet/tcp.h>
-  #include <sys/socket.h>
-  #include <sys/types.h>
-  #include <unistd.h>
-  typedef int websocket_socket_handle;
-  static const websocket_socket_handle WEBSOCKET_INVALID_SOCKET_HANDLE = -1;
-#endif
-
 using namespace mobius_net;
 
 namespace {
-
-static const char* WEBSOCKET_CONNECTION_TYPE = "websocket_connection";
-static const char* TCP_SOCKET_TYPE = "tcp_socket";
-using mobius_socket_internal::SocketKind;
-using mobius_socket_internal::SocketObject;
-
-struct WebSocketConnection {
-    websocket_socket_handle handle = WEBSOCKET_INVALID_SOCKET_HANDLE;
-    bool closed = false;
-    bool close_sent = false;
-    bool close_received = false;
-    std::string protocol;
-    std::vector<uint8_t> read_buffer;
-};
 
 struct ParsedFrame {
     bool fin = true;
@@ -76,10 +39,6 @@ enum class FrameParseStatus {
     need_more,
     error,
 };
-
-#ifdef _WIN32
-static bool g_winsock_initialized = false;
-#endif
 
 static bool split_http_message(const std::string& input, std::string& head, std::string& body) {
     size_t pos = input.find("\r\n\r\n");
@@ -351,210 +310,6 @@ static bool is_text_opcode(int opcode) {
 
 static bool is_close_opcode(int opcode) {
     return opcode == 0x8;
-}
-
-static bool websocket_platform_init() {
-#ifdef _WIN32
-    if (g_winsock_initialized) return true;
-    WSADATA wsa_data;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) return false;
-    g_winsock_initialized = true;
-#endif
-    return true;
-}
-
-static void websocket_platform_cleanup() {
-#ifdef _WIN32
-    if (g_winsock_initialized) {
-        WSACleanup();
-        g_winsock_initialized = false;
-    }
-#endif
-}
-
-static int websocket_last_error_code() {
-#ifdef _WIN32
-    return WSAGetLastError();
-#else
-    return errno;
-#endif
-}
-
-static bool websocket_error_is_timeout(int code) {
-#ifdef _WIN32
-    return code == WSAETIMEDOUT;
-#else
-    return code == EAGAIN || code == EWOULDBLOCK || code == ETIMEDOUT;
-#endif
-}
-
-static void websocket_close_handle(websocket_socket_handle handle) {
-    if (handle == WEBSOCKET_INVALID_SOCKET_HANDLE) return;
-#ifdef _WIN32
-    closesocket(handle);
-#else
-    close(handle);
-#endif
-}
-
-static void websocket_connection_destructor(void* ptr) {
-    WebSocketConnection* conn = static_cast<WebSocketConnection*>(ptr);
-    if (!conn) return;
-    if (!conn->closed) websocket_close_handle(conn->handle);
-    delete conn;
-}
-
-static std::string websocket_socket_error_message(const char* prefix, int code) {
-    char buffer[256];
-#ifdef _WIN32
-    snprintf(buffer, sizeof(buffer), "%s failed (code %d)", prefix, code);
-#else
-    snprintf(buffer, sizeof(buffer), "%s failed: %s", prefix, strerror(code));
-#endif
-    return std::string(buffer);
-}
-
-static WebSocketConnection* get_connection_object(MobiusState* state, int idx) {
-    const char* type_name = nullptr;
-    void* ptr = mobius_stack_getUserdata(state, idx, &type_name);
-    if (!ptr || !type_name || strcmp(type_name, WEBSOCKET_CONNECTION_TYPE) != 0) return nullptr;
-    return static_cast<WebSocketConnection*>(ptr);
-}
-
-static SocketObject* get_tcp_socket_object(MobiusState* state, int idx) {
-    const char* type_name = nullptr;
-    void* ptr = mobius_stack_getUserdata(state, idx, &type_name);
-    if (!ptr || !type_name || strcmp(type_name, TCP_SOCKET_TYPE) != 0) return nullptr;
-    SocketObject* obj = static_cast<SocketObject*>(ptr);
-    if (obj->kind != SocketKind::tcp_socket) return nullptr;
-    return obj;
-}
-
-static void websocket_set_timeout_value(WebSocketConnection* conn, int64_t timeout_ms) {
-#ifdef _WIN32
-    DWORD timeout = (DWORD)timeout_ms;
-    setsockopt(conn->handle, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
-    setsockopt(conn->handle, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-#else
-    timeval tv;
-    tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (int)((timeout_ms % 1000) * 1000);
-    setsockopt(conn->handle, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    setsockopt(conn->handle, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-#endif
-}
-
-static bool websocket_resolve_connect(const std::string& host, int64_t port,
-                                      websocket_socket_handle& out_handle,
-                                      std::string& error) {
-    out_handle = WEBSOCKET_INVALID_SOCKET_HANDLE;
-    char port_buffer[32];
-    snprintf(port_buffer, sizeof(port_buffer), "%" PRId64, port);
-
-    addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    addrinfo* results = nullptr;
-    int rc = getaddrinfo(host.c_str(), port_buffer, &hints, &results);
-    if (rc != 0 || !results) {
-        error = "websocket.connect() address resolution failed";
-        return false;
-    }
-
-    int last_error = 0;
-    for (addrinfo* it = results; it; it = it->ai_next) {
-        websocket_socket_handle handle = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
-        if (handle == WEBSOCKET_INVALID_SOCKET_HANDLE) {
-            last_error = websocket_last_error_code();
-            continue;
-        }
-        if (::connect(handle, it->ai_addr, (socklen_t)it->ai_addrlen) == 0) {
-            int yes = 1;
-            setsockopt(handle, IPPROTO_TCP, TCP_NODELAY, (const char*)&yes, sizeof(yes));
-            out_handle = handle;
-            freeaddrinfo(results);
-            return true;
-        }
-        last_error = websocket_last_error_code();
-        websocket_close_handle(handle);
-    }
-    freeaddrinfo(results);
-    error = websocket_socket_error_message("websocket.connect()", last_error);
-    return false;
-}
-
-static bool websocket_send_all(WebSocketConnection* conn, const uint8_t* data, size_t size, std::string& error) {
-    size_t sent = 0;
-    while (sent < size) {
-#ifdef _WIN32
-        int rc = send(conn->handle, (const char*)data + sent, (int)(size - sent), 0);
-#else
-        ssize_t rc = send(conn->handle, data + sent, size - sent, 0);
-#endif
-        if (rc <= 0) {
-            int err = websocket_last_error_code();
-            if (websocket_error_is_timeout(err)) error = "websocket send timed out";
-            else error = websocket_socket_error_message("websocket send", err);
-            return false;
-        }
-        sent += (size_t)rc;
-    }
-    return true;
-}
-
-static bool websocket_recv_some(WebSocketConnection* conn, std::vector<uint8_t>& out, std::string& error) {
-    uint8_t chunk[4096];
-#ifdef _WIN32
-    int rc = recv(conn->handle, (char*)chunk, (int)sizeof(chunk), 0);
-#else
-    ssize_t rc = recv(conn->handle, chunk, sizeof(chunk), 0);
-#endif
-    if (rc < 0) {
-        int err = websocket_last_error_code();
-        if (websocket_error_is_timeout(err)) error = "websocket recv timed out";
-        else error = websocket_socket_error_message("websocket recv", err);
-        return false;
-    }
-    if (rc == 0) {
-        error = "websocket connection closed";
-        return false;
-    }
-    out.insert(out.end(), chunk, chunk + rc);
-    return true;
-}
-
-static int push_addr_table(MobiusState* state, const sockaddr_storage& storage, socklen_t length) {
-    char host[NI_MAXHOST];
-    char service[NI_MAXSERV];
-    int rc = getnameinfo((const sockaddr*)&storage, length,
-                         host, sizeof(host), service, sizeof(service),
-                         NI_NUMERICHOST | NI_NUMERICSERV);
-    if (rc != 0) return mobius_error(state, "websocket address formatting failed");
-    mobius_stack_pushNewTable(state, 3);
-    int tbl = mobius_stack_size(state) - 1;
-    set_string_field(state, tbl, "host", host);
-    set_int_field(state, tbl, "port", strtoll(service, nullptr, 10));
-    if (storage.ss_family == AF_INET) set_string_field(state, tbl, "family", "ipv4");
-    else if (storage.ss_family == AF_INET6) set_string_field(state, tbl, "family", "ipv6");
-    else set_string_field(state, tbl, "family", "unknown");
-    return 1;
-}
-
-static int websocket_get_socket_name(MobiusState* state, WebSocketConnection* conn, bool peer) {
-    sockaddr_storage storage;
-    socklen_t len = (socklen_t)sizeof(storage);
-    memset(&storage, 0, sizeof(storage));
-    int rc = peer
-        ? getpeername(conn->handle, (sockaddr*)&storage, &len)
-        : getsockname(conn->handle, (sockaddr*)&storage, &len);
-    if (rc != 0) {
-        return mobius_error(state, websocket_socket_error_message(peer ? "websocket:peer_addr()" : "websocket:local_addr()",
-                                                                  websocket_last_error_code()).c_str());
-    }
-    return push_addr_table(state, storage, len);
 }
 
 static bool encode_frame_bytes(int opcode, const std::vector<uint8_t>& payload, bool fin, bool mask,
@@ -975,368 +730,31 @@ static int websocket_parse_frame(MobiusState* state, int arg_count) {
     return push_parsed_frame(state, frame);
 }
 
-static int websocket_connect(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return mobius_error(state, "websocket.connect() expects 1 argument");
-    if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "websocket.connect() expects a table argument");
+static int websocket_try_parse_frame(MobiusState* state, int arg_count) {
+    if (arg_count != 1) return mobius_error(state, "websocket.__try_parse_frame() expects 1 argument");
+    if (!mobius_stack_isBuffer(state, -1)) return mobius_error(state, "websocket.__try_parse_frame() expects a buffer argument");
 
-    int tbl = mobius_stack_size(state) - 1;
-    std::string host = get_optional_string_field(state, tbl, "host");
-    std::string path = get_optional_string_field(state, tbl, "path");
-    std::string query = get_optional_string_field(state, tbl, "query");
-    std::string origin = get_optional_string_field(state, tbl, "origin");
-    std::string protocol = get_optional_string_field(state, tbl, "protocol");
-    std::string version = get_optional_string_field(state, tbl, "version");
-    std::string key = get_optional_string_field(state, tbl, "key");
-    int64_t port = 80;
-    int64_t timeout_ms = -1;
-    get_optional_int_field(state, tbl, "port", port);
-    get_optional_int_field(state, tbl, "timeout_ms", timeout_ms);
+    size_t input_size = 0;
+    void* input_data = mobius_stack_getBufferData(state, -1, &input_size);
     mobius_stack_pop(state, 1);
-
-    if (host.empty()) return mobius_error(state, "websocket.connect() host is required");
-    if (port < 0 || port > 65535) return mobius_error(state, "websocket.connect() port must be in [0, 65535]");
-    if (timeout_ms < -1) return mobius_error(state, "websocket.connect() timeout_ms must be >= -1");
-    if (path.empty()) path = "/";
-    if (!query.empty()) path += "?" + query;
-    if (version.empty()) version = "HTTP/1.1";
-    if (key.empty()) {
-        uint8_t bytes[16];
-        if (!secure_random_fill(bytes, sizeof(bytes))) return mobius_error(state, "websocket.connect() secure random generation failed");
-        key = base64_encode_bytes(bytes, sizeof(bytes));
-    }
-
-    websocket_socket_handle handle = WEBSOCKET_INVALID_SOCKET_HANDLE;
-    std::string error;
-    if (!websocket_platform_init()) return mobius_error(state, "websocket.connect() socket platform init failed");
-    if (!websocket_resolve_connect(host, port, handle, error)) return mobius_error(state, error.c_str());
-
-    WebSocketConnection temp_conn;
-    temp_conn.handle = handle;
-    if (timeout_ms >= 0) websocket_set_timeout_value(&temp_conn, timeout_ms);
-
-    std::string request = "GET " + path + " " + version + "\r\n";
-    request += "Host: " + host + "\r\n";
-    request += "Upgrade: websocket\r\n";
-    request += "Connection: Upgrade\r\n";
-    request += "Sec-WebSocket-Version: 13\r\n";
-    request += "Sec-WebSocket-Key: " + key + "\r\n";
-    if (!origin.empty()) request += "Origin: " + origin + "\r\n";
-    if (!protocol.empty()) request += "Sec-WebSocket-Protocol: " + protocol + "\r\n";
-    request += "\r\n";
-
-    if (!websocket_send_all(&temp_conn, reinterpret_cast<const uint8_t*>(request.data()), request.size(), error)) {
-        websocket_close_handle(handle);
-        return mobius_error(state, error.c_str());
-    }
-
-    std::string response;
-    while (response.find("\r\n\r\n") == std::string::npos && response.find("\n\n") == std::string::npos) {
-        std::vector<uint8_t> chunk;
-        if (!websocket_recv_some(&temp_conn, chunk, error)) {
-            websocket_close_handle(handle);
-            return mobius_error(state, error.c_str());
-        }
-        response.append(reinterpret_cast<const char*>(chunk.data()), chunk.size());
-    }
-
-    std::string head, body;
-    split_http_message(response, head, body);
-    std::vector<std::string> lines;
-    split_lines(head, lines);
-    if (lines.empty()) {
-        websocket_close_handle(handle);
-        return mobius_error(state, "websocket.connect() invalid handshake response");
-    }
-    std::string status_line = lines[0];
-    size_t sp1 = status_line.find(' ');
-    size_t sp2 = sp1 == std::string::npos ? std::string::npos : status_line.find(' ', sp1 + 1);
-    if (sp1 == std::string::npos || sp2 == std::string::npos) {
-        websocket_close_handle(handle);
-        return mobius_error(state, "websocket.connect() invalid handshake status line");
-    }
-    std::string status_str = trim(status_line.substr(sp1 + 1, sp2 - sp1 - 1));
-    char* end_ptr = nullptr;
-    long long status = strtoll(status_str.c_str(), &end_ptr, 10);
-    if (!end_ptr || *end_ptr != '\0' || status != 101) {
-        websocket_close_handle(handle);
-        return mobius_error(state, "websocket.connect() expected HTTP 101 response");
-    }
-
-    std::vector<HeaderEntry> headers;
-    char parse_error[128];
-    if (!parse_headers_from_lines(lines, 1, headers, parse_error, sizeof(parse_error))) {
-        websocket_close_handle(handle);
-        return mobius_error(state, parse_error);
-    }
-    std::string upgrade = header_lookup(headers, "upgrade");
-    std::string connection = header_lookup(headers, "connection");
-    std::string accept = header_lookup(headers, "sec-websocket-accept");
-    std::string selected_protocol = header_lookup(headers, "sec-websocket-protocol");
-    if (!iequals(trim(upgrade), "websocket") || !header_value_has_token(connection, "upgrade")) {
-        websocket_close_handle(handle);
-        return mobius_error(state, "websocket.connect() invalid upgrade response");
-    }
-    if (accept != websocket_accept_key(key)) {
-        websocket_close_handle(handle);
-        return mobius_error(state, "websocket.connect() invalid accept key");
-    }
-    if (!protocol.empty() && !selected_protocol.empty() && selected_protocol != protocol) {
-        websocket_close_handle(handle);
-        return mobius_error(state, "websocket.connect() server selected unexpected protocol");
-    }
-
-    WebSocketConnection* conn = new (std::nothrow) WebSocketConnection();
-    if (!conn) {
-        websocket_close_handle(handle);
-        return mobius_error(state, "websocket.connect() failed to allocate connection");
-    }
-    conn->handle = handle;
-    conn->closed = false;
-    conn->close_sent = false;
-    conn->close_received = false;
-    conn->protocol = selected_protocol;
-    conn->read_buffer.assign(body.begin(), body.end());
-    mobius_stack_pushUserdata(state, conn, websocket_connection_destructor, WEBSOCKET_CONNECTION_TYPE, sizeof(WebSocketConnection));
-    return 1;
-}
-
-static int websocket_adopt_socket(MobiusState* state, int arg_count) {
-    if (arg_count != 3) return mobius_error(state, "websocket.__adopt_socket() expects 3 arguments");
-
-    SocketObject* sock = get_tcp_socket_object(state, -3);
-    if (!sock) return mobius_error(state, "websocket.__adopt_socket() first argument must be a tcp socket");
-    if (sock->closed) return mobius_error(state, "websocket.__adopt_socket() socket is closed");
-
-    std::string protocol;
-    if (!mobius_stack_isNil(state, -2)) {
-        if (!mobius_stack_isString(state, -2)) return mobius_error(state, "websocket.__adopt_socket() protocol must be a string or nil");
-        size_t protocol_len = 0;
-        const char* protocol_data = mobius_stack_getStringData(state, -2, &protocol_len);
-        protocol.assign(protocol_data ? protocol_data : "", protocol_len);
-    }
-
-    std::vector<uint8_t> initial_data;
-    if (!mobius_stack_isNil(state, -1)) {
-        if (!mobius_stack_isBuffer(state, -1)) return mobius_error(state, "websocket.__adopt_socket() initial_data must be a buffer or nil");
-        size_t data_len = 0;
-        void* data_ptr = mobius_stack_getBufferData(state, -1, &data_len);
-        const uint8_t* bytes = static_cast<const uint8_t*>(data_ptr);
-        if (data_len > 0) initial_data.assign(bytes, bytes + data_len);
-    }
-
-    WebSocketConnection* conn = new (std::nothrow) WebSocketConnection();
-    if (!conn) return mobius_error(state, "websocket.__adopt_socket() failed to allocate connection");
-
-    conn->handle = (websocket_socket_handle)sock->handle;
-    conn->closed = false;
-    conn->close_sent = false;
-    conn->close_received = false;
-    conn->protocol = protocol;
-    conn->read_buffer = std::move(initial_data);
-
-#ifdef _WIN32
-    sock->handle = INVALID_SOCKET;
-#else
-    sock->handle = -1;
-#endif
-    sock->closed = true;
-
-    mobius_stack_pop(state, 3);
-    mobius_stack_pushUserdata(state, conn, websocket_connection_destructor, WEBSOCKET_CONNECTION_TYPE, sizeof(WebSocketConnection));
-    return 1;
-}
-
-static int websocket_conn_send(MobiusState* state, int arg_count) {
-    if (arg_count != 2) return mobius_error(state, "websocket:send() expects 1 argument");
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:send() self is not a websocket connection");
-    if (conn->closed) return mobius_error(state, "websocket:send() connection is closed");
-
-    std::vector<uint8_t> payload;
-    int opcode = 0x2;
-    if (mobius_stack_isString(state, -1)) {
-        size_t len = 0;
-        const char* data = mobius_stack_getStringData(state, -1, &len);
-        if (len > 0) payload.assign((const uint8_t*)data, (const uint8_t*)data + len);
-        if (!is_valid_utf8(payload.data(), payload.size())) return mobius_error(state, "websocket:send() text must be valid UTF-8");
-        opcode = 0x1;
-    } else if (mobius_stack_isBuffer(state, -1)) {
-        size_t len = 0;
-        void* data = mobius_stack_getBufferData(state, -1, &len);
-        const uint8_t* bytes = static_cast<const uint8_t*>(data);
-        if (len > 0) payload.assign(bytes, bytes + len);
-        opcode = 0x2;
-    } else {
-        return mobius_error(state, "websocket:send() expects a string or buffer");
-    }
-
-    std::vector<uint8_t> frame;
-    std::string error;
-    if (!encode_frame_bytes(opcode, payload, true, true, false, false, false, frame, error)) {
-        return mobius_error(state, ("websocket:send() " + error).c_str());
-    }
-    if (!websocket_send_all(conn, frame.data(), frame.size(), error)) return mobius_error(state, error.c_str());
-    mobius_stack_pop(state, 2);
-    mobius_stack_pushInt64(state, (int64_t)frame.size());
-    return 1;
-}
-
-static int websocket_conn_recv(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return mobius_error(state, "websocket:recv() expects 0 arguments");
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:recv() self is not a websocket connection");
-    if (conn->closed) return mobius_error(state, "websocket:recv() connection is closed");
-
+    const uint8_t* input_bytes = static_cast<const uint8_t*>(input_data);
+    std::vector<uint8_t> bytes;
+    if (input_size > 0) bytes.assign(input_bytes, input_bytes + input_size);
     ParsedFrame frame;
     std::string error;
-    while (true) {
-        FrameParseStatus status = parse_frame_bytes(conn->read_buffer.data(), conn->read_buffer.size(), frame, error);
-        if (status == FrameParseStatus::ok) break;
-        if (status == FrameParseStatus::error) return mobius_error(state, ("websocket:recv() " + error).c_str());
-        if (!websocket_recv_some(conn, conn->read_buffer, error)) return mobius_error(state, error.c_str());
-    }
-    conn->read_buffer.erase(conn->read_buffer.begin(), conn->read_buffer.begin() + (ptrdiff_t)frame.frame_length);
-    if (is_close_opcode(frame.opcode)) conn->close_received = true;
-    mobius_stack_pop(state, 1);
-    return push_parsed_frame(state, frame);
-}
-
-static int websocket_conn_close(MobiusState* state, int arg_count) {
-    if (arg_count < 1 || arg_count > 3) {
-        return mobius_error(state, "websocket:close() expects 0, 1, or 2 arguments");
-    }
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:close() self is not a websocket connection");
-
-    int64_t close_code = 1000;
-    std::string close_reason;
-    if (arg_count == 2) close_code = mobius_stack_asInt64(state, -1);
-    if (arg_count == 3) {
-        close_code = mobius_stack_asInt64(state, -2);
-        close_reason = mobius_stack_asString(state, -1);
-    }
-
-    if (!conn->closed && !conn->close_sent) {
-        std::vector<uint8_t> payload;
-        if (arg_count >= 2) {
-            if (close_code < 0 || close_code > 0xFFFF) return mobius_error(state, "websocket:close() close_code must fit in 16 bits");
-            payload.push_back((uint8_t)((close_code >> 8) & 0xFF));
-            payload.push_back((uint8_t)(close_code & 0xFF));
-            if (arg_count == 3) {
-                if (!is_valid_utf8(reinterpret_cast<const uint8_t*>(close_reason.data()), close_reason.size())) {
-                    return mobius_error(state, "websocket:close() close_reason must be valid UTF-8");
-                }
-                payload.insert(payload.end(), close_reason.begin(), close_reason.end());
-            }
-        }
-        std::vector<uint8_t> frame;
-        std::string error;
-        if (!encode_frame_bytes(0x8, payload, true, true, false, false, false, frame, error)) {
-            return mobius_error(state, ("websocket:close() " + error).c_str());
-        }
-        websocket_send_all(conn, frame.data(), frame.size(), error);
-        conn->close_sent = true;
-    }
-    if (!conn->closed) {
-        websocket_close_handle(conn->handle);
-        conn->handle = WEBSOCKET_INVALID_SOCKET_HANDLE;
-        conn->closed = true;
-    }
-    mobius_stack_pop(state, arg_count);
-    mobius_stack_pushBool(state, true);
-    return 1;
-}
-
-static int websocket_conn_is_closed(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return mobius_error(state, "websocket:is_closed() expects 0 arguments");
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:is_closed() self is not a websocket connection");
-    mobius_stack_pop(state, 1);
-    mobius_stack_pushBool(state, conn->closed);
-    return 1;
-}
-
-static int websocket_conn_set_timeout(MobiusState* state, int arg_count) {
-    if (arg_count != 2) return mobius_error(state, "websocket:set_timeout() expects 1 argument");
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:set_timeout() self is not a websocket connection");
-    if (conn->closed) return mobius_error(state, "websocket:set_timeout() connection is closed");
-    int64_t timeout_ms = mobius_stack_asInt64(state, -1);
-    if (timeout_ms < 0) return mobius_error(state, "websocket:set_timeout() timeout must be >= 0");
-    websocket_set_timeout_value(conn, timeout_ms);
-    mobius_stack_copy(state, 0);
-    mobius_stack_pop(state, 2);
-    return 1;
-}
-
-static int websocket_conn_local_addr(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return mobius_error(state, "websocket:local_addr() expects 0 arguments");
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:local_addr() self is not a websocket connection");
-    if (conn->closed) return mobius_error(state, "websocket:local_addr() connection is closed");
-    mobius_stack_pop(state, 1);
-    return websocket_get_socket_name(state, conn, false);
-}
-
-static int websocket_conn_peer_addr(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return mobius_error(state, "websocket:peer_addr() expects 0 arguments");
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:peer_addr() self is not a websocket connection");
-    if (conn->closed) return mobius_error(state, "websocket:peer_addr() connection is closed");
-    mobius_stack_pop(state, 1);
-    return websocket_get_socket_name(state, conn, true);
-}
-
-static int websocket_conn_protocol(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return mobius_error(state, "websocket:protocol() expects 0 arguments");
-    WebSocketConnection* conn = get_connection_object(state, 0);
-    if (!conn) return mobius_error(state, "websocket:protocol() self is not a websocket connection");
-    mobius_stack_pop(state, 1);
-    if (conn->protocol.empty()) mobius_stack_pushNil(state);
-    else mobius_stack_pushStringLength(state, conn->protocol.data(), conn->protocol.size());
-    return 1;
-}
-
-static void copy_module_function(MobiusState* state, int module_idx,
-                                 const char* module_key, int target_idx,
-                                 const char* target_key) {
-    mobius_stack_getTableField(state, module_idx, module_key);
-    mobius_stack_setTableField(state, target_idx, target_key);
-}
-
-static int websocket_post_init(MobiusState* state) {
-    const int module_idx = 0;
-    mobius_stack_pushNewTable(state, 8);
-    const int conn_proto_idx = mobius_stack_size(state) - 1;
-    copy_module_function(state, module_idx, "__conn_send", conn_proto_idx, "send");
-    copy_module_function(state, module_idx, "__conn_recv", conn_proto_idx, "recv");
-    copy_module_function(state, module_idx, "__conn_close", conn_proto_idx, "close");
-    copy_module_function(state, module_idx, "__conn_is_closed", conn_proto_idx, "is_closed");
-    copy_module_function(state, module_idx, "__conn_set_timeout", conn_proto_idx, "set_timeout");
-    copy_module_function(state, module_idx, "__conn_local_addr", conn_proto_idx, "local_addr");
-    copy_module_function(state, module_idx, "__conn_peer_addr", conn_proto_idx, "peer_addr");
-    copy_module_function(state, module_idx, "__conn_protocol", conn_proto_idx, "protocol");
-    mobius_set_userdata_type_metatable(state, WEBSOCKET_CONNECTION_TYPE);
-
-    const char* hidden_keys[] = {
-        "__conn_send", "__conn_recv", "__conn_close", "__conn_is_closed",
-        "__conn_set_timeout", "__conn_local_addr", "__conn_peer_addr", "__conn_protocol"
-    };
-    for (const char* key : hidden_keys) {
+    FrameParseStatus status = parse_frame_bytes(bytes.data(), bytes.size(), frame, error);
+    if (status == FrameParseStatus::need_more) {
         mobius_stack_pushNil(state);
-        mobius_stack_setTableField(state, module_idx, key);
+        return 1;
     }
-    return 0;
+    if (status == FrameParseStatus::error) return mobius_error(state, ("websocket.__try_parse_frame() " + error).c_str());
+    return push_parsed_frame(state, frame);
 }
 
 } // namespace
 
-static int init_websocket_plugin(MobiusState* /*state*/) {
-    return websocket_platform_init() ? 0 : -1;
-}
-static void cleanup_websocket_plugin(void) {
-    websocket_platform_cleanup();
-}
+static int init_websocket_plugin(MobiusState* /*state*/) { return 0; }
+static void cleanup_websocket_plugin(void) {}
 
 static MobiusPluginFunction websocket_functions[] = {
     {"accept_key",         websocket_accept_key_fn,        1,          MOBIUS_VAL_STRING,  "Compute a Sec-WebSocket-Accept value from a client key"},
@@ -1345,16 +763,7 @@ static MobiusPluginFunction websocket_functions[] = {
     {"handshake_response", websocket_handshake_response,   SIZE_MAX,   MOBIUS_VAL_TABLE,   "Build a websocket server handshake response table"},
     {"build_frame",        websocket_build_frame,          1,          MOBIUS_VAL_BUFFER,  "Build a websocket frame and return encoded bytes as a buffer"},
     {"parse_frame",        websocket_parse_frame,          1,          MOBIUS_VAL_TABLE,   "Parse a websocket frame buffer into structured metadata"},
-    {"connect",            websocket_connect,              1,          MOBIUS_VAL_USERDATA,"Open a websocket client connection"},
-    {"__adopt_socket",     websocket_adopt_socket,         3,          MOBIUS_VAL_USERDATA,"Internal websocket socket adoption helper"},
-    {"__conn_send",        websocket_conn_send,            2,          MOBIUS_VAL_INT64,   "Internal websocket send method"},
-    {"__conn_recv",        websocket_conn_recv,            1,          MOBIUS_VAL_TABLE,   "Internal websocket recv method"},
-    {"__conn_close",       websocket_conn_close,           SIZE_MAX,   MOBIUS_VAL_BOOL,    "Internal websocket close method"},
-    {"__conn_is_closed",   websocket_conn_is_closed,       1,          MOBIUS_VAL_BOOL,    "Internal websocket closed-state method"},
-    {"__conn_set_timeout", websocket_conn_set_timeout,     2,          MOBIUS_VAL_USERDATA,"Internal websocket timeout method"},
-    {"__conn_local_addr",  websocket_conn_local_addr,      1,          MOBIUS_VAL_TABLE,   "Internal websocket local address method"},
-    {"__conn_peer_addr",   websocket_conn_peer_addr,       1,          MOBIUS_VAL_TABLE,   "Internal websocket peer address method"},
-    {"__conn_protocol",    websocket_conn_protocol,        1,          MOBIUS_VAL_UNKNOWN, "Internal websocket protocol method"},
+    {"__try_parse_frame",  websocket_try_parse_frame,      1,          MOBIUS_VAL_UNKNOWN, "Internal websocket frame parser returning nil when incomplete"},
 };
 
 static const char* websocket_depends_on[] = {
@@ -1377,7 +786,7 @@ static MobiusPlugin websocket_plugin = {
     .function_count = sizeof(websocket_functions) / sizeof(websocket_functions[0]),
     .init_plugin = init_websocket_plugin,
     .cleanup_plugin = cleanup_websocket_plugin,
-    .post_init = websocket_post_init,
+    .post_init = nullptr,
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

@@ -13,15 +13,33 @@ func assert_test(name, cond) {
     }
 }
 
-assert_test("sha256 abc", crypto.sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
-assert_test("sha1 abc", crypto.sha1("abc") == "a9993e364706816aba3e25717850c26c9cd0d89d")
-assert_test("md5 abc", crypto.md5("abc") == "900150983cd24fb0d6963f7d28e17f72")
-assert_test("hmac sha256 known vector", crypto.hmac_sha256("key", "The quick brown fox jumps over the lazy dog") == "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8")
+func assert_buffer_equals(name, buf, expected) {
+    var ok = typeof(buf) == "buffer" && len(buf) == len(expected)
+    var i = 0
+    while (ok && i < len(expected)) {
+        if (buf[i] != expected[i]) {
+            ok = false
+        }
+        i = i + 1
+    }
+    assert_test(name, ok)
+}
+
+assert_test("sha256 abc hex helper", crypto.sha256_hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+assert_test("sha1 abc hex helper", crypto.sha1_hex("abc") == "a9993e364706816aba3e25717850c26c9cd0d89d")
+assert_test("md5 abc hex helper", crypto.md5_hex("abc") == "900150983cd24fb0d6963f7d28e17f72")
+assert_test("hmac sha256 hex helper", crypto.hmac_sha256_hex("key", "The quick brown fox jumps over the lazy dog") == "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8")
+assert_buffer_equals("sha256 abc raw", crypto.sha256("abc"), [186, 120, 22, 191, 143, 1, 207, 234, 65, 65, 64, 222, 93, 174, 34, 35, 176, 3, 97, 163, 150, 23, 122, 156, 180, 16, 255, 97, 242, 0, 21, 173])
+assert_buffer_equals("sha1 abc raw", crypto.sha1("abc"), [169, 153, 62, 54, 71, 6, 129, 106, 186, 62, 37, 113, 120, 80, 194, 108, 156, 208, 216, 157])
+assert_buffer_equals("md5 abc raw", crypto.md5("abc"), [144, 1, 80, 152, 60, 210, 79, 176, 214, 150, 63, 125, 40, 225, 127, 114])
 assert_test("crc32 known vector", crypto.crc32("123456789") == 3421780262)
 
 var b64 = crypto.base64_encode("hello world")
 assert_test("base64 encode", b64 == "aGVsbG8gd29ybGQ=")
-assert_test("base64 decode", crypto.base64_decode(b64) == "hello world")
+assert_test("base64 decode", crypto.base64_decode(b64):to_string() == "hello world")
+assert_test("base64 encode buffer", crypto.base64_encode(buffer_from_string("hello world")) == "aGVsbG8gd29ybGQ=")
+assert_test("hex encode", crypto.hex_encode(buffer_from_string("ABC")) == "414243")
+assert_test("hex decode", crypto.hex_decode("414243"):to_string() == "ABC")
 
 var uuid = crypto.uuid4()
 assert_test("uuid length", len(uuid) == 36)
@@ -31,6 +49,10 @@ assert_test("uuid version 4", uuid[14] == "4")
 var rnd = crypto.random_hex(16)
 assert_test("random_hex length", len(rnd) == 32)
 assert_test("random_hex differs", rnd != crypto.random_hex(16))
+
+var rnd_bytes = crypto.random_bytes(16)
+assert_test("random_bytes type", typeof(rnd_bytes) == "buffer")
+assert_test("random_bytes length", len(rnd_bytes) == 16)
 
 var ok_range = true
 for (var i = 0; i < 32; i += 1) {

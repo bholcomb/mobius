@@ -1,0 +1,90 @@
+import "http"
+import "socket"
+import "websocket"
+import "http_server_utils" as web
+
+var HOST = "127.0.0.1"
+var PORT = 8082
+
+func handle_websocket(conn, request) {
+    var response = websocket.handshake_response(request)
+    conn:send(http.build_response(response))
+    print("WebSocket client connected from " + conn:peer_addr().host + ":" + str(conn:peer_addr().port))
+
+    while (true) {
+        var chunk = conn:recv(4096)
+        if (chunk == nil) {
+            return
+        }
+
+        var frame = websocket.parse_frame(chunk)
+        if (frame.opcode == 8) {
+            var close_code = frame.close_code
+            var close_reason = frame.close_reason
+            if (close_code == nil) {
+                close_code = 1000
+            }
+            if (close_reason == nil) {
+                close_reason = "bye"
+            }
+            conn:send(websocket.build_frame({
+                type: "close",
+                close_code: close_code,
+                close_reason: close_reason
+            }))
+            return
+        }
+
+        if (frame.opcode == 9) {
+            conn:send(websocket.build_frame({
+                type: "pong",
+                payload: frame.payload
+            }))
+            continue
+        }
+
+        if (frame.text != nil) {
+            print("text:", frame.text)
+            conn:send(websocket.build_frame({text: "echo: " + frame.text}))
+        } else {
+            print("binary payload bytes:", len(frame.payload))
+            conn:send(websocket.build_frame({payload: frame.payload}))
+        }
+    }
+}
+
+func handle_client(conn) {
+    conn:set_timeout(10000)
+    var request = web.read_http_request(conn)
+    if (request == nil) {
+        return
+    }
+
+    if (!websocket.is_upgrade_request(request)) {
+        web.bad_request(conn, "expected websocket upgrade request")
+        return
+    }
+
+    handle_websocket(conn, request)
+}
+
+func main() {
+    var listener = socket.listen(HOST, PORT)
+    print("Mobius WebSocket echo server listening on ws://" + HOST + ":" + str(PORT) + "/echo")
+    print("Use the browser console or a ws client to connect.")
+
+    while (true) {
+        var conn = listener:accept()
+        try {
+            handle_client(conn)
+        } catch err {
+            print("client error:", err)
+        } finally {
+            if (!conn:is_closed()) {
+                conn:close()
+            }
+        }
+    }
+}
+
+main()

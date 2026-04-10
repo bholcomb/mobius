@@ -12,28 +12,6 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-  #define WIN32_LEAN_AND_MEAN
-  #include <winsock2.h>
-  #include <ws2tcpip.h>
-  #ifdef _MSC_VER
-    #pragma comment(lib, "Ws2_32.lib")
-  #endif
-  typedef SOCKET http_socket_handle;
-  static const http_socket_handle HTTP_INVALID_SOCKET_HANDLE = INVALID_SOCKET;
-#else
-  #include <arpa/inet.h>
-  #include <cerrno>
-  #include <netdb.h>
-  #include <netinet/in.h>
-  #include <netinet/tcp.h>
-  #include <sys/socket.h>
-  #include <sys/types.h>
-  #include <unistd.h>
-  typedef int http_socket_handle;
-  static const http_socket_handle HTTP_INVALID_SOCKET_HANDLE = -1;
-#endif
-
 using namespace mobius_net;
 
 namespace {
@@ -53,10 +31,6 @@ struct ParsedResponseHead {
     int64_t content_length = 0;
     std::string content_type;
 };
-
-#ifdef _WIN32
-static bool g_winsock_initialized = false;
-#endif
 
 static const char* http_status_text_impl(int64_t status) {
     switch (status) {
@@ -189,154 +163,6 @@ static bool is_valid_utf8(const uint8_t* data, size_t len) {
 
         i += needed + 1;
     }
-    return true;
-}
-
-static bool http_socket_platform_init() {
-#ifdef _WIN32
-    if (g_winsock_initialized) return true;
-    WSADATA wsa_data;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) return false;
-    g_winsock_initialized = true;
-#endif
-    return true;
-}
-
-static void http_socket_platform_cleanup() {
-#ifdef _WIN32
-    if (g_winsock_initialized) {
-        WSACleanup();
-        g_winsock_initialized = false;
-    }
-#endif
-}
-
-static void http_socket_close(http_socket_handle handle) {
-    if (handle == HTTP_INVALID_SOCKET_HANDLE) return;
-#ifdef _WIN32
-    closesocket(handle);
-#else
-    close(handle);
-#endif
-}
-
-static int http_socket_last_error() {
-#ifdef _WIN32
-    return WSAGetLastError();
-#else
-    return errno;
-#endif
-}
-
-static std::string http_socket_error_message(const char* prefix, int code) {
-    char buffer[256];
-#ifdef _WIN32
-    snprintf(buffer, sizeof(buffer), "%s failed (code %d)", prefix, code);
-#else
-    snprintf(buffer, sizeof(buffer), "%s failed: %s", prefix, strerror(code));
-#endif
-    return std::string(buffer);
-}
-
-static bool http_socket_set_timeout(http_socket_handle handle, int64_t timeout_ms) {
-#ifdef _WIN32
-    DWORD timeout = (DWORD)timeout_ms;
-    int rc1 = setsockopt(handle, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
-    int rc2 = setsockopt(handle, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-#else
-    timeval tv;
-    tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (int)((timeout_ms % 1000) * 1000);
-    int rc1 = setsockopt(handle, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    int rc2 = setsockopt(handle, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-#endif
-    return rc1 == 0 && rc2 == 0;
-}
-
-static bool http_socket_connect(const std::string& host, int64_t port,
-                                int64_t timeout_ms, http_socket_handle& out_handle,
-                                std::string& error) {
-    out_handle = HTTP_INVALID_SOCKET_HANDLE;
-    if (!http_socket_platform_init()) {
-        error = "http.request() socket platform init failed";
-        return false;
-    }
-
-    char port_buffer[32];
-    snprintf(port_buffer, sizeof(port_buffer), "%" PRId64, port);
-
-    addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-
-    addrinfo* results = nullptr;
-    int rc = getaddrinfo(host.c_str(), port_buffer, &hints, &results);
-    if (rc != 0 || !results) {
-        error = "http.request() address resolution failed";
-        return false;
-    }
-
-    int last_error = 0;
-    for (addrinfo* it = results; it; it = it->ai_next) {
-        http_socket_handle handle = socket(it->ai_family, it->ai_socktype, it->ai_protocol);
-        if (handle == HTTP_INVALID_SOCKET_HANDLE) {
-            last_error = http_socket_last_error();
-            continue;
-        }
-        if (::connect(handle, it->ai_addr, (socklen_t)it->ai_addrlen) == 0) {
-            if (timeout_ms >= 0 && !http_socket_set_timeout(handle, timeout_ms)) {
-                last_error = http_socket_last_error();
-                http_socket_close(handle);
-                freeaddrinfo(results);
-                error = http_socket_error_message("http.request() set timeout", last_error);
-                return false;
-            }
-            int yes = 1;
-            setsockopt(handle, IPPROTO_TCP, TCP_NODELAY, (const char*)&yes, sizeof(yes));
-            out_handle = handle;
-            freeaddrinfo(results);
-            return true;
-        }
-        last_error = http_socket_last_error();
-        http_socket_close(handle);
-    }
-    freeaddrinfo(results);
-    error = http_socket_error_message("http.request() connect", last_error);
-    return false;
-}
-
-static bool http_socket_send_all(http_socket_handle handle, const char* data, size_t size, std::string& error) {
-    size_t sent = 0;
-    while (sent < size) {
-#ifdef _WIN32
-        int rc = send(handle, data + sent, (int)(size - sent), 0);
-#else
-        ssize_t rc = send(handle, data + sent, size - sent, 0);
-#endif
-        if (rc <= 0) {
-            error = http_socket_error_message("http.request() send", http_socket_last_error());
-            return false;
-        }
-        sent += (size_t)rc;
-    }
-    return true;
-}
-
-static bool http_socket_recv_some(http_socket_handle handle, std::string& buffer, std::string& error) {
-    char chunk[4096];
-#ifdef _WIN32
-    int rc = recv(handle, chunk, (int)sizeof(chunk), 0);
-#else
-    ssize_t rc = recv(handle, chunk, sizeof(chunk), 0);
-#endif
-    if (rc < 0) {
-        error = http_socket_error_message("http.request() recv", http_socket_last_error());
-        return false;
-    }
-    if (rc == 0) return false;
-    buffer.append(chunk, (size_t)rc);
     return true;
 }
 
@@ -524,111 +350,6 @@ static bool response_has_no_body(const std::string& method, int64_t status) {
     if (iequals(method, "HEAD")) return true;
     if (status >= 100 && status < 200) return true;
     return status == 204 || status == 304;
-}
-
-static bool read_http_header_block(http_socket_handle handle, std::string& raw, std::string& head,
-                                   std::string& remaining, std::string& error) {
-    size_t header_end = std::string::npos;
-    size_t separator_len = 0;
-    while (true) {
-        header_end = raw.find("\r\n\r\n");
-        separator_len = 4;
-        if (header_end == std::string::npos) {
-            header_end = raw.find("\n\n");
-            separator_len = 2;
-        }
-        if (header_end != std::string::npos) break;
-        if (!http_socket_recv_some(handle, raw, error)) {
-            if (error.empty()) error = "http.request() connection closed before response headers completed";
-            return false;
-        }
-    }
-    head = raw.substr(0, header_end);
-    remaining = raw.substr(header_end + separator_len);
-    return true;
-}
-
-static bool read_exact_bytes(http_socket_handle handle, std::string& buffer,
-                             size_t required_size, std::string& error) {
-    while (buffer.size() < required_size) {
-        if (!http_socket_recv_some(handle, buffer, error)) {
-            if (error.empty()) error = "http.request() connection closed before response body completed";
-            return false;
-        }
-    }
-    return true;
-}
-
-static bool read_until_close(http_socket_handle handle, std::string& buffer, std::string& error) {
-    while (true) {
-        std::string before = buffer;
-        if (!http_socket_recv_some(handle, buffer, error)) {
-            if (!error.empty()) return false;
-            return true;
-        }
-        (void)before;
-    }
-}
-
-static bool read_chunked_body(http_socket_handle handle, std::string& buffer,
-                              std::string& out, std::string& error) {
-    size_t cursor = 0;
-    out.clear();
-    while (true) {
-        while (true) {
-            size_t line_end = buffer.find('\n', cursor);
-            if (line_end != std::string::npos) {
-                std::string line = buffer.substr(cursor, line_end - cursor);
-                if (!line.empty() && line.back() == '\r') line.pop_back();
-                size_t semicolon = line.find(';');
-                std::string size_part = trim(line.substr(0, semicolon));
-                char* end_ptr = nullptr;
-                unsigned long long chunk_size = strtoull(size_part.c_str(), &end_ptr, 16);
-                if (!end_ptr || *end_ptr != '\0') {
-                    error = "http.request() invalid chunked response size";
-                    return false;
-                }
-                cursor = line_end + 1;
-                if (chunk_size == 0) {
-                    while (true) {
-                        size_t trailer_end = buffer.find('\n', cursor);
-                        if (trailer_end == std::string::npos) {
-                            if (!http_socket_recv_some(handle, buffer, error)) {
-                                if (error.empty()) error = "http.request() incomplete chunked response trailer";
-                                return false;
-                            }
-                            continue;
-                        }
-                        std::string trailer = buffer.substr(cursor, trailer_end - cursor);
-                        if (!trailer.empty() && trailer.back() == '\r') trailer.pop_back();
-                        cursor = trailer_end + 1;
-                        if (trailer.empty()) return true;
-                    }
-                }
-                size_t needed = cursor + (size_t)chunk_size + 2;
-                if (!read_exact_bytes(handle, buffer, needed, error)) return false;
-                out.append(buffer, cursor, (size_t)chunk_size);
-                cursor += (size_t)chunk_size;
-                if (buffer[cursor] == '\r') {
-                    if (cursor + 1 >= buffer.size() || buffer[cursor + 1] != '\n') {
-                        error = "http.request() invalid chunked response terminator";
-                        return false;
-                    }
-                    cursor += 2;
-                } else if (buffer[cursor] == '\n') {
-                    cursor += 1;
-                } else {
-                    error = "http.request() invalid chunked response terminator";
-                    return false;
-                }
-                break;
-            }
-            if (!http_socket_recv_some(handle, buffer, error)) {
-                if (error.empty()) error = "http.request() incomplete chunked response";
-                return false;
-            }
-        }
-    }
 }
 
 static int push_parsed_response_table(MobiusState* state, const ParsedResponseHead& parsed,
@@ -1043,130 +764,10 @@ static int http_build_response(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_request(MobiusState* state, int arg_count) {
-    if (arg_count != 1) return mobius_error(state, "http.request() expects 1 argument");
-    if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "http.request() expects a table argument");
-
-    int tbl = mobius_stack_size(state) - 1;
-    std::string method = get_optional_string_field(state, tbl, "method");
-    std::string target = get_optional_string_field(state, tbl, "target");
-    std::string version = get_optional_string_field(state, tbl, "version");
-    std::string host = get_optional_string_field(state, tbl, "host");
-    std::string path = get_optional_string_field(state, tbl, "path");
-    std::string query = get_optional_string_field(state, tbl, "query");
-    int64_t port = 80;
-    int64_t timeout_ms = -1;
-    get_optional_int_field(state, tbl, "port", port);
-    get_optional_int_field(state, tbl, "timeout_ms", timeout_ms);
-
-    std::string body;
-    std::string error;
-    if (!get_optional_body_bytes_field(state, tbl, "body", body, error, "http.request()")) {
-        mobius_stack_pop(state, 1);
-        return mobius_error(state, error.c_str());
-    }
-
-    if (method.empty()) method = "GET";
-    if (version.empty()) version = "HTTP/1.1";
-    if (target.empty()) {
-        target = path.empty() ? "/" : path;
-        if (!query.empty()) target += "?" + query;
-    }
-
-    std::vector<HeaderEntry> headers;
-    mobius_stack_getTableField(state, tbl, "headers");
-    if (!mobius_stack_isNil(state, -1)) {
-        if (!mobius_stack_isTable(state, -1)) {
-            mobius_stack_pop(state, 2);
-            return mobius_error(state, "http.request() headers must be a table");
-        }
-        int headers_tbl = mobius_stack_size(state) - 1;
-        append_sorted_header_table(state, headers_tbl, headers);
-    }
-    mobius_stack_pop(state, 1);
-    mobius_stack_pop(state, 1);
-
-    if (host.empty()) host = header_lookup(headers, "host");
-    if (host.empty()) return mobius_error(state, "http.request() host is required");
-    if (port < 0 || port > 65535) return mobius_error(state, "http.request() port must be in [0, 65535]");
-    if (timeout_ms < -1) return mobius_error(state, "http.request() timeout_ms must be >= -1");
-
-    append_or_replace_header(headers, "host", host);
-    append_or_replace_header(headers, "connection", "close");
-    if (!body.empty()) append_or_replace_header(headers, "content-length", std::to_string(body.size()));
-
-    std::sort(headers.begin(), headers.end(), [](const HeaderEntry& a, const HeaderEntry& b) {
-        return a.name < b.name;
-    });
-
-    std::string request_head = method + " " + target + " " + version + "\r\n";
-    request_head += build_header_block(headers);
-    request_head += "\r\n";
-
-    http_socket_handle handle = HTTP_INVALID_SOCKET_HANDLE;
-    if (!http_socket_connect(host, port, timeout_ms, handle, error)) {
-        return mobius_error(state, error.c_str());
-    }
-
-    bool ok = http_socket_send_all(handle, request_head.data(), request_head.size(), error);
-    if (ok && !body.empty()) ok = http_socket_send_all(handle, body.data(), body.size(), error);
-    if (!ok) {
-        http_socket_close(handle);
-        return mobius_error(state, error.c_str());
-    }
-
-    std::string raw;
-    std::string head;
-    std::string remaining;
-    if (!read_http_header_block(handle, raw, head, remaining, error)) {
-        http_socket_close(handle);
-        return mobius_error(state, error.c_str());
-    }
-
-    ParsedResponseHead parsed;
-    if (!parse_response_head(head, parsed, error)) {
-        http_socket_close(handle);
-        return mobius_error(state, error.c_str());
-    }
-
-    std::string response_body;
-    if (response_has_no_body(method, parsed.status)) {
-        response_body.clear();
-    } else if (header_value_has_token(header_lookup(parsed.headers, "transfer-encoding"), "chunked")) {
-        if (!read_chunked_body(handle, remaining, response_body, error)) {
-            http_socket_close(handle);
-            return mobius_error(state, error.c_str());
-        }
-    } else if (!header_lookup(parsed.headers, "transfer-encoding").empty()) {
-        http_socket_close(handle);
-        return mobius_error(state, "http.request() unsupported transfer-encoding");
-    } else if (parsed.has_content_length) {
-        if (!read_exact_bytes(handle, remaining, (size_t)parsed.content_length, error)) {
-            http_socket_close(handle);
-            return mobius_error(state, error.c_str());
-        }
-        response_body = remaining.substr(0, (size_t)parsed.content_length);
-    } else {
-        response_body = remaining;
-        if (!read_until_close(handle, response_body, error)) {
-            http_socket_close(handle);
-            return mobius_error(state, error.c_str());
-        }
-    }
-
-    http_socket_close(handle);
-    return push_parsed_response_table(state, parsed, response_body, true);
-}
-
 } // namespace
 
-static int init_http_plugin(MobiusState* /*state*/) {
-    return http_socket_platform_init() ? 0 : -1;
-}
-
-static void cleanup_http_plugin(void) {
-    http_socket_platform_cleanup();
-}
+static int init_http_plugin(MobiusState* /*state*/) { return 0; }
+static void cleanup_http_plugin(void) {}
 
 static MobiusPluginFunction http_functions[] = {
     {"status_text",    http_status_text,    1, MOBIUS_VAL_STRING,  "Return the standard reason phrase for an HTTP status code"},
@@ -1180,7 +781,6 @@ static MobiusPluginFunction http_functions[] = {
     {"__text_if_utf8", http_text_if_utf8, 1, MOBIUS_VAL_UNKNOWN, "Internal UTF-8 response text helper"},
     {"build_request",  http_build_request,  1, MOBIUS_VAL_STRING,  "Build a raw HTTP request string from a table"},
     {"build_response", http_build_response, 1, MOBIUS_VAL_STRING,  "Build a raw HTTP response string from a table"},
-    {"request",        http_request,        1, MOBIUS_VAL_TABLE,   "Perform a plain HTTP request over TCP"},
 };
 
 static const char* http_depends_on[] = {
