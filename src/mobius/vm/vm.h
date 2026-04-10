@@ -131,6 +131,8 @@ public:
 
     int callMetamethod(const Value& table_val, MobiusString* mm_name,
                        const Value& lhs, const Value& rhs, Value& out);
+    int callTernaryMetamethod(const Value& table_val, MobiusString* mm_name,
+                              const Value& a, const Value& b, const Value& c);
 
     static thread_local MobiusVM* t_current_vm;
 

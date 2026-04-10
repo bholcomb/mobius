@@ -175,6 +175,7 @@ void synchronize(Parser* parser) {
         switch (parser_peek(parser).type) {
             case TOKEN_FUNC:
             case TOKEN_VAR:
+            case TOKEN_STRUCT:
             case TOKEN_SHARED:
             case TOKEN_FOR:
             case TOKEN_IF:
@@ -969,6 +970,151 @@ void parse_NUM_annotation(Parser* parser, NumberType* type_hint, bool* is_annota
     }
 }
 
+static bool token_text_equals(const Token& token, const char* text) {
+    return token.identifier && strcmp(token.identifier, text) == 0;
+}
+
+static bool is_builtin_struct_type_token(const Token& token) {
+    switch (token.type) {
+        case TOKEN_TYPE_INT64:
+        case TOKEN_TYPE_UINT64:
+        case TOKEN_TYPE_FLOAT64:
+            return true;
+        case TOKEN_IDENTIFIER:
+            return token_text_equals(token, "int8") ||
+                   token_text_equals(token, "uint8") ||
+                   token_text_equals(token, "byte") ||
+                   token_text_equals(token, "int16") ||
+                   token_text_equals(token, "uint16") ||
+                   token_text_equals(token, "int32") ||
+                   token_text_equals(token, "uint32") ||
+                   token_text_equals(token, "float32") ||
+                   token_text_equals(token, "bool") ||
+                   token_text_equals(token, "bool8");
+        default:
+            return false;
+    }
+}
+
+static void free_struct_members_array(StructMemberDef* members, size_t count) {
+    if (!members) return;
+    for (size_t i = 0; i < count; i++) {
+        if (members[i].kind == STRUCT_MEMBER_FIELD) {
+            free_token(&members[i].as.field.name);
+            free_token(&members[i].as.field.type.type_name);
+        } else if (members[i].kind == STRUCT_MEMBER_UNION ||
+                   members[i].kind == STRUCT_MEMBER_STRUCT) {
+            free_struct_members_array(members[i].as.group_def.members,
+                                      members[i].as.group_def.member_count);
+        }
+    }
+    free(members);
+}
+
+static bool parse_struct_type_ref(Parser* parser, StructTypeRef* out) {
+    memset(out, 0, sizeof(*out));
+
+    if (parser_match(parser, TOKEN_IDENTIFIER) ||
+        parser_match(parser, TOKEN_TYPE_INT64) ||
+        parser_match(parser, TOKEN_TYPE_UINT64) ||
+        parser_match(parser, TOKEN_TYPE_FLOAT64)) {
+        out->type_name = parser_previous(parser);
+        out->is_builtin_type = is_builtin_struct_type_token(out->type_name);
+    } else {
+        parser_error_at_current(parser, "Expect field type");
+        return false;
+    }
+
+    if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
+        Token count = consume(parser, TOKEN_INTEGER, "Expect array length inside '[' and ']'.");
+        if (count.literal.integer.value <= 0) {
+            parser_error(parser, count, "Array length must be positive");
+            return false;
+        }
+        out->array_count = (size_t)count.literal.integer.value;
+        consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after array length.");
+    }
+
+    return true;
+}
+
+static bool parse_struct_members(Parser* parser, StructMemberDef** out_members, size_t* out_count) {
+    StructMemberDef* members = NULL;
+    size_t count = 0;
+    size_t capacity = 0;
+
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        while (parser_match(parser, TOKEN_NEWLINE)) {}
+        if (parser_check(parser, TOKEN_RIGHT_BRACE)) break;
+
+        StructMemberDef member = {};
+        if (parser_match(parser, TOKEN_UNION) || parser_match(parser, TOKEN_STRUCT)) {
+            Token keyword = parser_previous(parser);
+            bool is_union = keyword.type == TOKEN_UNION;
+            consume(parser, TOKEN_LEFT_BRACE, is_union ? "Expect '{' after 'union'."
+                                                       : "Expect '{' after 'struct'.");
+
+            StructMemberDef* group_members = NULL;
+            size_t group_count = 0;
+            if (!parse_struct_members(parser, &group_members, &group_count)) {
+                free_struct_members_array(members, count);
+                return false;
+            }
+
+            consume(parser, TOKEN_RIGHT_BRACE, is_union ? "Expect '}' after union body."
+                                                        : "Expect '}' after struct body.");
+            if (!consume_statement_terminator(parser, is_union
+                    ? "Expect ';' or newline after union declaration"
+                    : "Expect ';' or newline after struct declaration")) {
+                free_struct_members_array(group_members, group_count);
+                free_struct_members_array(members, count);
+                return false;
+            }
+
+            member = make_struct_group_member(keyword, group_members, group_count, is_union);
+        } else {
+            Token name = consume(parser, TOKEN_IDENTIFIER, "Expect field name.");
+            bool has_explicit_offset = false;
+            int64_t offset = 0;
+            if (parser_match(parser, TOKEN_AT)) {
+                Token offset_token = consume(parser, TOKEN_INTEGER, "Expect integer offset after 'at'.");
+                if (offset_token.literal.integer.value < 0) {
+                    parser_error(parser, offset_token, "Field offset must be non-negative");
+                    free_struct_members_array(members, count);
+                    return false;
+                }
+                has_explicit_offset = true;
+                offset = offset_token.literal.integer.value;
+            }
+
+            consume(parser, TOKEN_COLON, "Expect ':' after field name.");
+            StructTypeRef type = {};
+            if (!parse_struct_type_ref(parser, &type)) {
+                free_struct_members_array(members, count);
+                return false;
+            }
+            if (!consume_statement_terminator(parser, "Expect ';' or newline after struct field")) {
+                free_token(&type.type_name);
+                free_struct_members_array(members, count);
+                return false;
+            }
+
+            member = make_struct_field_member(name, type, has_explicit_offset, offset);
+            free_token(&type.type_name);
+        }
+
+        if (count >= capacity) {
+            capacity = capacity == 0 ? 8 : capacity * 2;
+            members = (StructMemberDef*)realloc(members, capacity * sizeof(StructMemberDef));
+        }
+        members[count++] = member;
+    }
+
+    *out_members = members;
+    *out_count = count;
+    return true;
+}
+
 Stmt* parse_var_declaration(Parser* parser) {
     Token name = consume(parser, TOKEN_IDENTIFIER, "Expect variable name.");
     
@@ -1343,6 +1489,10 @@ Stmt* parse_declaration(Parser* parser) {
     
     if (parser_match(parser, TOKEN_ENUM)) {
         return parse_enum_declaration(parser);
+    }
+
+    if (parser_match(parser, TOKEN_STRUCT)) {
+        return parse_struct_declaration(parser);
     }
     
     return parse_statement(parser);
@@ -2022,6 +2172,39 @@ Stmt* parse_enum_declaration(Parser* parser) {
     }
     
     return make_enum_stmt(keyword, name, underlying_type, has_explicit_type, members);
+}
+
+Stmt* parse_struct_declaration(Parser* parser) {
+    Token keyword = parser_previous(parser);
+    Token name = consume(parser, TOKEN_IDENTIFIER, "Expect struct name.");
+
+    StructLayoutKind layout_kind = STRUCT_LAYOUT_NATIVE;
+    if (parser_check(parser, TOKEN_IDENTIFIER)) {
+        Token layout = parser_peek(parser);
+        if (token_text_equals(layout, "packed")) {
+            parser_advance(parser);
+            layout_kind = STRUCT_LAYOUT_PACKED;
+        } else if (token_text_equals(layout, "native")) {
+            parser_advance(parser);
+            layout_kind = STRUCT_LAYOUT_NATIVE;
+        }
+    }
+
+    consume(parser, TOKEN_LEFT_BRACE, "Expect '{' before struct body.");
+
+    StructMemberDef* members = NULL;
+    size_t member_count = 0;
+    if (!parse_struct_members(parser, &members, &member_count)) {
+        return NULL;
+    }
+
+    consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after struct body.");
+    if (!consume_statement_terminator(parser, "Expect ';' or newline after struct declaration")) {
+        free_struct_members_array(members, member_count);
+        return NULL;
+    }
+
+    return make_struct_stmt(keyword, name, layout_kind, members, member_count);
 }
 
 void free_parse_result(ParseResult* result) {

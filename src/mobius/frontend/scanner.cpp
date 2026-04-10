@@ -49,6 +49,9 @@ static const Keyword keywords[] = {
     {"yield",    TOKEN_YIELD},
     {"shared",   TOKEN_SHARED},
     {"atomic",   TOKEN_ATOMIC},
+    {"struct",   TOKEN_STRUCT},
+    {"union",    TOKEN_UNION},
+    {"at",       TOKEN_AT},
     
     // Type keywords
     {"int64",    TOKEN_TYPE_INT64},

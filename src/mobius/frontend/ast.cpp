@@ -357,6 +357,21 @@ Stmt* make_enum_stmt(Token keyword, Token name, NumberType underlying_type,
     return stmt;
 }
 
+Stmt* make_struct_stmt(Token keyword, Token name, StructLayoutKind layout_kind,
+                       StructMemberDef* members, size_t member_count) {
+    Stmt* stmt = (Stmt*)calloc(1, sizeof(Stmt));
+    if (!stmt) return NULL;
+
+    stmt->type = STMT_STRUCT;
+    stmt->ref_count = 1;
+    stmt->as.struct_stmt.keyword = keyword;
+    stmt->as.struct_stmt.name = copy_token(&name);
+    stmt->as.struct_stmt.layout_kind = layout_kind;
+    stmt->as.struct_stmt.members = members;
+    stmt->as.struct_stmt.member_count = member_count;
+    return stmt;
+}
+
 EnumMemberDef* make_enum_member(Token name, Expr* value) {
     EnumMemberDef* member = (EnumMemberDef*)calloc(1, sizeof(EnumMemberDef));
     if (!member) return NULL;
@@ -365,6 +380,49 @@ EnumMemberDef* make_enum_member(Token name, Expr* value) {
     member->value = value;
     member->next = NULL;
     return member;
+}
+
+StructMemberDef make_struct_field_member(Token name, StructTypeRef type,
+                                         bool has_explicit_offset, int64_t offset) {
+    StructMemberDef member = {};
+    member.kind = STRUCT_MEMBER_FIELD;
+    member.as.field.name = copy_token(&name);
+    member.as.field.type.type_name = copy_token(&type.type_name);
+    member.as.field.type.is_builtin_type = type.is_builtin_type;
+    member.as.field.type.array_count = type.array_count;
+    member.as.field.has_explicit_offset = has_explicit_offset;
+    member.as.field.offset = offset;
+    return member;
+}
+
+StructMemberDef make_struct_union_member(Token keyword, StructMemberDef* members,
+                                         size_t member_count) {
+    return make_struct_group_member(keyword, members, member_count, true);
+}
+
+StructMemberDef make_struct_group_member(Token keyword, StructMemberDef* members,
+                                         size_t member_count, bool is_union) {
+    StructMemberDef member = {};
+    member.kind = is_union ? STRUCT_MEMBER_UNION : STRUCT_MEMBER_STRUCT;
+    member.as.group_def.keyword = keyword;
+    member.as.group_def.members = members;
+    member.as.group_def.member_count = member_count;
+    return member;
+}
+
+static void free_struct_member(StructMemberDef* member) {
+    if (!member) return;
+    if (member->kind == STRUCT_MEMBER_FIELD) {
+        free_token(&member->as.field.name);
+        free_token(&member->as.field.type.type_name);
+        return;
+    }
+    if (member->kind == STRUCT_MEMBER_UNION || member->kind == STRUCT_MEMBER_STRUCT) {
+        for (size_t i = 0; i < member->as.group_def.member_count; i++) {
+            free_struct_member(&member->as.group_def.members[i]);
+        }
+        free(member->as.group_def.members);
+    }
 }
 
 // Basic AST printing for debugging
@@ -603,6 +661,11 @@ void print_stmt(Stmt* stmt) {
             if (stmt->as.enum_stmt.has_explicit_type) {
                 printf(" : %s", number_type_name(stmt->as.enum_stmt.underlying_type));
             }
+            printf(" { ... }");
+            break;
+        case STMT_STRUCT:
+            printf("struct %s", stmt->as.struct_stmt.name.identifier ? stmt->as.struct_stmt.name.identifier : "unknown");
+            printf(stmt->as.struct_stmt.layout_kind == STRUCT_LAYOUT_PACKED ? " packed" : " native");
             printf(" { ... }");
             break;
         case STMT_FOR_IN:
@@ -909,6 +972,15 @@ void ast_release_stmt(Stmt* stmt) {
                 }
                 break;
             }
+            case STMT_STRUCT:
+                free_token(&stmt->as.struct_stmt.name);
+                if (stmt->as.struct_stmt.members) {
+                    for (size_t i = 0; i < stmt->as.struct_stmt.member_count; i++) {
+                        free_struct_member(&stmt->as.struct_stmt.members[i]);
+                    }
+                    free(stmt->as.struct_stmt.members);
+                }
+                break;
             case STMT_FOR_IN:
                 free_token(&stmt->as.for_in_stmt.var_name);
                 if (stmt->as.for_in_stmt.has_two_vars) {
