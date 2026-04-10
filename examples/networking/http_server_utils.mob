@@ -64,45 +64,45 @@ func send_response(conn, response) {
 }
 
 func html_response(conn, status, html) {
+    var headers = {}
+    headers["content-type"] = "text/html; charset=utf-8"
+    headers["connection"] = "close"
     send_response(conn, {
         status: status,
-        headers: {
-            ["content-type"]: "text/html; charset=utf-8",
-            ["connection"]: "close"
-        },
+        headers: headers,
         body: html
     })
 }
 
 func text_response(conn, status, text) {
+    var headers = {}
+    headers["content-type"] = "text/plain; charset=utf-8"
+    headers["connection"] = "close"
     send_response(conn, {
         status: status,
-        headers: {
-            ["content-type"]: "text/plain; charset=utf-8",
-            ["connection"]: "close"
-        },
+        headers: headers,
         body: text
     })
 }
 
 func json_response(conn, status, value) {
+    var headers = {}
+    headers["content-type"] = "application/json; charset=utf-8"
+    headers["connection"] = "close"
     send_response(conn, {
         status: status,
-        headers: {
-            ["content-type"]: "application/json; charset=utf-8",
-            ["connection"]: "close"
-        },
+        headers: headers,
         body: json.stringify(value, 2)
     })
 }
 
 func redirect_response(conn, location) {
+    var headers = {}
+    headers.location = location
+    headers["connection"] = "close"
     send_response(conn, {
         status: 303,
-        headers: {
-            location: location,
-            ["connection"]: "close"
-        },
+        headers: headers,
         body: ""
     })
 }
