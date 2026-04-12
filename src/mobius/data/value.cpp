@@ -14,6 +14,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <limits>
 #include <string.h>
 #include <unordered_map>
 
@@ -586,6 +587,10 @@ TypeConversionResult validate_and_convert_value(const Value& value, NumberType t
             conversion_needed = true;
         } else {
             result.error_message = (char*)malloc(256);
+            if (!result.error_message) {
+                result.error_message = mobius_strdup("Out of memory formatting conversion error");
+                return result;
+            }
             snprintf(result.error_message, 256, "Cannot convert %s to %s",
                     value_type_name(value.type), number_type_name(target_type));
             return result;
@@ -612,6 +617,10 @@ TypeConversionResult validate_and_convert_value(const Value& value, NumberType t
             conversion_needed = true;
         } else {
             result.error_message = (char*)malloc(256);
+            if (!result.error_message) {
+                result.error_message = mobius_strdup("Out of memory formatting conversion error");
+                return result;
+            }
             snprintf(result.error_message, 256, "Cannot convert %s to %s",
                     value_type_name(value.type), number_type_name(target_type));
             return result;
@@ -630,12 +639,24 @@ TypeConversionResult validate_and_convert_value(const Value& value, NumberType t
 Value increment_integer(Value val, bool is_increment, bool* success) {
     *success = false;
     if (val.type == VAL_INT64) {
+        if (is_increment) {
+            if (val.as.i64 == std::numeric_limits<int64_t>::max()) return make_nil_value();
+            *success = true;
+            return make_int64_value(val.as.i64 + 1);
+        }
+        if (val.as.i64 == std::numeric_limits<int64_t>::min()) return make_nil_value();
         *success = true;
-        return make_int64_value(val.as.i64 + (is_increment ? 1 : -1));
+        return make_int64_value(val.as.i64 - 1);
     }
     if (val.type == VAL_UINT64) {
+        if (is_increment) {
+            if (val.as.u64 == std::numeric_limits<uint64_t>::max()) return make_nil_value();
+            *success = true;
+            return make_uint64_value(val.as.u64 + 1u);
+        }
+        if (val.as.u64 == 0) return make_nil_value();
         *success = true;
-        return make_uint64_value(val.as.u64 + (is_increment ? 1u : (uint64_t)-1));
+        return make_uint64_value(val.as.u64 - 1u);
     }
     return make_nil_value();
 }

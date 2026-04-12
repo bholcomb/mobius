@@ -381,6 +381,10 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
 bool Table::hasKey(const Value& key) const {
     if (MOBIUS_UNLIKELY(shared_)) {
         std::lock_guard lock(mutex_);
+        if (size_ == 0) return false;
+        size_t h = hash_value_raw(key);
+        size_t index = findIndex(key, h);
+        return tags_[index] != TAG_EMPTY && entries_[index].key.exactlyEqual(key);
     }
     if (size_ == 0) return false;
     size_t h = hash_value_raw(key);
@@ -425,6 +429,20 @@ bool Table::removeUnlocked(const Value& key) {
 }
 
 Table* Table::copy() const {
+    if (MOBIUS_UNLIKELY(shared_)) {
+        std::lock_guard lock(mutex_);
+        Table* c = new (std::nothrow) Table(state_, entries_.size());
+        if (!c) return nullptr;
+
+        for (size_t i = 0; i < entries_.size(); i++) {
+            if (tags_[i] != TAG_EMPTY) {
+                c->set(entries_[i].key, entries_[i].value);
+            }
+        }
+        c->setMetatable(metatable_);
+        return c;
+    }
+
     Table* c = new (std::nothrow) Table(state_, entries_.size());
     if (!c) return nullptr;
 
@@ -440,6 +458,12 @@ Table* Table::copy() const {
 void Table::forEach(const std::function<void(const Value& key, const Value& value)>& fn) const {
     if (MOBIUS_UNLIKELY(shared_)) {
         std::lock_guard lock(mutex_);
+        for (size_t i = 0; i < entries_.size(); i++) {
+            if (tags_[i] != TAG_EMPTY) {
+                fn(entries_[i].key, entries_[i].value);
+            }
+        }
+        return;
     }
     for (size_t i = 0; i < entries_.size(); i++) {
         if (tags_[i] != TAG_EMPTY) {

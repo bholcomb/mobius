@@ -190,6 +190,7 @@ void StringInternPool::stats(size_t* out_bucket_count, size_t* out_string_count,
     size_t total_buckets = 0;
     size_t total_strings = 0;
     for (int i = 0; i < SHARD_COUNT; i++) {
+        std::lock_guard<std::mutex> lock(shards_[i].mutex);
         total_buckets += shards_[i].buckets.size();
         total_strings += shards_[i].string_count;
     }
@@ -205,6 +206,7 @@ void StringInternPool::stats(size_t* out_bucket_count, size_t* out_string_count,
 size_t StringInternPool::stringCount() const {
     size_t total = 0;
     for (int i = 0; i < SHARD_COUNT; i++) {
+        std::lock_guard<std::mutex> lock(shards_[i].mutex);
         total += shards_[i].string_count;
     }
     return total;
@@ -213,6 +215,7 @@ size_t StringInternPool::stringCount() const {
 size_t StringInternPool::bucketCount() const {
     size_t total = 0;
     for (int i = 0; i < SHARD_COUNT; i++) {
+        std::lock_guard<std::mutex> lock(shards_[i].mutex);
         total += shards_[i].buckets.size();
     }
     return total;

@@ -26,7 +26,7 @@ class Table;
 struct GlobalEnvironment {
     std::vector<Value> slots;
     std::atomic<int> count{0};
-    mutable std::mutex mutex;
+    mutable std::recursive_mutex mutex;
     std::unordered_map<std::string, int> slot_map;
     Table* backing_table = nullptr;
 
@@ -200,6 +200,8 @@ public:
     int assignGlobalSlot(const char* name, GlobalEnvironment* env = nullptr);
     Value& globalSlot(int idx, GlobalEnvironment* env = nullptr);
     const Value& globalSlot(int idx, GlobalEnvironment* env = nullptr) const;
+    bool copyGlobalValue(int idx, Value* out, GlobalEnvironment* env = nullptr) const;
+    Value getGlobalValue(int idx, GlobalEnvironment* env = nullptr) const;
     int globalSlotCount(GlobalEnvironment* env = nullptr) const;
     int findGlobalSlot(const char* name, GlobalEnvironment* env = nullptr) const;
     const char* globalSlotName(int idx, GlobalEnvironment* env = nullptr) const;
@@ -228,33 +230,36 @@ public:
 
     // Convenience wrappers for native functions operating on the NativeCallContext.
     inline const Value& npeek(int offset = 0) const {
-        NativeCallContext* ctx = nativeContext();
-        return ctx->registers[ctx->top - 1 - offset];
+        NativeCallContext* ctx = checkedNativeContext(offset + 1, false, false);
+        return ctx ? ctx->registers[ctx->top - 1 - offset] : invalidNativeValue();
     }
     inline Value& npeek(int offset = 0) {
-        NativeCallContext* ctx = nativeContext();
-        return ctx->registers[ctx->top - 1 - offset];
+        NativeCallContext* ctx = checkedNativeContext(offset + 1, false, false);
+        return ctx ? ctx->registers[ctx->top - 1 - offset] : invalidNativeValue();
     }
     inline Value npop() {
-        NativeCallContext* ctx = nativeContext();
+        NativeCallContext* ctx = checkedNativeContext(1, false, false);
+        if (!ctx) return make_nil_value();
         return ctx->registers[--ctx->top];
     }
     inline void npush(const Value& v) {
-        NativeCallContext* ctx = nativeContext();
+        NativeCallContext* ctx = checkedNativeContext(0, false, true);
+        if (!ctx) return;
         ctx->registers[ctx->top++] = v;
     }
     inline void npush(Value&& v) {
-        NativeCallContext* ctx = nativeContext();
+        NativeCallContext* ctx = checkedNativeContext(0, false, true);
+        if (!ctx) return;
         ctx->registers[ctx->top++] = std::move(v);
     }
     inline int nsize() const {
-        NativeCallContext* ctx = nativeContext();
-        return ctx->top - ctx->base;
+        NativeCallContext* ctx = checkedNativeContext(0, false, false);
+        return ctx ? (ctx->top - ctx->base) : 0;
     }
 
     inline const Value& npeek_self() const {
-        NativeCallContext* ctx = nativeContext();
-        return ctx->registers[ctx->base];
+        NativeCallContext* ctx = checkedNativeContext(0, true, false);
+        return ctx ? ctx->registers[ctx->base] : invalidNativeValue();
     }
 
     // Type-level metatables — one per ValueType, for method dispatch on non-table values
@@ -268,6 +273,8 @@ public:
 
 private:
     class MobiusVM* boundVM() const;
+    NativeCallContext* checkedNativeContext(int required_count, bool require_self, bool for_push) const;
+    static Value& invalidNativeValue();
 
     ModuleRegistry* registry_;
     StringInternPool* string_pool_;
@@ -302,7 +309,7 @@ private:
     mutable std::mutex userdata_type_metatables_mutex_;
     std::unordered_map<MobiusString*, Table*> userdata_type_metatables_;
 
-    class MobiusVM* main_vm_;
+    class MobiusVM* main_vm_ = nullptr;
     GlobalEnvironment* current_compile_env_ = nullptr;
 
     void clearErrorInternal();

@@ -71,6 +71,9 @@ struct JsonParser {
 
     // Encode a Unicode codepoint to UTF-8, appended to out
     static void encode_utf8(std::string& out, int cp) {
+        if (cp < 0 || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) {
+            return;
+        }
         if (cp < 0x80) {
             out.push_back((char)cp);
         } else if (cp < 0x800) {
@@ -131,6 +134,10 @@ struct JsonParser {
                                 return false;
                             }
                             cp = 0x10000 + ((cp - 0xD800) << 10) + (low - 0xDC00);
+                        } else if (cp >= 0xDC00 && cp <= 0xDFFF) {
+                            snprintf(error, sizeof(error),
+                                     "json.parse() unexpected low surrogate at position %zu", pos - 4);
+                            return false;
                         }
                         encode_utf8(out, cp);
                         break;

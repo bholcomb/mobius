@@ -69,11 +69,14 @@ int lib_array_create(MobiusState* state, int arg_count) {
     if (cap_arg.type != VAL_INT64) {
         return state->error("array_create capacity must be an integer");
     }
+    if (cap_arg.as.i64 < 0) {
+        return state->error("array_create capacity must be non-negative");
+    }
 
     size_t capacity = (size_t)cap_arg.as.i64;
     if (capacity == 0) capacity = 8;
 
-    ArrayValue* array = new ArrayValue(capacity);
+    ArrayValue* array = new (std::nothrow) ArrayValue(capacity);
     if (!array) {
         return state->error("Failed to create array");
     }

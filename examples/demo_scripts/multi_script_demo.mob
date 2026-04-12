@@ -5,7 +5,7 @@ print("=== Multi-Script Programming Demo ===");
 
 // Load utility functions from another script
 print("Loading utility functions...");
-var load_result = load("examples/utils.mob");
+var load_result = load("examples/demo_scripts/utils.mob");
 print("Load result:", load_result);
 
 // Use the loaded variables and functions

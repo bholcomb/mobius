@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <string>
 
 int lib_readfile(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
@@ -124,18 +125,35 @@ int lib_readlines(MobiusState* state, int arg_count) {
         return state->error("readlines: could not open file");
     }
 
-    ArrayValue* arr = new ArrayValue();
+    ArrayValue* arr = new (std::nothrow) ArrayValue();
+    if (!arr) {
+        fclose(f);
+        return state->error("readlines: failed to allocate result array");
+    }
     char line_buf[4096];
+    std::string current_line;
     while (fgets(line_buf, sizeof(line_buf), f)) {
         size_t len = strlen(line_buf);
-        if (len > 0 && line_buf[len - 1] == '\n') {
-            line_buf[len - 1] = '\0';
-            len--;
+        bool has_newline = len > 0 && line_buf[len - 1] == '\n';
+        if (has_newline) {
+            line_buf[--len] = '\0';
         }
         if (len > 0 && line_buf[len - 1] == '\r') {
-            line_buf[len - 1] = '\0';
+            line_buf[--len] = '\0';
         }
-        arr->push(make_string_value_from_cstr(state, line_buf));
+        current_line.append(line_buf, len);
+        if (has_newline) {
+            arr->push(make_string_value_from_cstr(state, current_line.c_str()));
+            current_line.clear();
+        }
+    }
+    if (ferror(f)) {
+        fclose(f);
+        arr->release();
+        return state->error("readlines: error while reading file");
+    }
+    if (!current_line.empty()) {
+        arr->push(make_string_value_from_cstr(state, current_line.c_str()));
     }
     fclose(f);
 

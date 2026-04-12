@@ -20,18 +20,32 @@ ArraySlice::~ArraySlice() {
 }
 
 Value ArraySlice::get(size_t index) const {
+    if (!parent_ || index >= length_) {
+        return make_nil_value();
+    }
+    size_t parent_index = offset_ + index;
+    if (parent_index < offset_ || parent_index >= parent_->length()) {
+        return make_nil_value();
+    }
     if (owner_cell_) {
         std::lock_guard<std::recursive_mutex> lock(owner_cell_->mutex());
-        return parent_->get(offset_ + index);
+        return parent_->get(parent_index);
     }
-    return parent_->get(offset_ + index);
+    return parent_->get(parent_index);
 }
 
 void ArraySlice::set(size_t index, const Value& value) {
-    if (owner_cell_) {
-        std::lock_guard<std::recursive_mutex> lock(owner_cell_->mutex());
-        parent_->set(offset_ + index, value);
+    if (!parent_ || index >= length_) {
         return;
     }
-    parent_->set(offset_ + index, value);
+    size_t parent_index = offset_ + index;
+    if (parent_index < offset_ || parent_index >= parent_->length()) {
+        return;
+    }
+    if (owner_cell_) {
+        std::lock_guard<std::recursive_mutex> lock(owner_cell_->mutex());
+        parent_->set(parent_index, value);
+        return;
+    }
+    parent_->set(parent_index, value);
 }

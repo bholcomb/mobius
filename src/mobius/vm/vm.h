@@ -7,6 +7,8 @@
 
 #include <vector>
 #include <cstdint>
+#include <limits>
+#include <new>
 
 class MobiusState;
 class ExecutionContext;
@@ -66,29 +68,43 @@ struct CallInfo {
         if (MOBIUS_UNLIKELY(upvalue_count > 0)) initUpvalues();
     }
 
-    void setUpvaluesFrom(Upvalue** src, int count) {
+    bool setUpvaluesFrom(Upvalue** src, int count) {
         if (upvalues != inline_upvals) delete[] upvalues;
         if (count <= CALLINFO_INLINE_UPVALS) {
             upvalues = inline_upvals;
             upvalue_capacity = CALLINFO_INLINE_UPVALS;
         } else {
-            upvalues = new Upvalue*[count];
+            upvalues = new (std::nothrow) Upvalue*[count];
+            if (!upvalues) {
+                upvalues = inline_upvals;
+                upvalue_capacity = CALLINFO_INLINE_UPVALS;
+                upvalue_count = 0;
+                return false;
+            }
             upvalue_capacity = count;
         }
         for (int i = 0; i < count; i++) upvalues[i] = src[i];
         upvalue_count = count;
+        return true;
     }
 
-    void pushUpvalue(Upvalue* uv) {
+    bool pushUpvalue(Upvalue* uv) {
         if (upvalue_count >= upvalue_capacity) {
+            if (upvalue_capacity > std::numeric_limits<int>::max() / 2) {
+                return false;
+            }
             int new_cap = upvalue_capacity * 2;
-            Upvalue** new_buf = new Upvalue*[new_cap];
+            Upvalue** new_buf = new (std::nothrow) Upvalue*[new_cap];
+            if (!new_buf) {
+                return false;
+            }
             for (int i = 0; i < upvalue_count; i++) new_buf[i] = upvalues[i];
             if (upvalues != inline_upvals) delete[] upvalues;
             upvalues = new_buf;
             upvalue_capacity = new_cap;
         }
         upvalues[upvalue_count++] = uv;
+        return true;
     }
 
     void clearUpvalues() {
@@ -177,6 +193,11 @@ public:
 
     int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
     void closeUpvalues(CallInfo& ci, int from_reg);
+
+    struct AtomicLock {
+        std::recursive_mutex* mutex = nullptr;
+    };
+    std::vector<AtomicLock> atomic_locks_;
 
     struct TryBlock {
         size_t call_stack_depth;

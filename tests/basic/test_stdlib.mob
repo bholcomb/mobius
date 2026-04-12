@@ -1,4 +1,4 @@
-// Comprehensive Standard Library Test
+// Standard library smoke test
 
 print("=== Mobius Standard Library Test ===");
 

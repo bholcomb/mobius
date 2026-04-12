@@ -1,6 +1,7 @@
 #include "data/buffer.h"
 
 #include <cstring>
+#include <limits>
 #include <new>
 
 BufferValue::BufferValue(size_t size, uint8_t fill, bool fixed, bool readonly) {
@@ -76,7 +77,13 @@ bool BufferValue::resize(size_t new_size, uint8_t fill) {
     if (readonly_ && new_size != size_) return false;
     if (new_size > capacity_) {
         size_t new_capacity = capacity_ > 0 ? capacity_ : 8;
-        while (new_capacity < new_size) new_capacity *= 2;
+        while (new_capacity < new_size) {
+            if (new_capacity > std::numeric_limits<size_t>::max() / 2) {
+                new_capacity = new_size;
+                break;
+            }
+            new_capacity *= 2;
+        }
         if (!reserve(new_capacity)) return false;
     }
     if (new_size > size_ && data_) {
@@ -98,6 +105,7 @@ uint8_t BufferValue::get(size_t index) const {
 }
 
 bool BufferValue::appendByte(uint8_t value) {
+    if (size_ == std::numeric_limits<size_t>::max()) return false;
     if (!resize(size_ + 1, 0)) return false;
     data_[size_ - 1] = value;
     return true;
@@ -106,6 +114,7 @@ bool BufferValue::appendByte(uint8_t value) {
 bool BufferValue::appendBytes(const uint8_t* bytes, size_t len) {
     if (!bytes && len > 0) return false;
     size_t old_size = size_;
+    if (len > std::numeric_limits<size_t>::max() - size_) return false;
     if (!resize(size_ + len, 0)) return false;
     if (len > 0) memcpy(data_ + old_size, bytes, len);
     return true;

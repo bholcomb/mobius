@@ -1,9 +1,0 @@
-// Test 1: filter alone
-var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0; });
-print("filter ok, len:", evens:length());
-
-// Test 2: simple array literal after filter
-print("making array...");
-var nums = [10, 20, 30];
-print("array ok:", nums[0], nums[1], nums[2]);
-print("done");

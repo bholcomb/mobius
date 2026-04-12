@@ -131,7 +131,7 @@ void Repl::commandHelp() {
 void Repl::commandEnv() const {
     printf("Current environment (globals: %d):\n", state_->globalSlotCount());
     for (int i = 0; i < state_->globalSlotCount(); i++) {
-        const Value& val = state_->globalSlot(i);
+        Value val = state_->getGlobalValue(i);
         if (!(val.flags & VAL_FLAG_DEFINED)) continue;
         const char* name = state_->globalSlotName(i);
         char* str = value_to_string(val);

@@ -102,6 +102,7 @@ void JobSystem::submitFiber(MobiusFiber* fiber) {
 }
 
 void JobSystem::waitForCounter(AtomicCounter* counter, int32_t target_value) {
+    if (!counter) return;
     if (counter->load() <= target_value) return;
 
     MobiusFiber* self = t_current_fiber_;
@@ -179,7 +180,7 @@ void JobSystem::wakeWaiters() {
     std::lock_guard<std::mutex> lock(wait_mutex_);
     auto it = wait_list_.begin();
     while (it != wait_list_.end()) {
-        if (it->counter->load() <= it->target_value) {
+        if (!it->counter || it->counter->load() <= it->target_value) {
             MobiusFiber* f = it->fiber;
             it = wait_list_.erase(it);
             std::lock_guard<std::mutex> rlock(ready_mutex_);
@@ -193,16 +194,17 @@ void JobSystem::wakeWaiters() {
 
 void JobSystem::spawnWorkerIfNeeded() {
     int current = active_worker_count_.load(std::memory_order_relaxed);
-    if (current >= max_workers_) return;
-
-    if (active_worker_count_.compare_exchange_strong(
-            current, current + 1, std::memory_order_acq_rel)) {
+    while (current < max_workers_) {
+        if (active_worker_count_.compare_exchange_weak(
+                current, current + 1, std::memory_order_acq_rel)) {
         std::lock_guard<std::mutex> lock(worker_mutex_);
         workers_.emplace_back(&JobSystem::workerThreadEntry, this);
 
         size_t count = workers_.size() + 1;
         if (count > metrics_->peak_worker_threads)
             metrics_->peak_worker_threads = count;
+            return;
+        }
     }
 }
 

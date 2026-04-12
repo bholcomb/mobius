@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
 
 // Initial capacity for token array
 #define INITIAL_TOKEN_CAPACITY 64
@@ -268,6 +269,39 @@ static bool is_binary_digit(char c) {
 
 // Scan number literal
 Token scan_number(Scanner* scanner) {
+    auto make_numeric_error = [&](const char* message) {
+        return make_error_token(message,
+                                scanner->line,
+                                scanner->column - (int)(scanner->current - scanner->start));
+    };
+    auto copy_numeric_lexeme = [&]() -> char* {
+        size_t len = (size_t)(scanner->current - scanner->start);
+        char* buf = (char*)malloc(len + 1);
+        if (!buf) return nullptr;
+        memcpy(buf, scanner->start, len);
+        buf[len] = '\0';
+        return buf;
+    };
+    auto make_integer_literal_token = [&](char* literal, int base, size_t prefix_offset,
+                                          const char* error_message) {
+        errno = 0;
+        char* endptr = nullptr;
+        unsigned long long raw = strtoull(literal + prefix_offset, &endptr, base);
+        bool ok = endptr && *endptr == '\0' && endptr != literal + prefix_offset && errno != ERANGE;
+        if (!ok) {
+            free(literal);
+            return make_numeric_error(error_message);
+        }
+        NumberType num_type = (raw > (unsigned long long)INT64_MAX) ? NUM_UINT64 : NUM_INT64;
+        int64_t stored = (int64_t)(uint64_t)raw;
+        free(literal);
+        return make_integer_token(scanner->start,
+                                  (int)(scanner->current - scanner->start),
+                                  scanner->line,
+                                  scanner->column - (int)(scanner->current - scanner->start),
+                                  num_type, stored);
+    };
+
     // Check for hex (0x/0X) or binary (0b/0B) prefix
     if (peek(scanner) == '0') {
         char next = peek_next(scanner);
@@ -277,12 +311,9 @@ Token scan_number(Scanner* scanner) {
             while (is_hex_digit(peek(scanner))) {
                 advance(scanner);
             }
-            long long value = strtoll(scanner->start, NULL, 16);
-            return make_integer_token(scanner->start,
-                                     (int)(scanner->current - scanner->start),
-                                     scanner->line,
-                                     scanner->column - (int)(scanner->current - scanner->start),
-                                     NUM_INT64, value);
+            char* literal = copy_numeric_lexeme();
+            if (!literal) return make_numeric_error("Out of memory parsing number");
+            return make_integer_literal_token(literal, 16, 0, "Invalid hexadecimal integer literal");
         }
         if (next == 'b' || next == 'B') {
             advance(scanner); // consume '0'
@@ -290,12 +321,9 @@ Token scan_number(Scanner* scanner) {
             while (is_binary_digit(peek(scanner))) {
                 advance(scanner);
             }
-            long long value = strtoll(scanner->start + 2, NULL, 2);
-            return make_integer_token(scanner->start,
-                                     (int)(scanner->current - scanner->start),
-                                     scanner->line,
-                                     scanner->column - (int)(scanner->current - scanner->start),
-                                     NUM_INT64, value);
+            char* literal = copy_numeric_lexeme();
+            if (!literal) return make_numeric_error("Out of memory parsing number");
+            return make_integer_literal_token(literal, 2, 2, "Invalid binary integer literal");
         }
     }
 
@@ -331,19 +359,23 @@ Token scan_number(Scanner* scanner) {
     
     // Convert to number
     if (is_float) {
-        double value = strtod(scanner->start, NULL);
+        char* literal = copy_numeric_lexeme();
+        if (!literal) return make_numeric_error("Out of memory parsing number");
+        errno = 0;
+        char* endptr = nullptr;
+        double value = strtod(literal, &endptr);
+        bool ok = endptr && *endptr == '\0' && errno != ERANGE;
+        free(literal);
+        if (!ok) return make_numeric_error("Invalid floating-point literal");
         return make_float_token(scanner->start, 
                                (int)(scanner->current - scanner->start),
                                scanner->line,
                                scanner->column - (int)(scanner->current - scanner->start),
                                value);
     } else {
-        long long value = strtoll(scanner->start, NULL, 10);
-        return make_integer_token(scanner->start,
-                                 (int)(scanner->current - scanner->start),
-                                 scanner->line,
-                                 scanner->column - (int)(scanner->current - scanner->start),
-                                 NUM_INT64, value);
+        char* literal = copy_numeric_lexeme();
+        if (!literal) return make_numeric_error("Out of memory parsing number");
+        return make_integer_literal_token(literal, 10, 0, "Invalid integer literal");
     }
 }
 

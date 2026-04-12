@@ -94,20 +94,19 @@ static ModulePaths resolve_module_paths(const char* name, const char* caller_sou
     for (int i = 0; default_dirs[i]; i++) search_dirs.emplace_back(default_dirs[i]);
 
     for (const auto& dir : search_dirs) {
-        char mob_path[1024], so_path[1024];
-        snprintf(mob_path, sizeof(mob_path), "%s/%s", dir.c_str(), mob_filename.c_str());
-        snprintf(so_path,  sizeof(so_path),  "%s/%s", dir.c_str(), so_filename.c_str());
+        std::string mob_path = dir + "/" + mob_filename;
+        std::string so_path = dir + "/" + so_filename;
 
         struct stat st_mob, st_so;
-        bool has_mob = (stat(mob_path, &st_mob) == 0 && S_ISREG(st_mob.st_mode));
-        bool has_so  = (stat(so_path,  &st_so)  == 0 && S_ISREG(st_so.st_mode));
+        bool has_mob = (stat(mob_path.c_str(), &st_mob) == 0 && S_ISREG(st_mob.st_mode));
+        bool has_so  = (stat(so_path.c_str(),  &st_so)  == 0 && S_ISREG(st_so.st_mode));
         if (!has_mob && !has_so) continue;
 
         out.found = true;
         out.has_mob = has_mob;
         out.has_so = has_so;
-        if (has_mob) out.mob_path = mob_path;
-        if (has_so) out.so_path = so_path;
+        if (has_mob) out.mob_path = std::move(mob_path);
+        if (has_so) out.so_path = std::move(so_path);
         break;
     }
 
@@ -165,20 +164,21 @@ static void run_plugin_post_init(Plugin* plugin, Table* mod_table, MobiusState* 
 
 ModuleRegistry::~ModuleRegistry() {
     for (auto& mod : modules_) {
-        if (mod.plugin && mod.plugin->cleanup_plugin) {
-            mod.plugin->cleanup_plugin();
+        if (mod && mod->plugin && mod->plugin->cleanup_plugin) {
+            mod->plugin->cleanup_plugin();
         }
-        if (mod.handle) {
-            dlclose(mod.handle);
+        if (mod && mod->handle) {
+            dlclose(mod->handle);
         }
     }
 }
 
 LoadedModule* ModuleRegistry::findModule(const char* name) {
     if (!name) return nullptr;
+    std::shared_lock<std::shared_mutex> lock(registry_mutex_);
     for (auto& mod : modules_) {
-        if (mod.name == name) {
-            return &mod;
+        if (mod && mod->name == name) {
+            return mod.get();
         }
     }
     return nullptr;
@@ -246,11 +246,16 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         return result;
     }
 
-    if (findModule(plugin->metadata.name)) {
-        dlclose(handle);
-        last_error_ = std::string("Module '") + plugin->metadata.name + "' is already loaded";
-        result.error_message = last_error_.c_str();
-        return result;
+    {
+        std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+        for (const auto& mod : modules_) {
+            if (mod && mod->name == plugin->metadata.name) {
+                dlclose(handle);
+                last_error_ = std::string("Module '") + plugin->metadata.name + "' is already loaded";
+                result.error_message = last_error_.c_str();
+                return result;
+            }
+        }
     }
 
     for (size_t i = 0; i < plugin->metadata.depends_on_count; i++) {
@@ -281,13 +286,16 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         return result;
     }
 
-    LoadedModule mod;
-    mod.name = plugin->metadata.name;
-    mod.path = path;
-    mod.handle = handle;
-    mod.plugin = plugin;
-    mod.status = PLUGIN_STATUS_LOADED;
-    modules_.push_back(std::move(mod));
+    auto mod = std::make_unique<LoadedModule>();
+    mod->name = plugin->metadata.name;
+    mod->path = path;
+    mod->handle = handle;
+    mod->plugin = plugin;
+    mod->status = PLUGIN_STATUS_LOADED;
+    {
+        std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+        modules_.push_back(std::move(mod));
+    }
 
     if (debug_mode_) {
         printf("Successfully loaded plugin '%s' v%s (%zu functions)\n",
@@ -352,9 +360,13 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         record.error_message.clear();
         record.globals = std::make_unique<GlobalEnvironment>();
         const GlobalEnvironment* root_globals = state->rootGlobalEnvironment();
-        record.globals->slots = root_globals->slots;
-        record.globals->count.store(root_globals->count.load(std::memory_order_relaxed), std::memory_order_relaxed);
-        record.globals->slot_map = root_globals->slot_map;
+        {
+            std::lock_guard<std::recursive_mutex> globals_lock(root_globals->mutex);
+            record.globals->slots = root_globals->slots;
+            record.globals->count.store(root_globals->count.load(std::memory_order_relaxed),
+                                        std::memory_order_relaxed);
+            record.globals->slot_map = root_globals->slot_map;
+        }
         record.globals->backing_table = mod_table;
         module_records_[module_name] = std::move(record);
         GlobalEnvironment* module_globals = module_records_[module_name].globals.get();

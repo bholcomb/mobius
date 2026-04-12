@@ -62,6 +62,8 @@ assert_test("lcm zero", math.lcm(12, 0) == 0)
 // Existing advanced log/exp helpers
 // ============================================================================
 
+assert_test("sin pi/2", approx_eq(math.sin(math.pi / 2.0), 1.0, 0.000000000001))
+assert_test("cos 0", approx_eq(math.cos(0.0), 1.0, 0.000000000001))
 assert_test("log2 8", approx_eq(math.log2(8), 3.0, 0.000000000001))
 assert_test("exp2 4", approx_eq(math.exp2(4), 16.0, 0.000000000001))
 assert_test("log1p small", approx_eq(math.log1p(0.5), 0.4054651081081644, 0.000000000001))
@@ -75,4 +77,6 @@ print("")
 print("Math Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
 if (fail_count == 0) {
     print("ALL TESTS PASSED")
+} else {
+    exit(1)
 }
