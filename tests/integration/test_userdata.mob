@@ -1,3 +1,22 @@
-// Simple userdata test
-print("Testing built-in print function...");
-print("This should work fine");
+struct Pair packed {
+    left: uint32
+    right: uint32
+}
+
+var buf = buffer_create(Pair.size)
+var pair = buf:view_as(Pair)
+pair.left = 12
+pair.right = 34
+
+if (pair.left != 12 || pair.right != 34) {
+    print("FAIL: struct userdata field access", pair.left, pair.right)
+    exit(1)
+}
+
+var pair2 = buf:view_as(Pair)
+if (pair2.left != 12 || pair2.right != 34) {
+    print("FAIL: struct userdata view persistence", pair2.left, pair2.right)
+    exit(1)
+}
+
+print("PASS: struct-view userdata access")

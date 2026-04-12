@@ -28,4 +28,8 @@ tests/errors/test_namespace_error.mob
 tests/errors/test_error_context.mob
 tests/errors/test_invalid_type_annotation.mob
 tests/errors/test_atomic_not_shared.mob
+tests/errors/test_struct_array_view_overflow_error.mob
+tests/errors/test_struct_array_view_shrink_error.mob
+tests/errors/test_struct_layout_overflow_error.mob
+tests/errors/test_struct_view_shrink_error.mob
 tests/basic/test_exit_nonzero.mob

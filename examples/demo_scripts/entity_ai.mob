@@ -1,5 +1,5 @@
 // Simple AI script for game entities
-// Each entity loads this but has its own environment
+// Requires the host to prebind `entity_id` and `health` in each environment.
 
 print("Loading AI module...");
 

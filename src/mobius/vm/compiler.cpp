@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include <limits>
 
 // ============================================================================
 // Constructor
@@ -892,8 +893,20 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         // String concatenation folding: "hello" + " world" => "hello world"
         if (lv.type == VAL_STRING && rv.type == VAL_STRING &&
             lv.as.string && rv.as.string && expr->op.type == TOKEN_PLUS) {
+            if (rv.as.string->length > std::numeric_limits<size_t>::max() - lv.as.string->length) {
+                fprintf(stderr, "Compile error [%s:%d]: string constant too large to fold\n",
+                        current_->proto->source.c_str(), currentLine_);
+                had_error_ = true;
+                return -1;
+            }
             size_t total = lv.as.string->length + rv.as.string->length;
             char* buf = (char*)malloc(total + 1);
+            if (!buf) {
+                fprintf(stderr, "Compile error [%s:%d]: out of memory folding string constant\n",
+                        current_->proto->source.c_str(), currentLine_);
+                had_error_ = true;
+                return -1;
+            }
             memcpy(buf, lv.as.string->data, lv.as.string->length);
             memcpy(buf + lv.as.string->length, rv.as.string->data, rv.as.string->length);
             buf[total] = '\0';

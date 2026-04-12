@@ -26,7 +26,8 @@ void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token
 // Parser state functions
 bool parser_at_end(Parser* parser) {
     return parser->current >= parser->token_count || 
-           parser->tokens[parser->current].type == TOKEN_EOF;
+           parser->tokens[parser->current].type == TOKEN_EOF ||
+           parser->tokens[parser->current].type == TOKEN_ERROR;
 }
 
 Token parser_peek(Parser* parser) {
@@ -86,7 +87,12 @@ bool parser_match_any(Parser* parser, size_t count, ...) {
 // Error handling
 void parser_error(Parser* parser, Token token, const char* message) {
     if (parser->panic_mode) return;
-    
+
+    const char* final_message = message;
+    if (token.type == TOKEN_ERROR && token.identifier && token.identifier[0] != '\0') {
+        final_message = token.identifier;
+    }
+
     parser->panic_mode = true;
     parser->had_error = true;
     
@@ -104,7 +110,7 @@ void parser_error(Parser* parser, Token token, const char* message) {
         fprintf(stderr, " at '%s'", token.identifier ? token.identifier : "unknown");
     }
     
-    fprintf(stderr, ": %s\n", message);
+    fprintf(stderr, ": %s\n", final_message ? final_message : "Unknown parse error");
 }
 
 void parser_error_at_current(Parser* parser, const char* message) {
@@ -259,6 +265,11 @@ Expr* parse_primary(Parser* parser) {
             if (ds > p) {
                 size_t seg_len = ds - p;
                 char* buf = (char*)malloc(seg_len + 1);
+                if (!buf) {
+                    parser_error(parser, token, "Out of memory in interpolated string");
+                    if (result) ast_release_expr(result);
+                    return NULL;
+                }
                 memcpy(buf, p, seg_len); buf[seg_len] = '\0';
                 Value sv = make_string_value_from_cstr(parser->state, buf);
                 free(buf);
@@ -280,6 +291,11 @@ Expr* parse_primary(Parser* parser) {
             }
             size_t expr_len = ds - expr_start;
             char* expr_src = (char*)malloc(expr_len + 1);
+            if (!expr_src) {
+                parser_error(parser, token, "Out of memory in interpolated string");
+                if (result) ast_release_expr(result);
+                return NULL;
+            }
             memcpy(expr_src, expr_start, expr_len); expr_src[expr_len] = '\0';
 
             TokenArray sub_tokens = scan_source(expr_src, parser->state->stringPool());
@@ -946,6 +962,9 @@ Stmt* parse_expression_statement(Parser* parser) {
         ast_release_expr(expr);
         return NULL;
     }
+    if (!expr) {
+        return NULL;
+    }
     return make_expression_stmt(expr);
 }
 
@@ -1518,7 +1537,12 @@ ParseResult parse(MobiusState* state, TokenArray tokens) {
         // Resize statements array if needed
         if (count >= capacity) {
             capacity = capacity == 0 ? 8 : capacity * 2;
-            statements = (Stmt**)realloc(statements, capacity * sizeof(Stmt*));
+            Stmt** new_statements = (Stmt**)realloc(statements, capacity * sizeof(Stmt*));
+            if (!new_statements) {
+                parser_error_at_current(&parser, "Out of memory growing statement list");
+                break;
+            }
+            statements = new_statements;
         }
         
         Stmt* stmt = parse_declaration(&parser);
@@ -1529,6 +1553,13 @@ ParseResult parse(MobiusState* state, TokenArray tokens) {
         if (parser.panic_mode) {
             synchronize(&parser);
         }
+    }
+
+    if (parser.current < parser.token_count &&
+        parser.tokens[parser.current].type == TOKEN_ERROR &&
+        parser.tokens[parser.current].identifier) {
+        parser.panic_mode = false;
+        parser_error(&parser, parser.tokens[parser.current], parser.tokens[parser.current].identifier);
     }
     
     result.statements = statements;

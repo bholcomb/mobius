@@ -105,6 +105,7 @@ Token make_error_token(const char* message, int line, int column) {
     memset(&token, 0, sizeof(Token));
     token.type = TOKEN_ERROR;
     token.length = (int)strlen(message);
+    token.identifier = mobius_strdup(message);
     token.line = line;
     token.column = column;
     return token;

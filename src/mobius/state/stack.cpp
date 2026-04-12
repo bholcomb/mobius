@@ -19,6 +19,9 @@
 // ============================================================================
 
 static NativeCallContext* get_nctx(MobiusState* state) {
+    if (!state) {
+        return nullptr;
+    }
     NativeCallContext* nctx = state->nativeContext();
     if (!nctx) {
         state->setError(MOBIUS_ERROR_RUNTIME,
@@ -63,7 +66,8 @@ static Value* get_value_at(MobiusState* state, int idx) {
 }
 
 static bool check_strict_conversion(MobiusState* state, ValueType from, ValueType to) {
-    if (from == to) return false;
+    if (!state) return false;
+    if (from == to) return true;
 
     bool strict = state->config().strict_mode;
     if (state->activeVM()) strict = state->activeVM()->strict_mode_;
@@ -98,6 +102,7 @@ int mobius_stack_size(MobiusState* state) {
 } // extern "C" (temporarily close for internal helper)
 
 static ValueType stack_get_internal_type(MobiusState* state, int idx) {
+    if (!state) return VAL_NIL;
     NativeCallContext* nctx = state->nativeContext();
     if (!nctx) return VAL_NIL;
 
@@ -241,7 +246,10 @@ static bool value_to_bool(Value* val) {
 }
 
 static const char* stack_value_to_string(Value* val) {
-    static thread_local char buffer[256];
+    static thread_local char buffers[8][256];
+    static thread_local size_t next_buffer = 0;
+    char* buffer = buffers[next_buffer];
+    next_buffer = (next_buffer + 1) % 8;
 
     if (val->type == VAL_SHARED_CELL && val->as.shared_cell) {
         Value inner = val->as.shared_cell->load();
@@ -400,7 +408,7 @@ const char* mobius_stack_getStringData(MobiusState* state, int idx, size_t* out_
 int8_t mobius_stack_getInt8(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return (int8_t)v;
@@ -409,7 +417,7 @@ int8_t mobius_stack_getInt8(MobiusState* state, int idx) {
 uint8_t mobius_stack_getUInt8(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return (uint8_t)v;
@@ -418,7 +426,7 @@ uint8_t mobius_stack_getUInt8(MobiusState* state, int idx) {
 int16_t mobius_stack_getInt16(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return (int16_t)v;
@@ -427,7 +435,7 @@ int16_t mobius_stack_getInt16(MobiusState* state, int idx) {
 uint16_t mobius_stack_getUInt16(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return (uint16_t)v;
@@ -436,7 +444,7 @@ uint16_t mobius_stack_getUInt16(MobiusState* state, int idx) {
 int32_t mobius_stack_getInt32(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return (int32_t)v;
@@ -445,7 +453,7 @@ int32_t mobius_stack_getInt32(MobiusState* state, int idx) {
 uint32_t mobius_stack_getUInt32(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return (uint32_t)v;
@@ -454,7 +462,7 @@ uint32_t mobius_stack_getUInt32(MobiusState* state, int idx) {
 int64_t mobius_stack_getInt64(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return v;
@@ -463,7 +471,7 @@ int64_t mobius_stack_getInt64(MobiusState* state, int idx) {
 uint64_t mobius_stack_getUInt64(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0;
-    if (val->type != VAL_INT64) check_strict_conversion(state, val->type, VAL_INT64);
+    if (val->type != VAL_INT64 && !check_strict_conversion(state, val->type, VAL_INT64)) return 0;
     int64_t v;
     if (!value_to_int64(val, &v)) return 0;
     return (uint64_t)v;
@@ -472,7 +480,7 @@ uint64_t mobius_stack_getUInt64(MobiusState* state, int idx) {
 float mobius_stack_getFloat32(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0.0f;
-    if (val->type != VAL_FLOAT64) check_strict_conversion(state, val->type, VAL_FLOAT64);
+    if (val->type != VAL_FLOAT64 && !check_strict_conversion(state, val->type, VAL_FLOAT64)) return 0.0f;
     double v;
     if (!value_to_double(val, &v)) return 0.0f;
     return (float)v;
@@ -481,7 +489,7 @@ float mobius_stack_getFloat32(MobiusState* state, int idx) {
 double mobius_stack_getFloat64(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return 0.0;
-    if (val->type != VAL_FLOAT64) check_strict_conversion(state, val->type, VAL_FLOAT64);
+    if (val->type != VAL_FLOAT64 && !check_strict_conversion(state, val->type, VAL_FLOAT64)) return 0.0;
     double v;
     if (!value_to_double(val, &v)) return 0.0;
     return v;
@@ -490,14 +498,14 @@ double mobius_stack_getFloat64(MobiusState* state, int idx) {
 bool mobius_stack_getBool(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return false;
-    if (val->type != VAL_BOOL) check_strict_conversion(state, val->type, VAL_BOOL);
+    if (val->type != VAL_BOOL && !check_strict_conversion(state, val->type, VAL_BOOL)) return false;
     return value_to_bool(val);
 }
 
 const char* mobius_stack_getString(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return "";
-    if (val->type != VAL_STRING) check_strict_conversion(state, val->type, VAL_STRING);
+    if (val->type != VAL_STRING && !check_strict_conversion(state, val->type, VAL_STRING)) return "";
     return stack_value_to_string(val);
 }
 
@@ -688,8 +696,9 @@ void mobius_stack_getVariable(MobiusState* state, const char* name) {
     }
 
     int slot = state->findGlobalSlot(name);
-    if (slot >= 0 && (state->globalSlot(slot).flags & VAL_FLAG_DEFINED)) {
-        stack_push(state, state->globalSlot(slot));
+    Value global = (slot >= 0) ? state->getGlobalValue(slot) : make_nil_value();
+    if (slot >= 0 && (global.flags & VAL_FLAG_DEFINED)) {
+        stack_push(state, global);
     } else {
         stack_push(state, make_nil_value());
     }
@@ -704,8 +713,9 @@ void mobius_stack_getGlobal(MobiusState* state, const char* name) {
     }
 
     int slot = state->findGlobalSlot(name);
-    if (slot >= 0 && (state->globalSlot(slot).flags & VAL_FLAG_DEFINED)) {
-        stack_push(state, state->globalSlot(slot));
+    Value global = (slot >= 0) ? state->getGlobalValue(slot) : make_nil_value();
+    if (slot >= 0 && (global.flags & VAL_FLAG_DEFINED)) {
+        stack_push(state, global);
     } else {
         stack_push(state, make_nil_value());
     }
@@ -1164,7 +1174,12 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     CallInfo& child_ci = vm->callStackPush(child_proto, child_proto->code.data(),
                                             child_base, nresults + 1);
     if (mf->upvalues && mf->upvalue_count > 0) {
-        child_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
+        if (!child_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
+            state->setError(MOBIUS_ERROR_MEMORY,
+                            "Failed to allocate closure upvalues",
+                            nullptr, 0, 0, nullptr);
+            return MOBIUS_ERROR_MEMORY;
+        }
     }
 
     int saved_base = vm->native_ctx_.base;

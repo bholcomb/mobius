@@ -28,6 +28,9 @@ assert_test("buffer to_string content", text == "ABCADEFGH")
 var grown = buffer_create(0)
 grown[3] = 90
 assert_test("buffer index growth", len(grown) == 4 && grown[0] == 0 && grown[3] == 90)
+grown = grown:reserve(32)
+assert_test("buffer reserve preserves self", typeof(grown) == "buffer")
+assert_test("buffer reserve preserves len", len(grown) == 4 && grown[3] == 90)
 
 var slice = buf:slice(2, 4)
 assert_test("buffer slice len", len(slice) == 4)

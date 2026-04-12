@@ -62,7 +62,7 @@ private:
 
     mutable std::shared_mutex registry_mutex_;
     std::condition_variable_any module_cv_;
-    std::vector<LoadedModule> modules_;
+    std::vector<std::unique_ptr<LoadedModule>> modules_;
     std::unordered_map<std::string, ModuleRecord> module_records_;
     bool debug_mode_ = false;
     std::string last_error_;

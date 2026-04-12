@@ -1,0 +1,17 @@
+var now = time()
+if (typeof(now) != "integer") {
+    print("FAIL: time() type", typeof(now))
+    exit(1)
+}
+if (now <= 0) {
+    print("FAIL: time() value", now)
+    exit(1)
+}
+
+var later = time()
+if (later < now) {
+    print("FAIL: time() monotonic wall check", now, later)
+    exit(1)
+}
+
+print("PASS: time() returns a positive integer timestamp")

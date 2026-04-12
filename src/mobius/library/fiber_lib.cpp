@@ -13,6 +13,7 @@
 
 #include <thread>
 #include <chrono>
+#include <limits>
 
 // ============================================================================
 // Module-level functions (accessed as fiber.channel, fiber.all, etc.)
@@ -193,11 +194,22 @@ int lib_fiber_slice(MobiusState* state, int arg_count) {
         return state->error("fiber.slice: first argument must be an array");
     }
 
-    if (start < 0 || length < 0 || (size_t)(start + length) > arr->length()) {
+    if (start < 0 || length < 0 ||
+        (uint64_t)start > (uint64_t)std::numeric_limits<size_t>::max() ||
+        (uint64_t)length > (uint64_t)std::numeric_limits<size_t>::max()) {
         return state->error("fiber.slice: range out of bounds for array");
     }
 
-    ArraySlice* slice = new ArraySlice(arr, (size_t)start, (size_t)length, owner_cell);
+    size_t start_index = (size_t)start;
+    size_t slice_length = (size_t)length;
+    if (slice_length > arr->length() || start_index > arr->length() - slice_length) {
+        return state->error("fiber.slice: range out of bounds for array");
+    }
+
+    ArraySlice* slice = new (std::nothrow) ArraySlice(arr, start_index, slice_length, owner_cell);
+    if (!slice) {
+        return state->error("fiber.slice: failed to allocate slice");
+    }
     state->npush(make_array_slice_value(slice));
     return 1;
 }
@@ -287,7 +299,10 @@ int channel_method_try_recv(MobiusState* state, int arg_count) {
     Value result;
     bool ok = ch->tryRecv(result);
 
-    Table* tbl = new Table(state, 2);
+    Table* tbl = new (std::nothrow) Table(state, 2);
+    if (!tbl) {
+        return state->error("ch:try_recv: failed to allocate result table");
+    }
     tbl->setByString(state->stringPool()->intern("ok"), make_bool_value(ok));
     tbl->setByString(state->stringPool()->intern("value"), ok ? result : make_nil_value());
     state->npush(make_table_value(tbl));

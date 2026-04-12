@@ -1,0 +1,217 @@
+=== Mobius Comprehensive Performance Benchmark ===
+
+Benchmark model: arrays = dense integer storage, tables = string-key hash maps
+
+Starting benchmarks...
+
+1. Arithmetic Operations...
+   Time:  0.0228315 s
+   Ops/sec:  43799133
+
+2. Function Calls (Fibonacci)...
+   Time:  0.0136599 s
+   Result:  6765
+
+3. Array Operations (Dense Numeric Storage)...
+   Time:  0.00054473 s
+   Sum:  99990000
+
+4. Table Operations (String-Key Hash Map)...
+   Time:  0.000756565 s
+   Sum:  37492500
+
+5. String Operations...
+   Time:  0.00101848 s
+   Final length:  15
+
+6. Nested Loops...
+   Time:  0.00318361 s
+   Sum:  15562562500
+
+7. Object Creation/Destruction...
+   Time:  0.0105605 s
+   Objects created: 30000
+
+8. Mixed Workload...
+   Time:  0.00149165 s
+   Total:  999000
+
+=== Overall Results ===
+Total time:  0.0585022 s
+Benchmark complete!
+
+===== RUN SPLIT =====
+
+=== Mobius Comprehensive Performance Benchmark ===
+
+Benchmark model: arrays = dense integer storage, tables = string-key hash maps
+
+Starting benchmarks...
+
+1. Arithmetic Operations...
+   Time:  0.0225418 s
+   Ops/sec:  44361974
+
+2. Function Calls (Fibonacci)...
+   Time:  0.0135476 s
+   Result:  6765
+
+3. Array Operations (Dense Numeric Storage)...
+   Time:  0.000539219 s
+   Sum:  99990000
+
+4. Table Operations (String-Key Hash Map)...
+   Time:  0.000754149 s
+   Sum:  37492500
+
+5. String Operations...
+   Time:  0.00101952 s
+   Final length:  15
+
+6. Nested Loops...
+   Time:  0.00320142 s
+   Sum:  15562562500
+
+7. Object Creation/Destruction...
+   Time:  0.0107293 s
+   Objects created: 30000
+
+8. Mixed Workload...
+   Time:  0.00148904 s
+   Total:  999000
+
+=== Overall Results ===
+Total time:  0.0583043 s
+Benchmark complete!
+
+===== RUN SPLIT =====
+
+=== Mobius Comprehensive Performance Benchmark ===
+
+Benchmark model: arrays = dense integer storage, tables = string-key hash maps
+
+Starting benchmarks...
+
+1. Arithmetic Operations...
+   Time:  0.0227768 s
+   Ops/sec:  43904329
+
+2. Function Calls (Fibonacci)...
+   Time:  0.0143299 s
+   Result:  6765
+
+3. Array Operations (Dense Numeric Storage)...
+   Time:  0.000557825 s
+   Sum:  99990000
+
+4. Table Operations (String-Key Hash Map)...
+   Time:  0.000751946 s
+   Sum:  37492500
+
+5. String Operations...
+   Time:  0.00103239 s
+   Final length:  15
+
+6. Nested Loops...
+   Time:  0.00319749 s
+   Sum:  15562562500
+
+7. Object Creation/Destruction...
+   Time:  0.0112552 s
+   Objects created: 30000
+
+8. Mixed Workload...
+   Time:  0.00152485 s
+   Total:  999000
+
+=== Overall Results ===
+Total time:  0.0599204 s
+Benchmark complete!
+
+===== RUN SPLIT =====
+
+=== Mobius Comprehensive Performance Benchmark ===
+
+Benchmark model: arrays = dense integer storage, tables = string-key hash maps
+
+Starting benchmarks...
+
+1. Arithmetic Operations...
+   Time:  0.0228203 s
+   Ops/sec:  43820616
+
+2. Function Calls (Fibonacci)...
+   Time:  0.013844 s
+   Result:  6765
+
+3. Array Operations (Dense Numeric Storage)...
+   Time:  0.000550461 s
+   Sum:  99990000
+
+4. Table Operations (String-Key Hash Map)...
+   Time:  0.000747527 s
+   Sum:  37492500
+
+5. String Operations...
+   Time:  0.00100956 s
+   Final length:  15
+
+6. Nested Loops...
+   Time:  0.00320218 s
+   Sum:  15562562500
+
+7. Object Creation/Destruction...
+   Time:  0.01053 s
+   Objects created: 30000
+
+8. Mixed Workload...
+   Time:  0.00147453 s
+   Total:  999000
+
+=== Overall Results ===
+Total time:  0.0586326 s
+Benchmark complete!
+
+===== RUN SPLIT =====
+
+=== Mobius Comprehensive Performance Benchmark ===
+
+Benchmark model: arrays = dense integer storage, tables = string-key hash maps
+
+Starting benchmarks...
+
+1. Arithmetic Operations...
+   Time:  0.0221647 s
+   Ops/sec:  45116870
+
+2. Function Calls (Fibonacci)...
+   Time:  0.0140464 s
+   Result:  6765
+
+3. Array Operations (Dense Numeric Storage)...
+   Time:  0.000563726 s
+   Sum:  99990000
+
+4. Table Operations (String-Key Hash Map)...
+   Time:  0.000763387 s
+   Sum:  37492500
+
+5. String Operations...
+   Time:  0.00103601 s
+   Final length:  15
+
+6. Nested Loops...
+   Time:  0.00320163 s
+   Sum:  15562562500
+
+7. Object Creation/Destruction...
+   Time:  0.0106651 s
+   Objects created: 30000
+
+8. Mixed Workload...
+   Time:  0.00150328 s
+   Total:  999000
+
+=== Overall Results ===
+Total time:  0.0584219 s
+Benchmark complete!

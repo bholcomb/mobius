@@ -1,0 +1,17 @@
+var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0; })
+if (evens:length() != 3) {
+    print("FAIL: filter length", evens:length())
+    exit(1)
+}
+if (evens[0] != 2 || evens[2] != 6) {
+    print("FAIL: filter contents", evens[0], evens[1], evens[2])
+    exit(1)
+}
+
+var nums = [10, 20, 30]
+if (nums[0] != 10 || nums[1] != 20 || nums[2] != 30) {
+    print("FAIL: array literal contents", nums[0], nums[1], nums[2])
+    exit(1)
+}
+
+print("PASS: filter followed by array literal")

@@ -1,4 +1,4 @@
-// Plugin System Test Script
+// Plugin system smoke test
 
 print("=== Mobius Plugin System Test ===");
 
@@ -24,13 +24,6 @@ print("text =", text);
 print("len(text) =", len(text));
 print("upper(text) =", upper(text));
 print("lower(text) =", lower(text));
-
-// Test that namespace syntax would work (when implemented)
-print("\n=== Future Namespace Support ===");
-print("// This will work when namespace support is added:");
-print("// stdlib.print('Hello from stdlib module')");
-print("// mathlib.sin(3.14159)");
-print("// filelib.read('config.txt')");
 
 // Test utility functions
 print("\n=== Utility Functions Test ===");

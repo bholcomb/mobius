@@ -73,6 +73,16 @@ static inline Value make_retained_table_value(Table* table) {
     return make_table_value(table);
 }
 
+static inline void release_atomic_locks(MobiusVM* vm, size_t keep_depth) {
+    while (vm->atomic_locks_.size() > keep_depth) {
+        MobiusVM::AtomicLock held = vm->atomic_locks_.back();
+        vm->atomic_locks_.pop_back();
+        if (held.mutex) {
+            held.mutex->unlock();
+        }
+    }
+}
+
 static inline int vm_userdata_lookup(MobiusVM* vm, const Value& value, const Value& key, Value* out) {
     MobiusState* state = vm->state_;
     if (out) *out = Value();
@@ -396,7 +406,10 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
 
     CallInfo& new_ci = callStackPush(child, child->code.data(), child_base, nresults);
     if (mf->upvalues && mf->upvalue_count > 0) {
-        new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
+        if (!new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
+            runtimeError("Failed to allocate closure upvalues");
+            return -1;
+        }
     }
 
     return 1;
@@ -757,19 +770,19 @@ MOBIUS_FORCEINLINE static int vm_op_unlock_shared(MobiusVM* vm, VMFrame& f, uint
 MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int slot = DECODE_Bx(inst);
     GlobalEnvironment* globals = frame_globals(vm, f);
-    const Value& gv = vm->state_->globalSlot(slot, globals);
-    if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
+    Value& dst = RA(inst);
+    if (MOBIUS_UNLIKELY(!vm->state_->copyGlobalValue(slot, &dst, globals) ||
+                        !(dst.flags & VAL_FLAG_DEFINED))) {
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
-    RA(inst) = gv;
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int slot = DECODE_Bx(inst);
     GlobalEnvironment* globals = frame_globals(vm, f);
-    Value& gv = vm->state_->globalSlot(slot, globals);
+    Value gv = vm->state_->getGlobalValue(slot, globals);
     if (MOBIUS_UNLIKELY(gv.flags & VAL_FLAG_READONLY)) {
         VM_ERROR(vm, f, "Cannot assign to read-only variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
@@ -781,7 +794,7 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
     if (gv.type == VAL_ENUM && gv.aux == -1) {
         gv.flags |= VAL_FLAG_READONLY;
     }
-    vm->state_->syncGlobalSlotToBackingTable(slot, globals);
+    vm->state_->setGlobalValue(slot, gv, globals, false);
     return 0;
 }
 
@@ -2106,12 +2119,11 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
     GlobalEnvironment* globals = frame_globals(vm, f);
-    const Value& gv = vm->state_->globalSlot(slot, globals);
-    if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
+    if (MOBIUS_UNLIKELY(!vm->state_->copyGlobalValue(slot, &f.regs[a], globals) ||
+                        !(f.regs[a].flags & VAL_FLAG_DEFINED))) {
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
-    f.regs[a] = gv;
     uint32_t inst2 = *f.ip++;
     uint8_t c2 = DECODE_C(inst2);
     const Value& key = IS_CONSTANT(c2)
@@ -2265,7 +2277,10 @@ MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t
 
         CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
-            new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
+            if (!new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
+                VM_ERROR(vm, f, "Failed to allocate closure upvalues");
+                return -1;
+            }
         }
 
         vm->refreshFrame(f);
@@ -2295,12 +2310,11 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uin
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
     GlobalEnvironment* globals = frame_globals(vm, f);
-    const Value& gv = vm->state_->globalSlot(slot, globals);
-    if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
+    if (MOBIUS_UNLIKELY(!vm->state_->copyGlobalValue(slot, &f.regs[a], globals) ||
+                        !(f.regs[a].flags & VAL_FLAG_DEFINED))) {
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
-    f.regs[a] = gv;
     uint32_t inst2 = *f.ip++;
     return vm_op_call(vm, f, inst2);
 }
@@ -2309,12 +2323,11 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call_plain(MobiusVM* vm, VMFrame& 
     int a = DECODE_A(inst);
     int slot = DECODE_Bx(inst);
     GlobalEnvironment* globals = frame_globals(vm, f);
-    const Value& gv = vm->state_->globalSlot(slot, globals);
-    if (MOBIUS_UNLIKELY(!(gv.flags & VAL_FLAG_DEFINED))) {
+    if (MOBIUS_UNLIKELY(!vm->state_->copyGlobalValue(slot, &f.regs[a], globals) ||
+                        !(f.regs[a].flags & VAL_FLAG_DEFINED))) {
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
-    f.regs[a] = gv;
     uint32_t inst2 = *f.ip++;
     return vm_op_call_plain(vm, f, inst2);
 }
@@ -2369,7 +2382,11 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     Prototype* child = mf->proto;
 
     Value arg_buf[256];
-    Value* args = (nargs <= 256) ? arg_buf : new Value[nargs];
+    Value* args = (nargs <= 256) ? arg_buf : new (std::nothrow) Value[nargs];
+    if (!args) {
+        VM_ERROR(vm, f, "Failed to allocate argument buffer");
+        return -1;
+    }
     int src_base = f.ci->base + a + 1;
     for (int i = 0; i < nargs; i++) {
         args[i] = prepare_param_value(child, i, vm->registers_[src_base + i]);
@@ -2394,7 +2411,10 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
     f.ci->ip = child->code.data();
     f.ci->clearUpvalues();
     if (mf->upvalues && mf->upvalue_count > 0) {
-        f.ci->setUpvaluesFrom(mf->upvalues, mf->upvalue_count);
+        if (!f.ci->setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
+            VM_ERROR(vm, f, "Failed to allocate closure upvalues");
+            return -1;
+        }
     }
 
     f.proto = child;
@@ -2438,7 +2458,16 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
         return -1;
     }
     Prototype* child_proto = f.proto->protos[bx];
-    MobiusFunction* mf = new MobiusFunction();
+    MobiusFunction* mf = new (std::nothrow) MobiusFunction();
+    if (!mf) {
+        VM_ERROR(vm, f, "Failed to allocate function closure");
+        return -1;
+    }
+    auto cleanup_function = [&]() {
+        delete[] mf->param_names;
+        delete[] mf->upvalues;
+        delete mf;
+    };
     mf->name = child_proto->name.empty() ? nullptr :
                vm->state_->stringPool()->intern(child_proto->name.c_str());
     mf->param_count = child_proto->num_params;
@@ -2446,17 +2475,28 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
     mf->body_count = 0;
     mf->ref_count.store(1, std::memory_order_relaxed);
     mf->proto = child_proto;
+    mf->param_names = nullptr;
+    mf->upvalues = nullptr;
+    mf->upvalue_count = 0;
     if (child_proto->num_params > 0 && !child_proto->local_vars.empty()) {
-        mf->param_names = new MobiusString*[child_proto->num_params]();
+        mf->param_names = new (std::nothrow) MobiusString*[child_proto->num_params]();
+        if (!mf->param_names) {
+            cleanup_function();
+            VM_ERROR(vm, f, "Failed to allocate function parameter names");
+            return -1;
+        }
         for (int i = 0; i < child_proto->num_params && i < (int)child_proto->local_vars.size(); i++) {
             mf->param_names[i] = vm->state_->stringPool()->intern(child_proto->local_vars[i].name.c_str());
         }
-    } else {
-        mf->param_names = nullptr;
     }
     int nupvals = (int)child_proto->upvalues.size();
     if (nupvals > 0) {
-        mf->upvalues = new Upvalue*[nupvals]();
+        mf->upvalues = new (std::nothrow) Upvalue*[nupvals]();
+        if (!mf->upvalues) {
+            cleanup_function();
+            VM_ERROR(vm, f, "Failed to allocate function upvalue table");
+            return -1;
+        }
         mf->upvalue_count = nupvals;
         for (int u = 0; u < nupvals; u++) {
             const UpvalueDesc& desc = child_proto->upvalues[u];
@@ -2473,10 +2513,20 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                 if (existing) {
                     mf->upvalues[u] = existing;
                 } else {
-                    Upvalue* uv = new Upvalue();
+                    Upvalue* uv = new (std::nothrow) Upvalue();
+                    if (!uv) {
+                        cleanup_function();
+                        VM_ERROR(vm, f, "Failed to allocate open upvalue");
+                        return -1;
+                    }
                     uv->location = reg_ptr;
                     uv->is_open = true;
-                    f.ci->pushUpvalue(uv);
+                    if (!f.ci->pushUpvalue(uv)) {
+                        delete uv;
+                        cleanup_function();
+                        VM_ERROR(vm, f, "Failed to grow open upvalue list");
+                        return -1;
+                    }
                     if ((size_t)f.ci->upvalue_count > vm->metrics_->peak_upvalues)
                         vm->metrics_->peak_upvalues = (size_t)f.ci->upvalue_count;
                     mf->upvalues[u] = uv;
@@ -2485,13 +2535,15 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                 if (desc.index < f.ci->upvalue_count) {
                     mf->upvalues[u] = f.ci->upvalues[desc.index];
                 } else {
-                    mf->upvalues[u] = new Upvalue();
+                    mf->upvalues[u] = new (std::nothrow) Upvalue();
+                    if (!mf->upvalues[u]) {
+                        cleanup_function();
+                        VM_ERROR(vm, f, "Failed to allocate closed upvalue");
+                        return -1;
+                    }
                 }
             }
         }
-    } else {
-        mf->upvalues = nullptr;
-        mf->upvalue_count = 0;
     }
     RA(inst) = make_function_value(mf);
     return 0;
@@ -2685,10 +2737,6 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         return -1;
     }
 
-    // The registry owns mod_table (cached). Retain so the Values we create
-    // below can safely release() when they go out of scope.
-    mod_table->retain();
-
     if (is_global) {
         GlobalEnvironment* globals = frame_globals(vm, f);
         // Spread table entries into individual globals
@@ -2706,35 +2754,55 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
     } else if (strchr(alias_name, '.') != nullptr) {
         GlobalEnvironment* globals = frame_globals(vm, f);
         // Dotted path: walk/create nested tables, put module table at the leaf
-        char buf[256];
-        strncpy(buf, alias_name, sizeof(buf) - 1);
-        buf[sizeof(buf) - 1] = '\0';
-        const char* components[32];
-        int ncomps = 0;
-        char* tok = strtok(buf, ".");
-        while (tok && ncomps < 32) { components[ncomps++] = tok; tok = strtok(nullptr, "."); }
+        std::vector<std::string> components;
+        components.reserve(8);
+        const char* part_start = alias_name;
+        const char* cursor = alias_name;
+        while (true) {
+            if (*cursor == '.' || *cursor == '\0') {
+                if (cursor == part_start) {
+                    VM_ERROR(vm, f, "Invalid import alias '%s'", alias_name);
+                    return -1;
+                }
+                components.emplace_back(part_start, (size_t)(cursor - part_start));
+                if (*cursor == '\0') break;
+                part_start = cursor + 1;
+                if (components.size() >= 32) {
+                    VM_ERROR(vm, f, "Import alias '%s' is too deeply nested", alias_name);
+                    return -1;
+                }
+            }
+            cursor++;
+        }
+        int ncomps = (int)components.size();
+        if (ncomps == 0) {
+            VM_ERROR(vm, f, "Invalid import alias '%s'", alias_name);
+            return -1;
+        }
 
         Table* cur_table = nullptr;
-        int ns_slot = vm->state_->findGlobalSlot(components[0], globals);
-        bool first_exists = (ns_slot >= 0 && (vm->state_->globalSlot(ns_slot, globals).flags & VAL_FLAG_DEFINED));
-        if (first_exists && vm->state_->globalSlot(ns_slot, globals).type == VAL_TABLE) {
-            cur_table = vm->state_->globalSlot(ns_slot, globals).as.table;
+        int ns_slot = vm->state_->findGlobalSlot(components[0].c_str(), globals);
+        Value first_value = (ns_slot >= 0) ? vm->state_->getGlobalValue(ns_slot, globals)
+                                           : make_nil_value();
+        bool first_exists = (ns_slot >= 0 && (first_value.flags & VAL_FLAG_DEFINED));
+        if (first_exists && first_value.type == VAL_TABLE) {
+            cur_table = first_value.as.table;
         } else if (first_exists) {
             VM_ERROR(vm, f, "Cannot create nested namespace '%s': '%s' is not a table",
-                             alias_name, components[0]);
+                             alias_name, components[0].c_str());
             return -1;
         } else {
             cur_table = new (std::nothrow) Table(vm->state_, 16);
             if (!cur_table) { VM_ERROR(vm, f, "Failed to create namespace table"); return -1; }
             Value tval = make_table_value(cur_table);
             tval.flags |= VAL_FLAG_DEFINED;
-            int s = vm->state_->assignGlobalSlot(components[0], globals);
+            int s = vm->state_->assignGlobalSlot(components[0].c_str(), globals);
             vm->state_->setGlobalValue(s, tval, globals, false);
         }
 
         // Walk/create intermediate tables
         for (int i = 1; i < ncomps - 1; i++) {
-            Value key = make_string_value_from_cstr(vm->state_, components[i]);
+            Value key = make_string_value_from_cstr(vm->state_, components[i].c_str());
             Value next = cur_table->get(key);
             if (next.type == VAL_TABLE) {
                 cur_table = next.as.table;
@@ -2748,13 +2816,13 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
 
         // Set the last component to point at the module table
         if (ncomps > 1) {
-            Value leaf_key = make_string_value_from_cstr(vm->state_, components[ncomps - 1]);
-            cur_table->set(leaf_key, make_table_value(mod_table));
+            Value leaf_key = make_string_value_from_cstr(vm->state_, components[ncomps - 1].c_str());
+            cur_table->set(leaf_key, make_retained_table_value(mod_table));
         }
     } else {
         GlobalEnvironment* globals = frame_globals(vm, f);
         // Simple alias: bind module table to a single global
-        Value tval = make_table_value(mod_table);
+        Value tval = make_retained_table_value(mod_table);
         tval.flags |= VAL_FLAG_DEFINED;
         int s = vm->state_->assignGlobalSlot(alias_name, globals);
         vm->state_->setGlobalValue(s, tval, globals, false);
@@ -3032,48 +3100,47 @@ MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t ins
 MOBIUS_FORCEINLINE static int vm_op_atomic_begin(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t a = DECODE_A(inst);
     Value& val = f.regs[a];
+    std::recursive_mutex* held_mutex = nullptr;
 
     if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
-        val.as.shared_cell->mutex().lock();
+        held_mutex = &val.as.shared_cell->mutex();
     } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice) {
         if (!val.as.array_slice->ownerCell()) {
             VM_ERROR(vm, f, "atomic: slice is not shared; use 'shared var' to declare the parent array");
             return -1;
         }
-        val.as.array_slice->ownerCell()->mutex().lock();
+        held_mutex = &val.as.array_slice->ownerCell()->mutex();
     } else if (val.type == VAL_ARRAY && val.as.array) {
         if (!val.as.array->isShared()) {
             VM_ERROR(vm, f, "atomic: array is not shared; use 'shared var' to declare it");
             return -1;
         }
-        val.as.array->mutex().lock();
+        held_mutex = &val.as.array->mutex();
     } else if (val.type == VAL_TABLE && val.as.table) {
         if (!val.as.table->isShared()) {
             VM_ERROR(vm, f, "atomic: table is not shared; use 'shared var' to declare it");
             return -1;
         }
-        val.as.table->mutex().lock();
+        held_mutex = &val.as.table->mutex();
     } else {
         VM_ERROR(vm, f, "atomic: expected a shared array or table, got %s", value_type_name(val.type));
         return -1;
     }
+
+    held_mutex->lock();
+    vm->atomic_locks_.push_back({held_mutex});
     return 0;
 }
 
 MOBIUS_FORCEINLINE static int vm_op_atomic_end(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm;
-    uint8_t a = DECODE_A(inst);
-    Value& val = f.regs[a];
-
-    if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
-        val.as.shared_cell->mutex().unlock();
-    } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice && val.as.array_slice->ownerCell()) {
-        val.as.array_slice->ownerCell()->mutex().unlock();
-    } else if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
-        val.as.array->mutex().unlock();
-    } else if (val.type == VAL_TABLE && val.as.table && val.as.table->isShared()) {
-        val.as.table->mutex().unlock();
+    (void)inst;
+    if (vm->atomic_locks_.empty()) {
+        VM_ERROR(vm, f, "atomic_end: no matching atomic_begin lock");
+        return -1;
     }
+    MobiusVM::AtomicLock held = vm->atomic_locks_.back();
+    vm->atomic_locks_.pop_back();
+    if (held.mutex) held.mutex->unlock();
     return 0;
 }
 
@@ -3095,6 +3162,15 @@ MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // ============================================================================
 
 int MobiusVM::run(size_t base_depth) {
+    size_t saved_atomic_depth = atomic_locks_.size();
+    struct AtomicLockCleanup {
+        MobiusVM* vm;
+        size_t keep_depth;
+        ~AtomicLockCleanup() {
+            release_atomic_locks(vm, keep_depth);
+        }
+    } atomic_cleanup{this, saved_atomic_depth};
+
     VMFrame f;
     f.ci = &callStackTop();
     f.ip = f.ci->ip;

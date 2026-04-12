@@ -32,7 +32,7 @@ private:
 
     std::vector<MobiusFiber*> all_fibers_;
     std::vector<MobiusFiber*> free_list_;
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
 
     uint32_t next_id_;
 };

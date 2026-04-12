@@ -124,10 +124,12 @@ void FiberPool::release(MobiusFiber* fiber) {
 }
 
 size_t FiberPool::activeCount() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     // active = total - free
     return all_fibers_.size() - free_list_.size();
 }
 
 size_t FiberPool::totalCount() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     return all_fibers_.size();
 }

@@ -89,8 +89,8 @@ var result = utility_function(data);
 ## Running the Demos
 
 ### Prerequisites
-- Mobius interpreter built (`make`)
-- Any required plugins loaded
+- Mobius interpreter built
+- Any required plugins or host bindings loaded for host-driven demos
 
 ### Individual Scripts
 ```bash

@@ -1,5 +1,7 @@
 // Complete Graphics Demo - Showcasing SDL + OpenGL + ImGui Integration
-// This example demonstrates the power of combining all graphics plugins
+// Requires host/plugin bindings for SDL/OpenGL/ImGui-style functions.
+
+import "math"
 
 // Initialize SDL and create window
 var window = sdl_create_window("Mobius Graphics Demo", 1280, 720);
@@ -23,7 +25,7 @@ var plot_data_x = [];
 var plot_data_y = [];
 for (var i = 0; i < 100; i = i + 1) {
     plot_data_x:push(i * 0.1);
-    plot_data_y:push(sin(i * 0.1) * cos(i * 0.05));
+    plot_data_y:push(math.sin(i * 0.1) * math.cos(i * 0.05));
 }
 
 // Main render loop
@@ -94,14 +96,14 @@ while (running) {
                 implot_plot_line("Sin/Cos Wave", plot_data_x, plot_data_y);
                 
                 // Add real-time data point
-                var time = get_time();
+                var time = time();
                 plot_data_x:push(time);
-                plot_data_y:push(sin(time) * cos(time * 0.5));
+                plot_data_y:push(math.sin(time) * math.cos(time * 0.5));
                 
                 // Keep only last 100 points
                 if (plot_data_x:length() > 100) {
-                    array_shift(plot_data_x);
-                    array_shift(plot_data_y);
+                    plot_data_x = plot_data_x:slice(1, plot_data_x:length());
+                    plot_data_y = plot_data_y:slice(1, plot_data_y:length());
                 }
                 
                 implot_end_plot();

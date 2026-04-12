@@ -21,6 +21,6 @@ while (i < 1000) {
 var end_time = clock();
 var duration = end_time - start_time;
 
-print("Time for 1000 calls:", duration, "seconds");
+print("Time for 1000 calls:", duration, "ns");
 print("Estimated copies made:", 2000);  // 2 per call
 print("Performance: Deep copying strings is expensive!");

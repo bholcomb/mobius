@@ -10,6 +10,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <limits>
+
+static bool checked_add_size(size_t a, size_t b, size_t* out) {
+    if (b > std::numeric_limits<size_t>::max() - a) return false;
+    *out = a + b;
+    return true;
+}
+
+static bool checked_mul_size(size_t a, size_t b, size_t* out) {
+    if (a != 0 && b > std::numeric_limits<size_t>::max() / a) return false;
+    *out = a * b;
+    return true;
+}
 
 // =============================================================================
 // UNIFIED STRING FUNCTION IMPLEMENTATIONS
@@ -183,13 +196,19 @@ int lib_concat(MobiusState* state, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
         Value arg = state->npeek(i);
         if (arg.type == VAL_STRING && arg.as.string) {
-            total_length += arg.as.string->length;
+            if (!checked_add_size(total_length, arg.as.string->length, &total_length)) {
+                return state->error("concat result too large");
+            }
         } else {
             return state->error("concat expects all arguments to be strings");
         }
     }
-    
-    char* result_data = (char*)malloc(total_length + 1);
+
+    size_t alloc_size = 0;
+    if (!checked_add_size(total_length, 1, &alloc_size)) {
+        return state->error("concat result too large");
+    }
+    char* result_data = (char*)malloc(alloc_size);
     if (!result_data) {
         return state->error("Memory allocation failed");
     }
@@ -261,7 +280,10 @@ int lib_split(MobiusState* state, int arg_count) {
     const char* delim = delim_val.as.string->data;
     size_t delim_len = delim_val.as.string->length;
 
-    ArrayValue* arr = new ArrayValue();
+    ArrayValue* arr = new (std::nothrow) ArrayValue();
+    if (!arr) {
+        return state->error("Memory allocation failed");
+    }
 
     if (delim_len == 0) {
         size_t slen = str_val.as.string->length;
@@ -275,6 +297,10 @@ int lib_split(MobiusState* state, int arg_count) {
         while ((found = strstr(p, delim)) != NULL) {
             size_t seg_len = found - p;
             char* seg = (char*)malloc(seg_len + 1);
+            if (!seg) {
+                arr->release();
+                return state->error("Memory allocation failed");
+            }
             memcpy(seg, p, seg_len); seg[seg_len] = '\0';
             arr->push(make_string_value_from_cstr(state, seg));
             free(seg);
@@ -307,11 +333,24 @@ int lib_join(MobiusState* state, int arg_count) {
     size_t total = 0;
     for (size_t i = 0; i < count; i++) {
         Value v = arr->get(i);
-        if (v.type == VAL_STRING && v.as.string) total += v.as.string->length;
-        if (i > 0) total += sep_len;
+        if (v.type == VAL_STRING && v.as.string) {
+            if (!checked_add_size(total, v.as.string->length, &total)) {
+                return state->error("join result too large");
+            }
+        }
+        if (i > 0 && !checked_add_size(total, sep_len, &total)) {
+            return state->error("join result too large");
+        }
     }
 
-    char* buf = (char*)malloc(total + 1);
+    size_t alloc_size = 0;
+    if (!checked_add_size(total, 1, &alloc_size)) {
+        return state->error("join result too large");
+    }
+    char* buf = (char*)malloc(alloc_size);
+    if (!buf) {
+        return state->error("Memory allocation failed");
+    }
     size_t offset = 0;
     for (size_t i = 0; i < count; i++) {
         if (i > 0) { memcpy(buf + offset, sep, sep_len); offset += sep_len; }
@@ -348,6 +387,9 @@ int lib_trim(MobiusState* state, int arg_count) {
 
     size_t new_len = end - start;
     char* buf = (char*)malloc(new_len + 1);
+    if (!buf) {
+        return state->error("Memory allocation failed");
+    }
     memcpy(buf, s + start, new_len);
     buf[new_len] = '\0';
 
@@ -425,8 +467,30 @@ int lib_replace(MobiusState* state, int arg_count) {
     const char* p = s;
     while ((p = strstr(p, old_s)) != NULL) { count++; p += old_len; }
 
-    size_t result_len = str_val.as.string->length + count * (new_len - old_len);
-    char* buf = (char*)malloc(result_len + 1);
+    size_t replacement_delta = 0;
+    if (new_len >= old_len) {
+        if (!checked_mul_size(count, new_len - old_len, &replacement_delta) ||
+            !checked_add_size(str_val.as.string->length, replacement_delta, &replacement_delta)) {
+            return state->error("replace result too large");
+        }
+    } else {
+        size_t shrink_total = 0;
+        if (!checked_mul_size(count, old_len - new_len, &shrink_total) ||
+            shrink_total > str_val.as.string->length) {
+            return state->error("replace result too large");
+        }
+        replacement_delta = str_val.as.string->length - shrink_total;
+    }
+
+    size_t result_len = replacement_delta;
+    size_t alloc_size = 0;
+    if (!checked_add_size(result_len, 1, &alloc_size)) {
+        return state->error("replace result too large");
+    }
+    char* buf = (char*)malloc(alloc_size);
+    if (!buf) {
+        return state->error("Memory allocation failed");
+    }
     char* dst = buf;
     p = s;
     const char* found;
@@ -483,8 +547,18 @@ int lib_repeat(MobiusState* state, int arg_count) {
     }
 
     size_t slen = str_val.as.string->length;
-    size_t total = slen * (size_t)count;
-    char* buf = (char*)malloc(total + 1);
+    size_t total = 0;
+    if (!checked_mul_size(slen, (size_t)count, &total)) {
+        return state->error("repeat result too large");
+    }
+    size_t alloc_size = 0;
+    if (!checked_add_size(total, 1, &alloc_size)) {
+        return state->error("repeat result too large");
+    }
+    char* buf = (char*)malloc(alloc_size);
+    if (!buf) {
+        return state->error("Memory allocation failed");
+    }
     for (int64_t i = 0; i < count; i++) {
         memcpy(buf + i * slen, str_val.as.string->data, slen);
     }

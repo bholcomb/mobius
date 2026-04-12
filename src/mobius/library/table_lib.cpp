@@ -144,11 +144,12 @@ int lib_setmetatable(MobiusState* state, int arg_count) {
     state->npop();
     state->npop();
     
-    if (table_val.type != VAL_TABLE) {
+    if (table_val.type != VAL_TABLE || !table_val.as.table) {
         return state->error("setmetatable first argument must be a table");
     }
     
-    if (metatable_val.type != VAL_TABLE && metatable_val.type != VAL_NIL) {
+    if ((metatable_val.type == VAL_TABLE && !metatable_val.as.table) ||
+        (metatable_val.type != VAL_TABLE && metatable_val.type != VAL_NIL)) {
         return state->error("setmetatable second argument must be a table or nil");
     }
     

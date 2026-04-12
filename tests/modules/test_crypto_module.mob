@@ -67,4 +67,6 @@ print("")
 print("Crypto Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
 if (fail_count == 0) {
     print("ALL TESTS PASSED")
+} else {
+    exit(1)
 }

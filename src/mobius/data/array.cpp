@@ -2,6 +2,11 @@
 #include "data/table.h"
 #include "data/value.h"
 
+static Value& invalid_array_value() {
+    static Value nil_value = make_nil_value();
+    return nil_value;
+}
+
 ArrayValue::ArrayValue(size_t initial_capacity)
 {
     elements.reserve(initial_capacity > 0 ? initial_capacity : 8);
@@ -43,16 +48,20 @@ Value ArrayValue::pop() {
 const Value& ArrayValue::get(size_t index) const {
     if (MOBIUS_UNLIKELY(shared_)) {
         std::lock_guard lock(mutex_);
+        if (index >= elements.size()) return invalid_array_value();
         return elements[index];
     }
+    if (index >= elements.size()) return invalid_array_value();
     return elements[index];
 }
 
 void ArrayValue::set(size_t index, const Value& value) {
     if (MOBIUS_UNLIKELY(shared_)) {
         std::lock_guard lock(mutex_);
+        if (index >= elements.size()) return;
         elements[index] = value;
     } else {
+        if (index >= elements.size()) return;
         elements[index] = value;
     }
 }
@@ -104,16 +113,20 @@ void ArrayValue::reverse() {
 const Value& ArrayValue::operator[](size_t index) const {
     if (MOBIUS_UNLIKELY(shared_)) {
         std::lock_guard lock(mutex_);
+        if (index >= elements.size()) return invalid_array_value();
         return elements[index];
     }
+    if (index >= elements.size()) return invalid_array_value();
     return elements[index];
 }
 
 Value& ArrayValue::operator[](size_t index) {
     if (MOBIUS_UNLIKELY(shared_)) {
         std::lock_guard lock(mutex_);
+        if (index >= elements.size()) return invalid_array_value();
         return elements[index];
     }
+    if (index >= elements.size()) return invalid_array_value();
     return elements[index];
 }
 

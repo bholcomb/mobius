@@ -38,7 +38,7 @@ public:
 
 private:
     struct Shard {
-        std::mutex mutex;
+        mutable std::mutex mutex;
         std::vector<MobiusString*> buckets;
         size_t string_count = 0;
         float load_factor = 0.75f;

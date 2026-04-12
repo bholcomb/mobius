@@ -15,7 +15,7 @@ while (i < 1000) {
 }
 
 var copy_time = clock() - start_time;
-print("String copying 1000 times took:", copy_time, "ms");
+print("String copying 1000 times took:", copy_time, "ns");
 
 // Test 2: String concatenation
 print("\nTest 2: String concatenation with reference counting");
@@ -29,7 +29,7 @@ while (i < 100) {
 }
 
 var concat_time = clock() - start_time;
-print("String concatenation 100 times took:", concat_time, "ms");
+print("String concatenation 100 times took:", concat_time, "ns");
 print("Final result length:", len(result));
 
 // Test 3: Mixed string operations
@@ -46,7 +46,7 @@ while (i < 50) {
 }
 
 var mixed_time = clock() - start_time;
-print("Mixed operations 50 times took:", mixed_time, "ms");
+print("Mixed operations 50 times took:", mixed_time, "ns");
 
 print("\n=== Performance Summary ===");
 print("✅ String copying: Uses O(1) reference counting instead of O(n) deep copy");

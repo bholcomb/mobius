@@ -94,6 +94,12 @@ void ExecutionContext::pushFrame(const char* function_name, const char* filename
                                  void* function_ptr) {
     if (call_frames_.size() >= max_depth_) {
         fprintf(stderr, "Stack overflow: call depth exceeds maximum %zu\n", max_depth_);
+        if (state) {
+            state->setError(MOBIUS_ERROR_RUNTIME,
+                            "Stack overflow: call depth exceeded maximum",
+                            "Reduce recursion depth or increase the configured call-depth limit",
+                            line, column, function_name, filename);
+        }
         return;
     }
 
@@ -216,7 +222,7 @@ StackTrace* ExecutionContext::captureStackTrace() const {
     if (!trace) return NULL;
 
     trace->frame_count = call_frames_.size();
-    trace->frames = (TraceFrame*)malloc(sizeof(TraceFrame) * call_frames_.size());
+    trace->frames = (TraceFrame*)calloc(call_frames_.size(), sizeof(TraceFrame));
     if (!trace->frames) {
         free(trace);
         return NULL;
@@ -226,8 +232,13 @@ StackTrace* ExecutionContext::captureStackTrace() const {
         const CallFrame& src = call_frames_[i];
         TraceFrame* dst = &trace->frames[i];
 
-        dst->function_name = src.function_name;
-        dst->filename = src.filename;
+        dst->function_name = src.function_name ? mobius_strdup(src.function_name) : NULL;
+        dst->filename = src.filename ? mobius_strdup(src.filename) : NULL;
+        if ((src.function_name && !dst->function_name) ||
+            (src.filename && !dst->filename)) {
+            free_stack_trace(trace);
+            return NULL;
+        }
         dst->line = src.line;
         dst->column = src.column;
 
@@ -398,7 +409,7 @@ void MobiusState::clearErrorInternal() {
 
 int MobiusState::assignGlobalSlot(const char* name, GlobalEnvironment* env) {
     GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::mutex> lock(globals->mutex);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it != globals->slot_map.end()) return it->second;
     int slot = globals->count.load(std::memory_order_relaxed);
@@ -416,11 +427,43 @@ int MobiusState::assignGlobalSlot(const char* name, GlobalEnvironment* env) {
 }
 
 Value& MobiusState::globalSlot(int idx, GlobalEnvironment* env) {
-    return env_or_root(this, env)->slots[idx];
+    GlobalEnvironment* globals = env_or_root(this, env);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (idx < 0 || idx >= count || (size_t)idx >= globals->slots.size()) {
+        return invalidNativeValue();
+    }
+    return globals->slots[idx];
 }
 
 const Value& MobiusState::globalSlot(int idx, GlobalEnvironment* env) const {
-    return env_or_root(this, env)->slots[idx];
+    const GlobalEnvironment* globals = env_or_root(this, env);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (idx < 0 || idx >= count || (size_t)idx >= globals->slots.size()) {
+        return invalidNativeValue();
+    }
+    return globals->slots[idx];
+}
+
+bool MobiusState::copyGlobalValue(int idx, Value* out, GlobalEnvironment* env) const {
+    if (out) *out = make_nil_value();
+    const GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (idx < 0 || idx >= count || (size_t)idx >= globals->slots.size()) {
+        return false;
+    }
+    if (out) *out = globals->slots[idx];
+    return true;
+}
+
+Value MobiusState::getGlobalValue(int idx, GlobalEnvironment* env) const {
+    const GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (idx < 0 || idx >= count || (size_t)idx >= globals->slots.size()) {
+        return make_nil_value();
+    }
+    return globals->slots[idx];
 }
 
 int MobiusState::globalSlotCount(GlobalEnvironment* env) const {
@@ -429,7 +472,7 @@ int MobiusState::globalSlotCount(GlobalEnvironment* env) const {
 
 int MobiusState::findGlobalSlot(const char* name, GlobalEnvironment* env) const {
     const GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::mutex> lock(globals->mutex);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it != globals->slot_map.end()) return it->second;
     return -1;
@@ -437,7 +480,7 @@ int MobiusState::findGlobalSlot(const char* name, GlobalEnvironment* env) const 
 
 const char* MobiusState::globalSlotName(int idx, GlobalEnvironment* env) const {
     const GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::mutex> lock(globals->mutex);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     for (auto& kv : globals->slot_map) {
         if (kv.second == idx) return kv.first.c_str();
     }
@@ -446,7 +489,7 @@ const char* MobiusState::globalSlotName(int idx, GlobalEnvironment* env) const {
 
 void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
     GlobalEnvironment* globals = rootGlobalEnvironment();
-    std::lock_guard<std::mutex> lock(globals->mutex);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it == globals->slot_map.end()) return;
     int slot = it->second;
@@ -458,7 +501,7 @@ void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
 
 bool MobiusState::removeGlobal(const char* name) {
     GlobalEnvironment* globals = rootGlobalEnvironment();
-    std::lock_guard<std::mutex> lock(globals->mutex);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it == globals->slot_map.end()) return false;
     int slot = it->second;
@@ -470,6 +513,12 @@ bool MobiusState::removeGlobal(const char* name) {
 
 void MobiusState::setGlobalValue(int slot, const Value& value, GlobalEnvironment* env, bool mark_defined) {
     GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (slot < 0 || slot >= count || (size_t)slot >= globals->slots.size()) {
+        setError(MOBIUS_ERROR_ARGUMENT, "Global slot index out of bounds", nullptr, 0, 0, nullptr);
+        return;
+    }
     Value updated = value;
     if (mark_defined) updated.flags |= VAL_FLAG_DEFINED;
     globals->slots[slot] = updated;
@@ -478,6 +527,7 @@ void MobiusState::setGlobalValue(int slot, const Value& value, GlobalEnvironment
 
 void MobiusState::syncGlobalSlotToBackingTable(int slot, GlobalEnvironment* env) {
     GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     if (!globals->backing_table) return;
     const char* name = globalSlotName(slot, globals);
     if (!name || strcmp(name, "<unknown>") == 0) return;
@@ -494,13 +544,13 @@ void MobiusState::seedGlobalEnvironmentFromTable(GlobalEnvironment* env, Table* 
         int slot = assignGlobalSlot(key.as.string->data, env);
         Value defined_value = value;
         if (!(defined_value.flags & VAL_FLAG_DEFINED)) defined_value.flags |= VAL_FLAG_DEFINED;
-        env->slots[slot] = defined_value;
+        setGlobalValue(slot, defined_value, env, false);
     });
 }
 
 void MobiusState::removeGlobalSlots(int from_slot, GlobalEnvironment* env) {
     GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::mutex> lock(globals->mutex);
+    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     int count = globals->count.load(std::memory_order_relaxed);
     if (from_slot < 0 || from_slot >= count) return;
 
@@ -778,6 +828,54 @@ MobiusVM* MobiusState::boundVM() const {
     return vm ? vm : main_vm_;
 }
 
+Value& MobiusState::invalidNativeValue() {
+    static Value nil_value = make_nil_value();
+    return nil_value;
+}
+
+NativeCallContext* MobiusState::checkedNativeContext(int required_count, bool require_self,
+                                                     bool for_push) const {
+    NativeCallContext* ctx = nativeContext();
+    if (!ctx) {
+        const_cast<MobiusState*>(this)->setError(
+            MOBIUS_ERROR_RUNTIME,
+            "Native call attempted without an available VM context",
+            "Ensure the state has an active or persistent VM before using native stack helpers",
+            0, 0, nullptr);
+        return nullptr;
+    }
+
+    if (require_self && ctx->base >= ctx->top) {
+        const_cast<MobiusState*>(this)->setError(
+            MOBIUS_ERROR_ARGUMENT,
+            "Native stack has no self value",
+            "Call the method with ':' syntax or provide a receiver value",
+            0, 0, nullptr);
+        return nullptr;
+    }
+
+    int available = ctx->top - ctx->base;
+    if (required_count > 0 && available < required_count) {
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "Native stack underflow (needed %d values, found %d)",
+                 required_count, available);
+        const_cast<MobiusState*>(this)->setError(MOBIUS_ERROR_ARGUMENT, buf, nullptr, 0, 0, nullptr);
+        return nullptr;
+    }
+
+    if (for_push && ctx->top >= ctx->capacity) {
+        const_cast<MobiusState*>(this)->setError(
+            MOBIUS_ERROR_MEMORY,
+            "Native stack overflow",
+            "Reduce the number of values pushed to the stack",
+            0, 0, nullptr);
+        return nullptr;
+    }
+
+    return ctx;
+}
+
 NativeCallContext* MobiusState::nativeContext() const {
     MobiusVM* vm = boundVM();
     return vm ? &vm->native_ctx_ : nullptr;
@@ -893,6 +991,12 @@ int mobius_error(MobiusState* state, const char* message) {
 
 void free_stack_trace(StackTrace* trace) {
     if (!trace) return;
+    if (trace->frames) {
+        for (size_t i = 0; i < trace->frame_count; i++) {
+            free((void*)trace->frames[i].function_name);
+            free((void*)trace->frames[i].filename);
+        }
+    }
     free(trace->frames);
     free(trace);
 }
