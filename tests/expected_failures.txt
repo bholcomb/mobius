@@ -33,3 +33,4 @@ tests/errors/test_struct_array_view_shrink_error.mob
 tests/errors/test_struct_layout_overflow_error.mob
 tests/errors/test_struct_view_shrink_error.mob
 tests/basic/test_exit_nonzero.mob
+tests/errors/test_unterminated_multiline_string.mob

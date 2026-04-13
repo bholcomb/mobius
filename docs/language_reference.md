@@ -262,6 +262,19 @@ var s = "Hello\tWorld\n"
 // Escapes: \n \t \r \\ \" \' \0
 ```
 
+Mobius also supports **triple-quoted multiline strings** with `"""..."""`.
+They behave like normal strings, preserve embedded newlines, and still process
+escape sequences, but allow unescaped `"` characters inside the body:
+
+```mobius
+var html = """<!doctype html>
+<html>
+  <body>
+    <h1>"quoted" heading</h1>
+  </body>
+</html>"""
+```
+
 **Characters** use single quotes:
 
 ```mobius

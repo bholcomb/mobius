@@ -1,0 +1,23 @@
+var simple = """hello
+world"""
+if (simple != "hello\nworld") { exit(1) }
+
+var quoted = """say "hello" to Mobius"""
+if (quoted != "say \"hello\" to Mobius") { exit(1) }
+
+var escaped = """line1\nline2\tend"""
+if (escaped != "line1\nline2\tend") { exit(1) }
+
+var empty = """"""
+if (empty != "") { exit(1) }
+
+var html = """<!doctype html>
+<html>
+  <body>
+    <h1>"quoted"</h1>
+  </body>
+</html>"""
+if (!startswith(html, "<!doctype html>\n<html>\n")) { exit(1) }
+if (!contains(html, "<h1>\"quoted\"</h1>")) { exit(1) }
+
+exit(0)
