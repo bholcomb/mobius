@@ -109,6 +109,7 @@ void register_stdlib_functions(MobiusState* state) {
         Value func_value = make_native_function_value(func->function);
 
         int slot = state->assignGlobalSlot(func->name);
+        if (slot < 0) return;
         state->setGlobalValue(slot, func_value);
     }
 }

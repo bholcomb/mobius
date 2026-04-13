@@ -227,6 +227,9 @@ void disassemble_instruction(const Prototype* proto, int offset) {
                     print_constant(proto, bx);
                     printf("] = R[%d]", a);
                     break;
+                case OP_GLOBAL_READONLY:
+                    printf("globals[%u].readonly = %s", (unsigned)bx, a ? "true" : "false");
+                    break;
                 case OP_CLOSURE:
                     printf("R[%d] = closure(proto[%d])", a, bx);
                     break;
@@ -319,6 +322,18 @@ void disassemble_instruction(const Prototype* proto, int offset) {
                 uint16_t bx = DECODE_Bx(inst);
                 printf("R[%d] = globals[%d]; call R[%d] %d args %d results (+1 fused word)",
                        a, bx, a, b2 - 1, c2 - 1);
+            } else if (op == OP_CALL_DIRECT || op == OP_CALL_DIRECT_PLAIN) {
+                uint32_t inst2 = (offset + 1 < (int)proto->code.size()) ? proto->code[offset + 1] : 0;
+                uint8_t b2 = DECODE_B(inst2);
+                uint8_t c2 = DECODE_C(inst2);
+                uint16_t bx = DECODE_Bx(inst);
+                if (bx == BX_MASK) {
+                    printf("direct %s-call self %d args %d results (+1 fused word)",
+                           (op == OP_CALL_DIRECT_PLAIN) ? "plain " : "", b2 - 1, c2 - 1);
+                } else {
+                    printf("direct %s-call proto[%u] %d args %d results (+1 fused word)",
+                           (op == OP_CALL_DIRECT_PLAIN) ? "plain " : "", (unsigned)bx, b2 - 1, c2 - 1);
+                }
             } else {
                 printf("A=%d B=%d (+fused)", a, b);
             }

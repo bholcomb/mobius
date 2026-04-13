@@ -25,8 +25,10 @@ class Table;
 
 struct GlobalEnvironment {
     std::vector<Value> slots;
+    std::vector<std::string> slot_names;
     std::atomic<int> count{0};
-    mutable std::recursive_mutex mutex;
+    std::atomic<bool> shared{false};
+    mutable std::mutex mutex;
     std::unordered_map<std::string, int> slot_map;
     Table* backing_table = nullptr;
 
@@ -207,6 +209,7 @@ public:
     const char* globalSlotName(int idx, GlobalEnvironment* env = nullptr) const;
     void removeGlobalSlots(int from_slot, GlobalEnvironment* env = nullptr);
     void setGlobalReadonly(const char* name, bool readonly);
+    void setGlobalReadonly(int slot, bool readonly, GlobalEnvironment* env = nullptr);
     bool removeGlobal(const char* name);
     void setGlobalValue(int slot, const Value& value, GlobalEnvironment* env = nullptr, bool mark_defined = true);
     void syncGlobalSlotToBackingTable(int slot, GlobalEnvironment* env = nullptr);

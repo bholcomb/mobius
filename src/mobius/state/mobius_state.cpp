@@ -39,6 +39,12 @@ static const GlobalEnvironment* env_or_root(const MobiusState* state, const Glob
     return env ? env : state->rootGlobalEnvironment();
 }
 
+static constexpr size_t kGlobalSlotCapacity = 16384;
+
+static inline bool global_slot_in_bounds(const GlobalEnvironment* globals, int idx, int count) {
+    return idx >= 0 && idx < count && (size_t)idx < globals->slots.size();
+}
+
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
@@ -287,7 +293,8 @@ MobiusState::MobiusState(MobiusConfig* config)
 
     config_ = config ? *config : mobius_default_config();
 
-    root_globals_.slots.resize(4096);
+    root_globals_.slots.resize(kGlobalSlotCapacity);
+    root_globals_.slot_names.resize(kGlobalSlotCapacity);
 
     string_pool_ = new (std::nothrow) StringInternPool(256);
     if (!string_pool_) return;
@@ -303,6 +310,7 @@ MobiusState::MobiusState(MobiusConfig* config)
 
     auto defineGlobal = [&](const char* name, Value val, bool readonly = false) {
         int slot = assignGlobalSlot(name);
+        if (slot < 0) return;
         val.flags |= VAL_FLAG_DEFINED;
         if (readonly) val.flags |= VAL_FLAG_READONLY;
         setGlobalValue(slot, val, nullptr, false);
@@ -409,16 +417,18 @@ void MobiusState::clearErrorInternal() {
 
 int MobiusState::assignGlobalSlot(const char* name, GlobalEnvironment* env) {
     GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    std::lock_guard<std::mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it != globals->slot_map.end()) return it->second;
     int slot = globals->count.load(std::memory_order_relaxed);
     if (slot >= (int)globals->slots.size()) {
-        size_t new_cap = globals->slots.empty() ? 64 : globals->slots.size() * 2;
-        globals->slots.resize(new_cap);
-        fprintf(stderr, "Warning: globals table resized from %zu to %zu slots\n",
-                new_cap / 2, new_cap);
+        setError(MOBIUS_ERROR_MEMORY,
+                 "Global slot capacity exceeded",
+                 "Increase the preallocated global slot capacity",
+                 0, 0, nullptr);
+        return -1;
     }
+    globals->slot_names[slot] = name;
     globals->slot_map[name] = slot;
     globals->count.store(slot + 1, std::memory_order_release);
     if ((size_t)(slot + 1) > metrics_.peak_globals)
@@ -445,24 +455,34 @@ const Value& MobiusState::globalSlot(int idx, GlobalEnvironment* env) const {
 }
 
 bool MobiusState::copyGlobalValue(int idx, Value* out, GlobalEnvironment* env) const {
-    if (out) *out = make_nil_value();
     const GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     int count = globals->count.load(std::memory_order_acquire);
-    if (idx < 0 || idx >= count || (size_t)idx >= globals->slots.size()) {
+    if (!global_slot_in_bounds(globals, idx, count)) {
         return false;
     }
+    if (!globals->shared.load(std::memory_order_acquire)) {
+        if (out) *out = globals->slots[idx];
+        return true;
+    }
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, idx, count)) return false;
     if (out) *out = globals->slots[idx];
     return true;
 }
 
 Value MobiusState::getGlobalValue(int idx, GlobalEnvironment* env) const {
     const GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     int count = globals->count.load(std::memory_order_acquire);
-    if (idx < 0 || idx >= count || (size_t)idx >= globals->slots.size()) {
+    if (!global_slot_in_bounds(globals, idx, count)) {
         return make_nil_value();
     }
+    if (!globals->shared.load(std::memory_order_acquire)) {
+        return globals->slots[idx];
+    }
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, idx, count)) return make_nil_value();
     return globals->slots[idx];
 }
 
@@ -472,7 +492,12 @@ int MobiusState::globalSlotCount(GlobalEnvironment* env) const {
 
 int MobiusState::findGlobalSlot(const char* name, GlobalEnvironment* env) const {
     const GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    if (!globals->shared.load(std::memory_order_acquire)) {
+        auto it = globals->slot_map.find(name);
+        if (it != globals->slot_map.end()) return it->second;
+        return -1;
+    }
+    std::lock_guard<std::mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it != globals->slot_map.end()) return it->second;
     return -1;
@@ -480,16 +505,22 @@ int MobiusState::findGlobalSlot(const char* name, GlobalEnvironment* env) const 
 
 const char* MobiusState::globalSlotName(int idx, GlobalEnvironment* env) const {
     const GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
-    for (auto& kv : globals->slot_map) {
-        if (kv.second == idx) return kv.first.c_str();
+    int count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, idx, count)) return "<unknown>";
+    if (!globals->shared.load(std::memory_order_acquire)) {
+        const std::string& name = globals->slot_names[idx];
+        return name.empty() ? "<unknown>" : name.c_str();
     }
-    return "<unknown>";
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, idx, count)) return "<unknown>";
+    const std::string& name = globals->slot_names[idx];
+    return name.empty() ? "<unknown>" : name.c_str();
 }
 
 void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
     GlobalEnvironment* globals = rootGlobalEnvironment();
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    std::lock_guard<std::mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it == globals->slot_map.end()) return;
     int slot = it->second;
@@ -499,9 +530,20 @@ void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
         globals->slots[slot].flags &= ~VAL_FLAG_READONLY;
 }
 
+void MobiusState::setGlobalReadonly(int slot, bool readonly, GlobalEnvironment* env) {
+    GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, slot, count)) return;
+    if (readonly)
+        globals->slots[slot].flags |= VAL_FLAG_READONLY;
+    else
+        globals->slots[slot].flags &= ~VAL_FLAG_READONLY;
+}
+
 bool MobiusState::removeGlobal(const char* name) {
     GlobalEnvironment* globals = rootGlobalEnvironment();
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    std::lock_guard<std::mutex> lock(globals->mutex);
     auto it = globals->slot_map.find(name);
     if (it == globals->slot_map.end()) return false;
     int slot = it->second;
@@ -513,25 +555,59 @@ bool MobiusState::removeGlobal(const char* name) {
 
 void MobiusState::setGlobalValue(int slot, const Value& value, GlobalEnvironment* env, bool mark_defined) {
     GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
     int count = globals->count.load(std::memory_order_acquire);
-    if (slot < 0 || slot >= count || (size_t)slot >= globals->slots.size()) {
+    if (!global_slot_in_bounds(globals, slot, count)) {
+        setError(MOBIUS_ERROR_ARGUMENT, "Global slot index out of bounds", nullptr, 0, 0, nullptr);
+        return;
+    }
+    if (!globals->shared.load(std::memory_order_acquire)) {
+        Value updated = value;
+        if (mark_defined) updated.flags |= VAL_FLAG_DEFINED;
+        globals->slots[slot] = updated;
+        if (globals->backing_table) {
+            const std::string& name = globals->slot_names[slot];
+            if (!name.empty()) {
+                MobiusString* key = string_pool_->intern(name.c_str());
+                globals->backing_table->setByString(key, globals->slots[slot]);
+            }
+        }
+        return;
+    }
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, slot, count)) {
         setError(MOBIUS_ERROR_ARGUMENT, "Global slot index out of bounds", nullptr, 0, 0, nullptr);
         return;
     }
     Value updated = value;
     if (mark_defined) updated.flags |= VAL_FLAG_DEFINED;
     globals->slots[slot] = updated;
-    syncGlobalSlotToBackingTable(slot, globals);
+    if (globals->backing_table) {
+        const std::string& name = globals->slot_names[slot];
+        if (!name.empty()) {
+            MobiusString* key = string_pool_->intern(name.c_str());
+            globals->backing_table->setByString(key, globals->slots[slot]);
+        }
+    }
 }
 
 void MobiusState::syncGlobalSlotToBackingTable(int slot, GlobalEnvironment* env) {
     GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
-    if (!globals->backing_table) return;
-    const char* name = globalSlotName(slot, globals);
-    if (!name || strcmp(name, "<unknown>") == 0) return;
-    MobiusString* key = string_pool_->intern(name);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, slot, count) || !globals->backing_table) return;
+    if (!globals->shared.load(std::memory_order_acquire)) {
+        const std::string& name = globals->slot_names[slot];
+        if (name.empty()) return;
+        MobiusString* key = string_pool_->intern(name.c_str());
+        globals->backing_table->setByString(key, globals->slots[slot]);
+        return;
+    }
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, slot, count) || !globals->backing_table) return;
+    const std::string& name = globals->slot_names[slot];
+    if (name.empty()) return;
+    MobiusString* key = string_pool_->intern(name.c_str());
     globals->backing_table->setByString(key, globals->slots[slot]);
 }
 
@@ -542,6 +618,7 @@ void MobiusState::seedGlobalEnvironmentFromTable(GlobalEnvironment* env, Table* 
     table->forEach([&](const Value& key, const Value& value) {
         if (key.type != VAL_STRING || !key.as.string) return;
         int slot = assignGlobalSlot(key.as.string->data, env);
+        if (slot < 0) return;
         Value defined_value = value;
         if (!(defined_value.flags & VAL_FLAG_DEFINED)) defined_value.flags |= VAL_FLAG_DEFINED;
         setGlobalValue(slot, defined_value, env, false);
@@ -550,7 +627,7 @@ void MobiusState::seedGlobalEnvironmentFromTable(GlobalEnvironment* env, Table* 
 
 void MobiusState::removeGlobalSlots(int from_slot, GlobalEnvironment* env) {
     GlobalEnvironment* globals = env_or_root(this, env);
-    std::lock_guard<std::recursive_mutex> lock(globals->mutex);
+    std::lock_guard<std::mutex> lock(globals->mutex);
     int count = globals->count.load(std::memory_order_relaxed);
     if (from_slot < 0 || from_slot >= count) return;
 
