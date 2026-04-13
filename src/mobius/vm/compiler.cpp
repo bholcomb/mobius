@@ -271,6 +271,10 @@ int Compiler::emitLoadK(int reg, int const_idx) {
 void Compiler::emitGetGlobal(int reg, const char* name) {
     if (state_) {
         int slot = state_->assignGlobalSlot(name, globals_);
+        if (slot < 0) {
+            had_error_ = true;
+            return;
+        }
         emitABx(OP_GETGLOBAL, (uint8_t)reg, (uint16_t)slot);
     } else {
         int ki = stringConstant(name);
@@ -281,11 +285,48 @@ void Compiler::emitGetGlobal(int reg, const char* name) {
 void Compiler::emitSetGlobal(int reg, const char* name) {
     if (state_) {
         int slot = state_->assignGlobalSlot(name, globals_);
+        if (slot < 0) {
+            had_error_ = true;
+            return;
+        }
         emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)slot);
     } else {
         int ki = stringConstant(name);
         emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
     }
+}
+
+bool Compiler::emitReadonlyGlobalConstant(int reg, const char* name) {
+    if (!state_ || !name) return false;
+
+    int slot = state_->findGlobalSlot(name, globals_);
+    if (slot < 0) return false;
+
+    Value value = state_->getGlobalValue(slot, globals_);
+    if (!(value.flags & VAL_FLAG_DEFINED) || !(value.flags & VAL_FLAG_READONLY)) {
+        return false;
+    }
+
+    switch (value.type) {
+        case VAL_NIL:
+        case VAL_BOOL:
+        case VAL_INT64:
+        case VAL_UINT64:
+        case VAL_FLOAT64:
+        case VAL_STRING:
+        case VAL_NATIVE_FUNCTION:
+            break;
+        default:
+            return false;
+    }
+
+    int ki = current_->proto->addConstant(value);
+    if (ki < 0) {
+        had_error_ = true;
+        return false;
+    }
+    emitLoadK(reg, ki);
+    return true;
 }
 
 // ============================================================================
@@ -351,6 +392,47 @@ bool Compiler::callMayBeShared(CallExpr* expr) {
     }
 
     return true;
+}
+
+bool Compiler::callArgsArePlain(CallExpr* expr, bool is_method) {
+    if (!expr) return false;
+    if (is_method) {
+        Expr* self_expr = (expr->callee->type == EXPR_METHOD_DOT)
+            ? expr->callee->as.table_dot.table
+            : nullptr;
+        if (!self_expr || exprMayBeShared(self_expr)) return false;
+    }
+    for (size_t i = 0; i < expr->arg_count; i++) {
+        if (exprMayBeShared(expr->arguments[i])) return false;
+    }
+    return true;
+}
+
+Compiler::DirectCallTarget Compiler::resolveDirectCallTarget(const char* name) {
+    DirectCallTarget target;
+    if (!name) return target;
+
+    if (current_->proto->name == name && current_->proto->upvalues.empty()) {
+        target.valid = true;
+        target.is_self = true;
+        target.proto = current_->proto;
+        target.proto_index = (uint16_t)BX_MASK;
+        return target;
+    }
+
+    for (size_t i = 0; i < current_->proto->protos.size(); i++) {
+        Prototype* proto = current_->proto->protos[i];
+        if (!proto || !proto->upvalues.empty()) continue;
+        if (readonly_function_globals_.find(proto->name) == readonly_function_globals_.end()) continue;
+        if (proto->name == name) {
+            target.valid = true;
+            target.proto = proto;
+            target.proto_index = (uint16_t)i;
+            return target;
+        }
+    }
+
+    return target;
 }
 
 bool Compiler::exprMayBeShared(Expr* expr) {
@@ -675,6 +757,9 @@ int Compiler::compileVariable(VariableExpr* expr, int dest) {
 
     // Global — use flat slot index when state is available
     int reg = (dest >= 0) ? dest : allocReg();
+    if (emitReadonlyGlobalConstant(reg, name)) {
+        return reg;
+    }
     emitGetGlobal(reg, name);
     return reg;
 }
@@ -1739,8 +1824,30 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
     int func_reg = allocReg();
 
     bool is_method = (expr->callee->type == EXPR_METHOD_DOT);
+    bool use_plain_call = callArgsArePlain(expr, is_method);
 
-    if (is_method) {
+    DirectCallTarget direct_target;
+    bool use_direct_call = false;
+    if (!is_method && expr->callee->type == EXPR_VARIABLE) {
+        const char* name = expr->callee->as.variable.name.identifier;
+        bool shadowed = false;
+        for (FunctionState* fs = current_; fs && !shadowed; fs = fs->enclosing) {
+            for (int i = (int)fs->locals.size() - 1; i >= 0; i--) {
+                if (fs->locals[i].name == name) {
+                    shadowed = true;
+                    break;
+                }
+            }
+        }
+        if (!shadowed) {
+            direct_target = resolveDirectCallTarget(name);
+            use_direct_call = direct_target.valid;
+        }
+    }
+
+    if (use_direct_call) {
+        // Arguments still live in the normal call frame layout: R[A+1..].
+    } else if (is_method) {
         TableDotExpr* dot = &expr->callee->as.table_dot;
         int tbl_reg = compileExpr(dot->table);
         int ki = stringConstant(dot->key.identifier);
@@ -1761,7 +1868,15 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
     int nargs = (int)expr->arg_count + 1 + (is_method ? 1 : 0);  // B = nargs + 1, +1 for self
     int nresults = 2;                       // C = nresults + 1 (1 result)
 
-    emitABC(OP_CALL, (uint8_t)func_reg, (uint8_t)nargs, (uint8_t)nresults);
+    if (use_direct_call) {
+        OpCode direct_op = use_plain_call ? OP_CALL_DIRECT_PLAIN : OP_CALL_DIRECT;
+        emitABx(direct_op, (uint8_t)func_reg, direct_target.proto_index);
+        emitABC(use_plain_call ? OP_CALL_PLAIN : OP_CALL,
+                (uint8_t)func_reg, (uint8_t)nargs, (uint8_t)nresults);
+    } else {
+        emitABC(use_plain_call ? OP_CALL_PLAIN : OP_CALL,
+                (uint8_t)func_reg, (uint8_t)nargs, (uint8_t)nresults);
+    }
 
     // After call, result is in func_reg. Free temporaries.
     setFreeReg(base);
@@ -2726,6 +2841,15 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
         int reg = allocReg();
         emitABx(OP_CLOSURE, (uint8_t)reg, (uint16_t)proto_idx);
         emitSetGlobal(reg, name);
+        if (state_) {
+            int slot = state_->assignGlobalSlot(name, globals_);
+            if (slot < 0) {
+                had_error_ = true;
+            } else {
+                emitABx(OP_GLOBAL_READONLY, 1, (uint16_t)slot);
+                readonly_function_globals_.insert(name);
+            }
+        }
         global_types_[name] = VAL_FUNCTION;
         setFreeReg(save);
     }
@@ -3505,7 +3629,9 @@ int Compiler::hoistLoopGlobals(Stmt* body) {
     for (const auto& name : globals) {
         std::string local_name = "(hoisted:" + name + ")";
         int reg = addLocal(pool_->intern(local_name.c_str())->data);
-        emitGetGlobal(reg, name.c_str());
+        if (!emitReadonlyGlobalConstant(reg, name.c_str())) {
+            emitGetGlobal(reg, name.c_str());
+        }
         hg.entries.push_back({name, reg});
     }
     hoisted_globals_stack_.push_back(std::move(hg));

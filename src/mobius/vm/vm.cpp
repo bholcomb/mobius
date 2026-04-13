@@ -798,6 +798,14 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
     return 0;
 }
 
+MOBIUS_FORCEINLINE static int vm_op_global_readonly(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)f;
+    int slot = DECODE_Bx(inst);
+    bool readonly = DECODE_A(inst) != 0;
+    vm->state_->setGlobalReadonly(slot, readonly, frame_globals(vm, f));
+    return 0;
+}
+
 // ---- Upvalues ----
 
 MOBIUS_FORCEINLINE static int vm_op_getupval(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -2233,6 +2241,62 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
 }
 
 // ---- Call / Tailcall ----
+MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint32_t inst,
+                                                  bool prepare_params) {
+    int a = DECODE_A(inst);
+    uint16_t proto_idx = DECODE_Bx(inst);
+    uint32_t inst2 = *f.ip++;
+    int b = DECODE_B(inst2);
+    int c = DECODE_C(inst2);
+    int nargs = b - 1;
+
+    Prototype* child = nullptr;
+    if (proto_idx == BX_MASK) {
+        child = f.ci->proto;
+    } else if ((size_t)proto_idx < f.ci->proto->protos.size()) {
+        child = f.ci->proto->protos[proto_idx];
+    }
+
+    if (!child) {
+        VM_ERROR(vm, f, "Direct call target is invalid");
+        return -1;
+    }
+    if (MOBIUS_UNLIKELY(!child->upvalues.empty())) {
+        VM_ERROR(vm, f, "Direct call target '%s' requires a closure environment",
+                         child->name.empty() ? "anonymous" : child->name.c_str());
+        return -1;
+    }
+    if (MOBIUS_UNLIKELY(child->num_params != nargs)) {
+        VM_ERROR(vm, f, "Function '%s' expects %d arguments but got %d",
+                         child->name.empty() ? "anonymous" : child->name.c_str(),
+                         child->num_params, nargs);
+        return -1;
+    }
+
+    int child_base = f.ci->base + a + 1;
+    vm->ensureRegisters(child_base + child->num_registers + 16);
+
+    if (prepare_params && !child->param_unwrap_on_entry.empty()) {
+        for (int i = 0; i < nargs; i++) {
+            Value& arg = vm->registers_[child_base + i];
+            if (i < (int)child->param_unwrap_on_entry.size() &&
+                child->param_unwrap_on_entry[i] &&
+                arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+                arg = shared_unwrap(arg);
+            }
+        }
+    }
+
+    if (MOBIUS_UNLIKELY(child->has_type_locks)) {
+        memset(&vm->type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
+    }
+
+    f.ci->ip = f.ip;
+    vm->callStackPush(child, child->code.data(), child_base, c);
+    vm->refreshFrame(f);
+    return 0;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t inst,
                                               bool prepare_params) {
     int a = DECODE_A(inst);
@@ -2330,6 +2394,14 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call_plain(MobiusVM* vm, VMFrame& 
     }
     uint32_t inst2 = *f.ip++;
     return vm_op_call_plain(vm, f, inst2);
+}
+
+MOBIUS_FORCEINLINE static int vm_op_call_direct(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_call_direct_impl(vm, f, inst, true);
+}
+
+MOBIUS_FORCEINLINE static int vm_op_call_direct_plain(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_call_direct_impl(vm, f, inst, false);
 }
 
 MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t inst, size_t base_depth) {
@@ -2749,6 +2821,10 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             Value val = entries[i].value;
             val.flags |= VAL_FLAG_DEFINED;
             int slot = vm->state_->assignGlobalSlot(key.as.string->data, globals);
+            if (slot < 0) {
+                VM_ERROR(vm, f, "Global slot capacity exceeded while importing '%s'", module_name);
+                return -1;
+            }
             vm->state_->setGlobalValue(slot, val, globals, false);
         }
     } else if (strchr(alias_name, '.') != nullptr) {
@@ -2797,6 +2873,10 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             Value tval = make_table_value(cur_table);
             tval.flags |= VAL_FLAG_DEFINED;
             int s = vm->state_->assignGlobalSlot(components[0].c_str(), globals);
+            if (s < 0) {
+                VM_ERROR(vm, f, "Global slot capacity exceeded while importing '%s'", module_name);
+                return -1;
+            }
             vm->state_->setGlobalValue(s, tval, globals, false);
         }
 
@@ -2825,6 +2905,10 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         Value tval = make_retained_table_value(mod_table);
         tval.flags |= VAL_FLAG_DEFINED;
         int s = vm->state_->assignGlobalSlot(alias_name, globals);
+        if (s < 0) {
+            VM_ERROR(vm, f, "Global slot capacity exceeded while importing '%s'", module_name);
+            return -1;
+        }
         vm->state_->setGlobalValue(s, tval, globals, false);
     }
 
@@ -3011,6 +3095,7 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
         };
 
         JobSystem* js = state->jobSystem();
+        frame_globals(vm, f)->shared.store(true, std::memory_order_release);
         js->submit(std::move(job));
 
         RA(inst) = make_future_value(future);
@@ -3184,7 +3269,7 @@ int MobiusVM::run(size_t base_depth) {
 #if defined(__GNUC__) || defined(__clang__)
     static const void* dispatch_table[] = {
         &&L_OP_MOVE, &&L_OP_LOADK, &&L_OP_LOADNIL, &&L_OP_LOADBOOL, &&L_OP_LOADINT,
-        &&L_OP_GETUPVAL, &&L_OP_SETUPVAL, &&L_OP_GETGLOBAL, &&L_OP_SETGLOBAL,
+        &&L_OP_GETUPVAL, &&L_OP_SETUPVAL, &&L_OP_GETGLOBAL, &&L_OP_SETGLOBAL, &&L_OP_GLOBAL_READONLY,
         &&L_OP_NEWTABLE, &&L_OP_NEWARRAY, &&L_OP_INDEX_GET, &&L_OP_INDEX_SET,
         &&L_OP_ADD, &&L_OP_SUB, &&L_OP_MUL, &&L_OP_DIV, &&L_OP_MOD,
         &&L_OP_UNM, &&L_OP_NOT,
@@ -3208,7 +3293,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_DIV_II, &&L_OP_DIV_FF, &&L_OP_MOD_FF,
         &&L_OP_ADDK, &&L_OP_SUBK, &&L_OP_MULK, &&L_OP_DIVK, &&L_OP_MODK,
         &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
-        &&L_OP_GETGLOBAL_CALL_PLAIN,
+        &&L_OP_GETGLOBAL_CALL_PLAIN, &&L_OP_CALL_DIRECT, &&L_OP_CALL_DIRECT_PLAIN,
         &&L_OP_ARRAY_PUSH,
         &&L_OP_LEN,
         &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
@@ -3284,6 +3369,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_SETUPVAL, vm_op_setupval)
     VM_HANDLER(OP_GETGLOBAL, vm_op_getglobal)
     VM_HANDLER(OP_SETGLOBAL, vm_op_setglobal)
+    VM_HANDLER(OP_GLOBAL_READONLY, vm_op_global_readonly)
     VM_HANDLER(OP_NEWTABLE, vm_op_newtable)
     VM_HANDLER(OP_NEWARRAY, vm_op_newarray)
     VM_HANDLER(OP_INDEX_GET, vm_op_index_get)
@@ -3356,6 +3442,8 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_GETGLOBAL_INDEX_GET, vm_op_getglobal_index_get)
     VM_HANDLER(OP_GETGLOBAL_CALL, vm_op_getglobal_call)
     VM_HANDLER(OP_GETGLOBAL_CALL_PLAIN, vm_op_getglobal_call_plain)
+    VM_HANDLER(OP_CALL_DIRECT, vm_op_call_direct)
+    VM_HANDLER(OP_CALL_DIRECT_PLAIN, vm_op_call_direct_plain)
 
     VM_HANDLER(OP_ARRAY_PUSH, vm_op_array_push)
 

@@ -361,8 +361,9 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         record.globals = std::make_unique<GlobalEnvironment>();
         const GlobalEnvironment* root_globals = state->rootGlobalEnvironment();
         {
-            std::lock_guard<std::recursive_mutex> globals_lock(root_globals->mutex);
+            std::lock_guard<std::mutex> globals_lock(root_globals->mutex);
             record.globals->slots = root_globals->slots;
+            record.globals->slot_names = root_globals->slot_names;
             record.globals->count.store(root_globals->count.load(std::memory_order_relaxed),
                                         std::memory_order_relaxed);
             record.globals->slot_map = root_globals->slot_map;

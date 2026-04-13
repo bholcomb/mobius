@@ -121,6 +121,7 @@ enum OpCode : uint8_t {
     OP_SETUPVAL,    // A B       UpValue[B] = R[A]
     OP_GETGLOBAL,   // A Bx      R[A] = globals[K[Bx]]
     OP_SETGLOBAL,   // A Bx      globals[K[Bx]] = R[A]
+    OP_GLOBAL_READONLY, // A Bx  set readonly flag on global slot Bx when A!=0
 
     // -- Table and array operations --
     OP_NEWTABLE,    // A B C     R[A] = new Table(B array slots, C hash slots)
@@ -239,6 +240,8 @@ enum OpCode : uint8_t {
     OP_GETGLOBAL_INDEX_GET, // consumes 2 words: GETGLOBAL(A,Bx) then INDEX_GET(A,A,RK(C))
     OP_GETGLOBAL_CALL, // consumes 2 words: GETGLOBAL(A,Bx) then CALL(A,B,C)
     OP_GETGLOBAL_CALL_PLAIN, // consumes 2 words: GETGLOBAL(A,Bx) then CALL_PLAIN(A,B,C)
+    OP_CALL_DIRECT, // consumes 2 words: direct script call to proto[Bx] (or self when Bx=0xFFFF)
+    OP_CALL_DIRECT_PLAIN, // same as OP_CALL_DIRECT, but explicit args are statically known non-shared
 
     // -- Array fast-path --
     OP_ARRAY_PUSH,  // A B       R[A].array.push(R[B])     (array-only append)
@@ -315,6 +318,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"SETUPVAL",  FMT_ABC},
         {"GETGLOBAL", FMT_ABx},
         {"SETGLOBAL", FMT_ABx},
+        {"GLOBAL_READONLY", FMT_ABx},
 
         {"NEWTABLE",  FMT_ABC},
         {"NEWARRAY",  FMT_ABC},
@@ -408,6 +412,8 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"GETGLOBAL_INDEX_GET", FMT_FUSED2},
         {"GETGLOBAL_CALL", FMT_FUSED2},
         {"GETGLOBAL_CALL_PLAIN", FMT_FUSED2},
+        {"CALL_DIRECT", FMT_FUSED2},
+        {"CALL_DIRECT_PLAIN", FMT_FUSED2},
 
         {"ARRAY_PUSH",FMT_ABC},
 

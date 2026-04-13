@@ -83,6 +83,13 @@ private:
     };
     std::vector<HoistedGlobals> hoisted_globals_stack_;
 
+    struct DirectCallTarget {
+        bool valid = false;
+        bool is_self = false;
+        uint16_t proto_index = 0;
+        Prototype* proto = nullptr;
+    };
+
     // --- Register management ---
     int allocReg();
     void allocRegs(int count);
@@ -118,6 +125,7 @@ private:
     int emitLoadK(int reg, int const_idx);
     void emitGetGlobal(int reg, const char* name);
     void emitSetGlobal(int reg, const char* name);
+    bool emitReadonlyGlobalConstant(int reg, const char* name);
 
     // --- Expression compilation ---
     // Returns the register holding the result.
@@ -192,12 +200,15 @@ private:
     bool globalMayBeShared(const char* name);
     bool callMayBeShared(CallExpr* expr);
     bool exprMayBeShared(Expr* expr);
+    bool callArgsArePlain(CallExpr* expr, bool is_method);
+    DirectCallTarget resolveDirectCallTarget(const char* name);
 
     // Global type tracking: maps global name → value type for user-defined
     // globals, and caches native function return types from the stdlib registry.
     std::unordered_map<std::string, ValueType> global_types_;
     std::unordered_map<std::string, bool> global_maybe_shared_;
     std::unordered_map<std::string, ValueType> native_return_types_;
+    std::unordered_set<std::string> readonly_function_globals_;
 
     // --- Helpers ---
     Prototype* endCompiler();

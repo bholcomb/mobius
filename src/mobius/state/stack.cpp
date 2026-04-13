@@ -740,6 +740,7 @@ void mobius_stack_setVariable(MobiusState* state, const char* name) {
 
     Value val = nctx->registers[--nctx->top];
     int slot = state->assignGlobalSlot(name);
+    if (slot < 0) return;
     state->setGlobalValue(slot, val);
 }
 
@@ -762,6 +763,7 @@ void mobius_stack_setGlobal(MobiusState* state, const char* name) {
 
     Value val = nctx->registers[--nctx->top];
     int slot = state->assignGlobalSlot(name);
+    if (slot < 0) return;
     state->setGlobalValue(slot, val);
 }
 
@@ -1086,6 +1088,7 @@ void mobius_register_function(MobiusState* state, const char* name,
     if (!state || !name || !func) return;
     Value fval = make_native_function_value(func);
     int slot = state->assignGlobalSlot(name);
+    if (slot < 0) return;
     state->setGlobalValue(slot, fval);
 }
 
