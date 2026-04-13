@@ -40,6 +40,7 @@ static const GlobalEnvironment* env_or_root(const MobiusState* state, const Glob
 }
 
 static constexpr size_t kGlobalSlotCapacity = 16384;
+static constexpr size_t kInitialStringBucketCount = 65536;
 
 static inline bool global_slot_in_bounds(const GlobalEnvironment* globals, int idx, int count) {
     return idx >= 0 && idx < count && (size_t)idx < globals->slots.size();
@@ -296,7 +297,7 @@ MobiusState::MobiusState(MobiusConfig* config)
     root_globals_.slots.resize(kGlobalSlotCapacity);
     root_globals_.slot_names.resize(kGlobalSlotCapacity);
 
-    string_pool_ = new (std::nothrow) StringInternPool(256);
+    string_pool_ = new (std::nothrow) StringInternPool(kInitialStringBucketCount);
     if (!string_pool_) return;
 
     metamethods_ = new (std::nothrow) Metamethods(string_pool_);

@@ -22,7 +22,7 @@ class StringInternPool {
 public:
     static constexpr int SHARD_COUNT = 16;
 
-    explicit StringInternPool(size_t initial_bucket_count = 256);
+    explicit StringInternPool(size_t initial_bucket_count = 65536);
     ~StringInternPool();
 
     StringInternPool(const StringInternPool&) = delete;
@@ -30,6 +30,7 @@ public:
 
     MobiusString* intern(const char* data);
     MobiusString* intern(const char* data, size_t length);
+    MobiusString* internOwned(char* data, size_t length);
     void stats(size_t* out_bucket_count, size_t* out_string_count,
                float* out_load_factor) const;
 
@@ -45,6 +46,7 @@ private:
 
         MobiusString* find(const char* data, size_t len, uint32_t hash) const;
         MobiusString* insert(const char* data, size_t len, uint32_t hash);
+        MobiusString* insertOwned(char* data, size_t len, uint32_t hash);
         void resize();
     };
 
