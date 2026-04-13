@@ -109,6 +109,32 @@ MobiusString* StringInternPool::Shard::insert(const char* data, size_t len, uint
     return str;
 }
 
+MobiusString* StringInternPool::Shard::insertOwned(char* data, size_t len, uint32_t hash) {
+    float current_load = (float)(string_count + 1) / (float)buckets.size();
+    if (current_load > load_factor) {
+        resize();
+    }
+
+    MobiusString* str = new (std::nothrow) MobiusString();
+    if (!str) {
+        delete[] data;
+        return nullptr;
+    }
+
+    str->data = data;
+    str->length = len;
+    str->hash = hash;
+    str->next = nullptr;
+
+    size_t bucket = hash & (buckets.size() - 1);
+    str->next = buckets[bucket];
+    buckets[bucket] = str;
+
+    string_count++;
+
+    return str;
+}
+
 void StringInternPool::Shard::resize() {
     size_t new_count = buckets.size() * 2;
     std::vector<MobiusString*> new_buckets(new_count, nullptr);
@@ -183,6 +209,24 @@ MobiusString* StringInternPool::intern(const char* data, size_t length) {
     }
 
     return shard.insert(data, length, hash);
+}
+
+MobiusString* StringInternPool::internOwned(char* data, size_t length) {
+    if (!data) return nullptr;
+
+    uint32_t hash = compute_string_hash(data, length);
+    int shard_idx = shardIndex(hash);
+    Shard& shard = shards_[shard_idx];
+
+    std::lock_guard<std::mutex> lock(shard.mutex);
+
+    MobiusString* existing = shard.find(data, length, hash);
+    if (existing) {
+        delete[] data;
+        return existing;
+    }
+
+    return shard.insertOwned(data, length, hash);
 }
 
 void StringInternPool::stats(size_t* out_bucket_count, size_t* out_string_count,

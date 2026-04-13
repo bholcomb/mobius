@@ -11,6 +11,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits>
+#include <new>
 
 static bool checked_add_size(size_t a, size_t b, size_t* out) {
     if (b > std::numeric_limits<size_t>::max() - a) return false;
@@ -22,6 +23,11 @@ static bool checked_mul_size(size_t a, size_t b, size_t* out) {
     if (a != 0 && b > std::numeric_limits<size_t>::max() / a) return false;
     *out = a * b;
     return true;
+}
+
+static MobiusString* intern_owned_string(MobiusState* state, char* buf, size_t len) {
+    if (!state || !buf) return nullptr;
+    return state->stringPool()->internOwned(buf, len);
 }
 
 // =============================================================================
@@ -69,7 +75,7 @@ int lib_upper(MobiusState* state, int arg_count) {
     
     const char* input = arg.as.string->data;
     size_t len = arg.as.string->length;
-    char* upper_str = (char*)malloc(len + 1);
+    char* upper_str = new (std::nothrow) char[len + 1];
     if (!upper_str) {
         return state->error("Memory allocation failed");
     }
@@ -79,8 +85,7 @@ int lib_upper(MobiusState* state, int arg_count) {
     }
     upper_str[len] = '\0';
     
-    MobiusString* result_string = state->stringPool()->intern(upper_str);
-    free(upper_str);
+    MobiusString* result_string = intern_owned_string(state, upper_str, len);
     
     if (!result_string) {
         return state->error("String creation failed");
@@ -104,7 +109,7 @@ int lib_lower(MobiusState* state, int arg_count) {
     
     const char* input = arg.as.string->data;
     size_t len = arg.as.string->length;
-    char* lower_str = (char*)malloc(len + 1);
+    char* lower_str = new (std::nothrow) char[len + 1];
     if (!lower_str) {
         return state->error("Memory allocation failed");
     }
@@ -114,8 +119,7 @@ int lib_lower(MobiusState* state, int arg_count) {
     }
     lower_str[len] = '\0';
     
-    MobiusString* result_string = state->stringPool()->intern(lower_str);
-    free(lower_str);
+    MobiusString* result_string = intern_owned_string(state, lower_str, len);
     
     if (!result_string) {
         return state->error("String creation failed");
@@ -167,7 +171,7 @@ int lib_substr(MobiusState* state, int arg_count) {
         actual_length = input_len - (size_t)start;
     }
     
-    char* substr_data = (char*)malloc(actual_length + 1);
+    char* substr_data = new (std::nothrow) char[actual_length + 1];
     if (!substr_data) {
         return state->error("Memory allocation failed");
     }
@@ -175,8 +179,7 @@ int lib_substr(MobiusState* state, int arg_count) {
     strncpy(substr_data, input + start, actual_length);
     substr_data[actual_length] = '\0';
     
-    MobiusString* result_string = state->stringPool()->intern(substr_data);
-    free(substr_data);
+    MobiusString* result_string = intern_owned_string(state, substr_data, actual_length);
     
     if (!result_string) {
         return state->error("String creation failed");
@@ -208,7 +211,7 @@ int lib_concat(MobiusState* state, int arg_count) {
     if (!checked_add_size(total_length, 1, &alloc_size)) {
         return state->error("concat result too large");
     }
-    char* result_data = (char*)malloc(alloc_size);
+    char* result_data = new (std::nothrow) char[alloc_size];
     if (!result_data) {
         return state->error("Memory allocation failed");
     }
@@ -228,8 +231,7 @@ int lib_concat(MobiusState* state, int arg_count) {
         state->npop();
     }
     
-    MobiusString* result_string = state->stringPool()->intern(result_data);
-    free(result_data);
+    MobiusString* result_string = intern_owned_string(state, result_data, total_length);
     
     if (!result_string) {
         return state->error("String creation failed");
@@ -296,14 +298,18 @@ int lib_split(MobiusState* state, int arg_count) {
         const char* found;
         while ((found = strstr(p, delim)) != NULL) {
             size_t seg_len = found - p;
-            char* seg = (char*)malloc(seg_len + 1);
+            char* seg = new (std::nothrow) char[seg_len + 1];
             if (!seg) {
                 arr->release();
                 return state->error("Memory allocation failed");
             }
             memcpy(seg, p, seg_len); seg[seg_len] = '\0';
-            arr->push(make_string_value_from_cstr(state, seg));
-            free(seg);
+            MobiusString* seg_str = intern_owned_string(state, seg, seg_len);
+            if (!seg_str) {
+                arr->release();
+                return state->error("String creation failed");
+            }
+            arr->push(make_string_value(seg_str));
             p = found + delim_len;
         }
         arr->push(make_string_value_from_cstr(state, p));
@@ -347,7 +353,7 @@ int lib_join(MobiusState* state, int arg_count) {
     if (!checked_add_size(total, 1, &alloc_size)) {
         return state->error("join result too large");
     }
-    char* buf = (char*)malloc(alloc_size);
+    char* buf = new (std::nothrow) char[alloc_size];
     if (!buf) {
         return state->error("Memory allocation failed");
     }
@@ -362,8 +368,10 @@ int lib_join(MobiusState* state, int arg_count) {
     }
     buf[offset] = '\0';
 
-    MobiusString* result = state->stringPool()->intern(buf);
-    free(buf);
+    MobiusString* result = intern_owned_string(state, buf, total);
+    if (!result) {
+        return state->error("String creation failed");
+    }
     state->npush(make_string_value(result));
     return 1;
 }
@@ -386,15 +394,17 @@ int lib_trim(MobiusState* state, int arg_count) {
     while (end > start && isspace((unsigned char)s[end - 1])) end--;
 
     size_t new_len = end - start;
-    char* buf = (char*)malloc(new_len + 1);
+    char* buf = new (std::nothrow) char[new_len + 1];
     if (!buf) {
         return state->error("Memory allocation failed");
     }
     memcpy(buf, s + start, new_len);
     buf[new_len] = '\0';
 
-    MobiusString* result = state->stringPool()->intern(buf);
-    free(buf);
+    MobiusString* result = intern_owned_string(state, buf, new_len);
+    if (!result) {
+        return state->error("String creation failed");
+    }
     state->npush(make_string_value(result));
     return 1;
 }
@@ -487,7 +497,7 @@ int lib_replace(MobiusState* state, int arg_count) {
     if (!checked_add_size(result_len, 1, &alloc_size)) {
         return state->error("replace result too large");
     }
-    char* buf = (char*)malloc(alloc_size);
+    char* buf = new (std::nothrow) char[alloc_size];
     if (!buf) {
         return state->error("Memory allocation failed");
     }
@@ -502,8 +512,10 @@ int lib_replace(MobiusState* state, int arg_count) {
     }
     strcpy(dst, p);
 
-    MobiusString* result = state->stringPool()->intern(buf);
-    free(buf);
+    MobiusString* result = intern_owned_string(state, buf, result_len);
+    if (!result) {
+        return state->error("String creation failed");
+    }
     state->npush(make_string_value(result));
     return 1;
 }
@@ -555,7 +567,7 @@ int lib_repeat(MobiusState* state, int arg_count) {
     if (!checked_add_size(total, 1, &alloc_size)) {
         return state->error("repeat result too large");
     }
-    char* buf = (char*)malloc(alloc_size);
+    char* buf = new (std::nothrow) char[alloc_size];
     if (!buf) {
         return state->error("Memory allocation failed");
     }
@@ -564,8 +576,10 @@ int lib_repeat(MobiusState* state, int arg_count) {
     }
     buf[total] = '\0';
 
-    MobiusString* result = state->stringPool()->intern(buf);
-    free(buf);
+    MobiusString* result = intern_owned_string(state, buf, total);
+    if (!result) {
+        return state->error("String creation failed");
+    }
     state->npush(make_string_value(result));
     return 1;
 }

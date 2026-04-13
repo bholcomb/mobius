@@ -16,6 +16,7 @@
 #include <stdlib.h>
 #include <limits>
 #include <string.h>
+#include <string>
 #include <unordered_map>
 
 // ============================================================================
@@ -548,6 +549,100 @@ Value make_string_value_from_cstr(MobiusState* state, const char* cstr) {
     }
     MobiusString* str = state->stringPool()->intern(cstr);
     return make_string_value(str);
+}
+
+MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {
+    if (!state) return nullptr;
+
+    char buffer[128];
+    auto pool = state->stringPool();
+    if (!pool) return nullptr;
+
+    switch (value.type) {
+        case VAL_NIL:
+            return pool->intern("nil", 3);
+        case VAL_BOOL:
+            return value.as.boolean ? pool->intern("true", 4) : pool->intern("false", 5);
+        case VAL_INT64: {
+            int len = snprintf(buffer, sizeof(buffer), "%ld", value.as.i64);
+            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+        }
+        case VAL_UINT64: {
+            int len = snprintf(buffer, sizeof(buffer), "%lu", value.as.u64);
+            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+        }
+        case VAL_FLOAT64: {
+            int len = 0;
+            if (value.as.double_val == (double)(long long)value.as.double_val) {
+                len = snprintf(buffer, sizeof(buffer), "%.1f", value.as.double_val);
+            } else {
+                len = snprintf(buffer, sizeof(buffer), "%g", value.as.double_val);
+            }
+            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+        }
+        case VAL_STRING:
+            return value.as.string ? value.as.string : pool->intern("(null)", 6);
+        case VAL_CHAR:
+            buffer[0] = value.as.character;
+            buffer[1] = '\0';
+            return pool->intern(buffer, 1);
+        case VAL_FUNCTION:
+            return pool->intern("<function>", 10);
+        case VAL_NATIVE_FUNCTION:
+            return pool->intern("<native function>", 17);
+        case VAL_TABLE:
+            return pool->intern("<table>", 7);
+        case VAL_ARRAY:
+            return pool->intern("<array>", 7);
+        case VAL_USERDATA:
+            if (value.as.userdata && value.as.userdata->ptr) {
+                int len = snprintf(buffer, sizeof(buffer), "<%s userdata %p>",
+                                   value.as.userdata->type_name ? value.as.userdata->type_name : "unknown",
+                                   value.as.userdata->ptr);
+                return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+            }
+            return pool->intern("<userdata (null)>", 17);
+        case VAL_ENUM: {
+            const char* member_name = enum_value_name(value);
+            if (member_name) {
+                std::string text = value.as.enum_def->name();
+                text.push_back('.');
+                text += member_name;
+                return pool->intern(text.c_str(), text.size());
+            }
+            int len = snprintf(buffer, sizeof(buffer), "%s(%d)",
+                               value.as.enum_def->name().c_str(), value.aux);
+            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+        }
+        case VAL_FUTURE: {
+            int len = snprintf(buffer, sizeof(buffer), "<future %p>", (void*)value.as.future);
+            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+        }
+        case VAL_ARRAY_SLICE: {
+            int len = snprintf(buffer, sizeof(buffer), "<slice len=%zu>",
+                               value.as.array_slice ? value.as.array_slice->length() : 0);
+            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+        }
+        case VAL_CHANNEL: {
+            int len = snprintf(buffer, sizeof(buffer), "<channel %p>", (void*)value.as.channel);
+            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+        }
+        case VAL_SHARED_CELL:
+            if (value.as.shared_cell) {
+                return value_to_interned_string(state, value.as.shared_cell->load());
+            }
+            return pool->intern("<shared null>", 13);
+        case VAL_BUFFER:
+            if (value.as.buffer) {
+                int len = snprintf(buffer, sizeof(buffer), "<buffer len=%zu%s>",
+                                   value.as.buffer->size(),
+                                   value.as.buffer->isFixed() ? " fixed" : "");
+                return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+            }
+            return pool->intern("<buffer (null)>", 15);
+        default:
+            return pool->intern("unknown", 7);
+    }
 }
 
 Value Value::makeEnum(EnumDefinition* definition, int64_t val) {

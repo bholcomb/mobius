@@ -272,6 +272,7 @@ inline Value make_float_value(double val) {
 
 MOBIUS_API Value make_string_value(MobiusString* string);
 MOBIUS_API Value make_string_value_from_cstr(MobiusState* state, const char* cstr);
+MOBIUS_API MobiusString* value_to_interned_string(MobiusState* state, const Value& value);
 MOBIUS_API Value make_function_value(struct MobiusFunction* function);
 MOBIUS_API Value make_native_function_value(MobiusCFunction function);
 MOBIUS_API Value make_userdata_value(MobiusState* state, void* ptr, UserdataDestructor destructor,
