@@ -2299,6 +2299,11 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
             emitABC(OP_TYPELOCK, (uint8_t)reg, 0, 0);
             current_->proto->has_type_locks = true;
         }
+
+        // Local initializers may use temporary registers while evaluating the
+        // RHS, but the binding itself must remain packed at its assigned
+        // register so local index -> register mapping stays stable.
+        setFreeReg(reg + 1);
     } else {
         // Global variable
         ValueType inferred = stmt->initializer ? inferExprType(stmt->initializer) : VAL_UNKNOWN;

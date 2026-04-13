@@ -1,0 +1,137 @@
+import "../../src/modules/web/web" as web
+import "http"
+import "socket"
+import "websocket"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count += 1
+        print("PASS: " + name)
+    } else {
+        fail_count += 1
+        print("FAIL: " + name)
+    }
+}
+
+assert_test("html escape helper", web.html_escape("<tag attr=\"x\">&") == "&lt;tag attr=&quot;x&quot;&gt;&amp;")
+
+var app = web.app()
+app:use(func(ctx, next) {
+    ctx:set_header("x-middleware", "yes")
+    return next()
+})
+
+app:get("/hello/:name", func(ctx) {
+    return ctx:text("hello " + ctx:param("name") + " lang=" + ctx:query("lang", "en"))
+})
+
+app:post("/json", func(ctx) {
+    var body = ctx:json_body()
+    return ctx:status(201):json({
+        ok: true,
+        title: body.title
+    })
+})
+
+app:post("/form", func(ctx) {
+    var form = ctx:form_body()
+    return ctx:html("<p>" + form.title + "</p>")
+})
+
+var listener = socket.listen("127.0.0.1", 0)
+var port = listener:local_addr().port
+var server = app:serve_async(listener, {
+    max_connections: 4,
+    timeout_ms: 1000
+})
+
+var hello_response = http.request({
+    host: "127.0.0.1",
+    port: port,
+    path: "/hello/mobius",
+    query: "lang=fr",
+    timeout_ms: 1000
+})
+assert_test("hello route status", hello_response.status == 200)
+assert_test("hello route text", hello_response.text == "hello mobius lang=fr")
+assert_test("middleware header set", hello_response.headers["x-middleware"] == "yes")
+
+var json_response = http.request({
+    host: "127.0.0.1",
+    port: port,
+    method: "POST",
+    path: "/json",
+    headers: {
+        ["content-type"] = "application/json"
+    },
+    body: "{\"title\":\"Ship It\"}",
+    timeout_ms: 1000
+})
+assert_test("json route status", json_response.status == 201)
+assert_test("json route body", json_response.text != nil && contains(json_response.text, "\"title\": \"Ship It\""))
+
+var form_response = http.request({
+    host: "127.0.0.1",
+    port: port,
+    method: "POST",
+    path: "/form",
+    headers: {
+        ["content-type"] = "application/x-www-form-urlencoded"
+    },
+    body: "title=FormTitle",
+    timeout_ms: 1000
+})
+assert_test("form route status", form_response.status == 200)
+assert_test("form route html", form_response.text == "<p>FormTitle</p>")
+
+var missing_response = http.request({
+    host: "127.0.0.1",
+    port: port,
+    path: "/missing",
+    timeout_ms: 1000
+})
+assert_test("not found status", missing_response.status == 404)
+assert_test("not found text", missing_response.text == "Not found\n")
+
+assert_test("server handled expected count", await server == 4)
+listener:close()
+
+var ws_app = web.app()
+ws_app:websocket("/ws/:room", func(ws, ctx) {
+    var text = ws:recv_text()
+    ws:send_text("room=" + ctx:param("room") + ":" + text)
+    ws:close(1000, "bye")
+})
+
+var ws_listener = socket.listen("127.0.0.1", 0)
+var ws_port = ws_listener:local_addr().port
+var ws_server = ws_app:serve_async(ws_listener, {
+    max_connections: 1,
+    timeout_ms: 1000
+})
+
+var ws = websocket.connect({
+    host: "127.0.0.1",
+    port: ws_port,
+    path: "/ws/lobby",
+    timeout_ms: 1000
+})
+ws:send("hello")
+var ws_echo = ws:recv()
+assert_test("websocket route echo", ws_echo.text == "room=lobby:hello")
+var ws_close = ws:recv()
+assert_test("websocket close received", ws_close.close_code == 1000)
+assert_test("websocket close reason", ws_close.close_reason == "bye")
+ws:close()
+
+assert_test("websocket server handled expected count", await ws_server == 1)
+ws_listener:close()
+
+print("")
+print("Web Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count != 0) {
+    exit(1)
+}

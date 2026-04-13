@@ -19,6 +19,7 @@ Current built-in first-party modules:
 - [`socket`](socket.md) - plain TCP client/listener APIs with buffer-first I/O
 - [`toml`](toml.md) - TOML parsing and serialization
 - [`url`](url.md) - URL parsing, encoding, and query helpers
+- [`web`](web.md) - high-level HTTP routing, middleware, and websocket helpers
 - [`websocket`](websocket.md) - websocket handshake and frame protocol helpers
 - [`yaml`](yaml.md) - dependency-free YAML subset parser and serializer
 

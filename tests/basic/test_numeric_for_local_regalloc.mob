@@ -1,0 +1,32 @@
+// REQUIRE: numeric for local regalloc: PASS
+
+func maybe_shared_text(v: string): string {
+    shared var cell = v
+    return cell
+}
+
+func run() {
+    var prefix = maybe_shared_text("ok")
+    var rows = [
+        {["value"] = 1},
+        {["value"] = 2},
+        {["value"] = 3}
+    ]
+
+    for (var i = 0; i < len(rows); i += 1) {
+        var row = rows[i]
+        if (row.value != i + 1) {
+            print("numeric for local regalloc: FAIL")
+            exit(1)
+        }
+    }
+
+    if (prefix != "ok") {
+        print("numeric for local regalloc: FAIL")
+        exit(1)
+    }
+
+    print("numeric for local regalloc: PASS")
+}
+
+run()

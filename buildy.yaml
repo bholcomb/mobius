@@ -50,6 +50,7 @@ staging:
         - "${out_dir}/bin/yaml.so"
         - "${out_dir}/bin/http.so"
         - "src/modules/http/http.mob"
+        - "src/modules/web/web.mob"
         - "${out_dir}/bin/websocket.so"
         - "src/modules/websocket/websocket.mob"
         - "${out_dir}/bin/socket.so"
