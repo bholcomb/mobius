@@ -1,0 +1,720 @@
+import "fiber"
+import "http"
+import "json"
+import "socket"
+import "url"
+import "websocket"
+
+func __find_header_separator(raw) {
+    var pos = find(raw, "\r\n\r\n")
+    if (pos >= 0) {
+        return { index: pos, len: 4 }
+    }
+
+    pos = find(raw, "\n\n")
+    if (pos >= 0) {
+        return { index: pos, len: 2 }
+    }
+
+    return nil
+}
+
+func __read_http_request(conn) {
+    var raw = buffer_create(0)
+
+    while (true) {
+        var text = raw:to_string()
+        var sep = __find_header_separator(text)
+        if (sep != nil) {
+            var header_text = substr(text, 0, sep.index + sep.len)
+            var request = http.parse_request(header_text)
+            var body_offset = sep.index + sep.len
+            var body = buffer_create(0)
+            if (len(raw) > body_offset) {
+                body:append(raw:slice(body_offset, len(raw) - body_offset))
+            }
+
+            if (request.content_length != nil) {
+                while (len(body) < request.content_length) {
+                    var chunk = conn:recv(4096)
+                    if (chunk == nil) {
+                        throw "request body ended before content-length bytes were read"
+                    }
+                    body:append(chunk)
+                }
+                if (len(body) > request.content_length) {
+                    body = body:slice(0, request.content_length)
+                }
+            }
+
+            request.body_buffer = body
+            request.body = body:to_string()
+            return request
+        }
+
+        var chunk = conn:recv(4096)
+        if (chunk == nil) {
+            if (len(raw) == 0) {
+                return nil
+            }
+            throw "connection closed before request headers completed"
+        }
+        raw:append(chunk)
+    }
+}
+
+func __copy_buffer(buf) {
+    var out = buffer_create(0)
+    if (buf != nil && len(buf) > 0) {
+        out:append(buf)
+    }
+    return out
+}
+
+func __buffer_tail(buf, offset) {
+    var out = buffer_create(0)
+    if (buf == nil) {
+        return out
+    }
+    var remaining = len(buf) - offset
+    if (remaining > 0) {
+        out:append(buf:slice(offset, remaining))
+    }
+    return out
+}
+
+func __normalize_path(path) {
+    if (path == nil || path == "") {
+        return "/"
+    }
+    if (path[0] != "/") {
+        path = "/" + path
+    }
+    while (len(path) > 1 && endswith(path, "/")) {
+        path = substr(path, 0, len(path) - 1)
+    }
+    return path
+}
+
+func __path_segments(path) {
+    var parts = split(__normalize_path(path), "/")
+    var out = []
+    for (var i = 0; i < len(parts); i += 1) {
+        if (parts[i] != "") {
+            out:push(parts[i])
+        }
+    }
+    return out
+}
+
+func __clone_headers(headers) {
+    var out = {}
+    if (headers == nil) {
+        return out
+    }
+    for (var key in headers) {
+        out[lower(str(key))] = headers[key]
+    }
+    return out
+}
+
+func html_escape(text) {
+    if (text == nil) {
+        return ""
+    }
+    var out = replace(str(text), "&", "&amp;")
+    out = replace(out, "<", "&lt;")
+    out = replace(out, ">", "&gt;")
+    out = replace(out, "\"", "&quot;")
+    return out
+}
+
+func __route_matches(route_path, request_path) {
+    var route_segments = __path_segments(route_path)
+    var request_segments = __path_segments(request_path)
+    if (len(route_segments) != len(request_segments)) {
+        return nil
+    }
+
+    var params = {}
+    for (var i = 0; i < len(route_segments); i += 1) {
+        var route_seg = route_segments[i]
+        var request_seg = request_segments[i]
+        if (startswith(route_seg, ":")) {
+            params[substr(route_seg, 1, len(route_seg) - 1)] = request_seg
+        } else if (route_seg != request_seg) {
+            return nil
+        }
+    }
+    return params
+}
+
+func __default_not_found(ctx) {
+    return ctx:status(404):text("Not found\n")
+}
+
+func __default_error(ctx, err) {
+    return ctx:status(500):text("Internal server error\n" + str(err) + "\n")
+}
+
+func __ensure_response(ctx) {
+    if (ctx.response == nil) {
+        ctx.response = {
+            status: 200,
+            headers: {},
+            body: ""
+        }
+    }
+    if (ctx.response.headers == nil) {
+        ctx.response.headers = {}
+    }
+    return ctx.response
+}
+
+func __ctx_param(self, name) {
+    return self.params[name]
+}
+
+func __ctx_query(self, name, default_value) {
+    if (self.query_values == nil) {
+        if (self.request.query == nil || self.request.query == "") {
+            self.query_values = {}
+        } else {
+            self.query_values = url.parse_query(self.request.query)
+        }
+    }
+    var value = self.query_values[name]
+    if (value == nil) {
+        return default_value
+    }
+    return value
+}
+
+func __ctx_header(self, name, default_value) {
+    var value = self.request.headers[lower(name)]
+    if (value == nil) {
+        return default_value
+    }
+    return value
+}
+
+func __ctx_form_body(self) {
+    if (self.form_values == nil) {
+        if (self.request.body == nil || self.request.body == "") {
+            self.form_values = {}
+        } else {
+            self.form_values = url.parse_query(self.request.body)
+        }
+    }
+    return self.form_values
+}
+
+func __ctx_json_body(self) {
+    if (self.json_value == nil) {
+        if (self.request.body == nil || self.request.body == "") {
+            self.json_value = {}
+        } else {
+            self.json_value = json.parse(self.request.body)
+        }
+    }
+    return self.json_value
+}
+
+func __ctx_text_body(self) {
+    if (self.request.body == nil) {
+        return ""
+    }
+    return self.request.body
+}
+
+func __ctx_status(self, status) {
+    var response = __ensure_response(self)
+    response.status = status
+    return self
+}
+
+func __ctx_set_header(self, name, value) {
+    var response = __ensure_response(self)
+    response.headers[lower(name)] = value
+    return self
+}
+
+func __ctx_send(self, response) {
+    if (response.headers == nil) {
+        response.headers = {}
+    }
+    if (self.response != nil && self.response.headers != nil) {
+        for (var key in self.response.headers) {
+            var normalized = lower(str(key))
+            if (response.headers[normalized] == nil) {
+                response.headers[normalized] = self.response.headers[key]
+            }
+        }
+    }
+    if (response.status == nil) {
+        if (self.response != nil && self.response.status != nil) {
+            response.status = self.response.status
+        } else {
+            response.status = 200
+        }
+    }
+    self.response = response
+    return response
+}
+
+func __ctx_text(self, body) {
+    var status = 200
+    if (self.response != nil && self.response.status != nil) {
+        status = self.response.status
+    }
+    return __ctx_send(self, {
+        status: status,
+        headers: {
+            ["content-type"] = "text/plain; charset=utf-8",
+            ["connection"] = "close"
+        },
+        body: body
+    })
+}
+
+func __ctx_html(self, body) {
+    var status = 200
+    if (self.response != nil && self.response.status != nil) {
+        status = self.response.status
+    }
+    return __ctx_send(self, {
+        status: status,
+        headers: {
+            ["content-type"] = "text/html; charset=utf-8",
+            ["connection"] = "close"
+        },
+        body: body
+    })
+}
+
+func __ctx_json(self, value) {
+    var status = 200
+    if (self.response != nil && self.response.status != nil) {
+        status = self.response.status
+    }
+    return __ctx_send(self, {
+        status: status,
+        headers: {
+            ["content-type"] = "application/json; charset=utf-8",
+            ["connection"] = "close"
+        },
+        body: json.stringify(value, 2)
+    })
+}
+
+func __ctx_redirect(self, location) {
+    var status = 303
+    if (self.response != nil && self.response.status != nil) {
+        status = self.response.status
+    }
+    return __ctx_send(self, {
+        status: status,
+        headers: {
+            location: location,
+            ["connection"] = "close"
+        },
+        body: ""
+    })
+}
+
+func __make_ctx(app_value, request, conn, params) {
+    var ctx = {
+        app: app_value,
+        conn: conn,
+        request: request,
+        response: nil,
+        params: params,
+        query_values: nil,
+        form_values: nil,
+        json_value: nil,
+        method: request.method,
+        path: request.path,
+        target: request.target,
+        headers: request.headers,
+        body: request.body,
+        remote_addr: conn:peer_addr()
+    }
+    ctx.param = __ctx_param
+    ctx.query = __ctx_query
+    ctx.header = __ctx_header
+    ctx.form_body = __ctx_form_body
+    ctx.json_body = __ctx_json_body
+    ctx.text_body = __ctx_text_body
+    ctx.status = __ctx_status
+    ctx.set_header = __ctx_set_header
+    ctx.send = __ctx_send
+    ctx.text = __ctx_text
+    ctx.html = __ctx_html
+    ctx.json = __ctx_json
+    ctx.redirect = __ctx_redirect
+    return ctx
+}
+
+func __find_route(app_value, method, path, websocket_only) {
+    var normalized = __normalize_path(path)
+    for (var i = 0; i < len(app_value.routes); i += 1) {
+        var route = app_value.routes[i]
+        if (route.websocket != websocket_only) {
+            continue
+        }
+        if (route.method != method) {
+            continue
+        }
+        var params = __route_matches(route.path, normalized)
+        if (params != nil) {
+            return {
+                route: route,
+                params: params
+            }
+        }
+    }
+    return nil
+}
+
+func __write_response(conn, response) {
+    if (response == nil) {
+        response = {
+            status: 204,
+            headers: {
+                ["connection"] = "close"
+            },
+            body: ""
+        }
+    }
+    if (response.headers == nil) {
+        response.headers = {}
+    }
+    if (response.headers["connection"] == nil) {
+        response.headers["connection"] = "close"
+    }
+    conn:send(http.build_response(response))
+}
+
+func __run_handlers(ctx, route_handler, index) {
+    if (index < len(ctx.app.middleware)) {
+        var middleware = ctx.app.middleware[index]
+        var next = func() {
+            return __run_handlers(ctx, route_handler, index + 1)
+        }
+        return middleware(ctx, next)
+    }
+
+    return route_handler(ctx)
+}
+
+func __ws_send_text(self, text) {
+    self.conn:send(websocket.build_frame({ text: text }))
+    return true
+}
+
+func __ws_send_json(self, value) {
+    self.conn:send(websocket.build_frame({ text: json.stringify(value, 2) }))
+    return true
+}
+
+func __ws_recv(self) {
+    while (true) {
+        var frame = websocket.__try_parse_frame(self.read_buffer)
+        if (frame != nil) {
+            self.read_buffer = __buffer_tail(self.read_buffer, frame.frame_length)
+            if (frame.opcode == 8) {
+                self.closed = true
+                return nil
+            }
+            if (frame.opcode == 9) {
+                self.conn:send(websocket.build_frame({
+                    type: "pong",
+                    payload: frame.payload
+                }))
+                continue
+            }
+            return frame
+        }
+
+        var chunk = self.conn:recv(4096)
+        if (chunk == nil) {
+            self.closed = true
+            return nil
+        }
+        self.read_buffer:append(chunk)
+    }
+}
+
+func __ws_recv_text(self) {
+    var frame = self:recv()
+    if (frame == nil) {
+        return nil
+    }
+    return frame.text
+}
+
+func __ws_recv_json(self) {
+    var text = self:recv_text()
+    if (text == nil) {
+        return nil
+    }
+    return json.parse(text)
+}
+
+func __ws_close(self, code, reason) {
+    if (self.closed) {
+        return true
+    }
+
+    var spec = { type: "close" }
+    if (code != nil) {
+        spec.close_code = code
+    }
+    if (reason != nil) {
+        spec.close_reason = reason
+    }
+    self.conn:send(websocket.build_frame(spec))
+    self.conn:close()
+    self.closed = true
+    return true
+}
+
+func __ws_is_closed(self) {
+    return self.closed || self.conn:is_closed()
+}
+
+func __make_ws_session(conn, request) {
+    var ws = {
+        conn: conn,
+        request: request,
+        read_buffer: buffer_create(0),
+        closed: false
+    }
+    ws.send_text = __ws_send_text
+    ws.send_json = __ws_send_json
+    ws.recv = __ws_recv
+    ws.recv_text = __ws_recv_text
+    ws.recv_json = __ws_recv_json
+    ws.close = __ws_close
+    ws.is_closed = __ws_is_closed
+    return ws
+}
+
+func __handle_connection(app_value, conn, options) {
+    try {
+        if (options != nil && options.timeout_ms != nil) {
+            conn:set_timeout(options.timeout_ms)
+        }
+
+        var request = __read_http_request(conn)
+        if (request == nil) {
+            return nil
+        }
+
+        if (websocket.is_upgrade_request(request)) {
+            var websocket_match = __find_route(app_value, upper(request.method), request.path, true)
+            if (websocket_match == nil) {
+                __write_response(conn, {
+                    status: 404,
+                    headers: {
+                        ["content-type"] = "text/plain; charset=utf-8",
+                        ["connection"] = "close"
+                    },
+                    body: "Not found\n"
+                })
+                return nil
+            }
+
+            var ws_ctx = __make_ctx(app_value, request, conn, websocket_match.params)
+            var handshake = websocket.handshake_response(request)
+            conn:send(http.build_response(handshake))
+            var ws = __make_ws_session(conn, request)
+            websocket_match.route.handler(ws, ws_ctx)
+            return nil
+        }
+
+        var matched = __find_route(app_value, upper(request.method), request.path, false)
+        if (matched == nil) {
+            var not_found_ctx = __make_ctx(app_value, request, conn, {})
+            var fallback = app_value.not_found_handler(not_found_ctx)
+            if (fallback != nil && not_found_ctx.response == nil) {
+                not_found_ctx.response = fallback
+            }
+            __write_response(conn, not_found_ctx.response)
+            return nil
+        }
+
+        var ctx = __make_ctx(app_value, request, conn, matched.params)
+        try {
+            var result = __run_handlers(ctx, matched.route.handler, 0)
+            if (result != nil && ctx.response == nil) {
+                ctx.response = result
+            }
+        } catch err {
+            var fallback_error = app_value.error_handler(ctx, err)
+            if (fallback_error != nil && ctx.response == nil) {
+                ctx.response = fallback_error
+            }
+        }
+
+        __write_response(conn, ctx.response)
+        return nil
+    } catch err {
+        throw err
+    } finally {
+        if (!conn:is_closed()) {
+            conn:close()
+        }
+    }
+}
+
+func __app_use(self, handler) {
+    self.middleware:push(handler)
+    return self
+}
+
+func __app_add_route(self, method, path, handler, is_websocket) {
+    self.routes:push({
+        method: upper(method),
+        path: __normalize_path(path),
+        handler: handler,
+        websocket: is_websocket
+    })
+    return self
+}
+
+func __app_get(self, path, handler) {
+    return __app_add_route(self, "GET", path, handler, false)
+}
+
+func __app_post(self, path, handler) {
+    return __app_add_route(self, "POST", path, handler, false)
+}
+
+func __app_put(self, path, handler) {
+    return __app_add_route(self, "PUT", path, handler, false)
+}
+
+func __app_delete(self, path, handler) {
+    return __app_add_route(self, "DELETE", path, handler, false)
+}
+
+func __app_websocket(self, path, handler) {
+    return __app_add_route(self, "GET", path, handler, true)
+}
+
+func __app_on_error(self, handler) {
+    self.error_handler = handler
+    return self
+}
+
+func __app_on_not_found(self, handler) {
+    self.not_found_handler = handler
+    return self
+}
+
+func __serve_worker(app_value, conn_ch, options) {
+    var handled = 0
+    while (true) {
+        var conn = conn_ch:recv()
+        if (conn == false) {
+            break
+        }
+        __handle_connection(app_value, conn, options)
+        handled += 1
+    }
+    return handled
+}
+
+func __app_serve(self, listener, options) {
+    var max_connections = nil
+    var worker_count = 4
+    var channel_capacity = 16
+    if (options != nil) {
+        max_connections = options.max_connections
+        if (options.worker_count != nil) {
+            worker_count = options.worker_count
+        }
+        if (options.channel_capacity != nil) {
+            channel_capacity = options.channel_capacity
+        }
+    }
+
+    if (worker_count < 1) {
+        worker_count = 1
+    }
+
+    var accepted = 0
+    var workers = []
+    var conn_ch = fiber.channel(channel_capacity)
+
+    for (var i = 0; i < worker_count; i += 1) {
+        workers:push(spawn __serve_worker(self, conn_ch, options))
+    }
+
+    try {
+        while (true) {
+            if (max_connections != nil && accepted >= max_connections) {
+                break
+            }
+            var conn = listener:accept()
+            accepted += 1
+            conn_ch:send(conn)
+        }
+    } catch err {
+        throw err
+    } finally {
+        for (var i = 0; i < worker_count; i += 1) {
+            conn_ch:send(false)
+        }
+        conn_ch:close()
+    }
+
+    for (var i = 0; i < len(workers); i += 1) {
+        await workers[i]
+    }
+    return accepted
+}
+
+func __app_listen(self, host, port, options) {
+    var backlog = 128
+    if (options != nil && options.backlog != nil) {
+        backlog = options.backlog
+    }
+    var listener = socket.listen(host, port, backlog)
+    return self:serve(listener, options)
+}
+
+func __app_serve_async(self, listener, options) {
+    return spawn func(app_value, listener_value, options_value) {
+        return app_value:serve(listener_value, options_value)
+    }(self, listener, options)
+}
+
+func __app_listen_async(self, host, port, options) {
+    return spawn func(app_value, host_value, port_value, options_value) {
+        return app_value:listen(host_value, port_value, options_value)
+    }(self, host, port, options)
+}
+
+func app() {
+    var value = {
+        routes: [],
+        middleware: [],
+        error_handler: __default_error,
+        not_found_handler: __default_not_found
+    }
+    value.use = __app_use
+    value.get = __app_get
+    value.post = __app_post
+    value.put = __app_put
+    value.delete = __app_delete
+    value.websocket = __app_websocket
+    value.on_error = __app_on_error
+    value.on_not_found = __app_on_not_found
+    value.serve = __app_serve
+    value.serve_async = __app_serve_async
+    value.listen = __app_listen
+    value.listen_async = __app_listen_async
+    return value
+}
