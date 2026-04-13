@@ -193,29 +193,19 @@ static size_t process_escapes(const char* src, size_t src_len, char* out) {
     return w;
 }
 
-// Scan string literal
-Token scan_string(Scanner* scanner) {
-    while (peek(scanner) != '"' && !is_at_end(scanner)) {
-        if (peek(scanner) == '\\' && !is_at_end(scanner)) {
-            advance(scanner); // skip the backslash
-            if (!is_at_end(scanner)) advance(scanner); // skip the escaped char
-            continue;
-        }
-        advance(scanner);
+static char peek_offset(Scanner* scanner, size_t offset) {
+    for (size_t i = 0; i <= offset; i++) {
+        char c = scanner->current[i];
+        if (c == '\0') return '\0';
+        if (i == offset) return c;
     }
-    
-    if (is_at_end(scanner)) {
-        return make_error_token("Unterminated string", scanner->line, scanner->column);
-    }
-    
-    // Consume closing quote
-    advance(scanner);
-    
+    return '\0';
+}
+
+static Token make_decoded_string_token(Scanner* scanner, const char* raw, size_t raw_len) {
     Token token = make_simple_token(scanner, TOKEN_STRING);
-    
-    const char* raw = scanner->start + 1;           // skip opening quote
-    size_t raw_len = scanner->current - scanner->start - 2; // exclude both quotes
-    char* string_content = (char*)malloc(raw_len + 1); // may shrink due to escapes
+
+    char* string_content = (char*)malloc(raw_len + 1);
     if (string_content) {
         size_t decoded_len = process_escapes(raw, raw_len, string_content);
         string_content[decoded_len] = '\0';
@@ -223,8 +213,56 @@ Token scan_string(Scanner* scanner) {
     } else {
         token.literal.string = NULL;
     }
-    
+
     return token;
+}
+
+// Scan string literal
+Token scan_string(Scanner* scanner) {
+    bool multiline = peek(scanner) == '"' && peek_next(scanner) == '"';
+    if (multiline) {
+        advance(scanner);
+        advance(scanner);
+    }
+
+    while (!is_at_end(scanner)) {
+        if (peek(scanner) == '\\' && !is_at_end(scanner)) {
+            advance(scanner); // skip the backslash
+            if (!is_at_end(scanner)) advance(scanner); // skip the escaped char
+            continue;
+        }
+        if (multiline) {
+            if (peek(scanner) == '"' &&
+                peek_offset(scanner, 1) == '"' &&
+                peek_offset(scanner, 2) == '"') {
+                break;
+            }
+        } else if (peek(scanner) == '"') {
+            break;
+        }
+        advance(scanner);
+    }
+
+    if (is_at_end(scanner)) {
+        return make_error_token(multiline ? "Unterminated multiline string" : "Unterminated string",
+                                scanner->line, scanner->column);
+    }
+
+    const char* raw = nullptr;
+    size_t raw_len = 0;
+    if (multiline) {
+        advance(scanner);
+        advance(scanner);
+        advance(scanner);
+        raw = scanner->start + 3;
+        raw_len = (size_t)(scanner->current - scanner->start - 6);
+    } else {
+        advance(scanner);
+        raw = scanner->start + 1;
+        raw_len = (size_t)(scanner->current - scanner->start - 2);
+    }
+
+    return make_decoded_string_token(scanner, raw, raw_len);
 }
 
 // Scan character literal

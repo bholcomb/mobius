@@ -63,14 +63,15 @@ func completed_count() {
 func render_todo_item(todo) {
     var status = todo.done ? "done" : "open"
     var button = todo.done ? "Mark open" : "Mark done"
-    return "<li>"
-        + "<strong>#" + str(todo.id) + "</strong> "
-        + web.html_escape(todo.title)
-        + " <em>(" + status + ")</em>"
-        + "<form method=\"POST\" action=\"/todos/" + str(todo.id) + "/toggle\" style=\"display:inline; margin-left:8px\">"
-        + "<button type=\"submit\">" + button + "</button>"
-        + "</form>"
-        + "</li>"
+    var html = "<li>"
+    html += "<strong>#" + str(todo.id) + "</strong> "
+    html += web.html_escape(todo.title)
+    html += " <em>(" + status + ")</em>"
+    html += "<form method=\"POST\" action=\"/todos/" + str(todo.id) + "/toggle\" style=\"display:inline; margin-left:8px\">"
+    html += "<button type=\"submit\">" + button + "</button>"
+    html += "</form>"
+    html += "</li>"
+    return html
 }
 
 func render_home_page() {
@@ -79,26 +80,30 @@ func render_home_page() {
         items += render_todo_item(todos[i])
     }
 
-    return "<!doctype html>\n"
-        + "<html><head><title>Mobius Todo App</title>"
-        + "<style>body{font-family:sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;} code,pre{background:#f5f5f5;} form{margin:0.5rem 0;} .panel{padding:1rem;border:1px solid #ddd;border-radius:8px;margin:1rem 0;}</style>"
-        + "</head><body>"
-        + "<h1>Mobius Todo App</h1>"
-        + "<p>This example serves both server-rendered HTML and a JSON REST API from the same Mobius process.</p>"
-        + "<div class=\"panel\"><strong>Total</strong>: " + str(len(todos)) + " | <strong>Done</strong>: " + str(completed_count()) + "</div>"
-        + "<div class=\"panel\">"
-        + "<h2>Create Todo</h2>"
-        + "<form method=\"POST\" action=\"/todos/create\">"
-        + "<input type=\"text\" name=\"title\" placeholder=\"What needs doing?\" style=\"width:22rem\"/>"
-        + "<button type=\"submit\">Create</button>"
-        + "</form>"
-        + "</div>"
-        + "<div class=\"panel\"><h2>Current Todos</h2><ul>" + items + "</ul></div>"
-        + "<div class=\"panel\">"
-        + "<h2>REST API</h2>"
-        + "<pre>GET  /api/health\nGET  /api/todos\nPOST /api/todos           {\"title\":\"Ship it\"}\nPOST /api/todos/{id}/toggle</pre>"
-        + "</div>"
-        + "</body></html>"
+    var html = """<!doctype html>
+<html><head><title>Mobius Todo App</title>
+<style>body{font-family:sans-serif;max-width:860px;margin:2rem auto;padding:0 1rem;} code,pre{background:#f5f5f5;} form{margin:0.5rem 0;} .panel{padding:1rem;border:1px solid #ddd;border-radius:8px;margin:1rem 0;}</style>
+</head><body>
+<h1>Mobius Todo App</h1>
+<p>This example serves both server-rendered HTML and a JSON REST API from the same Mobius process.</p>"""
+    html += "<div class=\"panel\"><strong>Total</strong>: " + str(len(todos)) + " | <strong>Done</strong>: " + str(completed_count()) + "</div>"
+    html += """<div class="panel">
+<h2>Create Todo</h2>
+<form method="POST" action="/todos/create">
+<input type="text" name="title" placeholder="What needs doing?" style="width:22rem"/>
+<button type="submit">Create</button>
+</form>
+</div>"""
+    html += "<div class=\"panel\"><h2>Current Todos</h2><ul>" + items + "</ul></div>"
+    html += """<div class="panel">
+<h2>REST API</h2>
+<pre>GET  /api/health
+GET  /api/todos
+POST /api/todos           {"title":"Ship it"}
+POST /api/todos/{id}/toggle</pre>
+</div>
+</body></html>"""
+    return html
 }
 
 func parse_form_body(body) {
