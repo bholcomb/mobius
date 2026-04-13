@@ -193,18 +193,33 @@ int lib_concat(MobiusState* state, int arg_count) {
     if (arg_count < 2) {
         return state->error("concat expects at least 2 arguments");
     }
-    
-    // Calculate total length
+
+    const auto& common = state->commonStrings();
     size_t total_length = 0;
+    int non_empty_count = 0;
+    MobiusString* single_non_empty = nullptr;
     for (int i = 0; i < arg_count; i++) {
-        Value arg = state->npeek(i);
+        const Value& arg = state->npeek(i);
         if (arg.type == VAL_STRING && arg.as.string) {
-            if (!checked_add_size(total_length, arg.as.string->length, &total_length)) {
+            size_t str_len = arg.as.string->length;
+            if (!checked_add_size(total_length, str_len, &total_length)) {
                 return state->error("concat result too large");
+            }
+            if (str_len != 0) {
+                non_empty_count++;
+                single_non_empty = arg.as.string;
             }
         } else {
             return state->error("concat expects all arguments to be strings");
         }
+    }
+
+    if (non_empty_count <= 1) {
+        for (int i = 0; i < arg_count; i++) {
+            state->npop();
+        }
+        state->npush(make_string_value(non_empty_count == 0 ? common.empty : single_non_empty));
+        return 1;
     }
 
     size_t alloc_size = 0;
@@ -218,7 +233,7 @@ int lib_concat(MobiusState* state, int arg_count) {
     
     size_t offset = 0;
     for (int i = arg_count - 1; i >= 0; i--) {
-        Value arg = state->npeek(i);
+        const Value& arg = state->npeek(i);
         const char* str_data = arg.as.string->data;
         size_t str_len = arg.as.string->length;
         memcpy(result_data + offset, str_data, str_len);

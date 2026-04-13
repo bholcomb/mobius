@@ -151,6 +151,22 @@ private:
 
 class MOBIUS_API MobiusState {
 public:
+    struct CommonInternedStrings {
+        MobiusString* empty = nullptr;
+        MobiusString* nil = nullptr;
+        MobiusString* true_value = nullptr;
+        MobiusString* false_value = nullptr;
+        MobiusString* null_string = nullptr;
+        MobiusString* function = nullptr;
+        MobiusString* native_function = nullptr;
+        MobiusString* table = nullptr;
+        MobiusString* array = nullptr;
+        MobiusString* userdata_null = nullptr;
+        MobiusString* shared_null = nullptr;
+        MobiusString* buffer_null = nullptr;
+        MobiusString* unknown = nullptr;
+    };
+
     explicit MobiusState(MobiusConfig* config = nullptr);
     ~MobiusState();
 
@@ -189,6 +205,7 @@ public:
     ExecutionContext* mainContext() const;
     ModuleRegistry* registry() const { return registry_; }
     StringInternPool* stringPool() const { return string_pool_; }
+    const CommonInternedStrings& commonStrings() const { return common_strings_; }
     const MobiusConfig& config() const { return config_; }
     bool isInitialized() const { return initialized_; }
     InternalError* lastError() const;
@@ -281,6 +298,7 @@ private:
 
     ModuleRegistry* registry_;
     StringInternPool* string_pool_;
+    CommonInternedStrings common_strings_;
     Metamethods* metamethods_;
     JobSystem* job_system_;
 

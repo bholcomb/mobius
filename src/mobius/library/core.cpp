@@ -182,14 +182,15 @@ int lib_str(MobiusState* state, int arg_count) {
         return state->error("str expects 1 argument");
     }
 
-    Value arg = state->npeek(0);
+    const Value& arg = state->npeek(0);
 
     if (arg.type == VAL_TABLE && arg.as.table) {
         Value tostr = arg.as.table->getMetamethod(state->metamethods()->tostring());
         if (tostr.type != VAL_NIL) {
+            Value self = arg;
             state->npop();
             state->npush(tostr);
-            state->npush(arg);
+            state->npush(self);
             int rc = mobius_pcall(state, 1, 1);
             if (rc < 0) return -1;
             return 1;

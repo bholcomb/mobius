@@ -300,6 +300,20 @@ MobiusState::MobiusState(MobiusConfig* config)
     string_pool_ = new (std::nothrow) StringInternPool(kInitialStringBucketCount);
     if (!string_pool_) return;
 
+    common_strings_.empty = string_pool_->intern("", 0);
+    common_strings_.nil = string_pool_->intern("nil", 3);
+    common_strings_.true_value = string_pool_->intern("true", 4);
+    common_strings_.false_value = string_pool_->intern("false", 5);
+    common_strings_.null_string = string_pool_->intern("(null)", 6);
+    common_strings_.function = string_pool_->intern("<function>", 10);
+    common_strings_.native_function = string_pool_->intern("<native function>", 17);
+    common_strings_.table = string_pool_->intern("<table>", 7);
+    common_strings_.array = string_pool_->intern("<array>", 7);
+    common_strings_.userdata_null = string_pool_->intern("<userdata (null)>", 17);
+    common_strings_.shared_null = string_pool_->intern("<shared null>", 13);
+    common_strings_.buffer_null = string_pool_->intern("<buffer (null)>", 15);
+    common_strings_.unknown = string_pool_->intern("unknown", 7);
+
     metamethods_ = new (std::nothrow) Metamethods(string_pool_);
     if (!metamethods_) return;
 

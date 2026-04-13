@@ -12,6 +12,7 @@
 #include "state/mobius_state.h"
 #include "util/utility.h"
 
+#include <charconv>
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits>
@@ -556,20 +557,21 @@ MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {
 
     char buffer[128];
     auto pool = state->stringPool();
+    const auto& common = state->commonStrings();
     if (!pool) return nullptr;
 
     switch (value.type) {
         case VAL_NIL:
-            return pool->intern("nil", 3);
+            return common.nil;
         case VAL_BOOL:
-            return value.as.boolean ? pool->intern("true", 4) : pool->intern("false", 5);
+            return value.as.boolean ? common.true_value : common.false_value;
         case VAL_INT64: {
-            int len = snprintf(buffer, sizeof(buffer), "%ld", value.as.i64);
-            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+            auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value.as.i64);
+            return (ec == std::errc()) ? pool->intern(buffer, (size_t)(ptr - buffer)) : nullptr;
         }
         case VAL_UINT64: {
-            int len = snprintf(buffer, sizeof(buffer), "%lu", value.as.u64);
-            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+            auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value.as.u64);
+            return (ec == std::errc()) ? pool->intern(buffer, (size_t)(ptr - buffer)) : nullptr;
         }
         case VAL_FLOAT64: {
             int len = 0;
@@ -581,19 +583,19 @@ MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {
             return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
         }
         case VAL_STRING:
-            return value.as.string ? value.as.string : pool->intern("(null)", 6);
+            return value.as.string ? value.as.string : common.null_string;
         case VAL_CHAR:
             buffer[0] = value.as.character;
             buffer[1] = '\0';
             return pool->intern(buffer, 1);
         case VAL_FUNCTION:
-            return pool->intern("<function>", 10);
+            return common.function;
         case VAL_NATIVE_FUNCTION:
-            return pool->intern("<native function>", 17);
+            return common.native_function;
         case VAL_TABLE:
-            return pool->intern("<table>", 7);
+            return common.table;
         case VAL_ARRAY:
-            return pool->intern("<array>", 7);
+            return common.array;
         case VAL_USERDATA:
             if (value.as.userdata && value.as.userdata->ptr) {
                 int len = snprintf(buffer, sizeof(buffer), "<%s userdata %p>",
@@ -601,7 +603,7 @@ MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {
                                    value.as.userdata->ptr);
                 return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
             }
-            return pool->intern("<userdata (null)>", 17);
+            return common.userdata_null;
         case VAL_ENUM: {
             const char* member_name = enum_value_name(value);
             if (member_name) {
@@ -631,7 +633,7 @@ MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {
             if (value.as.shared_cell) {
                 return value_to_interned_string(state, value.as.shared_cell->load());
             }
-            return pool->intern("<shared null>", 13);
+            return common.shared_null;
         case VAL_BUFFER:
             if (value.as.buffer) {
                 int len = snprintf(buffer, sizeof(buffer), "<buffer len=%zu%s>",
@@ -639,9 +641,9 @@ MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {
                                    value.as.buffer->isFixed() ? " fixed" : "");
                 return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
             }
-            return pool->intern("<buffer (null)>", 15);
+            return common.buffer_null;
         default:
-            return pool->intern("unknown", 7);
+            return common.unknown;
     }
 }
 

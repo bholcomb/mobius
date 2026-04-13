@@ -5,39 +5,39 @@ Benchmark model: arrays = dense integer storage, tables = string-key hash maps
 Starting benchmarks...
 
 1. Arithmetic Operations...
-   Time:  0.0183758 s
-   Ops/sec:  54419414
+   Time:  0.0181067 s
+   Ops/sec:  55228053
 
 2. Function Calls (Fibonacci)...
-   Time:  0.0060331 s
+   Time:  0.0061133 s
    Result:  6765
 
 3. Array Operations (Dense Numeric Storage)...
-   Time:  0.000438395 s
+   Time:  0.000470526 s
    Sum:  99990000
 
 4. Table Operations (String-Key Hash Map)...
-   Time:  0.000706206 s
+   Time:  0.00072479 s
    Sum:  37492500
 
 5. String Operations...
-   Time:  0.000762644 s
+   Time:  0.000707878 s
    Final length:  15
 
 6. Nested Loops...
-   Time:  0.00165983 s
+   Time:  0.00167481 s
    Sum:  15562562500
 
 7. Object Creation/Destruction...
-   Time:  0.00889373 s
+   Time:  0.00821309 s
    Objects created: 30000
 
 8. Mixed Workload...
-   Time:  0.00147004 s
+   Time:  0.00141477 s
    Total:  999000
 
 === Overall Results ===
-Total time:  0.0421477 s
+Total time:  0.0409788 s
 Benchmark complete!
 
 ===== RUN SPLIT =====
@@ -49,39 +49,39 @@ Benchmark model: arrays = dense integer storage, tables = string-key hash maps
 Starting benchmarks...
 
 1. Arithmetic Operations...
-   Time:  0.0178773 s
-   Ops/sec:  55936908
+   Time:  0.0179492 s
+   Ops/sec:  55712879
 
 2. Function Calls (Fibonacci)...
-   Time:  0.00607737 s
+   Time:  0.00610194 s
    Result:  6765
 
 3. Array Operations (Dense Numeric Storage)...
-   Time:  0.000446251 s
+   Time:  0.000482108 s
    Sum:  99990000
 
 4. Table Operations (String-Key Hash Map)...
-   Time:  0.000708581 s
+   Time:  0.000751671 s
    Sum:  37492500
 
 5. String Operations...
-   Time:  0.00076575 s
+   Time:  0.000713278 s
    Final length:  15
 
 6. Nested Loops...
-   Time:  0.00165381 s
+   Time:  0.00166776 s
    Sum:  15562562500
 
 7. Object Creation/Destruction...
-   Time:  0.00888076 s
+   Time:  0.00819678 s
    Objects created: 30000
 
 8. Mixed Workload...
-   Time:  0.00148052 s
+   Time:  0.00153109 s
    Total:  999000
 
 === Overall Results ===
-Total time:  0.041712 s
+Total time:  0.0409211 s
 Benchmark complete!
 
 ===== RUN SPLIT =====
@@ -93,39 +93,39 @@ Benchmark model: arrays = dense integer storage, tables = string-key hash maps
 Starting benchmarks...
 
 1. Arithmetic Operations...
-   Time:  0.0180043 s
-   Ops/sec:  55542422
+   Time:  0.0194908 s
+   Ops/sec:  51306346
 
 2. Function Calls (Fibonacci)...
-   Time:  0.00605953 s
+   Time:  0.0061119 s
    Result:  6765
 
 3. Array Operations (Dense Numeric Storage)...
-   Time:  0.000437985 s
+   Time:  0.000464836 s
    Sum:  99990000
 
 4. Table Operations (String-Key Hash Map)...
-   Time:  0.000706407 s
+   Time:  0.000726774 s
    Sum:  37492500
 
 5. String Operations...
-   Time:  0.000742776 s
+   Time:  0.000707167 s
    Final length:  15
 
 6. Nested Loops...
-   Time:  0.0016596 s
+   Time:  0.00165494 s
    Sum:  15562562500
 
 7. Object Creation/Destruction...
-   Time:  0.00875424 s
+   Time:  0.00826382 s
    Objects created: 30000
 
 8. Mixed Workload...
-   Time:  0.00144961 s
+   Time:  0.00145417 s
    Total:  999000
 
 === Overall Results ===
-Total time:  0.041565 s
+Total time:  0.0424847 s
 Benchmark complete!
 
 ===== RUN SPLIT =====
@@ -137,39 +137,39 @@ Benchmark model: arrays = dense integer storage, tables = string-key hash maps
 Starting benchmarks...
 
 1. Arithmetic Operations...
-   Time:  0.0186149 s
-   Ops/sec:  53720490
+   Time:  0.0186547 s
+   Ops/sec:  53605897
 
 2. Function Calls (Fibonacci)...
-   Time:  0.00645574 s
+   Time:  0.00621733 s
    Result:  6765
 
 3. Array Operations (Dense Numeric Storage)...
-   Time:  0.000630692 s
+   Time:  0.000498549 s
    Sum:  99990000
 
 4. Table Operations (String-Key Hash Map)...
-   Time:  0.00100983 s
+   Time:  0.000729389 s
    Sum:  37492500
 
 5. String Operations...
-   Time:  0.00116084 s
+   Time:  0.000753384 s
    Final length:  15
 
 6. Nested Loops...
-   Time:  0.00278963 s
+   Time:  0.00167825 s
    Sum:  15562562500
 
 7. Object Creation/Destruction...
-   Time:  0.0128371 s
+   Time:  0.00872346 s
    Objects created: 30000
 
 8. Mixed Workload...
-   Time:  0.00227483 s
+   Time:  0.00148129 s
    Total:  999000
 
 === Overall Results ===
-Total time:  0.0504982 s
+Total time:  0.042632 s
 Benchmark complete!
 
 ===== RUN SPLIT =====
@@ -181,37 +181,37 @@ Benchmark model: arrays = dense integer storage, tables = string-key hash maps
 Starting benchmarks...
 
 1. Arithmetic Operations...
-   Time:  0.0182984 s
-   Ops/sec:  54649565
+   Time:  0.0183483 s
+   Ops/sec:  54501107
 
 2. Function Calls (Fibonacci)...
-   Time:  0.00602317 s
+   Time:  0.00611513 s
    Result:  6765
 
 3. Array Operations (Dense Numeric Storage)...
-   Time:  0.000432154 s
+   Time:  0.000448504 s
    Sum:  99990000
 
 4. Table Operations (String-Key Hash Map)...
-   Time:  0.000704112 s
+   Time:  0.00071969 s
    Sum:  37492500
 
 5. String Operations...
-   Time:  0.000754107 s
+   Time:  0.000701666 s
    Final length:  15
 
 6. Nested Loops...
-   Time:  0.00165658 s
+   Time:  0.00166289 s
    Sum:  15562562500
 
 7. Object Creation/Destruction...
-   Time:  0.00875106 s
+   Time:  0.00820876 s
    Objects created: 30000
 
 8. Mixed Workload...
-   Time:  0.00146255 s
+   Time:  0.00155925 s
    Total:  999000
 
 === Overall Results ===
-Total time:  0.0418624 s
+Total time:  0.041222 s
 Benchmark complete!
