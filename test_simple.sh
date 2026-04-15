@@ -51,9 +51,14 @@ for test_file in $TEST_FILES; do
     fi
 
     printf "%-50s " "$test_file"
-    
+
+    CMD=(./bin/mobius "$test_file")
+    if [ "$test_file" = "tests/basic/test_cli_argv.mob" ]; then
+        CMD+=(alpha "two words" --flag 42)
+    fi
+
     # Run the test and capture output/exit code
-    if timeout 10 ./bin/mobius "$test_file" >/dev/null 2>&1; then
+    if timeout 10 "${CMD[@]}" >/dev/null 2>&1; then
         # Test succeeded (exit code 0)
         if is_expected_to_fail "$test_file"; then
             echo "❌ FAIL (expected to fail but passed)"

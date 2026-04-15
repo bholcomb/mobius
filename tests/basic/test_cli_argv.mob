@@ -1,0 +1,27 @@
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+assert_test("argv is array", typeof(argv) == "array")
+assert_test("argv length", len(argv) == 4)
+assert_test("argv[0]", argv[0] == "alpha")
+assert_test("argv[1]", argv[1] == "two words")
+assert_test("argv[2]", argv[2] == "--flag")
+assert_test("argv[3]", argv[3] == "42")
+
+print("")
+print("CLI argv Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}

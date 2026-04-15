@@ -18,6 +18,9 @@ Global utility functions like `len`, `setmetatable`, `array_create`, and
 For namespaced module APIs (such as `math.sin(...)`, `json.parse(...)`, or
 `os.join(...)`), see the [Module Reference](modules/index.md).
 
+The CLI exposes a read-only global `argv` array containing the positional
+arguments passed to the current script after the script filename.
+
 ---
 
 ## Table of Contents
@@ -36,6 +39,21 @@ For namespaced module APIs (such as `math.sin(...)`, `json.parse(...)`, or
 ---
 
 ## Core Functions
+
+### argv -> array
+
+When a script is launched from the Mobius CLI, `argv` contains the positional
+arguments passed after the script filename.
+
+```bash
+./bin/mobius tools/example.mob alpha "two words" --flag
+```
+
+```mobius
+print(argv[0])    // "alpha"
+print(argv[1])    // "two words"
+print(argv[2])    // "--flag"
+```
 
 ### print(...)
 

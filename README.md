@@ -39,6 +39,7 @@ greet(name)
 | [Standard Library Reference](docs/stdlib_reference.md) | Built-in functions: math, string, array, table, utility |
 | [Embedding Guide](docs/embedding_guide.md) | How to embed Mobius in a C/C++ application |
 | [Plugin Guide](docs/plugin_guide.md) | How to write native plugin modules (.so/.dll) |
+| [Package Format](docs/package_format.md) | `module.yaml`, `.mz` archives, and package directory conventions |
 | [Formal Grammar (BNF)](docs/BNF.md) | Canonical grammar specification |
 
 ## Building
