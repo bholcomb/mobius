@@ -834,6 +834,7 @@ shared parent.
 
 Namespaced modules live under [`docs/modules`](modules/index.md):
 
+- [`compression`](modules/compression.md)
 - [`crypto`](modules/crypto.md)
 - [`datetime`](modules/datetime.md)
 - [`fiber`](modules/fiber.md)

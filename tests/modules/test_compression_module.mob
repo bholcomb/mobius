@@ -1,0 +1,174 @@
+import "compression"
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+func has_entry(entries, path, entry_type) {
+    for (var i = 0; i < len(entries); i += 1) {
+        var entry = entries[i]
+        if (entry.path == path && entry.type == entry_type) {
+            return true
+        }
+    }
+    return false
+}
+
+var input_path = os.tmpfile()
+var gzip_path = input_path + ".gz"
+var gzip_roundtrip = input_path + ".gzip.out"
+var zstd_path = input_path + ".zst"
+var zstd_roundtrip = input_path + ".zstd.out"
+
+assert_test("tmp path created", input_path is string)
+assert_test("write fixture", writefile(input_path, "compression module fixture\nsecond line"))
+
+var gzip_summary = compression.compress(input_path, gzip_path, { format: "gzip", overwrite: "replace" })
+assert_test("gzip summary ok", gzip_summary.ok == true)
+assert_test("gzip summary format", gzip_summary.format == "gzip")
+
+var gzip_info = compression.inspect(gzip_path, nil)
+assert_test("gzip inspect kind", gzip_info.kind == "compressed_stream")
+assert_test("gzip inspect format", gzip_info.format == "gzip")
+assert_test("gzip inspect compression format", gzip_info.compression_format == "gzip")
+
+var gzip_decode = compression.decompress(gzip_path, gzip_roundtrip, { overwrite: "replace" })
+assert_test("gzip decompress ok", gzip_decode.ok == true)
+assert_test("gzip roundtrip contents", readfile(gzip_roundtrip) == readfile(input_path))
+
+var zstd_summary = compression.compress(input_path, zstd_path, { format: "zstd", overwrite: "replace" })
+assert_test("zstd summary ok", zstd_summary.ok == true)
+assert_test("zstd summary format", zstd_summary.format == "zstd")
+
+var zstd_info = compression.inspect(zstd_path, nil)
+assert_test("zstd inspect kind", zstd_info.kind == "compressed_stream")
+assert_test("zstd inspect format", zstd_info.format == "zstd")
+assert_test("zstd inspect compression format", zstd_info.compression_format == "zstd")
+
+var zstd_decode = compression.decompress(zstd_path, zstd_roundtrip, { overwrite: "replace" })
+assert_test("zstd decompress ok", zstd_decode.ok == true)
+assert_test("zstd roundtrip contents", readfile(zstd_roundtrip) == readfile(input_path))
+
+var archive_root = os.tmpdir() + "/mobius_compression_" + str(os.getpid())
+var source_dir = archive_root + "/payload"
+var nested_dir = source_dir + "/nested"
+var empty_dir = source_dir + "/empty"
+assert_test("mkdirp nested", os.mkdirp(nested_dir))
+assert_test("mkdir empty", os.mkdir(empty_dir))
+assert_test("write root file", writefile(source_dir + "/root.txt", "root file"))
+assert_test("write nested file", writefile(nested_dir + "/child.txt", "child file"))
+
+var payload_name = os.basename(source_dir)
+var zip_path = archive_root + "/payload.zip"
+var tar_path = archive_root + "/payload.tar"
+var targz_path = archive_root + "/payload.tar.gz"
+var tarzst_path = archive_root + "/payload.tar.zst"
+
+var zip_summary = compression.create(zip_path, [source_dir], { overwrite: "replace" })
+assert_test("zip create ok", zip_summary.ok == true)
+var zip_info = compression.inspect(zip_path, nil)
+assert_test("zip inspect format", zip_info.format == "zip")
+assert_test("zip inspect kind", zip_info.kind == "archive")
+assert_test("zip inspect entry_count", zip_info.entry_count >= 4)
+var zip_entries = compression.list(zip_path, nil)
+assert_test("zip has root file", has_entry(zip_entries, payload_name + "/root.txt", "file"))
+assert_test("zip has nested dir", has_entry(zip_entries, payload_name + "/nested", "directory"))
+var zip_extract_dir = archive_root + "/zip_out"
+var zip_extract = compression.extract(zip_path, zip_extract_dir, { overwrite: "replace" })
+assert_test("zip extract ok", zip_extract.ok == true)
+assert_test("zip extracted root file", readfile(zip_extract_dir + "/" + payload_name + "/root.txt") == "root file")
+assert_test("zip extracted nested file", readfile(zip_extract_dir + "/" + payload_name + "/nested/child.txt") == "child file")
+
+var tar_summary = compression.create(tar_path, [source_dir], { overwrite: "replace" })
+assert_test("tar create ok", tar_summary.ok == true)
+var tar_info = compression.inspect(tar_path, nil)
+assert_test("tar inspect format", tar_info.format == "tar")
+assert_test("tar inspect kind", tar_info.kind == "archive")
+var tar_entries = compression.list(tar_path, nil)
+assert_test("tar has root file", has_entry(tar_entries, payload_name + "/root.txt", "file"))
+var tar_extract_dir = archive_root + "/tar_out"
+var tar_extract = compression.extract(tar_path, tar_extract_dir, { overwrite: "replace" })
+assert_test("tar extract ok", tar_extract.ok == true)
+assert_test("tar extracted nested file", readfile(tar_extract_dir + "/" + payload_name + "/nested/child.txt") == "child file")
+
+var targz_summary = compression.create(targz_path, [source_dir], { overwrite: "replace" })
+assert_test("tar.gz create ok", targz_summary.ok == true)
+var targz_info = compression.inspect(targz_path, nil)
+assert_test("tar.gz inspect format", targz_info.format == "tar.gz")
+assert_test("tar.gz inspect archive format", targz_info.archive_format == "tar")
+assert_test("tar.gz inspect compression format", targz_info.compression_format == "gzip")
+var targz_extract_dir = archive_root + "/targz_out"
+var targz_extract = compression.extract(targz_path, targz_extract_dir, { overwrite: "replace" })
+assert_test("tar.gz extract ok", targz_extract.ok == true)
+assert_test("tar.gz extracted root file", readfile(targz_extract_dir + "/" + payload_name + "/root.txt") == "root file")
+
+var tarzst_summary = compression.create(tarzst_path, [source_dir], { overwrite: "replace" })
+assert_test("tar.zst create ok", tarzst_summary.ok == true)
+var tarzst_info = compression.inspect(tarzst_path, nil)
+assert_test("tar.zst inspect format", tarzst_info.format == "tar.zst")
+assert_test("tar.zst inspect archive format", tarzst_info.archive_format == "tar")
+assert_test("tar.zst inspect compression format", tarzst_info.compression_format == "zstd")
+var tarzst_entries = compression.list(tarzst_path, nil)
+assert_test("tar.zst has nested file", has_entry(tarzst_entries, payload_name + "/nested/child.txt", "file"))
+var tarzst_extract_dir = archive_root + "/tarzst_out"
+var tarzst_extract = compression.extract(tarzst_path, tarzst_extract_dir, { overwrite: "replace" })
+assert_test("tar.zst extract ok", tarzst_extract.ok == true)
+assert_test("tar.zst extracted nested file", readfile(tarzst_extract_dir + "/" + payload_name + "/nested/child.txt") == "child file")
+
+os.remove(input_path)
+os.remove(gzip_path)
+os.remove(gzip_roundtrip)
+os.remove(zstd_path)
+os.remove(zstd_roundtrip)
+os.remove(zip_path)
+os.remove(tar_path)
+os.remove(targz_path)
+os.remove(tarzst_path)
+os.remove(source_dir + "/root.txt")
+os.remove(nested_dir + "/child.txt")
+os.rmdir(empty_dir)
+os.rmdir(nested_dir)
+os.rmdir(source_dir)
+os.remove(zip_extract_dir + "/" + payload_name + "/root.txt")
+os.remove(zip_extract_dir + "/" + payload_name + "/nested/child.txt")
+os.rmdir(zip_extract_dir + "/" + payload_name + "/empty")
+os.rmdir(zip_extract_dir + "/" + payload_name + "/nested")
+os.rmdir(zip_extract_dir + "/" + payload_name)
+os.rmdir(zip_extract_dir)
+os.remove(tar_extract_dir + "/" + payload_name + "/root.txt")
+os.remove(tar_extract_dir + "/" + payload_name + "/nested/child.txt")
+os.rmdir(tar_extract_dir + "/" + payload_name + "/empty")
+os.rmdir(tar_extract_dir + "/" + payload_name + "/nested")
+os.rmdir(tar_extract_dir + "/" + payload_name)
+os.rmdir(tar_extract_dir)
+os.remove(targz_extract_dir + "/" + payload_name + "/root.txt")
+os.remove(targz_extract_dir + "/" + payload_name + "/nested/child.txt")
+os.rmdir(targz_extract_dir + "/" + payload_name + "/empty")
+os.rmdir(targz_extract_dir + "/" + payload_name + "/nested")
+os.rmdir(targz_extract_dir + "/" + payload_name)
+os.rmdir(targz_extract_dir)
+os.remove(tarzst_extract_dir + "/" + payload_name + "/root.txt")
+os.remove(tarzst_extract_dir + "/" + payload_name + "/nested/child.txt")
+os.rmdir(tarzst_extract_dir + "/" + payload_name + "/empty")
+os.rmdir(tarzst_extract_dir + "/" + payload_name + "/nested")
+os.rmdir(tarzst_extract_dir + "/" + payload_name)
+os.rmdir(tarzst_extract_dir)
+os.rmdir(archive_root)
+
+print("")
+print("Compression Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}
