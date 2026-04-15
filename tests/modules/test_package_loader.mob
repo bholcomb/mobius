@@ -1,0 +1,25 @@
+import "demo_pkg" as demo_pkg
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+assert_test("package function call", demo_pkg.hello() == "hello from package")
+assert_test("package global value", demo_pkg.meaning == 42)
+
+print("")
+print("Package Loader Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}

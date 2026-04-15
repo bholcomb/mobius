@@ -1,0 +1,9 @@
+name: datetime
+version: 0.1.0
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/datetime.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: Structured date and time helpers

@@ -1,0 +1,8 @@
+name: web
+version: 0.1.0
+entry:
+  script: web.mob
+dependencies:
+  mobius_modules: [fiber, http, json, socket, url, websocket]
+metadata:
+  description: HTTP routing, middleware, and websocket helpers

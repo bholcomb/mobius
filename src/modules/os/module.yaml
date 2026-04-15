@@ -1,0 +1,9 @@
+name: os
+version: 0.1.0
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/os.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: Filesystem, path, process, and host utilities

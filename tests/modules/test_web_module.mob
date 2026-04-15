@@ -1,4 +1,4 @@
-import "../../src/modules/web/web" as web
+import "web"
 import "http"
 import "socket"
 import "websocket"

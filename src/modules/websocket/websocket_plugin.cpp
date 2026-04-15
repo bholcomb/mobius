@@ -1,8 +1,8 @@
 #include <mobius/mobius_plugin.h>
-
-#include "modules/net/protocol_common.h"
+#include "modules/internal/crypto_common.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cinttypes>
 #include <cstddef>
 #include <cstdint>
@@ -13,9 +13,48 @@
 #include <string>
 #include <vector>
 
-using namespace mobius_net;
+using namespace mobius_crypto_internal;
 
 namespace {
+
+static std::string trim_left(const std::string& s) {
+    size_t i = 0;
+    while (i < s.size() && std::isspace((unsigned char)s[i])) i++;
+    return s.substr(i);
+}
+
+static std::string trim_right(const std::string& s) {
+    size_t end = s.size();
+    while (end > 0 && std::isspace((unsigned char)s[end - 1])) end--;
+    return s.substr(0, end);
+}
+
+static std::string trim(const std::string& s) {
+    return trim_right(trim_left(s));
+}
+
+static std::string to_lower_copy(const std::string& s) {
+    std::string out = s;
+    for (char& c : out) c = (char)std::tolower((unsigned char)c);
+    return out;
+}
+
+static bool iequals(const std::string& a, const std::string& b) {
+    return to_lower_copy(a) == to_lower_copy(b);
+}
+
+static bool header_value_has_token(const std::string& value, const char* token) {
+    std::string wanted = to_lower_copy(token ? token : "");
+    size_t start = 0;
+    while (start <= value.size()) {
+        size_t end = value.find(',', start);
+        std::string part = to_lower_copy(trim(value.substr(start, end == std::string::npos ? std::string::npos : end - start)));
+        if (part == wanted) return true;
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return false;
+}
 
 struct ParsedFrame {
     bool fin = true;

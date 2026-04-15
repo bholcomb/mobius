@@ -1,0 +1,9 @@
+name: yaml
+version: 0.1.0
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/yaml.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: YAML parsing and serialization helpers

@@ -10,10 +10,14 @@
 #include "util/file_io.h"
 
 #include <cstdio>
+#include <cctype>
 #include <cstring>
 #include <cstdlib>
+#include <fstream>
 #include <mutex>
+#include <sstream>
 #include <thread>
+#include <unordered_set>
 #include <libgen.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -64,9 +68,269 @@ struct ModulePaths {
     bool found = false;
     bool has_mob = false;
     bool has_so = false;
+    bool is_packaged = false;
+    std::string package_root;
+    std::string manifest_path;
     std::string mob_path;
     std::string so_path;
+    std::vector<std::string> runtime_library_paths;
+    std::string error_message;
 };
+
+struct PackageManifest {
+    std::string name;
+    std::string version;
+    std::string entry_script;
+    std::string module_library;
+    std::vector<std::string> runtime_libraries;
+};
+
+static bool is_regular_file_path(const std::string& path);
+
+static std::string parent_path(std::string path) {
+    while (path.size() > 1 && path.back() == '/') path.pop_back();
+    size_t slash = path.find_last_of('/');
+    if (slash == std::string::npos) return "";
+    if (slash == 0) return "/";
+    return path.substr(0, slash);
+}
+
+static std::string dirname_path(const char* path) {
+    if (!path || path[0] == '\0') return "";
+    return parent_path(path);
+}
+
+static std::string find_enclosing_package_root(const char* source_path) {
+    std::string dir = dirname_path(source_path);
+    while (!dir.empty()) {
+        if (is_regular_file_path(dir + "/module.yaml")) return dir;
+        std::string parent = parent_path(dir);
+        if (parent.empty() || parent == dir) break;
+        dir = parent;
+    }
+    return "";
+}
+
+static void append_search_dir(std::vector<std::string>& search_dirs,
+                              std::unordered_set<std::string>& seen_dirs,
+                              const std::string& dir) {
+    if (dir.empty()) return;
+    if (!seen_dirs.insert(dir).second) return;
+    search_dirs.push_back(dir);
+}
+
+static std::string trim_copy(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && std::isspace(static_cast<unsigned char>(s[start]))) start++;
+    size_t end = s.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(s[end - 1]))) end--;
+    return s.substr(start, end - start);
+}
+
+static std::string strip_quotes(std::string value) {
+    value = trim_copy(value);
+    if (value.size() >= 2) {
+        char first = value.front();
+        char last = value.back();
+        if ((first == '"' && last == '"') || (first == '\'' && last == '\'')) {
+            return value.substr(1, value.size() - 2);
+        }
+    }
+    return value;
+}
+
+static bool is_regular_file_path(const std::string& path) {
+    struct stat st;
+    return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+}
+
+static std::string current_platform_key() {
+#if defined(_WIN32)
+  #if defined(_M_ARM64) || defined(__aarch64__)
+    return "windows-aarch64";
+  #else
+    return "windows-x86_64";
+  #endif
+#elif defined(__APPLE__)
+  #if defined(__aarch64__) || defined(__arm64__)
+    return "macos-aarch64";
+  #else
+    return "macos-x86_64";
+  #endif
+#else
+  #if defined(__aarch64__)
+    return "linux-aarch64";
+  #else
+    return "linux-x86_64";
+  #endif
+#endif
+}
+
+static bool parse_package_manifest(const std::string& manifest_path, PackageManifest& out, std::string& error) {
+    out = PackageManifest{};
+    std::ifstream in(manifest_path);
+    if (!in) {
+        error = "could not open module.yaml";
+        return false;
+    }
+
+    enum class Section {
+        root,
+        entry,
+        platforms,
+        current_platform,
+        runtime_libraries,
+        other
+    };
+
+    Section section = Section::root;
+    const std::string wanted_platform = current_platform_key();
+    bool in_wanted_platform = false;
+    bool saw_platforms = false;
+    bool saw_any_platform_module_library = false;
+    std::string line;
+
+    while (std::getline(in, line)) {
+        size_t comment_pos = line.find('#');
+        if (comment_pos != std::string::npos) line.erase(comment_pos);
+        std::string trimmed = trim_copy(line);
+        if (trimmed.empty()) continue;
+
+        size_t indent = 0;
+        while (indent < line.size() && line[indent] == ' ') indent++;
+
+        if (indent == 0) {
+            section = Section::root;
+            in_wanted_platform = false;
+            if (trimmed.rfind("name:", 0) == 0) {
+                out.name = strip_quotes(trimmed.substr(5));
+            } else if (trimmed.rfind("version:", 0) == 0) {
+                out.version = strip_quotes(trimmed.substr(8));
+            } else if (trimmed == "entry:") {
+                section = Section::entry;
+            } else if (trimmed == "platforms:") {
+                section = Section::platforms;
+                saw_platforms = true;
+            } else {
+                section = Section::other;
+            }
+            continue;
+        }
+
+        if (indent == 2 && section == Section::entry) {
+            if (trimmed.rfind("script:", 0) == 0) {
+                out.entry_script = strip_quotes(trimmed.substr(7));
+            }
+            continue;
+        }
+
+        if (indent == 2 && saw_platforms) {
+            if (!trimmed.empty() && trimmed.back() == ':') {
+                std::string platform_key = trim_copy(trimmed.substr(0, trimmed.size() - 1));
+                in_wanted_platform = (platform_key == wanted_platform);
+                section = in_wanted_platform ? Section::current_platform : Section::platforms;
+            }
+            continue;
+        }
+
+        if (indent == 4 && in_wanted_platform) {
+            if (trimmed.rfind("module_library:", 0) == 0) {
+                out.module_library = strip_quotes(trimmed.substr(15));
+                saw_any_platform_module_library = true;
+                section = Section::current_platform;
+            } else if (trimmed == "runtime_libraries:") {
+                section = Section::runtime_libraries;
+            } else {
+                section = Section::current_platform;
+            }
+            continue;
+        }
+
+        if (indent == 4 && saw_platforms) {
+            if (trimmed.rfind("module_library:", 0) == 0) {
+                saw_any_platform_module_library = true;
+            }
+            continue;
+        }
+
+        if (indent >= 6 && in_wanted_platform && section == Section::runtime_libraries) {
+            if (trimmed.rfind("- ", 0) == 0) {
+                out.runtime_libraries.push_back(strip_quotes(trimmed.substr(2)));
+            }
+            continue;
+        }
+    }
+
+    if (out.name.empty()) {
+        error = "module.yaml is missing name";
+        return false;
+    }
+    if (out.version.empty()) {
+        error = "module.yaml is missing version";
+        return false;
+    }
+    if (out.entry_script.empty() && !saw_any_platform_module_library) {
+        error = "module.yaml must declare entry.script and/or a platform module_library";
+        return false;
+    }
+    return true;
+}
+
+static ModulePaths resolve_packaged_module_paths(const std::string& dir, const char* name) {
+    ModulePaths out;
+    const std::string package_root = dir + "/" + name;
+    const std::string manifest_path = package_root + "/module.yaml";
+    if (!is_regular_file_path(manifest_path)) return out;
+
+    PackageManifest manifest;
+    std::string error;
+    if (!parse_package_manifest(manifest_path, manifest, error)) {
+        out.error_message = "Invalid package manifest for module '" + std::string(name) + "': " + error;
+        return out;
+    }
+    if (manifest.name != name) {
+        out.error_message = "Package manifest name mismatch for module '" + std::string(name) + "'";
+        return out;
+    }
+
+    out.is_packaged = true;
+    out.package_root = package_root;
+    out.manifest_path = manifest_path;
+
+    if (!manifest.entry_script.empty()) {
+        std::string mob_path = package_root + "/" + manifest.entry_script;
+        if (!is_regular_file_path(mob_path)) {
+            out.error_message = "Package entry script not found: " + mob_path;
+            return out;
+        }
+        out.has_mob = true;
+        out.mob_path = std::move(mob_path);
+    }
+
+    if (!manifest.module_library.empty()) {
+        std::string so_path = package_root + "/" + manifest.module_library;
+        if (!is_regular_file_path(so_path)) {
+            out.error_message = "Package module library not found: " + so_path;
+            return out;
+        }
+        out.has_so = true;
+        out.so_path = std::move(so_path);
+        for (const std::string& runtime_lib : manifest.runtime_libraries) {
+            std::string full_runtime_path = package_root + "/" + runtime_lib;
+            if (!is_regular_file_path(full_runtime_path)) {
+                out.error_message = "Package runtime library not found: " + full_runtime_path;
+                return out;
+            }
+            out.runtime_library_paths.push_back(std::move(full_runtime_path));
+        }
+    }
+
+    out.found = out.has_mob || out.has_so;
+    if (!out.found && out.error_message.empty()) {
+        out.error_message = "Package does not contain a loadable entry for the current platform";
+    }
+    return out;
+}
 
 static ModulePaths resolve_module_paths(const char* name, const char* caller_source, MobiusState* state) {
     ModulePaths out;
@@ -76,38 +340,25 @@ static ModulePaths resolve_module_paths(const char* name, const char* caller_sou
         "/usr/local/lib/mobius/modules",
         nullptr
     };
-
-    std::string mob_filename = std::string(name) + ".mob";
-    std::string so_filename  = std::string(name) + ".so";
     std::vector<std::string> search_dirs;
 
+    std::unordered_set<std::string> seen_dirs;
     if (caller_source && caller_source[0] != '\0' && strcmp(caller_source, "<string>") != 0) {
-        char* buf = strdup(caller_source);
-        if (buf) {
-            char* dir = dirname(buf);
-            if (dir && dir[0] != '\0') search_dirs.emplace_back(dir);
-            free(buf);
+        append_search_dir(search_dirs, seen_dirs, dirname_path(caller_source));
+
+        std::string caller_package_root = find_enclosing_package_root(caller_source);
+        if (!caller_package_root.empty()) {
+            append_search_dir(search_dirs, seen_dirs, parent_path(caller_package_root));
         }
     }
 
-    for (const auto& d : state->pluginDirectories()) search_dirs.push_back(d);
-    for (int i = 0; default_dirs[i]; i++) search_dirs.emplace_back(default_dirs[i]);
+    for (const auto& d : state->pluginDirectories()) append_search_dir(search_dirs, seen_dirs, d);
+    for (int i = 0; default_dirs[i]; i++) append_search_dir(search_dirs, seen_dirs, default_dirs[i]);
 
     for (const auto& dir : search_dirs) {
-        std::string mob_path = dir + "/" + mob_filename;
-        std::string so_path = dir + "/" + so_filename;
-
-        struct stat st_mob, st_so;
-        bool has_mob = (stat(mob_path.c_str(), &st_mob) == 0 && S_ISREG(st_mob.st_mode));
-        bool has_so  = (stat(so_path.c_str(),  &st_so)  == 0 && S_ISREG(st_so.st_mode));
-        if (!has_mob && !has_so) continue;
-
-        out.found = true;
-        out.has_mob = has_mob;
-        out.has_so = has_so;
-        if (has_mob) out.mob_path = std::move(mob_path);
-        if (has_so) out.so_path = std::move(so_path);
-        break;
+        ModulePaths packaged = resolve_packaged_module_paths(dir, name);
+        if (!packaged.error_message.empty()) return packaged;
+        if (packaged.found) return packaged;
     }
 
     return out;
@@ -170,6 +421,11 @@ ModuleRegistry::~ModuleRegistry() {
         if (mod && mod->handle) {
             dlclose(mod->handle);
         }
+        if (mod) {
+            for (void* extra : mod->extra_handles) {
+                if (extra) dlclose(extra);
+            }
+        }
     }
 }
 
@@ -197,8 +453,10 @@ void ModuleRegistry::registerBuiltinModule(const char* name, Table* module_table
 // Plugin loading (dlopen + init_plugin)
 // ============================================================================
 
-PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state) {
+PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state,
+                                            const std::vector<std::string>* preload_paths) {
     PluginLoadResult result = {PLUGIN_STATUS_ERROR, nullptr, nullptr};
+    std::vector<void*> extra_handles;
 
     if (!path) {
         result.error_message = "Invalid path";
@@ -209,8 +467,26 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         printf("Loading plugin: %s\n", path);
     }
 
+    if (preload_paths) {
+        for (const std::string& preload_path : *preload_paths) {
+            void* extra = dlopen(preload_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
+            if (!extra) {
+                for (void* handle : extra_handles) {
+                    if (handle) dlclose(handle);
+                }
+                last_error_ = std::string("Failed to preload runtime library: ") + dlerror();
+                result.error_message = last_error_.c_str();
+                return result;
+            }
+            extra_handles.push_back(extra);
+        }
+    }
+
     void* handle = dlopen(path, RTLD_LAZY);
     if (!handle) {
+        for (void* extra : extra_handles) {
+            if (extra) dlclose(extra);
+        }
         last_error_ = std::string("Failed to load library: ") + dlerror();
         result.error_message = last_error_.c_str();
         return result;
@@ -220,6 +496,9 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
     plugin_info_ptr.obj = dlsym(handle, "mobius_plugin_info");
     PluginInfoFunc get_plugin_info = plugin_info_ptr.func;
     if (!get_plugin_info) {
+        for (void* extra : extra_handles) {
+            if (extra) dlclose(extra);
+        }
         dlclose(handle);
         last_error_ = "Plugin does not export mobius_plugin_info function";
         result.error_message = last_error_.c_str();
@@ -228,6 +507,9 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
 
     Plugin* plugin = get_plugin_info();
     if (!plugin) {
+        for (void* extra : extra_handles) {
+            if (extra) dlclose(extra);
+        }
         dlclose(handle);
         last_error_ = "Plugin returned NULL from mobius_plugin_info";
         result.error_message = last_error_.c_str();
@@ -235,6 +517,9 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
     }
 
     if (plugin->metadata.api_version != MOBIUS_PLUGIN_API_VERSION) {
+        for (void* extra : extra_handles) {
+            if (extra) dlclose(extra);
+        }
         dlclose(handle);
         char buf[256];
         snprintf(buf, sizeof(buf),
@@ -250,6 +535,9 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         std::shared_lock<std::shared_mutex> lock(registry_mutex_);
         for (const auto& mod : modules_) {
             if (mod && mod->name == plugin->metadata.name) {
+                for (void* extra : extra_handles) {
+                    if (extra) dlclose(extra);
+                }
                 dlclose(handle);
                 last_error_ = std::string("Module '") + plugin->metadata.name + "' is already loaded";
                 result.error_message = last_error_.c_str();
@@ -262,6 +550,9 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         const char* dep_name = plugin->metadata.depends_on ? plugin->metadata.depends_on[i] : nullptr;
         if (!dep_name || dep_name[0] == '\0') continue;
         if (strcmp(dep_name, plugin->metadata.name) == 0) {
+            for (void* extra : extra_handles) {
+                if (extra) dlclose(extra);
+            }
             dlclose(handle);
             last_error_ = std::string("Module '") + plugin->metadata.name + "' cannot depend on itself";
             result.error_message = last_error_.c_str();
@@ -270,6 +561,9 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         Table* dep_table = resolveModule(dep_name, path, state);
         if (!dep_table) {
             std::string dep_error = last_error_;
+            for (void* extra : extra_handles) {
+                if (extra) dlclose(extra);
+            }
             dlclose(handle);
             last_error_ = std::string("Failed to load dependency '") + dep_name +
                           "' for module '" + plugin->metadata.name + "'" +
@@ -280,6 +574,9 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
     }
 
     if (plugin->init_plugin && plugin->init_plugin(state) != 0) {
+        for (void* extra : extra_handles) {
+            if (extra) dlclose(extra);
+        }
         dlclose(handle);
         last_error_ = "Plugin initialization failed";
         result.error_message = last_error_.c_str();
@@ -290,6 +587,7 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
     mod->name = plugin->metadata.name;
     mod->path = path;
     mod->handle = handle;
+    mod->extra_handles = std::move(extra_handles);
     mod->plugin = plugin;
     mod->status = PLUGIN_STATUS_LOADED;
     {
@@ -342,7 +640,9 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
 
         ModulePaths paths = resolve_module_paths(name, caller_source, state);
         if (!paths.found) {
-            last_error_ = std::string("Module '") + name + "' not found";
+            last_error_ = paths.error_message.empty()
+                ? std::string("Module '") + name + "' not found"
+                : paths.error_message;
             return nullptr;
         }
 
@@ -355,7 +655,9 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         ModuleRecord record;
         record.table = mod_table;
         record.state = ModuleLoadState::loading;
-        record.path = paths.has_mob ? paths.mob_path : paths.so_path;
+        record.path = paths.is_packaged
+            ? paths.package_root
+            : (paths.has_mob ? paths.mob_path : paths.so_path);
         record.owner_thread = current_thread;
         record.error_message.clear();
         record.globals = std::make_unique<GlobalEnvironment>();
@@ -382,7 +684,8 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         if (paths.has_so) {
             LoadedModule* lm = findModule(name);
             if (!lm) {
-                PluginLoadResult result = loadPlugin(paths.so_path.c_str(), state);
+                PluginLoadResult result = loadPlugin(paths.so_path.c_str(), state,
+                                                     paths.runtime_library_paths.empty() ? nullptr : &paths.runtime_library_paths);
                 if (result.status == PLUGIN_STATUS_LOADED && result.plugin) {
                     lm = findModule(result.plugin->metadata.name);
                 } else if (result.error_message) {

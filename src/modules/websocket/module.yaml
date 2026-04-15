@@ -1,0 +1,11 @@
+name: websocket
+version: 0.1.0
+entry:
+  script: websocket.mob
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/websocket.so
+dependencies:
+  mobius_modules: [crypto, http, socket]
+metadata:
+  description: Websocket handshake and frame helpers

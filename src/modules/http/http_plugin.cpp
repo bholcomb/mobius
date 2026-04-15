@@ -1,7 +1,5 @@
 #include <mobius/mobius_plugin.h>
 
-#include "modules/net/protocol_common.h"
-
 #include <algorithm>
 #include <cctype>
 #include <cinttypes>
@@ -12,9 +10,86 @@
 #include <string>
 #include <vector>
 
-using namespace mobius_net;
-
 namespace {
+
+static std::string trim_left(const std::string& s) {
+    size_t i = 0;
+    while (i < s.size() && std::isspace((unsigned char)s[i])) i++;
+    return s.substr(i);
+}
+
+static std::string trim_right(const std::string& s) {
+    size_t end = s.size();
+    while (end > 0 && std::isspace((unsigned char)s[end - 1])) end--;
+    return s.substr(0, end);
+}
+
+static std::string trim(const std::string& s) {
+    return trim_right(trim_left(s));
+}
+
+static std::string to_lower_copy(const std::string& s) {
+    std::string out = s;
+    for (char& c : out) c = (char)std::tolower((unsigned char)c);
+    return out;
+}
+
+static bool iequals(const std::string& a, const std::string& b) {
+    return to_lower_copy(a) == to_lower_copy(b);
+}
+
+static bool header_value_has_token(const std::string& value, const char* token) {
+    std::string wanted = to_lower_copy(token ? token : "");
+    size_t start = 0;
+    while (start <= value.size()) {
+        size_t end = value.find(',', start);
+        std::string part = to_lower_copy(trim(value.substr(start, end == std::string::npos ? std::string::npos : end - start)));
+        if (part == wanted) return true;
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+    return false;
+}
+
+static void split_lines(const std::string& input, std::vector<std::string>& lines) {
+    lines.clear();
+    size_t start = 0;
+    while (start <= input.size()) {
+        size_t end = input.find('\n', start);
+        std::string line = input.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        lines.push_back(std::move(line));
+        if (end == std::string::npos) break;
+        start = end + 1;
+    }
+}
+
+static std::string canonical_header_name(const std::string& name) {
+    std::string out = to_lower_copy(name);
+    bool upper = true;
+    for (char& c : out) {
+        if (upper && c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+        upper = (c == '-');
+    }
+    return out;
+}
+
+static void collect_sorted_string_keys(MobiusState* state, int tbl_idx, std::vector<std::string>& keys) {
+    mobius_stack_getTableKeys(state, tbl_idx);
+    int keys_arr = mobius_stack_size(state) - 1;
+    size_t count = mobius_stack_getArrayLength(state, keys_arr);
+    keys.clear();
+    keys.reserve(count);
+    for (size_t i = 0; i < count; i++) {
+        mobius_stack_getArrayElement(state, keys_arr, i);
+        if (mobius_stack_isString(state, -1)) {
+            keys.emplace_back(mobius_stack_asString(state, -1));
+        }
+        mobius_stack_pop(state, 1);
+    }
+    mobius_stack_pop(state, 1);
+    std::sort(keys.begin(), keys.end());
+}
 
 struct HeaderEntry {
     std::string name;
