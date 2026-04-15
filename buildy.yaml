@@ -26,7 +26,12 @@ workspace:
   modules:
     - src
     - src/modules
+    - src/packages/sqlite
+    - src/packages/glfw
     - examples
+
+dependencies:
+  file: buildy_config/dependencies.yaml
 
 
 staging:
@@ -122,3 +127,18 @@ staging:
     - folder: "bin/modules/socket/native/linux-x86_64"
       files:
         - "${out_dir}/bin/socket.so"
+    - folder: "packages/sqlite"
+      files:
+        - "src/packages/sqlite/module.yaml"
+        - "src/packages/sqlite/sqlite.mob"
+    - folder: "packages/sqlite/native/linux-x86_64"
+      files:
+        - "${out_dir}/bin/sqlite.so"
+        - ".buildy_cache/deps/sqlite3/build/${platform}-${arch}-${config}/bin/libsqlite3.so"
+    - folder: "packages/glfw"
+      files:
+        - "src/packages/glfw/module.yaml"
+        - "src/packages/glfw/glfw.mob"
+    - folder: "packages/glfw/native/linux-x86_64"
+      files:
+        - "${out_dir}/bin/glfw.so"

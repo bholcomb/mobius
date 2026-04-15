@@ -34,6 +34,10 @@ is_expected_to_fail() {
 should_run_test() {
     local test_file="$1"
     case "$test_file" in
+        tests/*.mob)
+            [[ "$(basename "$test_file")" == test_* ]]
+            return
+            ;;
         tests/modules/*.mob)
             [[ "$(basename "$test_file")" == test_* ]]
             return

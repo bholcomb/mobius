@@ -1,0 +1,68 @@
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var repo_root = os.getcwd()
+var mobius_bin = os.join(repo_root, "bin", "mobius")
+var math_so_src = os.join(repo_root, "bin", "modules", "math", "native", "linux-x86_64", "math.so")
+var core_so_src = os.join(repo_root, "bin", "libmobius-core.so")
+
+var workspace = os.join(os.tmpdir(), "mobius_flat_hybrid_" + str(os.getpid()))
+var wrapper_path = os.join(workspace, "math.mob")
+var native_path = os.join(workspace, "math.so")
+var core_path = os.join(workspace, "libmobius-core.so")
+var run_script = os.join(workspace, "run.mob")
+
+assert_test("math native exists", os.is_file(math_so_src))
+assert_test("mobius core exists", os.is_file(core_so_src))
+assert_test("create workspace", os.mkdirp(workspace))
+assert_test("copy math native", os.cp(math_so_src, native_path))
+assert_test("copy mobius core", os.cp(core_so_src, core_path))
+assert_test("write math wrapper", writefile(wrapper_path,
+    "func sin_zero() {\n" +
+    "    return sin(0)\n" +
+    "}\n" +
+    "\n" +
+    "func cos_zero() {\n" +
+    "    return cos(0)\n" +
+    "}\n" +
+    "\n" +
+    "var wrapper_loaded = true\n"))
+assert_test("write runner", writefile(run_script,
+    "import \"math\" as math\n" +
+    "if (typeof(math.factorial) != \"function\") { exit(1) }\n" +
+    "if (math.wrapper_loaded != true) { exit(1) }\n" +
+    "if (math.sin_zero() != 0.0) { exit(1) }\n" +
+    "if (math.cos_zero() != 1.0) { exit(1) }\n" +
+    "print(\"flat hybrid import ok\")\n"))
+
+var old_cwd = os.getcwd()
+assert_test("chdir into workspace", os.chdir(workspace))
+var import_rc = os.system(mobius_bin + " " + run_script)
+assert_test("import flat hybrid module", import_rc == 0)
+assert_test("chdir back to repo root", os.chdir(old_cwd))
+
+os.remove(run_script)
+os.remove(wrapper_path)
+os.remove(native_path)
+os.remove(core_path)
+os.rmdir(workspace)
+
+print("")
+print("Flat Hybrid Module Loader Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}

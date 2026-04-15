@@ -1,0 +1,953 @@
+2026/04/15 11:40:49.413143 Found 6 template file(s)
+2026/04/15 11:40:49.413237 Found 29 toolchain file(s)
+2026/04/15 11:40:49.413247 Found 7 build system file(s)
+2026/04/15 11:40:49.414463 Loaded 13 embedded template(s)
+2026/04/15 11:40:49.414481 Total templates loaded: 13
+2026/04/15 11:40:49.422967 Loaded embedded build system: autoconf - GNU Autoconf/Automake build system
+2026/04/15 11:40:49.423035 Loaded embedded build system: buildy - Buildy build system (recursive)
+2026/04/15 11:40:49.423117 Loaded embedded build system: cargo - Rust Cargo build system
+2026/04/15 11:40:49.423200 Loaded embedded build system: cmake - CMake build system
+2026/04/15 11:40:49.423284 Loaded embedded build system: go_mod - Go modules build system
+2026/04/15 11:40:49.423373 Loaded embedded build system: make - GNU Make build system
+2026/04/15 11:40:49.423460 Loaded embedded build system: meson - Meson build system
+2026/04/15 11:40:49.424034 Fetching URL: https://sqlite.org/2026/sqlite-amalgamation-3530000.zip -> /home/bholcomb/projects/side/mobius/.buildy_cache/deps/sqlite3
+2026/04/15 11:40:49.424044 WARNING: No checksum provided for https://sqlite.org/2026/sqlite-amalgamation-3530000.zip - consider adding one for reproducible builds
+2026/04/15 11:40:49.614305 Downloading: https://sqlite.org/2026/sqlite-amalgamation-3530000.zip (2.8 MB)
+2026/04/15 11:40:49.837436   10% (0.3 / 2.8 MB)
+2026/04/15 11:40:49.892791   20% (0.6 / 2.8 MB)
+2026/04/15 11:40:49.915063   30% (0.8 / 2.8 MB)
+2026/04/15 11:40:49.937818   40% (1.1 / 2.8 MB)
+2026/04/15 11:40:49.953963   50% (1.4 / 2.8 MB)
+2026/04/15 11:40:49.966904   60% (1.7 / 2.8 MB)
+2026/04/15 11:40:49.974313   70% (2.0 / 2.8 MB)
+2026/04/15 11:40:49.999055   80% (2.2 / 2.8 MB)
+2026/04/15 11:40:50.009540   90% (2.5 / 2.8 MB)
+2026/04/15 11:40:50.012025   100% (2.8 / 2.8 MB)
+2026/04/15 11:40:50.012040 Download complete: sqlite-amalgamation-3530000.zip.tmp
+2026/04/15 11:40:50.097418 Successfully fetched and extracted https://sqlite.org/2026/sqlite-amalgamation-3530000.zip
+2026/04/15 11:40:50.097434 === Building dependency: sqlite3 (using buildy) ===
+2026/04/15 11:40:50.097570 Building sqlite3 (debug) with buildy
+2026/04/15 11:40:50.097585 Executing build phase: /home/bholcomb/projects/side/mobius/buildy --platform linux --architecture x86_64 --config debug /home/bholcomb/projects/side/mobius/buildy_config/dependencies/sqlite3_build.yaml
+2026/04/15 11:41:17.251739 Phase 'build' completed successfully
+2026/04/15 11:41:17.251787 Build completed for sqlite3 (debug)
+2026/04/15 11:41:17.251974 Building sqlite3 (release) with buildy
+2026/04/15 11:41:17.251996 Executing build phase: /home/bholcomb/projects/side/mobius/buildy --platform linux --architecture x86_64 --config release /home/bholcomb/projects/side/mobius/buildy_config/dependencies/sqlite3_build.yaml
+2026/04/15 11:41:59.812563 Phase 'build' completed successfully
+2026/04/15 11:41:59.812697 Build completed for sqlite3 (release)
+2026/04/15 11:41:59.812742 === Dependency sqlite3 built successfully ===
+2026/04/15 11:41:59.812811 Fetching URL: https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip -> /home/bholcomb/projects/side/mobius/.buildy_cache/deps/glfw3
+2026/04/15 11:41:59.812828 WARNING: No checksum provided for https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip - consider adding one for reproducible builds
+2026/04/15 11:42:00.245435 Downloading: https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip (1.6 MB)
+2026/04/15 11:42:00.371295   10% (0.2 / 1.6 MB)
+2026/04/15 11:42:00.420381   20% (0.3 / 1.6 MB)
+2026/04/15 11:42:00.435810   30% (0.5 / 1.6 MB)
+2026/04/15 11:42:00.467874   40% (0.6 / 1.6 MB)
+2026/04/15 11:42:00.476236   50% (0.8 / 1.6 MB)
+2026/04/15 11:42:00.485884   60% (1.0 / 1.6 MB)
+2026/04/15 11:42:00.494872   70% (1.1 / 1.6 MB)
+2026/04/15 11:42:00.516823   81% (1.3 / 1.6 MB)
+2026/04/15 11:42:00.522249   90% (1.4 / 1.6 MB)
+2026/04/15 11:42:00.526818   100% (1.6 / 1.6 MB)
+2026/04/15 11:42:00.526843 Download complete: glfw-3.4.zip.tmp
+2026/04/15 11:42:00.609848 Successfully fetched and extracted https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip
+2026/04/15 11:42:00.609887 === Building dependency: glfw3 (using buildy) ===
+2026/04/15 11:42:00.610130 Building glfw3 (debug) with buildy
+2026/04/15 11:42:00.610155 Executing build phase: /home/bholcomb/projects/side/mobius/buildy --platform linux --architecture x86_64 --config debug /home/bholcomb/projects/side/mobius/buildy_config/dependencies/glfw3_build.yaml
+2026/04/15 11:42:01.236281 Phase 'build' completed successfully
+2026/04/15 11:42:01.236318 Build completed for glfw3 (debug)
+2026/04/15 11:42:01.236536 Building glfw3 (release) with buildy
+2026/04/15 11:42:01.236567 Executing build phase: /home/bholcomb/projects/side/mobius/buildy --platform linux --architecture x86_64 --config release /home/bholcomb/projects/side/mobius/buildy_config/dependencies/glfw3_build.yaml
+2026/04/15 11:42:02.078236 Phase 'build' completed successfully
+2026/04/15 11:42:02.078267 Build completed for glfw3 (release)
+2026/04/15 11:42:02.078302 === Dependency glfw3 built successfully ===
+2026/04/15 11:42:02.079219 Starting workspace build...
+2026/04/15 11:42:02.079270 No build state found at /home/bholcomb/projects/side/mobius/.buildy_cache/incremental_build.json
+2026/04/15 11:42:02.079299 Auto-detected toolchain: gcc-cpp-linux
+2026/04/15 11:42:02.079468 Phase 1: Task Generation
+2026/04/15 11:42:02.079852 Initializing target registry...
+2026/04/15 11:42:02.079880 Indexed 22 unique target names
+2026/04/15 11:42:02.079892 Processing module: src
+2026/04/15 11:42:02.079912 Auto-detected toolchain: gcc-cpp-linux
+2026/04/15 11:42:02.079981 Using toolchain: gcc-cpp-linux (GCC C++ compiler for Linux x86_64)
+2026/04/15 11:42:02.079993 Execution environment: native
+2026/04/15 11:42:02.080025 Output directory pattern '${base_dir}/linux-x86_64-release' resolved to '/home/bholcomb/projects/side/mobius/build/linux-x86_64-release'
+2026/04/15 11:42:02.080294 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.080314 Expanding pattern 'mobius/data/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/data/*.cpp'
+2026/04/15 11:42:02.080440 Pattern 'mobius/data/*.cpp' matched 10 files: [src/mobius/data/array.cpp src/mobius/data/array_slice.cpp src/mobius/data/buffer.cpp src/mobius/data/channel.cpp src/mobius/data/enum.cpp src/mobius/data/metamethods.cpp src/mobius/data/number.cpp src/mobius/data/shared_cell.cpp src/mobius/data/table.cpp src/mobius/data/value.cpp]
+2026/04/15 11:42:02.080458 Expanding pattern 'mobius/fiber/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/fiber/*.cpp'
+2026/04/15 11:42:02.080521 Pattern 'mobius/fiber/*.cpp' matched 3 files: [src/mobius/fiber/fiber_context_posix.cpp src/mobius/fiber/fiber_pool.cpp src/mobius/fiber/job_system.cpp]
+2026/04/15 11:42:02.080534 Expanding pattern 'mobius/frontend/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/frontend/*.cpp'
+2026/04/15 11:42:02.080595 Pattern 'mobius/frontend/*.cpp' matched 4 files: [src/mobius/frontend/ast.cpp src/mobius/frontend/parser.cpp src/mobius/frontend/scanner.cpp src/mobius/frontend/token.cpp]
+2026/04/15 11:42:02.080607 Expanding pattern 'mobius/internal/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/internal/*.cpp'
+2026/04/15 11:42:02.080657 Pattern 'mobius/internal/*.cpp' matched 1 files: [src/mobius/internal/string_intern.cpp]
+2026/04/15 11:42:02.080668 Expanding pattern 'mobius/library/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/library/*.cpp'
+2026/04/15 11:42:02.080764 Pattern 'mobius/library/*.cpp' matched 12 files: [src/mobius/library/array.cpp src/mobius/library/buffer_lib.cpp src/mobius/library/core.cpp src/mobius/library/fiber_lib.cpp src/mobius/library/file_lib.cpp src/mobius/library/library.cpp src/mobius/library/math.cpp src/mobius/library/string.cpp src/mobius/library/struct_view_lib.cpp src/mobius/library/table_lib.cpp src/mobius/library/types.cpp src/mobius/library/util.cpp]
+2026/04/15 11:42:02.080778 Expanding pattern 'mobius/plugin/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/plugin/*.cpp'
+2026/04/15 11:42:02.080831 Pattern 'mobius/plugin/*.cpp' matched 1 files: [src/mobius/plugin/module_registry.cpp]
+2026/04/15 11:42:02.080853 Expanding pattern 'mobius/state/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/state/*.cpp'
+2026/04/15 11:42:02.080906 Pattern 'mobius/state/*.cpp' matched 2 files: [src/mobius/state/mobius_state.cpp src/mobius/state/stack.cpp]
+2026/04/15 11:42:02.080917 Expanding pattern 'mobius/util/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/util/*.cpp'
+2026/04/15 11:42:02.080969 Pattern 'mobius/util/*.cpp' matched 2 files: [src/mobius/util/file_io.cpp src/mobius/util/utility.cpp]
+2026/04/15 11:42:02.080982 Expanding pattern 'mobius/vm/*.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/vm/*.cpp'
+2026/04/15 11:42:02.081039 Pattern 'mobius/vm/*.cpp' matched 3 files: [src/mobius/vm/bytecode.cpp src/mobius/vm/compiler.cpp src/mobius/vm/vm.cpp]
+2026/04/15 11:42:02.081051 Expanding pattern 'mobius/repl.cpp' as '/home/bholcomb/projects/side/mobius/src/mobius/repl.cpp'
+2026/04/15 11:42:02.081075 Pattern 'mobius/repl.cpp' matched 1 files: [src/mobius/repl.cpp]
+2026/04/15 11:42:02.081105 Matched src/mobius/data/array.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081232 Matched src/mobius/data/array_slice.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081337 Matched src/mobius/data/buffer.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081467 Matched src/mobius/data/channel.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081572 Matched src/mobius/data/enum.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081673 Matched src/mobius/data/metamethods.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081773 Matched src/mobius/data/number.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081872 Matched src/mobius/data/shared_cell.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.081977 Matched src/mobius/data/table.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.082094 Matched src/mobius/data/value.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.082219 Matched src/mobius/fiber/fiber_context_posix.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.082321 Matched src/mobius/fiber/fiber_pool.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.082439 Matched src/mobius/fiber/job_system.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.082565 Matched src/mobius/frontend/ast.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.082737 Matched src/mobius/frontend/parser.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.082930 Matched src/mobius/frontend/scanner.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083050 Matched src/mobius/frontend/token.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083154 Matched src/mobius/internal/string_intern.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083259 Matched src/mobius/library/array.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083383 Matched src/mobius/library/buffer_lib.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083504 Matched src/mobius/library/core.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083605 Matched src/mobius/library/fiber_lib.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083712 Matched src/mobius/library/file_lib.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083767 Matched src/mobius/library/library.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083824 Matched src/mobius/library/math.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083882 Matched src/mobius/library/string.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.083953 Matched src/mobius/library/struct_view_lib.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.084034 Matched src/mobius/library/table_lib.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.084093 Matched src/mobius/library/types.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.084152 Matched src/mobius/library/util.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.084210 Matched src/mobius/plugin/module_registry.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.084614 Matched src/mobius/state/mobius_state.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.085197 Matched src/mobius/state/stack.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.085422 Matched src/mobius/util/file_io.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.085542 Matched src/mobius/util/utility.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.085652 Matched src/mobius/vm/bytecode.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.085767 Matched src/mobius/vm/compiler.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.086040 Matched src/mobius/vm/vm.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.086289 Matched src/mobius/repl.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.086448 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.086998 Registered target 'mobius-core' -> task 'link_mobius_core_001__src' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/libmobius-core.so)
+2026/04/15 11:42:02.087068 Found template 'cpp_executable' for language=cpp, type=executable
+2026/04/15 11:42:02.087077 Expanding pattern 'main.cpp' as '/home/bholcomb/projects/side/mobius/src/main.cpp'
+2026/04/15 11:42:02.087095 Pattern 'main.cpp' matched 1 files: [src/main.cpp]
+2026/04/15 11:42:02.087112 Matched src/main.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.087175 Matched link tool for 'executable' -> 'link_executable'
+2026/04/15 11:42:02.087244 Registered target 'mobius' -> task 'link_mobius_001__src' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/mobius)
+2026/04/15 11:42:02.087254 Processing module: src/modules
+2026/04/15 11:42:02.087268 Auto-detected toolchain: gcc-cpp-linux
+2026/04/15 11:42:02.087311 Using toolchain: gcc-cpp-linux (GCC C++ compiler for Linux x86_64)
+2026/04/15 11:42:02.087318 Execution environment: native
+2026/04/15 11:42:02.087331 Output directory pattern '${base_dir}/linux-x86_64-release' resolved to '/home/bholcomb/projects/side/mobius/build/linux-x86_64-release'
+2026/04/15 11:42:02.087526 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.087540 Expanding pattern 'compression/compression_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/compression/compression_plugin.cpp'
+2026/04/15 11:42:02.087557 Pattern 'compression/compression_plugin.cpp' matched 1 files: [src/modules/compression/compression_plugin.cpp]
+2026/04/15 11:42:02.087570 Matched src/modules/compression/compression_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.087664 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.087719 Registered target 'compression' -> task 'link_compression_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/compression.so)
+2026/04/15 11:42:02.087776 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.087786 Expanding pattern 'math/math_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/math/math_plugin.cpp'
+2026/04/15 11:42:02.087803 Pattern 'math/math_plugin.cpp' matched 1 files: [src/modules/math/math_plugin.cpp]
+2026/04/15 11:42:02.087820 Matched src/modules/math/math_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.087895 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.087948 Registered target 'math' -> task 'link_math_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/math.so)
+2026/04/15 11:42:02.087991 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.088001 Expanding pattern 'os/os_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/os/os_plugin.cpp'
+2026/04/15 11:42:02.088016 Pattern 'os/os_plugin.cpp' matched 1 files: [src/modules/os/os_plugin.cpp]
+2026/04/15 11:42:02.088033 Matched src/modules/os/os_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.088131 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.088196 Registered target 'os' -> task 'link_os_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/os.so)
+2026/04/15 11:42:02.088243 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.088252 Expanding pattern 'regex/regex_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/regex/regex_plugin.cpp'
+2026/04/15 11:42:02.088273 Pattern 'regex/regex_plugin.cpp' matched 1 files: [src/modules/regex/regex_plugin.cpp]
+2026/04/15 11:42:02.088287 Matched src/modules/regex/regex_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.088360 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.088441 Registered target 'regex' -> task 'link_regex_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/regex.so)
+2026/04/15 11:42:02.088495 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.088505 Expanding pattern 'json/json_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/json/json_plugin.cpp'
+2026/04/15 11:42:02.088520 Pattern 'json/json_plugin.cpp' matched 1 files: [src/modules/json/json_plugin.cpp]
+2026/04/15 11:42:02.088533 Matched src/modules/json/json_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.088608 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.088668 Registered target 'json' -> task 'link_json_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/json.so)
+2026/04/15 11:42:02.088712 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.088722 Expanding pattern 'toml/toml_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/toml/toml_plugin.cpp'
+2026/04/15 11:42:02.088736 Pattern 'toml/toml_plugin.cpp' matched 1 files: [src/modules/toml/toml_plugin.cpp]
+2026/04/15 11:42:02.088749 Matched src/modules/toml/toml_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.088844 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.088901 Registered target 'toml' -> task 'link_toml_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/toml.so)
+2026/04/15 11:42:02.088947 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.088957 Expanding pattern 'datetime/datetime_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/datetime/datetime_plugin.cpp'
+2026/04/15 11:42:02.088971 Pattern 'datetime/datetime_plugin.cpp' matched 1 files: [src/modules/datetime/datetime_plugin.cpp]
+2026/04/15 11:42:02.088984 Matched src/modules/datetime/datetime_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.089057 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.089116 Registered target 'datetime' -> task 'link_datetime_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/datetime.so)
+2026/04/15 11:42:02.089163 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.089173 Expanding pattern 'url/url_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/url/url_plugin.cpp'
+2026/04/15 11:42:02.089187 Pattern 'url/url_plugin.cpp' matched 1 files: [src/modules/url/url_plugin.cpp]
+2026/04/15 11:42:02.089200 Matched src/modules/url/url_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.089270 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.089325 Registered target 'url' -> task 'link_url_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/url.so)
+2026/04/15 11:42:02.089373 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.089384 Expanding pattern 'crypto/crypto_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/crypto/crypto_plugin.cpp'
+2026/04/15 11:42:02.089404 Pattern 'crypto/crypto_plugin.cpp' matched 1 files: [src/modules/crypto/crypto_plugin.cpp]
+2026/04/15 11:42:02.089417 Matched src/modules/crypto/crypto_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.089492 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.089545 Registered target 'crypto' -> task 'link_crypto_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/crypto.so)
+2026/04/15 11:42:02.089591 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.089601 Expanding pattern 'yaml/yaml_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/yaml/yaml_plugin.cpp'
+2026/04/15 11:42:02.089615 Pattern 'yaml/yaml_plugin.cpp' matched 1 files: [src/modules/yaml/yaml_plugin.cpp]
+2026/04/15 11:42:02.089628 Matched src/modules/yaml/yaml_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.089715 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.089776 Registered target 'yaml' -> task 'link_yaml_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/yaml.so)
+2026/04/15 11:42:02.089827 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.089837 Expanding pattern 'http/http_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/http/http_plugin.cpp'
+2026/04/15 11:42:02.089851 Pattern 'http/http_plugin.cpp' matched 1 files: [src/modules/http/http_plugin.cpp]
+2026/04/15 11:42:02.089867 Matched src/modules/http/http_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.090235 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.090770 Registered target 'http' -> task 'link_http_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/http.so)
+2026/04/15 11:42:02.090874 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.090894 Expanding pattern 'websocket/websocket_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/websocket/websocket_plugin.cpp'
+2026/04/15 11:42:02.090928 Pattern 'websocket/websocket_plugin.cpp' matched 1 files: [src/modules/websocket/websocket_plugin.cpp]
+2026/04/15 11:42:02.090960 Matched src/modules/websocket/websocket_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.091123 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.091232 Registered target 'websocket' -> task 'link_websocket_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/websocket.so)
+2026/04/15 11:42:02.091319 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.091335 Expanding pattern 'socket/socket_plugin.cpp' as '/home/bholcomb/projects/side/mobius/src/modules/socket/socket_plugin.cpp'
+2026/04/15 11:42:02.091363 Pattern 'socket/socket_plugin.cpp' matched 1 files: [src/modules/socket/socket_plugin.cpp]
+2026/04/15 11:42:02.091402 Matched src/modules/socket/socket_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.091563 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.091662 Registered target 'socket' -> task 'link_socket_001__src_modules' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/socket.so)
+2026/04/15 11:42:02.091678 Processing module: examples
+2026/04/15 11:42:02.091699 Auto-detected toolchain: gcc-cpp-linux
+2026/04/15 11:42:02.091782 Using toolchain: gcc-cpp-linux (GCC C++ compiler for Linux x86_64)
+2026/04/15 11:42:02.091795 Execution environment: native
+2026/04/15 11:42:02.091821 Output directory pattern '${base_dir}/linux-x86_64-release' resolved to '/home/bholcomb/projects/side/mobius/build/linux-x86_64-release'
+2026/04/15 11:42:02.092079 Found template 'cpp_shared_library' for language=cpp, type=shared_library
+2026/04/15 11:42:02.092098 Expanding pattern 'text_processing_plugin/text_processing_plugin.cpp' as '/home/bholcomb/projects/side/mobius/examples/text_processing_plugin/text_processing_plugin.cpp'
+2026/04/15 11:42:02.092137 Pattern 'text_processing_plugin/text_processing_plugin.cpp' matched 1 files: [examples/text_processing_plugin/text_processing_plugin.cpp]
+2026/04/15 11:42:02.092163 Matched examples/text_processing_plugin/text_processing_plugin.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.092301 Matched link tool for 'shared_library' -> 'link_shared_library'
+2026/04/15 11:42:02.092412 Registered target 'text_processing' -> task 'link_text_processing_001__examples' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/text_processing.so)
+2026/04/15 11:42:02.092500 Found template 'cpp_executable' for language=cpp, type=executable
+2026/04/15 11:42:02.092516 Expanding pattern 'embedding_example/embedding_example.cpp' as '/home/bholcomb/projects/side/mobius/examples/embedding_example/embedding_example.cpp'
+2026/04/15 11:42:02.092543 Pattern 'embedding_example/embedding_example.cpp' matched 1 files: [examples/embedding_example/embedding_example.cpp]
+2026/04/15 11:42:02.092568 Matched examples/embedding_example/embedding_example.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.092686 Matched link tool for 'executable' -> 'link_executable'
+2026/04/15 11:42:02.092846 Registered target 'embedding_example' -> task 'link_embedding_example_001__examples' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/embedding_example)
+2026/04/15 11:42:02.092921 Found template 'cpp_executable' for language=cpp, type=executable
+2026/04/15 11:42:02.092938 Expanding pattern 'simple_embedding/simple_embedding.cpp' as '/home/bholcomb/projects/side/mobius/examples/simple_embedding/simple_embedding.cpp'
+2026/04/15 11:42:02.092965 Pattern 'simple_embedding/simple_embedding.cpp' matched 1 files: [examples/simple_embedding/simple_embedding.cpp]
+2026/04/15 11:42:02.092989 Matched examples/simple_embedding/simple_embedding.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.093095 Matched link tool for 'executable' -> 'link_executable'
+2026/04/15 11:42:02.093206 Registered target 'simple_embedding' -> task 'link_simple_embedding_001__examples' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/simple_embedding)
+2026/04/15 11:42:02.093284 Found template 'cpp_executable' for language=cpp, type=executable
+2026/04/15 11:42:02.093301 Expanding pattern 'game_engine/game_engine.cpp' as '/home/bholcomb/projects/side/mobius/examples/game_engine/game_engine.cpp'
+2026/04/15 11:42:02.093328 Pattern 'game_engine/game_engine.cpp' matched 1 files: [examples/game_engine/game_engine.cpp]
+2026/04/15 11:42:02.093352 Matched examples/game_engine/game_engine.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.093483 Matched link tool for 'executable' -> 'link_executable'
+2026/04/15 11:42:02.093598 Registered target 'game_engine' -> task 'link_game_engine_001__examples' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/game_engine)
+2026/04/15 11:42:02.093675 Found template 'cpp_executable' for language=cpp, type=executable
+2026/04/15 11:42:02.093691 Expanding pattern 'multi_environment_demo/multi_environment_demo.cpp' as '/home/bholcomb/projects/side/mobius/examples/multi_environment_demo/multi_environment_demo.cpp'
+2026/04/15 11:42:02.093720 Pattern 'multi_environment_demo/multi_environment_demo.cpp' matched 1 files: [examples/multi_environment_demo/multi_environment_demo.cpp]
+2026/04/15 11:42:02.093745 Matched examples/multi_environment_demo/multi_environment_demo.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.093854 Matched link tool for 'executable' -> 'link_executable'
+2026/04/15 11:42:02.093976 Registered target 'multi_environment_demo' -> task 'link_multi_environment_demo_001__examples' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/multi_environment_demo)
+2026/04/15 11:42:02.094052 Found template 'cpp_executable' for language=cpp, type=executable
+2026/04/15 11:42:02.094068 Expanding pattern 'simple_userdata_test/simple_userdata_test.cpp' as '/home/bholcomb/projects/side/mobius/examples/simple_userdata_test/simple_userdata_test.cpp'
+2026/04/15 11:42:02.094105 Pattern 'simple_userdata_test/simple_userdata_test.cpp' matched 1 files: [examples/simple_userdata_test/simple_userdata_test.cpp]
+2026/04/15 11:42:02.094130 Matched examples/simple_userdata_test/simple_userdata_test.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.094254 Matched link tool for 'executable' -> 'link_executable'
+2026/04/15 11:42:02.094377 Registered target 'simple_userdata_test' -> task 'link_simple_userdata_test_001__examples' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/simple_userdata_test)
+2026/04/15 11:42:02.094457 Found template 'cpp_executable' for language=cpp, type=executable
+2026/04/15 11:42:02.094475 Expanding pattern 'stack_api_test/stack_api_test.cpp' as '/home/bholcomb/projects/side/mobius/examples/stack_api_test/stack_api_test.cpp'
+2026/04/15 11:42:02.094502 Pattern 'stack_api_test/stack_api_test.cpp' matched 1 files: [examples/stack_api_test/stack_api_test.cpp]
+2026/04/15 11:42:02.094527 Matched examples/stack_api_test/stack_api_test.cpp (compile) -> tool 'cpp_compile'
+2026/04/15 11:42:02.094634 Matched link tool for 'executable' -> 'link_executable'
+2026/04/15 11:42:02.094742 Registered target 'stack_api_test' -> task 'link_stack_api_test_001__examples' (output: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/stack_api_test)
+2026/04/15 11:42:02.094758 Target 'mobius-core' already registered -> link task 'link_mobius_core_001__src'
+2026/04/15 11:42:02.094769 Target 'mobius' already registered -> link task 'link_mobius_001__src'
+2026/04/15 11:42:02.094778 Target 'compression' already registered -> link task 'link_compression_001__src_modules'
+2026/04/15 11:42:02.094790 Target 'math' already registered -> link task 'link_math_001__src_modules'
+2026/04/15 11:42:02.094799 Target 'os' already registered -> link task 'link_os_001__src_modules'
+2026/04/15 11:42:02.094808 Target 'regex' already registered -> link task 'link_regex_001__src_modules'
+2026/04/15 11:42:02.094818 Target 'json' already registered -> link task 'link_json_001__src_modules'
+2026/04/15 11:42:02.094829 Target 'toml' already registered -> link task 'link_toml_001__src_modules'
+2026/04/15 11:42:02.094839 Target 'datetime' already registered -> link task 'link_datetime_001__src_modules'
+2026/04/15 11:42:02.094848 Target 'url' already registered -> link task 'link_url_001__src_modules'
+2026/04/15 11:42:02.094858 Target 'crypto' already registered -> link task 'link_crypto_001__src_modules'
+2026/04/15 11:42:02.094868 Target 'yaml' already registered -> link task 'link_yaml_001__src_modules'
+2026/04/15 11:42:02.094878 Target 'http' already registered -> link task 'link_http_001__src_modules'
+2026/04/15 11:42:02.094887 Target 'websocket' already registered -> link task 'link_websocket_001__src_modules'
+2026/04/15 11:42:02.094897 Target 'socket' already registered -> link task 'link_socket_001__src_modules'
+2026/04/15 11:42:02.094907 Target 'text_processing' already registered -> link task 'link_text_processing_001__examples'
+2026/04/15 11:42:02.094917 Target 'embedding_example' already registered -> link task 'link_embedding_example_001__examples'
+2026/04/15 11:42:02.094926 Target 'simple_embedding' already registered -> link task 'link_simple_embedding_001__examples'
+2026/04/15 11:42:02.094935 Target 'game_engine' already registered -> link task 'link_game_engine_001__examples'
+2026/04/15 11:42:02.094946 Target 'multi_environment_demo' already registered -> link task 'link_multi_environment_demo_001__examples'
+2026/04/15 11:42:02.094955 Target 'simple_userdata_test' already registered -> link task 'link_simple_userdata_test_001__examples'
+2026/04/15 11:42:02.094964 Target 'stack_api_test' already registered -> link task 'link_stack_api_test_001__examples'
+2026/04/15 11:42:02.094987 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_mobius_001__src'
+2026/04/15 11:42:02.094999 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_mobius_001__src'
+2026/04/15 11:42:02.095020 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_compression_001__src_modules'
+2026/04/15 11:42:02.095030 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_compression_001__src_modules'
+2026/04/15 11:42:02.095042 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_math_001__src_modules'
+2026/04/15 11:42:02.095052 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_math_001__src_modules'
+2026/04/15 11:42:02.095063 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_os_001__src_modules'
+2026/04/15 11:42:02.095073 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_os_001__src_modules'
+2026/04/15 11:42:02.095083 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_regex_001__src_modules'
+2026/04/15 11:42:02.095094 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_regex_001__src_modules'
+2026/04/15 11:42:02.095104 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_json_001__src_modules'
+2026/04/15 11:42:02.095114 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_json_001__src_modules'
+2026/04/15 11:42:02.095125 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_toml_001__src_modules'
+2026/04/15 11:42:02.095135 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_toml_001__src_modules'
+2026/04/15 11:42:02.095146 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_datetime_001__src_modules'
+2026/04/15 11:42:02.095156 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_datetime_001__src_modules'
+2026/04/15 11:42:02.095166 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_url_001__src_modules'
+2026/04/15 11:42:02.095177 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_url_001__src_modules'
+2026/04/15 11:42:02.095187 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_crypto_001__src_modules'
+2026/04/15 11:42:02.095197 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_crypto_001__src_modules'
+2026/04/15 11:42:02.095208 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_yaml_001__src_modules'
+2026/04/15 11:42:02.095218 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_yaml_001__src_modules'
+2026/04/15 11:42:02.095228 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_http_001__src_modules'
+2026/04/15 11:42:02.095239 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_http_001__src_modules'
+2026/04/15 11:42:02.095250 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_websocket_001__src_modules'
+2026/04/15 11:42:02.095260 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_websocket_001__src_modules'
+2026/04/15 11:42:02.095270 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_socket_001__src_modules'
+2026/04/15 11:42:02.095280 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_socket_001__src_modules'
+2026/04/15 11:42:02.095290 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_text_processing_001__examples'
+2026/04/15 11:42:02.095300 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_text_processing_001__examples'
+2026/04/15 11:42:02.095311 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_embedding_example_001__examples'
+2026/04/15 11:42:02.095328 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_embedding_example_001__examples'
+2026/04/15 11:42:02.095339 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_simple_embedding_001__examples'
+2026/04/15 11:42:02.095349 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_simple_embedding_001__examples'
+2026/04/15 11:42:02.095361 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_game_engine_001__examples'
+2026/04/15 11:42:02.095382 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_game_engine_001__examples'
+2026/04/15 11:42:02.095397 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_multi_environment_demo_001__examples'
+2026/04/15 11:42:02.095407 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_multi_environment_demo_001__examples'
+2026/04/15 11:42:02.095417 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_simple_userdata_test_001__examples'
+2026/04/15 11:42:02.095427 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_simple_userdata_test_001__examples'
+2026/04/15 11:42:02.095438 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_stack_api_test_001__examples'
+2026/04/15 11:42:02.095447 Resolved dependency 'mobius-core' to link task 'link_mobius_core_001__src' in task 'link_stack_api_test_001__examples'
+2026/04/15 11:42:02.095644 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/mobius -> /home/bholcomb/projects/side/mobius/bin/mobius
+2026/04/15 11:42:02.095694 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/libmobius-core.so -> /home/bholcomb/projects/side/mobius/bin/libmobius-core.so
+2026/04/15 11:42:02.095773 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/compression/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/compression/module.yaml
+2026/04/15 11:42:02.095852 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/compression/compression.mob -> /home/bholcomb/projects/side/mobius/bin/modules/compression/compression.mob
+2026/04/15 11:42:02.095906 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/compression.so -> /home/bholcomb/projects/side/mobius/bin/modules/compression/native/linux-x86_64/compression.so
+2026/04/15 11:42:02.095978 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/math/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/math/module.yaml
+2026/04/15 11:42:02.096031 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/math.so -> /home/bholcomb/projects/side/mobius/bin/modules/math/native/linux-x86_64/math.so
+2026/04/15 11:42:02.096103 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/os/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/os/module.yaml
+2026/04/15 11:42:02.096156 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/os.so -> /home/bholcomb/projects/side/mobius/bin/modules/os/native/linux-x86_64/os.so
+2026/04/15 11:42:02.096229 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/regex/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/regex/module.yaml
+2026/04/15 11:42:02.096277 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/regex.so -> /home/bholcomb/projects/side/mobius/bin/modules/regex/native/linux-x86_64/regex.so
+2026/04/15 11:42:02.096348 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/json/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/json/module.yaml
+2026/04/15 11:42:02.096409 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/json.so -> /home/bholcomb/projects/side/mobius/bin/modules/json/native/linux-x86_64/json.so
+2026/04/15 11:42:02.096499 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/toml/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/toml/module.yaml
+2026/04/15 11:42:02.096547 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/toml.so -> /home/bholcomb/projects/side/mobius/bin/modules/toml/native/linux-x86_64/toml.so
+2026/04/15 11:42:02.096619 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/datetime/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/datetime/module.yaml
+2026/04/15 11:42:02.096666 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/datetime.so -> /home/bholcomb/projects/side/mobius/bin/modules/datetime/native/linux-x86_64/datetime.so
+2026/04/15 11:42:02.096738 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/url/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/url/module.yaml
+2026/04/15 11:42:02.096786 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/url.so -> /home/bholcomb/projects/side/mobius/bin/modules/url/native/linux-x86_64/url.so
+2026/04/15 11:42:02.096857 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/crypto/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/crypto/module.yaml
+2026/04/15 11:42:02.096905 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/crypto.so -> /home/bholcomb/projects/side/mobius/bin/modules/crypto/native/linux-x86_64/crypto.so
+2026/04/15 11:42:02.096978 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/yaml/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/yaml/module.yaml
+2026/04/15 11:42:02.097026 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/yaml.so -> /home/bholcomb/projects/side/mobius/bin/modules/yaml/native/linux-x86_64/yaml.so
+2026/04/15 11:42:02.097100 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/http/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/http/module.yaml
+2026/04/15 11:42:02.097174 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/http/http.mob -> /home/bholcomb/projects/side/mobius/bin/modules/http/http.mob
+2026/04/15 11:42:02.097220 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/http.so -> /home/bholcomb/projects/side/mobius/bin/modules/http/native/linux-x86_64/http.so
+2026/04/15 11:42:02.097292 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/web/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/web/module.yaml
+2026/04/15 11:42:02.097390 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/web/web.mob -> /home/bholcomb/projects/side/mobius/bin/modules/web/web.mob
+2026/04/15 11:42:02.097681 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/websocket/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/websocket/module.yaml
+2026/04/15 11:42:02.097796 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/websocket/websocket.mob -> /home/bholcomb/projects/side/mobius/bin/modules/websocket/websocket.mob
+2026/04/15 11:42:02.097930 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/websocket.so -> /home/bholcomb/projects/side/mobius/bin/modules/websocket/native/linux-x86_64/websocket.so
+2026/04/15 11:42:02.098124 Generated copy task: /home/bholcomb/projects/side/mobius/src/modules/socket/module.yaml -> /home/bholcomb/projects/side/mobius/bin/modules/socket/module.yaml
+2026/04/15 11:42:02.098168 Generated copy task: /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/socket.so -> /home/bholcomb/projects/side/mobius/bin/modules/socket/native/linux-x86_64/socket.so
+2026/04/15 11:42:02.098182 Generated 33 staging tasks for 'mobius' at /home/bholcomb/projects/side/mobius
+2026/04/15 11:42:02.098195 Generated 118 tasks from 3 modules
+2026/04/15 11:42:02.101516 Task graph saved to /home/bholcomb/projects/side/mobius/.buildy_cache/tasks.json
+2026/04/15 11:42:02.101537 Task generation completed in 0.02s (118 tasks)
+2026/04/15 11:42:02.101546 Phase 2: Task Execution
+2026/04/15 11:42:02.101638 Starting build with 118 tasks in 5 stages
+2026/04/15 11:42:02.101650 
+Stage 1/5: 21 task(s) [0.0% complete]
+2026/04/15 11:42:02.101751 Cache miss for stage_module_yaml_012__workspace: no cache entry found
+2026/04/15 11:42:02.101764 [2/118] stage_module_yaml_012__workspace - executing
+2026/04/15 11:42:02.101774   Command: cp /home/bholcomb/projects/side/mobius/src/modules/web/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/web/module.yaml
+2026/04/15 11:42:02.101785 Cache miss for stage_module_yaml_005__workspace: no cache entry found
+2026/04/15 11:42:02.101800 Cache miss for stage_module_yaml_006__workspace: no cache entry found
+2026/04/15 11:42:02.101826 [4/118] stage_module_yaml_006__workspace - executing
+2026/04/15 11:42:02.101835   Command: cp /home/bholcomb/projects/side/mobius/src/modules/toml/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/toml/module.yaml
+2026/04/15 11:42:02.101786 Cache miss for stage_module_yaml_011__workspace: no cache entry found
+2026/04/15 11:42:02.101856 [3/118] stage_module_yaml_011__workspace - executing
+2026/04/15 11:42:02.101808 [1/118] stage_module_yaml_005__workspace - executing
+2026/04/15 11:42:02.101891   Command: cp /home/bholcomb/projects/side/mobius/src/modules/json/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/json/module.yaml
+2026/04/15 11:42:02.101868   Command: cp /home/bholcomb/projects/side/mobius/src/modules/http/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/http/module.yaml
+2026/04/15 11:42:02.101984 [4/118] stage_module_yaml_006__workspace (0.0s) - completed
+2026/04/15 11:42:02.101991 [2/118] stage_module_yaml_012__workspace (0.0s) - completed
+2026/04/15 11:42:02.102084 [1/118] stage_module_yaml_005__workspace (0.0s) - completed
+2026/04/15 11:42:02.102194 [3/118] stage_module_yaml_011__workspace (0.0s) - completed
+2026/04/15 11:42:02.121534 Cache miss for stage_websocket_mob_001__workspace: no cache entry found
+2026/04/15 11:42:02.121574 [5/118] stage_websocket_mob_001__workspace - executing
+2026/04/15 11:42:02.121585   Command: cp /home/bholcomb/projects/side/mobius/src/modules/websocket/websocket.mob /home/bholcomb/projects/side/mobius/bin/modules/websocket/websocket.mob
+2026/04/15 11:42:02.121841 [5/118] stage_websocket_mob_001__workspace (0.0s) - completed
+2026/04/15 11:42:02.128151 Cache miss for stage_module_yaml_002__workspace: no cache entry found
+2026/04/15 11:42:02.128180 [6/118] stage_module_yaml_002__workspace - executing
+2026/04/15 11:42:02.128189   Command: cp /home/bholcomb/projects/side/mobius/src/modules/math/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/math/module.yaml
+2026/04/15 11:42:02.128364 [6/118] stage_module_yaml_002__workspace (0.0s) - completed
+2026/04/15 11:42:02.134812 Cache miss for stage_module_yaml_008__workspace: no cache entry found
+2026/04/15 11:42:02.134835 [7/118] stage_module_yaml_008__workspace - executing
+2026/04/15 11:42:02.134844   Command: cp /home/bholcomb/projects/side/mobius/src/modules/url/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/url/module.yaml
+2026/04/15 11:42:02.135010 [7/118] stage_module_yaml_008__workspace (0.0s) - completed
+2026/04/15 11:42:02.141536 Cache miss for stage_module_yaml_007__workspace: no cache entry found
+2026/04/15 11:42:02.141560 [8/118] stage_module_yaml_007__workspace - executing
+2026/04/15 11:42:02.141570   Command: cp /home/bholcomb/projects/side/mobius/src/modules/datetime/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/datetime/module.yaml
+2026/04/15 11:42:02.141543 Cache miss for setup_dirs_001__src: no cache entry found
+2026/04/15 11:42:02.141636 [9/118] setup_dirs_001__src - executing
+2026/04/15 11:42:02.141642   Command: true
+2026/04/15 11:42:02.141741 [9/118] setup_dirs_001__src (0.0s) - completed
+2026/04/15 11:42:02.141743 [8/118] stage_module_yaml_007__workspace (0.0s) - completed
+2026/04/15 11:42:02.154708 Cache miss for stage_module_yaml_009__workspace: no cache entry found
+2026/04/15 11:42:02.154736 [10/118] stage_module_yaml_009__workspace - executing
+2026/04/15 11:42:02.154747   Command: cp /home/bholcomb/projects/side/mobius/src/modules/crypto/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/crypto/module.yaml
+2026/04/15 11:42:02.154943 [10/118] stage_module_yaml_009__workspace (0.0s) - completed
+2026/04/15 11:42:02.161091 Cache miss for stage_http_mob_001__workspace: no cache entry found
+2026/04/15 11:42:02.161120 [11/118] stage_http_mob_001__workspace - executing
+2026/04/15 11:42:02.161132   Command: cp /home/bholcomb/projects/side/mobius/src/modules/http/http.mob /home/bholcomb/projects/side/mobius/bin/modules/http/http.mob
+2026/04/15 11:42:02.161330 [11/118] stage_http_mob_001__workspace (0.0s) - completed
+2026/04/15 11:42:02.167844 Cache miss for stage_module_yaml_010__workspace: no cache entry found
+2026/04/15 11:42:02.167867 [12/118] stage_module_yaml_010__workspace - executing
+2026/04/15 11:42:02.167876   Command: cp /home/bholcomb/projects/side/mobius/src/modules/yaml/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/yaml/module.yaml
+2026/04/15 11:42:02.168049 [12/118] stage_module_yaml_010__workspace (0.0s) - completed
+2026/04/15 11:42:02.174399 Cache miss for setup_dirs_001__examples: no cache entry found
+2026/04/15 11:42:02.174422 [14/118] setup_dirs_001__examples - executing
+2026/04/15 11:42:02.174400 Cache miss for stage_web_mob_001__workspace: no cache entry found
+2026/04/15 11:42:02.174452 [13/118] stage_web_mob_001__workspace - executing
+2026/04/15 11:42:02.174464   Command: cp /home/bholcomb/projects/side/mobius/src/modules/web/web.mob /home/bholcomb/projects/side/mobius/bin/modules/web/web.mob
+2026/04/15 11:42:02.174433   Command: true
+2026/04/15 11:42:02.174538 [14/118] setup_dirs_001__examples (0.0s) - completed
+2026/04/15 11:42:02.174680 [13/118] stage_web_mob_001__workspace (0.0s) - completed
+2026/04/15 11:42:02.187359 Cache miss for stage_module_yaml_014__workspace: no cache entry found
+2026/04/15 11:42:02.187398 [15/118] stage_module_yaml_014__workspace - executing
+2026/04/15 11:42:02.187412   Command: cp /home/bholcomb/projects/side/mobius/src/modules/socket/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/socket/module.yaml
+2026/04/15 11:42:02.187606 [15/118] stage_module_yaml_014__workspace (0.0s) - completed
+2026/04/15 11:42:02.193892 Cache miss for stage_module_yaml_001__workspace: no cache entry found
+2026/04/15 11:42:02.193914 [16/118] stage_module_yaml_001__workspace - executing
+2026/04/15 11:42:02.193924   Command: cp /home/bholcomb/projects/side/mobius/src/modules/compression/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/compression/module.yaml
+2026/04/15 11:42:02.194086 [16/118] stage_module_yaml_001__workspace (0.0s) - completed
+2026/04/15 11:42:02.200489 Cache miss for stage_compression_mob_001__workspace: no cache entry found
+2026/04/15 11:42:02.200512 [17/118] stage_compression_mob_001__workspace - executing
+2026/04/15 11:42:02.200522   Command: cp /home/bholcomb/projects/side/mobius/src/modules/compression/compression.mob /home/bholcomb/projects/side/mobius/bin/modules/compression/compression.mob
+2026/04/15 11:42:02.200695 [17/118] stage_compression_mob_001__workspace (0.0s) - completed
+2026/04/15 11:42:02.207015 Cache miss for setup_dirs_001__src_modules: no cache entry found
+2026/04/15 11:42:02.207039 [19/118] setup_dirs_001__src_modules - executing
+2026/04/15 11:42:02.207016 Cache miss for stage_module_yaml_004__workspace: no cache entry found
+2026/04/15 11:42:02.207078 [18/118] stage_module_yaml_004__workspace - executing
+2026/04/15 11:42:02.207050   Command: true
+2026/04/15 11:42:02.207123 [19/118] setup_dirs_001__src_modules (0.0s) - completed
+2026/04/15 11:42:02.207095   Command: cp /home/bholcomb/projects/side/mobius/src/modules/regex/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/regex/module.yaml
+2026/04/15 11:42:02.207383 [18/118] stage_module_yaml_004__workspace (0.0s) - completed
+2026/04/15 11:42:02.220330 Cache miss for stage_module_yaml_013__workspace: no cache entry found
+2026/04/15 11:42:02.220357 [20/118] stage_module_yaml_013__workspace - executing
+2026/04/15 11:42:02.220374   Command: cp /home/bholcomb/projects/side/mobius/src/modules/websocket/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/websocket/module.yaml
+2026/04/15 11:42:02.220550 [20/118] stage_module_yaml_013__workspace (0.0s) - completed
+2026/04/15 11:42:02.226985 Cache miss for stage_module_yaml_003__workspace: no cache entry found
+2026/04/15 11:42:02.227007 [21/118] stage_module_yaml_003__workspace - executing
+2026/04/15 11:42:02.227017   Command: cp /home/bholcomb/projects/side/mobius/src/modules/os/module.yaml /home/bholcomb/projects/side/mobius/bin/modules/os/module.yaml
+2026/04/15 11:42:02.227191 [21/118] stage_module_yaml_003__workspace (0.0s) - completed
+2026/04/15 11:42:02.249775 
+Stage 2/5: 60 task(s) [17.8% complete]
+2026/04/15 11:42:02.249807 WARNING: Limiting parallelism to 4 workers due to memory constraints (12000MB required, 8192MB available)
+2026/04/15 11:42:02.249888 Cache miss for compile_mobius_core_src_mobius_data_enum_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.249901 [22/118] compile_mobius_core_src_mobius_data_enum_cpp_001__src - executing
+2026/04/15 11:42:02.249910 Cache miss for compile_mobius_core_src_mobius_library_math_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.249928 [23/118] compile_mobius_core_src_mobius_library_math_cpp_001__src - executing
+2026/04/15 11:42:02.249940   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/math.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/math.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/math.o
+2026/04/15 11:42:02.249947 Cache miss for compile_mobius_core_src_mobius_library_util_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.249972 [24/118] compile_mobius_core_src_mobius_library_util_cpp_001__src - executing
+2026/04/15 11:42:02.249986   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/util.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/util.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/util.o
+2026/04/15 11:42:02.250002 Cache miss for compile_mobius_core_src_mobius_state_mobius_state_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.250023 [25/118] compile_mobius_core_src_mobius_state_mobius_state_cpp_001__src - executing
+2026/04/15 11:42:02.249912   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/enum.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/enum.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/enum.o
+2026/04/15 11:42:02.250036   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/mobius_state.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/state/mobius_state.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/mobius_state.o
+2026/04/15 11:42:02.512967 [22/118] compile_mobius_core_src_mobius_data_enum_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:02.513847 Parsed 7 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/enum.d (Makefile format)
+2026/04/15 11:42:02.520833 Cache miss for compile_mobius_core_src_mobius_library_types_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.520846 [26/118] compile_mobius_core_src_mobius_library_types_cpp_001__src - executing
+2026/04/15 11:42:02.520851   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/types.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/types.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/types.o
+2026/04/15 11:42:02.613737 [23/118] compile_mobius_core_src_mobius_library_math_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:02.613944 [24/118] compile_mobius_core_src_mobius_library_util_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:02.614688 Parsed 12 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/math.d (Makefile format)
+2026/04/15 11:42:02.615194 Parsed 13 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/util.d (Makefile format)
+2026/04/15 11:42:02.628732 Cache miss for compile_mobius_core_src_mobius_util_utility_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.628865 [27/118] compile_mobius_core_src_mobius_util_utility_cpp_001__src - executing
+2026/04/15 11:42:02.628772 Cache miss for compile_simple_embedding_examples_simple_embedding_simple_embedding_cpp_001__examples: no cache entry found
+2026/04/15 11:42:02.628923 [28/118] compile_simple_embedding_examples_simple_embedding_simple_embedding_cpp_001__examples - executing
+2026/04/15 11:42:02.628939   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_embedding/simple_embedding.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG  -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c examples/simple_embedding/simple_embedding.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_embedding/simple_embedding.o
+2026/04/15 11:42:02.628877   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/utility.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/util/utility.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/utility.o
+2026/04/15 11:42:02.662682 [28/118] compile_simple_embedding_examples_simple_embedding_simple_embedding_cpp_001__examples (0.0s) - completed
+2026/04/15 11:42:02.663250 Parsed 1 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_embedding/simple_embedding.d (Makefile format)
+2026/04/15 11:42:02.665688 [27/118] compile_mobius_core_src_mobius_util_utility_cpp_001__src (0.0s) - completed
+2026/04/15 11:42:02.666776 Parsed 1 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/utility.d (Makefile format)
+2026/04/15 11:42:02.676926 Cache miss for compile_os_src_modules_os_os_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:02.677036 [29/118] compile_os_src_modules_os_os_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:02.676994 Cache miss for compile_mobius_core_src_mobius_plugin_module_registry_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.677067 [30/118] compile_mobius_core_src_mobius_plugin_module_registry_cpp_001__src - executing
+2026/04/15 11:42:02.677051   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/os/os_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/os/os_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/os/os_plugin.o
+2026/04/15 11:42:02.677080   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/plugin/module_registry.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/plugin/module_registry.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/plugin/module_registry.o
+2026/04/15 11:42:02.835632 [26/118] compile_mobius_core_src_mobius_library_types_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:02.837645 Parsed 13 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/types.d (Makefile format)
+2026/04/15 11:42:02.845287 Cache miss for compile_mobius_core_src_mobius_repl_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.845307 [31/118] compile_mobius_core_src_mobius_repl_cpp_001__src - executing
+2026/04/15 11:42:02.845318   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/repl.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/repl.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/repl.o
+2026/04/15 11:42:02.938076 [29/118] compile_os_src_modules_os_os_plugin_cpp_001__src_modules (0.3s) - completed
+2026/04/15 11:42:02.939512 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/os/os_plugin.d (Makefile format)
+2026/04/15 11:42:02.946790 Cache miss for compile_mobius_core_src_mobius_library_buffer_lib_cpp_001__src: no cache entry found
+2026/04/15 11:42:02.946810 [32/118] compile_mobius_core_src_mobius_library_buffer_lib_cpp_001__src - executing
+2026/04/15 11:42:02.946822   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/buffer_lib.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/buffer_lib.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/buffer_lib.o
+2026/04/15 11:42:03.050477 [25/118] compile_mobius_core_src_mobius_state_mobius_state_cpp_001__src (0.8s) - completed
+2026/04/15 11:42:03.052873 Parsed 36 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/mobius_state.d (Makefile format)
+2026/04/15 11:42:03.061148 Cache miss for compile_embedding_example_examples_embedding_example_embedding_example_cpp_001__examples: no cache entry found
+2026/04/15 11:42:03.061178 [33/118] compile_embedding_example_examples_embedding_example_embedding_example_cpp_001__examples - executing
+2026/04/15 11:42:03.061202   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/embedding_example/embedding_example.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG  -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c examples/embedding_example/embedding_example.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/embedding_example/embedding_example.o
+2026/04/15 11:42:03.105868 [33/118] compile_embedding_example_examples_embedding_example_embedding_example_cpp_001__examples (0.0s) - completed
+2026/04/15 11:42:03.106921 Parsed 3 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/embedding_example/embedding_example.d (Makefile format)
+2026/04/15 11:42:03.115280 Cache miss for compile_mobius_core_src_mobius_fiber_fiber_pool_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.115313 [34/118] compile_mobius_core_src_mobius_fiber_fiber_pool_cpp_001__src - executing
+2026/04/15 11:42:03.115325   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_pool.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/fiber/fiber_pool.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_pool.o
+2026/04/15 11:42:03.145093 [31/118] compile_mobius_core_src_mobius_repl_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:03.145698 Parsed 8 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/repl.d (Makefile format)
+2026/04/15 11:42:03.153310 Cache miss for compile_mobius_core_src_mobius_library_library_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.153340 [35/118] compile_mobius_core_src_mobius_library_library_cpp_001__src - executing
+2026/04/15 11:42:03.153353   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/library.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/library.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/library.o
+2026/04/15 11:42:03.312747 [34/118] compile_mobius_core_src_mobius_fiber_fiber_pool_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:03.313994 Parsed 4 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_pool.d (Makefile format)
+2026/04/15 11:42:03.321718 Cache miss for compile_stack_api_test_examples_stack_api_test_stack_api_test_cpp_001__examples: no cache entry found
+2026/04/15 11:42:03.321745 [36/118] compile_stack_api_test_examples_stack_api_test_stack_api_test_cpp_001__examples - executing
+2026/04/15 11:42:03.321756   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/stack_api_test/stack_api_test.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG  -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c examples/stack_api_test/stack_api_test.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/stack_api_test/stack_api_test.o
+2026/04/15 11:42:03.339200 [32/118] compile_mobius_core_src_mobius_library_buffer_lib_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:03.340474 Parsed 16 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/buffer_lib.d (Makefile format)
+2026/04/15 11:42:03.348186 Cache miss for compile_mobius_core_src_mobius_data_value_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.348207 [37/118] compile_mobius_core_src_mobius_data_value_cpp_001__src - executing
+2026/04/15 11:42:03.348218   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/value.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/value.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/value.o
+2026/04/15 11:42:03.350127 [36/118] compile_stack_api_test_examples_stack_api_test_stack_api_test_cpp_001__examples (0.0s) - completed
+2026/04/15 11:42:03.350750 Parsed 3 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/stack_api_test/stack_api_test.d (Makefile format)
+2026/04/15 11:42:03.357687 Cache miss for compile_json_src_modules_json_json_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:03.357700 [38/118] compile_json_src_modules_json_json_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:03.357706   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/json/json_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/json/json_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/json/json_plugin.o
+2026/04/15 11:42:03.438447 [35/118] compile_mobius_core_src_mobius_library_library_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:03.439086 Parsed 22 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/library.d (Makefile format)
+2026/04/15 11:42:03.446469 Cache miss for compile_mobius_core_src_mobius_fiber_job_system_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.446490 [39/118] compile_mobius_core_src_mobius_fiber_job_system_cpp_001__src - executing
+2026/04/15 11:42:03.446496   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/job_system.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/fiber/job_system.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/job_system.o
+2026/04/15 11:42:03.576901 [30/118] compile_mobius_core_src_mobius_plugin_module_registry_cpp_001__src (0.9s) - completed
+2026/04/15 11:42:03.579377 Parsed 17 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/plugin/module_registry.d (Makefile format)
+2026/04/15 11:42:03.587354 Cache miss for compile_text_processing_examples_text_processing_plugin_text_processing_plugin_cpp_001__examples: no cache entry found
+2026/04/15 11:42:03.587384 [40/118] compile_text_processing_examples_text_processing_plugin_text_processing_plugin_cpp_001__examples - executing
+2026/04/15 11:42:03.587397   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/text_processing_plugin/text_processing_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c examples/text_processing_plugin/text_processing_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/text_processing_plugin/text_processing_plugin.o
+2026/04/15 11:42:03.639515 [40/118] compile_text_processing_examples_text_processing_plugin_text_processing_plugin_cpp_001__examples (0.1s) - completed
+2026/04/15 11:42:03.640533 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/text_processing_plugin/text_processing_plugin.d (Makefile format)
+2026/04/15 11:42:03.648106 Cache miss for compile_game_engine_examples_game_engine_game_engine_cpp_001__examples: no cache entry found
+2026/04/15 11:42:03.648130 [41/118] compile_game_engine_examples_game_engine_game_engine_cpp_001__examples - executing
+2026/04/15 11:42:03.648138   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/game_engine/game_engine.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG  -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c examples/game_engine/game_engine.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/game_engine/game_engine.o
+2026/04/15 11:42:03.706003 [41/118] compile_game_engine_examples_game_engine_game_engine_cpp_001__examples (0.1s) - completed
+2026/04/15 11:42:03.707262 Parsed 3 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/game_engine/game_engine.d (Makefile format)
+2026/04/15 11:42:03.709236 [38/118] compile_json_src_modules_json_json_plugin_cpp_001__src_modules (0.4s) - completed
+2026/04/15 11:42:03.710724 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/json/json_plugin.d (Makefile format)
+2026/04/15 11:42:03.722884 Cache miss for compile_mobius_core_src_mobius_library_fiber_lib_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.722944 [42/118] compile_mobius_core_src_mobius_library_fiber_lib_cpp_001__src - executing
+2026/04/15 11:42:03.722919 Cache miss for compile_mobius_core_src_mobius_data_channel_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.723000 [43/118] compile_mobius_core_src_mobius_data_channel_cpp_001__src - executing
+2026/04/15 11:42:03.723016   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/channel.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/channel.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/channel.o
+2026/04/15 11:42:03.722960   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/fiber_lib.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/fiber_lib.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/fiber_lib.o
+2026/04/15 11:42:03.823248 [37/118] compile_mobius_core_src_mobius_data_value_cpp_001__src (0.5s) - completed
+2026/04/15 11:42:03.824873 Parsed 18 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/value.d (Makefile format)
+2026/04/15 11:42:03.833704 Cache miss for compile_mobius_core_src_mobius_frontend_token_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.833731 [44/118] compile_mobius_core_src_mobius_frontend_token_cpp_001__src - executing
+2026/04/15 11:42:03.833743   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/token.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/frontend/token.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/token.o
+2026/04/15 11:42:03.954943 [43/118] compile_mobius_core_src_mobius_data_channel_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:03.956295 Parsed 7 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/channel.d (Makefile format)
+2026/04/15 11:42:03.964395 Cache miss for compile_mobius_core_src_mobius_vm_bytecode_cpp_001__src: no cache entry found
+2026/04/15 11:42:03.964417 [45/118] compile_mobius_core_src_mobius_vm_bytecode_cpp_001__src - executing
+2026/04/15 11:42:03.964427   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/bytecode.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/vm/bytecode.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/bytecode.o
+2026/04/15 11:42:03.984247 [44/118] compile_mobius_core_src_mobius_frontend_token_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:03.985198 Parsed 4 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/token.d (Makefile format)
+2026/04/15 11:42:03.993232 Cache miss for compile_compression_src_modules_compression_compression_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:03.993261 [46/118] compile_compression_src_modules_compression_compression_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:03.993272   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/compression/compression_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -I/home/bholcomb/projects/side/mobius/src/modules/compression -c src/modules/compression/compression_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/compression/compression_plugin.o
+2026/04/15 11:42:04.039198 [39/118] compile_mobius_core_src_mobius_fiber_job_system_cpp_001__src (0.6s) - completed
+2026/04/15 11:42:04.040782 Parsed 14 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/job_system.d (Makefile format)
+2026/04/15 11:42:04.049486 Cache miss for compile_simple_userdata_test_examples_simple_userdata_test_simple_userdata_test_cpp_001__examples: no cache entry found
+2026/04/15 11:42:04.049515 [47/118] compile_simple_userdata_test_examples_simple_userdata_test_simple_userdata_test_cpp_001__examples - executing
+2026/04/15 11:42:04.049521   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_userdata_test/simple_userdata_test.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG  -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c examples/simple_userdata_test/simple_userdata_test.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_userdata_test/simple_userdata_test.o
+2026/04/15 11:42:04.093778 [47/118] compile_simple_userdata_test_examples_simple_userdata_test_simple_userdata_test_cpp_001__examples (0.0s) - completed
+2026/04/15 11:42:04.094559 Parsed 3 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_userdata_test/simple_userdata_test.d (Makefile format)
+2026/04/15 11:42:04.102021 Cache miss for compile_mobius_src_main_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.102041 [48/118] compile_mobius_src_main_cpp_001__src - executing
+2026/04/15 11:42:04.102056   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/main.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG  -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/main.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/main.o
+2026/04/15 11:42:04.142096 [48/118] compile_mobius_src_main_cpp_001__src (0.0s) - completed
+2026/04/15 11:42:04.143063 Parsed 3 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/main.d (Makefile format)
+2026/04/15 11:42:04.151087 Cache miss for compile_socket_src_modules_socket_socket_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:04.151108 [49/118] compile_socket_src_modules_socket_socket_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:04.151118   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/socket/socket_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/socket/socket_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/socket/socket_plugin.o
+2026/04/15 11:42:04.261028 [42/118] compile_mobius_core_src_mobius_library_fiber_lib_cpp_001__src (0.5s) - completed
+2026/04/15 11:42:04.262365 Parsed 25 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/fiber_lib.d (Makefile format)
+2026/04/15 11:42:04.271980 Cache miss for compile_mobius_core_src_mobius_library_core_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.272012 [50/118] compile_mobius_core_src_mobius_library_core_cpp_001__src - executing
+2026/04/15 11:42:04.272022   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/core.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/core.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/core.o
+2026/04/15 11:42:04.325879 [45/118] compile_mobius_core_src_mobius_vm_bytecode_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:04.326530 Parsed 8 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/bytecode.d (Makefile format)
+2026/04/15 11:42:04.333976 Cache miss for compile_mobius_core_src_mobius_frontend_ast_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.333988 [51/118] compile_mobius_core_src_mobius_frontend_ast_cpp_001__src - executing
+2026/04/15 11:42:04.333993   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/ast.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/frontend/ast.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/ast.o
+2026/04/15 11:42:04.421170 [49/118] compile_socket_src_modules_socket_socket_plugin_cpp_001__src_modules (0.3s) - completed
+2026/04/15 11:42:04.422617 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/socket/socket_plugin.d (Makefile format)
+2026/04/15 11:42:04.430672 Cache miss for compile_mobius_core_src_mobius_util_file_io_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.430694 [52/118] compile_mobius_core_src_mobius_util_file_io_cpp_001__src - executing
+2026/04/15 11:42:04.430715   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/file_io.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/util/file_io.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/file_io.o
+2026/04/15 11:42:04.662431 [50/118] compile_mobius_core_src_mobius_library_core_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:04.663665 Parsed 14 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/core.d (Makefile format)
+2026/04/15 11:42:04.672189 Cache miss for compile_mobius_core_src_mobius_fiber_fiber_context_posix_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.672211 [53/118] compile_mobius_core_src_mobius_fiber_fiber_context_posix_cpp_001__src - executing
+2026/04/15 11:42:04.672221   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_context_posix.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/fiber/fiber_context_posix.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_context_posix.o
+2026/04/15 11:42:04.705013 [51/118] compile_mobius_core_src_mobius_frontend_ast_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:04.705426 [53/118] compile_mobius_core_src_mobius_fiber_fiber_context_posix_cpp_001__src (0.0s) - completed
+2026/04/15 11:42:04.706429 Parsed 12 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/ast.d (Makefile format)
+2026/04/15 11:42:04.706508 Parsed 1 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_context_posix.d (Makefile format)
+2026/04/15 11:42:04.722513 Cache miss for compile_mobius_core_src_mobius_data_metamethods_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.722542 [54/118] compile_mobius_core_src_mobius_data_metamethods_cpp_001__src - executing
+2026/04/15 11:42:04.722552   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/metamethods.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/metamethods.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/metamethods.o
+2026/04/15 11:42:04.722554 Cache miss for compile_mobius_core_src_mobius_internal_string_intern_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.722576 [55/118] compile_mobius_core_src_mobius_internal_string_intern_cpp_001__src - executing
+2026/04/15 11:42:04.722587   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/internal/string_intern.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/internal/string_intern.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/internal/string_intern.o
+2026/04/15 11:42:04.735032 [52/118] compile_mobius_core_src_mobius_util_file_io_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:04.736049 Parsed 8 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/file_io.d (Makefile format)
+2026/04/15 11:42:04.744391 Cache miss for compile_url_src_modules_url_url_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:04.744420 [56/118] compile_url_src_modules_url_url_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:04.744432   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/url/url_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/url/url_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/url/url_plugin.o
+2026/04/15 11:42:04.878149 [54/118] compile_mobius_core_src_mobius_data_metamethods_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:04.878759 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/metamethods.d (Makefile format)
+2026/04/15 11:42:04.886322 Cache miss for compile_websocket_src_modules_websocket_websocket_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:04.886334 [57/118] compile_websocket_src_modules_websocket_websocket_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:04.886339   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/websocket/websocket_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/websocket/websocket_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/websocket/websocket_plugin.o
+2026/04/15 11:42:04.923598 [55/118] compile_mobius_core_src_mobius_internal_string_intern_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:04.924818 Parsed 1 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/internal/string_intern.d (Makefile format)
+2026/04/15 11:42:04.933308 Cache miss for compile_mobius_core_src_mobius_data_buffer_cpp_001__src: no cache entry found
+2026/04/15 11:42:04.933334 [58/118] compile_mobius_core_src_mobius_data_buffer_cpp_001__src - executing
+2026/04/15 11:42:04.933345   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/buffer.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/buffer.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/buffer.o
+2026/04/15 11:42:04.999801 [58/118] compile_mobius_core_src_mobius_data_buffer_cpp_001__src (0.1s) - completed
+2026/04/15 11:42:05.000428 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/buffer.d (Makefile format)
+2026/04/15 11:42:05.001970 [46/118] compile_compression_src_modules_compression_compression_plugin_cpp_001__src_modules (1.0s) - completed
+2026/04/15 11:42:05.005290 Parsed 4 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/compression/compression_plugin.d (Makefile format)
+2026/04/15 11:42:05.016171 Cache miss for compile_mobius_core_src_mobius_vm_vm_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.016215 [59/118] compile_mobius_core_src_mobius_vm_vm_cpp_001__src - executing
+2026/04/15 11:42:05.016224   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/vm.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/vm/vm.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/vm.o
+2026/04/15 11:42:05.016195 Cache miss for compile_mobius_core_src_mobius_library_string_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.016349 [60/118] compile_mobius_core_src_mobius_library_string_cpp_001__src - executing
+2026/04/15 11:42:05.016363   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/string.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/string.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/string.o
+2026/04/15 11:42:05.024354 [56/118] compile_url_src_modules_url_url_plugin_cpp_001__src_modules (0.3s) - completed
+2026/04/15 11:42:05.025772 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/url/url_plugin.d (Makefile format)
+2026/04/15 11:42:05.034451 Cache miss for compile_mobius_core_src_mobius_data_number_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.034511 [61/118] compile_mobius_core_src_mobius_data_number_cpp_001__src - executing
+2026/04/15 11:42:05.034522   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/number.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/number.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/number.o
+2026/04/15 11:42:05.050247 [61/118] compile_mobius_core_src_mobius_data_number_cpp_001__src (0.0s) - completed
+2026/04/15 11:42:05.051265 Parsed 1 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/number.d (Makefile format)
+2026/04/15 11:42:05.059834 Cache miss for compile_mobius_core_src_mobius_library_struct_view_lib_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.059858 [62/118] compile_mobius_core_src_mobius_library_struct_view_lib_cpp_001__src - executing
+2026/04/15 11:42:05.059869   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/struct_view_lib.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/struct_view_lib.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/struct_view_lib.o
+2026/04/15 11:42:05.259974 [57/118] compile_websocket_src_modules_websocket_websocket_plugin_cpp_001__src_modules (0.4s) - completed
+2026/04/15 11:42:05.260885 Parsed 3 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/websocket/websocket_plugin.d (Makefile format)
+2026/04/15 11:42:05.268506 Cache miss for compile_mobius_core_src_mobius_library_file_lib_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.268518 [63/118] compile_mobius_core_src_mobius_library_file_lib_cpp_001__src - executing
+2026/04/15 11:42:05.268524   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/file_lib.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/file_lib.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/file_lib.o
+2026/04/15 11:42:05.372997 [60/118] compile_mobius_core_src_mobius_library_string_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:05.374072 Parsed 16 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/string.d (Makefile format)
+2026/04/15 11:42:05.382482 Cache miss for compile_mobius_core_src_mobius_data_array_slice_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.382502 [64/118] compile_mobius_core_src_mobius_data_array_slice_cpp_001__src - executing
+2026/04/15 11:42:05.382511   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array_slice.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/array_slice.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array_slice.o
+2026/04/15 11:42:05.525153 [62/118] compile_mobius_core_src_mobius_library_struct_view_lib_cpp_001__src (0.5s) - completed
+2026/04/15 11:42:05.526183 Parsed 16 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/struct_view_lib.d (Makefile format)
+2026/04/15 11:42:05.535210 Cache miss for compile_math_src_modules_math_math_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:05.535237 [65/118] compile_math_src_modules_math_math_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:05.535247   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/math/math_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/math/math_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/math/math_plugin.o
+2026/04/15 11:42:05.571595 [64/118] compile_mobius_core_src_mobius_data_array_slice_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:05.572812 Parsed 9 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array_slice.d (Makefile format)
+2026/04/15 11:42:05.581882 Cache miss for compile_crypto_src_modules_crypto_crypto_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:05.581913 [66/118] compile_crypto_src_modules_crypto_crypto_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:05.581932   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/crypto/crypto_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/crypto/crypto_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/crypto/crypto_plugin.o
+2026/04/15 11:42:05.600961 [63/118] compile_mobius_core_src_mobius_library_file_lib_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:05.601622 Parsed 13 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/file_lib.d (Makefile format)
+2026/04/15 11:42:05.609441 Cache miss for compile_mobius_core_src_mobius_data_array_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.609453 [67/118] compile_mobius_core_src_mobius_data_array_cpp_001__src - executing
+2026/04/15 11:42:05.609459   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/array.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array.o
+2026/04/15 11:42:05.682572 [65/118] compile_math_src_modules_math_math_plugin_cpp_001__src_modules (0.1s) - completed
+2026/04/15 11:42:05.683431 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/math/math_plugin.d (Makefile format)
+2026/04/15 11:42:05.691826 Cache miss for compile_mobius_core_src_mobius_state_stack_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.691841 [68/118] compile_mobius_core_src_mobius_state_stack_cpp_001__src - executing
+2026/04/15 11:42:05.691845   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/stack.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/state/stack.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/stack.o
+2026/04/15 11:42:05.900703 [67/118] compile_mobius_core_src_mobius_data_array_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:05.901968 Parsed 8 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array.d (Makefile format)
+2026/04/15 11:42:05.910827 Cache miss for compile_mobius_core_src_mobius_data_table_cpp_001__src: no cache entry found
+2026/04/15 11:42:05.910848 [69/118] compile_mobius_core_src_mobius_data_table_cpp_001__src - executing
+2026/04/15 11:42:05.910858   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/table.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/table.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/table.o
+2026/04/15 11:42:05.914218 [66/118] compile_crypto_src_modules_crypto_crypto_plugin_cpp_001__src_modules (0.3s) - completed
+2026/04/15 11:42:05.915827 Parsed 3 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/crypto/crypto_plugin.d (Makefile format)
+2026/04/15 11:42:05.924589 Cache miss for compile_datetime_src_modules_datetime_datetime_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:05.924609 [70/118] compile_datetime_src_modules_datetime_datetime_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:05.924615   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/datetime/datetime_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/datetime/datetime_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/datetime/datetime_plugin.o
+2026/04/15 11:42:06.110459 [70/118] compile_datetime_src_modules_datetime_datetime_plugin_cpp_001__src_modules (0.2s) - completed
+2026/04/15 11:42:06.111764 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/datetime/datetime_plugin.d (Makefile format)
+2026/04/15 11:42:06.120786 Cache miss for compile_mobius_core_src_mobius_frontend_parser_cpp_001__src: no cache entry found
+2026/04/15 11:42:06.120810 [71/118] compile_mobius_core_src_mobius_frontend_parser_cpp_001__src - executing
+2026/04/15 11:42:06.120820   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/parser.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/frontend/parser.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/parser.o
+2026/04/15 11:42:06.245028 [68/118] compile_mobius_core_src_mobius_state_stack_cpp_001__src (0.6s) - completed
+2026/04/15 11:42:06.246674 Parsed 17 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/stack.d (Makefile format)
+2026/04/15 11:42:06.250656 [59/118] compile_mobius_core_src_mobius_vm_vm_cpp_001__src (1.2s) - completed
+2026/04/15 11:42:06.253644 Parsed 26 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/vm.d (Makefile format)
+2026/04/15 11:42:06.264022 Cache miss for compile_yaml_src_modules_yaml_yaml_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:06.264049 [72/118] compile_yaml_src_modules_yaml_yaml_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:06.264060   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/yaml/yaml_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/yaml/yaml_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/yaml/yaml_plugin.o
+2026/04/15 11:42:06.264035 Cache miss for compile_mobius_core_src_mobius_data_shared_cell_cpp_001__src: no cache entry found
+2026/04/15 11:42:06.264131 [73/118] compile_mobius_core_src_mobius_data_shared_cell_cpp_001__src - executing
+2026/04/15 11:42:06.264141   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/shared_cell.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/data/shared_cell.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/shared_cell.o
+2026/04/15 11:42:06.339546 [69/118] compile_mobius_core_src_mobius_data_table_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:06.340946 Parsed 10 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/table.d (Makefile format)
+2026/04/15 11:42:06.350512 Cache miss for compile_mobius_core_src_mobius_library_table_lib_cpp_001__src: no cache entry found
+2026/04/15 11:42:06.350529 [74/118] compile_mobius_core_src_mobius_library_table_lib_cpp_001__src - executing
+2026/04/15 11:42:06.350535   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/table_lib.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/table_lib.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/table_lib.o
+2026/04/15 11:42:06.427786 [73/118] compile_mobius_core_src_mobius_data_shared_cell_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:06.428392 Parsed 7 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/shared_cell.d (Makefile format)
+2026/04/15 11:42:06.436243 Cache miss for compile_mobius_core_src_mobius_library_array_cpp_001__src: no cache entry found
+2026/04/15 11:42:06.436254 [75/118] compile_mobius_core_src_mobius_library_array_cpp_001__src - executing
+2026/04/15 11:42:06.436259   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/array.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/library/array.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/array.o
+2026/04/15 11:42:06.520497 [71/118] compile_mobius_core_src_mobius_frontend_parser_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:06.521691 Parsed 13 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/parser.d (Makefile format)
+2026/04/15 11:42:06.531624 Cache miss for compile_mobius_core_src_mobius_vm_compiler_cpp_001__src: no cache entry found
+2026/04/15 11:42:06.531645 [76/118] compile_mobius_core_src_mobius_vm_compiler_cpp_001__src - executing
+2026/04/15 11:42:06.531651   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/compiler.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/vm/compiler.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/compiler.o
+2026/04/15 11:42:06.696047 [74/118] compile_mobius_core_src_mobius_library_table_lib_cpp_001__src (0.3s) - completed
+2026/04/15 11:42:06.697245 Parsed 15 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/table_lib.d (Makefile format)
+2026/04/15 11:42:06.706802 Cache miss for compile_http_src_modules_http_http_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:06.706814 [77/118] compile_http_src_modules_http_http_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:06.706820   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/http/http_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/http/http_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/http/http_plugin.o
+2026/04/15 11:42:06.727124 [72/118] compile_yaml_src_modules_yaml_yaml_plugin_cpp_001__src_modules (0.5s) - completed
+2026/04/15 11:42:06.728178 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/yaml/yaml_plugin.d (Makefile format)
+2026/04/15 11:42:06.736696 Cache miss for compile_regex_src_modules_regex_regex_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:06.736729 [78/118] compile_regex_src_modules_regex_regex_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:06.736740   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/regex/regex_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/regex/regex_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/regex/regex_plugin.o
+2026/04/15 11:42:06.850906 [75/118] compile_mobius_core_src_mobius_library_array_cpp_001__src (0.4s) - completed
+2026/04/15 11:42:06.852248 Parsed 15 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/array.d (Makefile format)
+2026/04/15 11:42:06.861470 Cache miss for compile_mobius_core_src_mobius_frontend_scanner_cpp_001__src: no cache entry found
+2026/04/15 11:42:06.861483 [79/118] compile_mobius_core_src_mobius_frontend_scanner_cpp_001__src - executing
+2026/04/15 11:42:06.861489   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/scanner.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -fvisibility=hidden -DMOBIUS_BUILDING -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/mobius/frontend/scanner.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/scanner.o
+2026/04/15 11:42:06.975923 [78/118] compile_regex_src_modules_regex_regex_plugin_cpp_001__src_modules (0.2s) - completed
+2026/04/15 11:42:06.977544 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/regex/regex_plugin.d (Makefile format)
+2026/04/15 11:42:06.988039 Cache miss for compile_toml_src_modules_toml_toml_plugin_cpp_001__src_modules: no cache entry found
+2026/04/15 11:42:06.988058 [80/118] compile_toml_src_modules_toml_toml_plugin_cpp_001__src_modules - executing
+2026/04/15 11:42:06.988064   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/toml/toml_plugin.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG -fPIC -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c src/modules/toml/toml_plugin.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/toml/toml_plugin.o
+2026/04/15 11:42:07.060696 [79/118] compile_mobius_core_src_mobius_frontend_scanner_cpp_001__src (0.2s) - completed
+2026/04/15 11:42:07.061958 Parsed 8 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/scanner.d (Makefile format)
+2026/04/15 11:42:07.072042 Cache miss for compile_multi_environment_demo_examples_multi_environment_demo_multi_environment_demo_cpp_001__examples: no cache entry found
+2026/04/15 11:42:07.072057 [81/118] compile_multi_environment_demo_examples_multi_environment_demo_multi_environment_demo_cpp_001__examples - executing
+2026/04/15 11:42:07.072063   Command: g++ -MMD -MP -MF /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/multi_environment_demo/multi_environment_demo.d -std=c++17 -Wall -Wextra -O3 -march=native -funroll-loops -flto -DNDEBUG  -I/home/bholcomb/projects/side/mobius/include -I/home/bholcomb/projects/side/mobius/src -I/home/bholcomb/projects/side/mobius/src/mobius -c examples/multi_environment_demo/multi_environment_demo.cpp -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/multi_environment_demo/multi_environment_demo.o
+2026/04/15 11:42:07.104163 [81/118] compile_multi_environment_demo_examples_multi_environment_demo_multi_environment_demo_cpp_001__examples (0.0s) - completed
+2026/04/15 11:42:07.105246 Parsed 1 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/multi_environment_demo/multi_environment_demo.d (Makefile format)
+2026/04/15 11:42:07.163529 [77/118] compile_http_src_modules_http_http_plugin_cpp_001__src_modules (0.5s) - completed
+2026/04/15 11:42:07.165396 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/http/http_plugin.d (Makefile format)
+2026/04/15 11:42:07.492180 [80/118] compile_toml_src_modules_toml_toml_plugin_cpp_001__src_modules (0.5s) - completed
+2026/04/15 11:42:07.493808 Parsed 2 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/toml/toml_plugin.d (Makefile format)
+2026/04/15 11:42:07.607610 [76/118] compile_mobius_core_src_mobius_vm_compiler_cpp_001__src (1.1s) - completed
+2026/04/15 11:42:07.611186 Parsed 16 header dependencies from /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/compiler.d (Makefile format)
+2026/04/15 11:42:07.620989 
+Stage 3/5: 1 task(s) [68.6% complete]
+2026/04/15 11:42:07.625142 Cache miss for link_mobius_core_001__src: no cache entry found
+2026/04/15 11:42:07.625161 [82/118] link_mobius_core_001__src - executing
+2026/04/15 11:42:07.625167   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/array_slice.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/buffer.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/channel.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/enum.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/metamethods.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/number.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/shared_cell.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/table.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/data/value.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_context_posix.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/fiber_pool.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/fiber/job_system.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/ast.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/parser.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/scanner.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/frontend/token.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/internal/string_intern.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/array.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/buffer_lib.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/core.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/fiber_lib.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/file_lib.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/library.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/math.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/string.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/struct_view_lib.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/table_lib.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/types.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/library/util.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/plugin/module_registry.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/mobius_state.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/state/stack.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/file_io.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/util/utility.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/bytecode.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/compiler.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/vm/vm.o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/mobius/repl.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lpthread  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/libmobius-core.so
+2026/04/15 11:42:19.835428 [82/118] link_mobius_core_001__src (12.2s) - completed
+2026/04/15 11:42:19.845980 
+Stage 4/5: 22 task(s) [69.5% complete]
+2026/04/15 11:42:19.846114 Cache miss for link_stack_api_test_001__examples: no cache entry found
+2026/04/15 11:42:19.846128 [83/118] link_stack_api_test_001__examples - executing
+2026/04/15 11:42:19.846140   Command: g++ -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/stack_api_test/stack_api_test.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/stack_api_test
+2026/04/15 11:42:19.846158 Cache miss for link_game_engine_001__examples: no cache entry found
+2026/04/15 11:42:19.846169 [86/118] link_game_engine_001__examples - executing
+2026/04/15 11:42:19.846174   Command: g++ -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/game_engine/game_engine.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/game_engine
+2026/04/15 11:42:19.847152 Cache miss for link_http_001__src_modules: no cache entry found
+2026/04/15 11:42:19.847212 [84/118] link_http_001__src_modules - executing
+2026/04/15 11:42:19.847235   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/http/http_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/http.so
+2026/04/15 11:42:19.848175 Cache miss for stage_libmobius_core_so_001__workspace: no cache entry found
+2026/04/15 11:42:19.848209 [85/118] stage_libmobius_core_so_001__workspace - executing
+2026/04/15 11:42:19.848222   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/libmobius-core.so /home/bholcomb/projects/side/mobius/bin/libmobius-core.so
+2026/04/15 11:42:19.850966 [85/118] stage_libmobius_core_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:19.864851 Cache miss for link_simple_userdata_test_001__examples: no cache entry found
+2026/04/15 11:42:19.864869 [87/118] link_simple_userdata_test_001__examples - executing
+2026/04/15 11:42:19.864876   Command: g++ -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_userdata_test/simple_userdata_test.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/simple_userdata_test
+2026/04/15 11:42:19.949205 [83/118] link_stack_api_test_001__examples (0.1s) - completed
+2026/04/15 11:42:19.960878 Cache miss for link_websocket_001__src_modules: no cache entry found
+2026/04/15 11:42:19.960905 [88/118] link_websocket_001__src_modules - executing
+2026/04/15 11:42:19.960916   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/websocket/websocket_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/websocket.so
+2026/04/15 11:42:19.971230 [86/118] link_game_engine_001__examples (0.1s) - completed
+2026/04/15 11:42:19.975749 [87/118] link_simple_userdata_test_001__examples (0.1s) - completed
+2026/04/15 11:42:19.991351 Cache miss for link_compression_001__src_modules: no cache entry found
+2026/04/15 11:42:19.991386 [89/118] link_compression_001__src_modules - executing
+2026/04/15 11:42:19.991409   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/compression/compression_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl -lz -lzstd  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/compression.so
+2026/04/15 11:42:19.991425 Cache miss for link_text_processing_001__examples: no cache entry found
+2026/04/15 11:42:19.991440 [90/118] link_text_processing_001__examples - executing
+2026/04/15 11:42:19.991448   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/text_processing_plugin/text_processing_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/text_processing.so
+2026/04/15 11:42:20.143961 [90/118] link_text_processing_001__examples (0.2s) - completed
+2026/04/15 11:42:20.154662 Cache miss for link_socket_001__src_modules: no cache entry found
+2026/04/15 11:42:20.154686 [91/118] link_socket_001__src_modules - executing
+2026/04/15 11:42:20.154697   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/socket/socket_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/socket.so
+2026/04/15 11:42:20.504184 [91/118] link_socket_001__src_modules (0.3s) - completed
+2026/04/15 11:42:20.513789 Cache miss for link_multi_environment_demo_001__examples: no cache entry found
+2026/04/15 11:42:20.513809 [92/118] link_multi_environment_demo_001__examples - executing
+2026/04/15 11:42:20.513817   Command: g++ -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/multi_environment_demo/multi_environment_demo.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/multi_environment_demo
+2026/04/15 11:42:20.611846 [92/118] link_multi_environment_demo_001__examples (0.1s) - completed
+2026/04/15 11:42:20.620520 Cache miss for link_toml_001__src_modules: no cache entry found
+2026/04/15 11:42:20.620536 [93/118] link_toml_001__src_modules - executing
+2026/04/15 11:42:20.620543   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/toml/toml_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/toml.so
+2026/04/15 11:42:20.634812 [88/118] link_websocket_001__src_modules (0.7s) - completed
+2026/04/15 11:42:20.643457 Cache miss for link_url_001__src_modules: no cache entry found
+2026/04/15 11:42:20.643478 [94/118] link_url_001__src_modules - executing
+2026/04/15 11:42:20.643485   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/url/url_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/url.so
+2026/04/15 11:42:21.339259 [94/118] link_url_001__src_modules (0.7s) - completed
+2026/04/15 11:42:21.350982 Cache miss for link_mobius_001__src: no cache entry found
+2026/04/15 11:42:21.351006 [95/118] link_mobius_001__src - executing
+2026/04/15 11:42:21.351012   Command: g++ -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/main.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl -lpthread  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/mobius
+2026/04/15 11:42:21.460289 [95/118] link_mobius_001__src (0.1s) - completed
+2026/04/15 11:42:21.469044 Cache miss for link_datetime_001__src_modules: no cache entry found
+2026/04/15 11:42:21.469058 [96/118] link_datetime_001__src_modules - executing
+2026/04/15 11:42:21.469065   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/datetime/datetime_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/datetime.so
+2026/04/15 11:42:21.656365 [96/118] link_datetime_001__src_modules (0.2s) - completed
+2026/04/15 11:42:21.667541 Cache miss for link_math_001__src_modules: no cache entry found
+2026/04/15 11:42:21.667562 [97/118] link_math_001__src_modules - executing
+2026/04/15 11:42:21.667568   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/math/math_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/math.so
+2026/04/15 11:42:21.809903 [97/118] link_math_001__src_modules (0.1s) - completed
+2026/04/15 11:42:21.819209 Cache miss for link_regex_001__src_modules: no cache entry found
+2026/04/15 11:42:21.819223 [98/118] link_regex_001__src_modules - executing
+2026/04/15 11:42:21.819230   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/regex/regex_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/regex.so
+2026/04/15 11:42:21.831610 [84/118] link_http_001__src_modules (2.0s) - completed
+2026/04/15 11:42:21.841374 Cache miss for link_crypto_001__src_modules: no cache entry found
+2026/04/15 11:42:21.841395 [99/118] link_crypto_001__src_modules - executing
+2026/04/15 11:42:21.841402   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/crypto/crypto_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/crypto.so
+2026/04/15 11:42:22.203302 [98/118] link_regex_001__src_modules (0.4s) - completed
+2026/04/15 11:42:22.204727 [93/118] link_toml_001__src_modules (1.6s) - completed
+2026/04/15 11:42:22.222533 Cache miss for link_simple_embedding_001__examples: no cache entry found
+2026/04/15 11:42:22.222562 [100/118] link_simple_embedding_001__examples - executing
+2026/04/15 11:42:22.222569   Command: g++ -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/simple_embedding/simple_embedding.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/simple_embedding
+2026/04/15 11:42:22.222650 Cache miss for link_json_001__src_modules: no cache entry found
+2026/04/15 11:42:22.222661 [101/118] link_json_001__src_modules - executing
+2026/04/15 11:42:22.222667   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/json/json_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/json.so
+2026/04/15 11:42:22.308569 [100/118] link_simple_embedding_001__examples (0.1s) - completed
+2026/04/15 11:42:22.318364 Cache miss for link_embedding_example_001__examples: no cache entry found
+2026/04/15 11:42:22.318387 [102/118] link_embedding_example_001__examples - executing
+2026/04/15 11:42:22.318392   Command: g++ -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/examples/embedding_example/embedding_example.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/lib -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -lm -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/embedding_example
+2026/04/15 11:42:22.427247 [102/118] link_embedding_example_001__examples (0.1s) - completed
+2026/04/15 11:42:22.437793 Cache miss for link_yaml_001__src_modules: no cache entry found
+2026/04/15 11:42:22.437810 [103/118] link_yaml_001__src_modules - executing
+2026/04/15 11:42:22.437816   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/yaml/yaml_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/yaml.so
+2026/04/15 11:42:22.451717 [99/118] link_crypto_001__src_modules (0.6s) - completed
+2026/04/15 11:42:22.462710 Cache miss for link_os_001__src_modules: no cache entry found
+2026/04/15 11:42:22.462741 [104/118] link_os_001__src_modules - executing
+2026/04/15 11:42:22.462752   Command: g++ -shared -Wl,-rpath,'$ORIGIN' -flto -Wl,-O1 /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/obj/src/modules/os/os_plugin.o -L/home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin -lmobius-core -ldl  -o /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/os.so
+2026/04/15 11:42:22.809945 [101/118] link_json_001__src_modules (0.6s) - completed
+2026/04/15 11:42:22.820151 [104/118] link_os_001__src_modules (0.4s) - completed
+2026/04/15 11:42:23.242724 [89/118] link_compression_001__src_modules (3.3s) - completed
+2026/04/15 11:42:24.257340 [103/118] link_yaml_001__src_modules (1.8s) - completed
+2026/04/15 11:42:24.268975 
+Stage 5/5: 14 task(s) [88.1% complete]
+2026/04/15 11:42:24.269100 Cache miss for stage_socket_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.269111 [105/118] stage_socket_so_001__workspace - executing
+2026/04/15 11:42:24.269118   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/socket.so /home/bholcomb/projects/side/mobius/bin/modules/socket/native/linux-x86_64/socket.so
+2026/04/15 11:42:24.269178 Cache miss for stage_mobius_001__workspace: no cache entry found
+2026/04/15 11:42:24.269207 [106/118] stage_mobius_001__workspace - executing
+2026/04/15 11:42:24.269218   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/mobius /home/bholcomb/projects/side/mobius/bin/mobius
+2026/04/15 11:42:24.269245 Cache miss for stage_websocket_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.269266 [107/118] stage_websocket_so_001__workspace - executing
+2026/04/15 11:42:24.269278   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/websocket.so /home/bholcomb/projects/side/mobius/bin/modules/websocket/native/linux-x86_64/websocket.so
+2026/04/15 11:42:24.269307 [105/118] stage_socket_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.269345 Cache miss for stage_yaml_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.269363 [108/118] stage_yaml_so_001__workspace - executing
+2026/04/15 11:42:24.269384   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/yaml.so /home/bholcomb/projects/side/mobius/bin/modules/yaml/native/linux-x86_64/yaml.so
+2026/04/15 11:42:24.269573 [106/118] stage_mobius_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.269629 [107/118] stage_websocket_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.269942 [108/118] stage_yaml_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.287961 Cache miss for stage_datetime_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.288116 [109/118] stage_datetime_so_001__workspace - executing
+2026/04/15 11:42:24.288126   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/datetime.so /home/bholcomb/projects/side/mobius/bin/modules/datetime/native/linux-x86_64/datetime.so
+2026/04/15 11:42:24.288442 [109/118] stage_datetime_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.297745 Cache miss for stage_compression_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.297773 [110/118] stage_compression_so_001__workspace - executing
+2026/04/15 11:42:24.297783   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/compression.so /home/bholcomb/projects/side/mobius/bin/modules/compression/native/linux-x86_64/compression.so
+2026/04/15 11:42:24.298618 [110/118] stage_compression_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.306580 Cache miss for stage_http_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.306622 [111/118] stage_http_so_001__workspace - executing
+2026/04/15 11:42:24.306630   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/http.so /home/bholcomb/projects/side/mobius/bin/modules/http/native/linux-x86_64/http.so
+2026/04/15 11:42:24.307059 [111/118] stage_http_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.316240 Cache miss for stage_os_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.316279 [112/118] stage_os_so_001__workspace - executing
+2026/04/15 11:42:24.316295   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/os.so /home/bholcomb/projects/side/mobius/bin/modules/os/native/linux-x86_64/os.so
+2026/04/15 11:42:24.316669 [112/118] stage_os_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.325971 Cache miss for stage_toml_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.326000 [113/118] stage_toml_so_001__workspace - executing
+2026/04/15 11:42:24.326008   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/toml.so /home/bholcomb/projects/side/mobius/bin/modules/toml/native/linux-x86_64/toml.so
+2026/04/15 11:42:24.326410 [113/118] stage_toml_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.335781 Cache miss for stage_crypto_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.335799 [114/118] stage_crypto_so_001__workspace - executing
+2026/04/15 11:42:24.335805   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/crypto.so /home/bholcomb/projects/side/mobius/bin/modules/crypto/native/linux-x86_64/crypto.so
+2026/04/15 11:42:24.335998 [114/118] stage_crypto_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.346093 Cache miss for stage_math_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.346115 [115/118] stage_math_so_001__workspace - executing
+2026/04/15 11:42:24.346122   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/math.so /home/bholcomb/projects/side/mobius/bin/modules/math/native/linux-x86_64/math.so
+2026/04/15 11:42:24.346259 [115/118] stage_math_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.355629 Cache miss for stage_url_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.355656 [116/118] stage_url_so_001__workspace - executing
+2026/04/15 11:42:24.355668   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/url.so /home/bholcomb/projects/side/mobius/bin/modules/url/native/linux-x86_64/url.so
+2026/04/15 11:42:24.355998 [116/118] stage_url_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.366183 Cache miss for stage_regex_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.366222 [117/118] stage_regex_so_001__workspace - executing
+2026/04/15 11:42:24.366234   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/regex.so /home/bholcomb/projects/side/mobius/bin/modules/regex/native/linux-x86_64/regex.so
+2026/04/15 11:42:24.366551 [117/118] stage_regex_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.376293 Cache miss for stage_json_so_001__workspace: no cache entry found
+2026/04/15 11:42:24.376317 [118/118] stage_json_so_001__workspace - executing
+2026/04/15 11:42:24.376325   Command: cp /home/bholcomb/projects/side/mobius/build/linux-x86_64-release/bin/json.so /home/bholcomb/projects/side/mobius/bin/modules/json/native/linux-x86_64/json.so
+2026/04/15 11:42:24.376523 [118/118] stage_json_so_001__workspace (0.0s) - completed
+2026/04/15 11:42:24.403649 
+Build completed in 22.3s
+2026/04/15 11:42:24.403672 Tasks: 118 total, 0 cache hits, 118 executed
+2026/04/15 11:42:24.403679 Task execution completed in 22.30s
+2026/04/15 11:42:24.405163 Saved build state to /home/bholcomb/projects/side/mobius/.buildy_cache/incremental_build.json
+2026/04/15 11:42:24.405402 Build report saved to /home/bholcomb/projects/side/mobius/.buildy_cache/build_report.json
+
+╔════════════════════════════════════════════════════════════╗
+║                        BUILD REPORT                        ║
+╠════════════════════════════════════════════════════════════╣
+║  Status:           SUCCESS                                 ║
+║  Platform:         linux-x86_64                            ║
+║  Configuration:    release                                 ║
+║  Toolchain:        gcc-cpp-linux                           ║
+╠════════════════════════════════════════════════════════════╣
+║  TIMING                                                    ║
+╠════════════════════════════════════════════════════════════╣
+║  Total Duration:   22.32s                                  ║
+║  Task Generation:  0.02s                                   ║
+║  Execution:        22.30s                                  ║
+╠════════════════════════════════════════════════════════════╣
+║  TASKS                                                     ║
+╠════════════════════════════════════════════════════════════╣
+║  Total Tasks:      118                                     ║
+║  Executed:         118                                     ║
+║  Cache Hits:       0 (0.0%)                                ║
+║  Cache Misses:     118                                     ║
+╠════════════════════════════════════════════════════════════╣
+║  TASKS BY TYPE                                             ║
+╠════════════════════════════════════════════════════════════╣
+║    compile:        60                                      ║
+║    copy:           33                                      ║
+║    link:           22                                      ║
+║    setup:          3                                       ║
+╚════════════════════════════════════════════════════════════╝
+

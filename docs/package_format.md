@@ -70,7 +70,7 @@ Canonical platform keys:
 
 ## Creating Packages
 
-The first package tool is a Mobius script:
+Package archives are created with a Mobius script:
 
 ```bash
 ./bin/mobius tools/pack_module.mob <package_dir> [output.mz]
@@ -87,12 +87,28 @@ If `output.mz` is omitted, the tool writes `packages/<name>-<version>.mz`.
 The `packages/` folder is intended for built package artifacts that can later be
 installed into a modules root such as `./modules/`.
 
+## Installing Packages
+
+Installed packages are unpacked with a Mobius script:
+
+```bash
+./bin/mobius tools/install_module.mob <package.mz> [modules_root]
+```
+
+The installer:
+
+1. validates the archive layout
+2. extracts into a temporary directory
+3. validates `module.yaml` for the current `os.platform`
+4. moves the package into the target modules root
+
+If `modules_root` is omitted, the installer writes into `./modules`.
+
 ## Current Scope
 
-The runtime loader now resolves modules from package directories only. Built-in
-first-party modules are staged into the same `modules/<name>/module.yaml`
-layout used by installable packages, so there is no separate legacy flat-module
-path for shipped modules.
+The runtime loader, package archive builder, and package installer are all in
+place. Built-in first-party modules are staged into the same
+`modules/<name>/module.yaml` layout used by installable packages, so there is
+no separate legacy flat-module path for shipped modules.
 
-The remaining follow-up task is the `.mz` installer flow that unpacks a package
-archive into a modules root.
+The next follow-up task is building and packaging the first external modules.

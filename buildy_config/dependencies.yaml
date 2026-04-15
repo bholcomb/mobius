@@ -1,0 +1,7 @@
+# Mobius external dependencies
+
+sqlite3:
+  file: dependencies/sqlite3.yaml
+
+glfw3:
+  file: dependencies/glfw3.yaml

@@ -1,0 +1,64 @@
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var repo_root = os.getcwd()
+var mobius_bin = os.join(repo_root, "bin", "mobius")
+var pack_tool = os.join(repo_root, "tools", "pack_module.mob")
+var install_tool = os.join(repo_root, "tools", "install_module.mob")
+var package_source = os.join(repo_root, "tests", "modules", "demo_pkg")
+
+var workspace = os.join(os.tmpdir(), "mobius_pkg_install_" + str(os.getpid()))
+var modules_root = os.join(workspace, "modules")
+var archive_path = os.join(workspace, "demo_pkg.mz")
+var run_script = os.join(workspace, "run.mob")
+
+assert_test("create workspace", os.mkdirp(workspace))
+assert_test("write run script", writefile(run_script,
+    "import \"demo_pkg\" as demo_pkg\n" +
+    "if (demo_pkg.hello() != \"hello from package\") { exit(1) }\n" +
+    "if (demo_pkg.meaning != 42) { exit(1) }\n" +
+    "print(\"installed package import ok\")\n"))
+
+var pack_rc = os.system(mobius_bin + " " + pack_tool + " " + package_source + " " + archive_path)
+assert_test("pack demo package", pack_rc == 0)
+assert_test("archive created", os.exists(archive_path))
+
+var install_rc = os.system(mobius_bin + " " + install_tool + " " + archive_path + " " + modules_root)
+assert_test("install demo package", install_rc == 0)
+assert_test("installed module directory exists", os.is_dir(os.join(modules_root, "demo_pkg")))
+assert_test("installed manifest exists", os.is_file(os.join(modules_root, "demo_pkg", "module.yaml")))
+assert_test("installed script exists", os.is_file(os.join(modules_root, "demo_pkg", "demo_pkg.mob")))
+
+var old_cwd = os.getcwd()
+assert_test("chdir into workspace", os.chdir(workspace))
+var import_rc = os.system(mobius_bin + " " + run_script)
+assert_test("import from installed modules root", import_rc == 0)
+assert_test("chdir back to repo root", os.chdir(old_cwd))
+
+os.remove(os.join(modules_root, "demo_pkg", "demo_pkg.mob"))
+os.remove(os.join(modules_root, "demo_pkg", "module.yaml"))
+os.rmdir(os.join(modules_root, "demo_pkg"))
+os.rmdir(modules_root)
+os.remove(archive_path)
+os.remove(run_script)
+os.rmdir(workspace)
+
+print("")
+print("Package Install Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}

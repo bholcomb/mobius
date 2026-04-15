@@ -22,6 +22,7 @@ class ModuleRegistry;
 class Metamethods;
 class JobSystem;
 class Table;
+typedef uint64_t MobiusValueRef;
 
 struct GlobalEnvironment {
     std::vector<Value> slots;
@@ -291,6 +292,12 @@ public:
     Table* userdataTypeMetatable(MobiusString* type_tag) const;
     void setUserdataTypeMetatable(MobiusString* type_tag, Table* mt);
 
+    MobiusValueRef createValueRef(const Value& value);
+    bool releaseValueRef(MobiusValueRef ref);
+    bool copyValueRef(MobiusValueRef ref, Value* out) const;
+    int callValue(const Value& function, const Value* args, int nargs,
+                  int nresults, std::vector<Value>* out_results);
+
 private:
     class MobiusVM* boundVM() const;
     NativeCallContext* checkedNativeContext(int required_count, bool require_self, bool for_push) const;
@@ -329,6 +336,10 @@ private:
     Table* type_metatables_[VALUE_TYPE_COUNT] = {};
     mutable std::mutex userdata_type_metatables_mutex_;
     std::unordered_map<MobiusString*, Table*> userdata_type_metatables_;
+
+    mutable std::mutex value_refs_mutex_;
+    std::unordered_map<MobiusValueRef, Value> value_refs_;
+    MobiusValueRef next_value_ref_ = 1;
 
     class MobiusVM* main_vm_ = nullptr;
     GlobalEnvironment* current_compile_env_ = nullptr;

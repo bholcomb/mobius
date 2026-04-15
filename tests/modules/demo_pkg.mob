@@ -1,0 +1,5 @@
+func hello() {
+    return "hello from loose module"
+}
+
+var meaning = -1

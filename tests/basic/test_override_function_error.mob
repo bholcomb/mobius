@@ -7,12 +7,12 @@ import "math" as m
 print("First import successful");
 print("m.sin exists:", typeof(m.sin) == "function");
 
-// Now try to import text_processing into NESTED m namespace
-// This should create m.text_processing, not override m
-import "text_processing" as m.text
+// Now try to import math again into NESTED m namespace
+// This should create m.text, not override m
+import "math" as m.text
 
 print("Nested import successful");
-print("m.text.reverse exists:", typeof(m.text.reverse) == "function");
+print("m.text.cos exists:", typeof(m.text.cos) == "function");
 print("m.sin still exists:", typeof(m.sin) == "function");
 
 print("\n✅ PASS: Nested imports don't conflict!");

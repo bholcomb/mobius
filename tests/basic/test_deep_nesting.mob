@@ -23,16 +23,16 @@ if (result != 0.0) {
 
 // Test 2: Add another module to different branch of same tree
 print("\n2. Testing adding to different branch...");
-import "text_processing" as a.b.e
+import "math" as a.b.e
 
 print("a.b.e exists:", typeof(a.b.e) == "table");
 print("a.b.c.d still exists:", typeof(a.b.c.d) == "table");
 
-var reversed = a.b.e.reverse("test");
-print("a.b.e.reverse('test') =", reversed);
+var factorial = a.b.e.factorial(5);
+print("a.b.e.factorial(5) =", factorial);
 
-if (reversed != "tset") {
-    print("❌ FAIL: Expected 'tset'");
+if (factorial != 120) {
+    print("❌ FAIL: Expected 120");
 } else {
     print("✅ PASS: Adding to different branch works!");
 }

@@ -1,0 +1,13 @@
+name: sqlite
+version: 0.1.0
+entry:
+  script: sqlite.mob
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/sqlite.so
+    runtime_libraries:
+      - native/linux-x86_64/libsqlite3.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: SQLite database bindings for Mobius

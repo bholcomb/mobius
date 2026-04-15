@@ -1,0 +1,189 @@
+import "compression"
+import "os"
+import "yaml"
+
+func fail(message) {
+    print("install_module: " + message)
+    exit(1)
+}
+
+func usage() {
+    print("Usage: ./bin/mobius tools/install_module.mob <package.mz> [modules_root]")
+}
+
+func expect_string(value, label) {
+    if (typeof(value) != "string" || value == "") {
+        fail(label + " must be a non-empty string")
+    }
+    return value
+}
+
+func expect_table(value, label) {
+    if (typeof(value) != "table") {
+        fail(label + " must be a table")
+    }
+    return value
+}
+
+func expect_array(value, label) {
+    if (typeof(value) != "array") {
+        fail(label + " must be an array")
+    }
+    return value
+}
+
+func ensure_file(base_dir, relative_path, label) {
+    var full_path = os.join(base_dir, relative_path)
+    if (!os.exists(full_path) || !os.is_file(full_path)) {
+        fail(label + " does not exist: " + full_path)
+    }
+    return full_path
+}
+
+func first_path_component(path) {
+    var slash = find(path, "/")
+    if (slash < 0) {
+        return path
+    }
+    return substr(path, 0, slash)
+}
+
+func archive_package_root(archive_path) {
+    var entries = compression.list(archive_path, nil)
+    if (len(entries) == 0) {
+        fail("package archive is empty")
+    }
+
+    var roots = []
+    var seen = {}
+    for (var i = 0; i < len(entries); i += 1) {
+        var entry = entries[i]
+        var path = expect_string(entry.path, "archive entry path")
+        var root = first_path_component(path)
+        if (root == "") {
+            fail("archive contains an empty top-level path")
+        }
+        if (seen[root] == nil) {
+            seen[root] = true
+            roots:push(root)
+        }
+    }
+
+    if (len(roots) != 1) {
+        fail("package archive must contain exactly one top-level package directory")
+    }
+    return roots[0]
+}
+
+func validate_manifest(package_dir, expected_dir_name, manifest) {
+    manifest = expect_table(manifest, "module.yaml")
+
+    var name = expect_string(manifest.name, "module.yaml name")
+    var version = expect_string(manifest.version, "module.yaml version")
+    if (expected_dir_name != name) {
+        fail("archive package directory must match manifest name (" + expected_dir_name + " != " + name + ")")
+    }
+
+    var has_entry = false
+    if (manifest.entry != nil) {
+        var entry = expect_table(manifest.entry, "module.yaml entry")
+        if (entry.script != nil) {
+            ensure_file(package_dir, expect_string(entry.script, "entry.script"), "entry.script")
+            has_entry = true
+        }
+    }
+
+    if (manifest.platforms != nil) {
+        var platforms = expect_table(manifest.platforms, "module.yaml platforms")
+        var current_spec = platforms[os.platform]
+        if (current_spec == nil) {
+            fail("package does not support current platform: " + os.platform)
+        }
+        current_spec = expect_table(current_spec, "platforms." + os.platform)
+        if (current_spec.module_library != nil) {
+            ensure_file(package_dir, expect_string(current_spec.module_library, "platforms." + os.platform + ".module_library"), "platform module_library")
+            has_entry = true
+        }
+        if (current_spec.runtime_libraries != nil) {
+            var libs = expect_array(current_spec.runtime_libraries, "platforms." + os.platform + ".runtime_libraries")
+            for (var lib in libs) {
+                ensure_file(package_dir, expect_string(lib, "runtime library entry"), "runtime library")
+            }
+        }
+    }
+
+    if (!has_entry) {
+        fail("module.yaml must declare a loadable entry for the current platform")
+    }
+
+    return {
+        name: name,
+        version: version
+    }
+}
+
+if (len(argv) < 1 || len(argv) > 2) {
+    usage()
+    exit(1)
+}
+
+var archive_path = argv[0]
+if (!os.exists(archive_path) || !os.is_file(archive_path)) {
+    fail("package archive must be an existing file")
+}
+if (!endswith(lower(archive_path), ".mz")) {
+    fail("package archive must use the .mz extension")
+}
+
+var modules_root = "modules"
+if (len(argv) == 2) {
+    modules_root = argv[1]
+}
+
+if (!os.exists(modules_root)) {
+    if (!os.mkdirp(modules_root)) {
+        fail("failed to create modules_root: " + modules_root)
+    }
+}
+if (!os.is_dir(modules_root)) {
+    fail("modules_root must be a directory")
+}
+
+var package_root_name = archive_package_root(archive_path)
+var temp_root = os.join(os.tmpdir(), "mobius_install_" + str(os.getpid()) + "_" + str(os.time()))
+if (!os.mkdirp(temp_root)) {
+    fail("failed to create temporary install directory")
+}
+
+var extract_result = compression.extract(archive_path, temp_root, { overwrite: "replace" })
+if (extract_result.ok != true) {
+    fail("failed to extract archive")
+}
+
+var package_dir = os.join(temp_root, package_root_name)
+if (!os.exists(package_dir) || !os.is_dir(package_dir)) {
+    fail("extracted package directory not found: " + package_dir)
+}
+
+var manifest_path = os.join(package_dir, "module.yaml")
+if (!os.exists(manifest_path) || !os.is_file(manifest_path)) {
+    fail("package must contain module.yaml")
+}
+
+var manifest = yaml.parsefile(manifest_path)
+var info = validate_manifest(package_dir, package_root_name, manifest)
+var destination_dir = os.join(modules_root, info.name)
+if (os.exists(destination_dir)) {
+    fail("module is already installed: " + destination_dir)
+}
+
+if (!os.rename(package_dir, destination_dir)) {
+    fail("failed to move package into modules root: " + destination_dir)
+}
+os.rmdir(temp_root)
+
+print("Installed package:")
+print("  name: " + info.name)
+print("  version: " + info.version)
+print("  platform: " + os.platform)
+print("  location: " + destination_dir)

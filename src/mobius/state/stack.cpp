@@ -3,6 +3,7 @@
 #include "state/mobius_state.h"
 #include "vm/vm.h"
 #include "data/shared_cell.h"
+#include "data/enum.h"
 #include "data/value.h"
 #include "data/table.h"
 #include "data/array.h"
@@ -81,6 +82,23 @@ static bool check_strict_conversion(MobiusState* state, ValueType from, ValueTyp
     }
 
     return true;
+}
+
+static EnumDefinition* get_enum_definition_at(MobiusState* state, int idx, bool require_definition) {
+    Value* val = get_value_at(state, idx);
+    if (!val || val->type != VAL_ENUM || !val->as.enum_def) {
+        state->setError(MOBIUS_ERROR_ARGUMENT, "Stack value is not an enum",
+                        "Pass an enum definition value created by script or mobius_stack_pushNewEnum()",
+                        0, 0, nullptr);
+        return nullptr;
+    }
+    if (require_definition && val->aux != -1) {
+        state->setError(MOBIUS_ERROR_ARGUMENT, "Stack value is not an enum definition",
+                        "Pass the enum definition itself, not an enum member value",
+                        0, 0, nullptr);
+        return nullptr;
+    }
+    return val->as.enum_def;
 }
 
 // ============================================================================
@@ -187,6 +205,9 @@ static bool value_to_int64(Value* val, int64_t* out) {
         case VAL_BOOL:
             *out = val->as.boolean ? 1 : 0;
             return true;
+        case VAL_ENUM:
+            *out = (int64_t)val->aux;
+            return true;
         case VAL_STRING:
             if (val->as.string && val->as.string->data) {
                 *out = strtoll(val->as.string->data, NULL, 10);
@@ -213,6 +234,9 @@ static bool value_to_double(Value* val, double* out) {
             return true;
         case VAL_FLOAT64:
             *out = val->as.double_val;
+            return true;
+        case VAL_ENUM:
+            *out = (double)val->aux;
             return true;
         case VAL_STRING:
             if (val->as.string && val->as.string->data) {
@@ -1206,6 +1230,60 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     return actual_results;
 }
 
+MobiusValueRef mobius_ref_value(MobiusState* state, int idx) {
+    Value* val = get_value_at(state, idx);
+    if (!val) return 0;
+    return state->createValueRef(*val);
+}
+
+bool mobius_unref_value(MobiusState* state, MobiusValueRef ref) {
+    if (!state) return false;
+    return state->releaseValueRef(ref);
+}
+
+bool mobius_push_ref(MobiusState* state, MobiusValueRef ref) {
+    if (!state) return false;
+    Value value;
+    if (!state->copyValueRef(ref, &value)) return false;
+    return stack_push(state, value) == MOBIUS_OK;
+}
+
+int mobius_call_ref(MobiusState* state, MobiusValueRef function_ref,
+                    const MobiusValueRef* arg_refs, size_t nargs,
+                    int nresults) {
+    if (!state) return -1;
+
+    Value function;
+    if (!state->copyValueRef(function_ref, &function)) {
+        state->setError(MOBIUS_ERROR_ARGUMENT,
+                        "mobius_call_ref() received an invalid function ref",
+                        nullptr, 0, 0, nullptr);
+        return -1;
+    }
+
+    std::vector<Value> args;
+    args.reserve(nargs);
+    for (size_t i = 0; i < nargs; i++) {
+        Value arg;
+        if (!state->copyValueRef(arg_refs[i], &arg)) {
+            state->setError(MOBIUS_ERROR_ARGUMENT,
+                            "mobius_call_ref() received an invalid argument ref",
+                            nullptr, 0, 0, nullptr);
+            return -1;
+        }
+        args.push_back(std::move(arg));
+    }
+
+    std::vector<Value> results;
+    int rc = state->callValue(function, args.data(), (int)nargs, nresults, &results);
+    if (rc < 0) return -1;
+
+    for (const Value& result : results) {
+        if (stack_push(state, result) != MOBIUS_OK) return -1;
+    }
+    return rc;
+}
+
 // ============================================================================
 // PUBLIC API — Userdata
 // ============================================================================
@@ -1214,6 +1292,59 @@ void mobius_stack_pushUserdata(MobiusState* state, void* ptr,
                                void (*destructor)(void*),
                                const char* type_name, size_t size) {
     stack_push(state, make_userdata_value(state, ptr, destructor, type_name, size));
+}
+
+void mobius_stack_pushNewEnum(MobiusState* state, const char* name) {
+    const char* enum_name = (name && name[0] != '\0') ? name : "Enum";
+    EnumDefinition* definition = new (std::nothrow) EnumDefinition(enum_name, NUM_INT64);
+    if (!definition) {
+        state->setError(MOBIUS_ERROR_MEMORY, "Failed to allocate enum definition",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
+    stack_push(state, Value::makeEnum(definition, -1));
+    definition->release();
+}
+
+bool mobius_stack_enumAddMember(MobiusState* state, int enum_idx,
+                                const char* member_name, int64_t value) {
+    if (!member_name || member_name[0] == '\0') {
+        state->setError(MOBIUS_ERROR_ARGUMENT, "Enum member name must not be empty",
+                        nullptr, 0, 0, nullptr);
+        return false;
+    }
+    EnumDefinition* definition = get_enum_definition_at(state, enum_idx, true);
+    if (!definition) return false;
+    definition->addMember(member_name, value);
+    return true;
+}
+
+bool mobius_stack_enumAddAutoMember(MobiusState* state, int enum_idx,
+                                    const char* member_name) {
+    if (!member_name || member_name[0] == '\0') {
+        state->setError(MOBIUS_ERROR_ARGUMENT, "Enum member name must not be empty",
+                        nullptr, 0, 0, nullptr);
+        return false;
+    }
+    EnumDefinition* definition = get_enum_definition_at(state, enum_idx, true);
+    if (!definition) return false;
+    definition->addAutoMember(member_name);
+    return true;
+}
+
+bool mobius_stack_getEnumMember(MobiusState* state, int enum_idx,
+                                const char* member_name) {
+    if (!member_name || member_name[0] == '\0') {
+        state->setError(MOBIUS_ERROR_ARGUMENT, "Enum member name must not be empty",
+                        nullptr, 0, 0, nullptr);
+        return false;
+    }
+    EnumDefinition* definition = get_enum_definition_at(state, enum_idx, false);
+    if (!definition) return false;
+    const EnumMember* member = definition->findMember(member_name);
+    if (!member) return false;
+    stack_push(state, Value::makeEnum(definition, member->value));
+    return true;
 }
 
 bool mobius_stack_isUserdata(MobiusState* state, int idx) {
