@@ -17,7 +17,14 @@ func assert_test(name, cond) {
 // Constants
 // ============================================================================
 assert_test("platform is string", os.platform is string)
-assert_test("platform is linux", os.platform == "linux" || os.platform == "darwin" || os.platform == "windows")
+var valid_platform =
+    os.platform == "linux-x86_64" ||
+    os.platform == "linux-aarch64" ||
+    os.platform == "macos-x86_64" ||
+    os.platform == "macos-aarch64" ||
+    os.platform == "windows-x86_64" ||
+    os.platform == "windows-aarch64"
+assert_test("platform is canonical target key", valid_platform)
 assert_test("separator is string", os.separator is string)
 assert_test("separator is / or \\", os.separator == "/" || os.separator == "\\")
 
@@ -63,7 +70,7 @@ assert_test("env snapshot contains key", env_tbl["MOBIUS_OS_SNAPSHOT_TEST"] == "
 os.unsetenv("MOBIUS_OS_SNAPSHOT_TEST")
 
 var resolved_true = nil
-if (os.platform == "windows") {
+if (startswith(os.platform, "windows-")) {
     resolved_true = os.which("cmd")
 } else {
     resolved_true = os.which("sh")

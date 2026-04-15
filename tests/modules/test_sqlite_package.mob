@@ -1,0 +1,141 @@
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var repo_root = os.getcwd()
+var mobius_bin = os.join(repo_root, "bin", "mobius")
+var pack_tool = os.join(repo_root, "tools", "pack_module.mob")
+var install_tool = os.join(repo_root, "tools", "install_module.mob")
+var package_source = os.join(repo_root, "packages", "sqlite")
+
+var workspace = os.join(os.tmpdir(), "mobius_sqlite_pkg_" + str(os.getpid()))
+var modules_root = os.join(workspace, "modules")
+var archive_path = os.join(workspace, "sqlite.mz")
+var database_path = os.join(workspace, "test.db")
+var run_script = os.join(workspace, "run.mob")
+
+assert_test("sqlite package staged", os.is_dir(package_source))
+assert_test("create workspace", os.mkdirp(workspace))
+assert_test("write run script", writefile(run_script,
+    "import \"sqlite\"\n" +
+    "func ensure(cond) { if (!cond) { exit(1) } }\n" +
+    "var db = sqlite.open(\"" + database_path + "\")\n" +
+    "db:exec(\"create table items (id integer primary key, name text not null, score integer not null, active integer not null, note text, payload blob)\")\n" +
+    "var insert_stmt = db:prepare(\"insert into items (name, score, active, note, payload) values (:name, :score, :active, :note, :payload)\")\n" +
+    "ensure(insert_stmt:parameter_count() == 5)\n" +
+    "ensure(insert_stmt:parameter_name(1) == \":name\")\n" +
+    "var payload1 = buffer_create(3)\n" +
+    "payload1[0] = 1\n" +
+    "payload1[1] = 2\n" +
+    "payload1[2] = 255\n" +
+    "var params1 = {}\n" +
+    "params1[\":name\"] = \"alpha\"\n" +
+    "params1[\":score\"] = 11\n" +
+    "params1[\":active\"] = true\n" +
+    "params1[\":note\"] = \"first\"\n" +
+    "params1[\":payload\"] = payload1\n" +
+    "insert_stmt:bind_all(params1)\n" +
+    "ensure(insert_stmt:expanded_sql() != nil)\n" +
+    "var insert_result1 = insert_stmt:run()\n" +
+    "ensure(insert_result1.changes == 1)\n" +
+    "insert_stmt:reset()\n" +
+    "insert_stmt:clear_bindings()\n" +
+    "var params2 = {}\n" +
+    "params2[\":name\"] = \"beta\"\n" +
+    "params2[\":score\"] = 22\n" +
+    "params2[\":active\"] = false\n" +
+    "params2[\":note\"] = nil\n" +
+    "params2[\":payload\"] = nil\n" +
+    "insert_stmt:bind_all(params2)\n" +
+    "var insert_result2 = insert_stmt:run()\n" +
+    "ensure(insert_result2.last_insert_rowid == 2)\n" +
+    "insert_stmt:finalize()\n" +
+    "ensure(insert_stmt:is_finalized())\n" +
+    "var rows = db:query(\"select id, name, score, active, note, payload from items order by id\")\n" +
+    "ensure(len(rows) == 2)\n" +
+    "ensure(rows[0].id == 1 && rows[0].name == \"alpha\" && rows[0].score == 11)\n" +
+    "ensure(rows[1].id == 2 && rows[1].name == \"beta\" && rows[1].score == 22)\n" +
+    "ensure(rows[0].active == 1 && rows[1].active == 0)\n" +
+    "ensure(rows[0].note == \"first\" && rows[1].note == nil)\n" +
+    "ensure(typeof(rows[0].payload) == \"buffer\" && len(rows[0].payload) == 3)\n" +
+    "ensure(rows[0].payload[0] == 1 && rows[0].payload[1] == 2 && rows[0].payload[2] == 255)\n" +
+    "ensure(rows[1].payload == nil)\n" +
+    "var one = db:query_one(\"select name, active from items where score = ?\", [22])\n" +
+    "ensure(one.name == \"beta\" && one.active == 0)\n" +
+    "var scan = db:prepare(\"select id, name, active from items order by id\")\n" +
+    "ensure(scan:column_count() == 3)\n" +
+    "ensure(scan:column_name(0) == \"id\")\n" +
+    "ensure(scan:column_name(1) == \"name\")\n" +
+    "ensure(scan:column_name(2) == \"active\")\n" +
+    "var first = scan:step()\n" +
+    "ensure(first.id == 1 && first.name == \"alpha\" && first.active == 1)\n" +
+    "ensure(scan:column_type(0) == \"integer\")\n" +
+    "ensure(scan:column_type(1) == \"text\")\n" +
+    "ensure(scan:column_value(1) == \"alpha\")\n" +
+    "scan:reset()\n" +
+    "var again = scan:all()\n" +
+    "ensure(len(again) == 2)\n" +
+    "scan:finalize()\n" +
+    "ensure(scan:is_finalized())\n" +
+    "var tx_value = db:transaction(func(conn) {\n" +
+    "    conn:exec(\"insert into items (name, score, active, note, payload) values (?, ?, ?, ?, ?)\", [\"gamma\", 33, true, \"txn\", nil])\n" +
+    "    var row = conn:query_one(\"select count(*) as count from items\")\n" +
+    "    return row.count\n" +
+    "})\n" +
+    "ensure(tx_value == 3)\n" +
+    "ensure(db:total_changes() == 3)\n" +
+    "ensure(db:last_insert_rowid() == 3)\n" +
+    "var dangling = db:prepare(\"select 1 as value\")\n" +
+    "db:close()\n" +
+    "ensure(dangling:is_finalized())\n" +
+    "print(\"sqlite package import ok\")\n"))
+
+var pack_rc = os.system(mobius_bin + " " + pack_tool + " " + package_source + " " + archive_path)
+assert_test("pack sqlite package", pack_rc == 0)
+assert_test("sqlite archive created", os.is_file(archive_path))
+
+var install_rc = os.system(mobius_bin + " " + install_tool + " " + archive_path + " " + modules_root)
+assert_test("install sqlite package", install_rc == 0)
+assert_test("installed sqlite manifest exists", os.is_file(os.join(modules_root, "sqlite", "module.yaml")))
+assert_test("installed sqlite script exists", os.is_file(os.join(modules_root, "sqlite", "sqlite.mob")))
+assert_test("installed sqlite native library exists", os.is_file(os.join(modules_root, "sqlite", "native", "linux-x86_64", "sqlite.so")))
+assert_test("installed sqlite runtime library exists", os.is_file(os.join(modules_root, "sqlite", "native", "linux-x86_64", "libsqlite3.so")))
+
+var old_cwd = os.getcwd()
+assert_test("chdir into workspace", os.chdir(workspace))
+var import_rc = os.system(mobius_bin + " " + run_script)
+assert_test("import installed sqlite package", import_rc == 0)
+assert_test("sqlite database created", os.is_file(database_path))
+assert_test("chdir back to repo root", os.chdir(old_cwd))
+
+os.remove(os.join(modules_root, "sqlite", "native", "linux-x86_64", "libsqlite3.so"))
+os.remove(os.join(modules_root, "sqlite", "native", "linux-x86_64", "sqlite.so"))
+os.rmdir(os.join(modules_root, "sqlite", "native", "linux-x86_64"))
+os.rmdir(os.join(modules_root, "sqlite", "native"))
+os.remove(os.join(modules_root, "sqlite", "sqlite.mob"))
+os.remove(os.join(modules_root, "sqlite", "module.yaml"))
+os.rmdir(os.join(modules_root, "sqlite"))
+os.rmdir(modules_root)
+os.remove(database_path)
+os.remove(archive_path)
+os.remove(run_script)
+os.rmdir(workspace)
+
+print("")
+print("SQLite Package Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}

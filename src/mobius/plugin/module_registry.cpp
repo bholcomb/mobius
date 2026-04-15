@@ -144,6 +144,16 @@ static bool is_regular_file_path(const std::string& path) {
     return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
 }
 
+static const char* native_module_extension() {
+#if defined(_WIN32)
+    return ".dll";
+#elif defined(__APPLE__)
+    return ".dylib";
+#else
+    return ".so";
+#endif
+}
+
 static std::string current_platform_key() {
 #if defined(_WIN32)
   #if defined(_M_ARM64) || defined(__aarch64__)
@@ -332,6 +342,29 @@ static ModulePaths resolve_packaged_module_paths(const std::string& dir, const c
     return out;
 }
 
+static ModulePaths resolve_flat_module_paths(const std::string& dir, const char* name, bool want_native, bool want_script) {
+    ModulePaths out;
+
+    if (want_native) {
+        std::string so_path = dir + "/" + name + native_module_extension();
+        if (is_regular_file_path(so_path)) {
+            out.has_so = true;
+            out.so_path = std::move(so_path);
+        }
+    }
+
+    if (want_script) {
+        std::string mob_path = dir + "/" + name + ".mob";
+        if (is_regular_file_path(mob_path)) {
+            out.has_mob = true;
+            out.mob_path = std::move(mob_path);
+        }
+    }
+
+    out.found = out.has_so || out.has_mob;
+    return out;
+}
+
 static ModulePaths resolve_module_paths(const char* name, const char* caller_source, MobiusState* state) {
     ModulePaths out;
     const char* default_dirs[] = {
@@ -359,6 +392,16 @@ static ModulePaths resolve_module_paths(const char* name, const char* caller_sou
         ModulePaths packaged = resolve_packaged_module_paths(dir, name);
         if (!packaged.error_message.empty()) return packaged;
         if (packaged.found) return packaged;
+    }
+
+    for (const auto& dir : search_dirs) {
+        ModulePaths native = resolve_flat_module_paths(dir, name, true, true);
+        if (native.has_so) return native;
+    }
+
+    for (const auto& dir : search_dirs) {
+        ModulePaths script = resolve_flat_module_paths(dir, name, false, true);
+        if (script.found) return script;
     }
 
     return out;

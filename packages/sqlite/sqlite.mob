@@ -1,0 +1,43 @@
+func __ensure_string(value, label, func_name) {
+    if (typeof(value) != "string") {
+        throw func_name + "() " + label + " must be a string"
+    }
+    return value
+}
+
+func open_memory() {
+    return open(":memory:")
+}
+
+func close(db) {
+    return db:close()
+}
+
+func prepare(db, sql) {
+    sql = __ensure_string(sql, "sql", "prepare")
+    return db:prepare(sql)
+}
+
+func exec(db, sql, params) {
+    sql = __ensure_string(sql, "sql", "exec")
+    return db:exec(sql, params)
+}
+
+func query(db, sql, params) {
+    sql = __ensure_string(sql, "sql", "query")
+    return db:query(sql, params)
+}
+
+func query_all(db, sql, params) {
+    sql = __ensure_string(sql, "sql", "query_all")
+    return db:query_all(sql, params)
+}
+
+func query_one(db, sql, params) {
+    sql = __ensure_string(sql, "sql", "query_one")
+    return db:query_one(sql, params)
+}
+
+func transaction(db, fn) {
+    return db:transaction(fn)
+}

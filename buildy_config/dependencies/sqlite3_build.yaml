@@ -1,0 +1,51 @@
+# Custom buildy build script for SQLite 3.53.0 amalgamation.
+# Builds the fetched amalgamation as a shared library without invoking
+# configure/cmake/other external build tools.
+
+project:
+  name: sqlite3
+  description: "SQLite shared library build from amalgamation"
+
+environment:
+  compile:
+    c_standard: "c11"
+    warnings: default
+
+  configurations:
+    debug:
+      optimization: none
+      symbols: true
+      defines: ["SQLITE_DEBUG=1"]
+    release:
+      optimization: speed
+      defines: ["NDEBUG"]
+
+targets:
+  shared_libraries:
+    - name: sqlite3
+      language: c
+
+      sources:
+        - "sqlite3.c"
+
+      include_dirs:
+        - "."
+
+      defines:
+        - "SQLITE_THREADSAFE=1"
+        - "SQLITE_ENABLE_FTS5"
+        - "SQLITE_ENABLE_RTREE"
+        - "SQLITE_ENABLE_DBSTAT_VTAB"
+        - "SQLITE_ENABLE_MATH_FUNCTIONS"
+        - "SQLITE_ENABLE_JSON1"
+        - linux:
+            - "_GNU_SOURCE"
+        - windows:
+            - "SQLITE_API=__declspec(dllexport)"
+            - "_CRT_SECURE_NO_WARNINGS"
+
+      libs:
+        - linux:
+            - "dl"
+            - "m"
+            - "pthread"

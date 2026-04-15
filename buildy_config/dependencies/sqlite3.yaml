@@ -1,0 +1,26 @@
+# SQLite3 dependency
+
+sqlite3:
+  description: "SQLite embedded database"
+  version: "3.53.0"
+
+  common:
+    url: "https://sqlite.org/2026/sqlite-amalgamation-3530000.zip"
+    build:
+      system: buildy
+      override: sqlite3_build.yaml
+    include_dirs: ["${dep_dir}"]
+
+  linux:
+    lib_dirs: ["${dep_dir}/build/${platform}-${arch}-${config}/bin"]
+    libs: ["sqlite3"]
+
+  macos:
+    lib_dirs: ["${dep_dir}/build/${platform}-${arch}-${config}/bin"]
+    libs: ["sqlite3"]
+
+  windows:
+    lib_dirs:
+      - "${dep_dir}/build/${platform}-${arch}-${config}/bin"
+      - "${dep_dir}/build/${platform}-${arch}-${config}/lib"
+    libs: ["sqlite3"]

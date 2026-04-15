@@ -285,6 +285,20 @@ static MOBIUS_FORCEINLINE MobiusVM* executing_vm_for_state(const MobiusState* st
     return (vm && vm->state_ == state) ? vm : nullptr;
 }
 
+namespace {
+struct ScopedCurrentVMOverride {
+    MobiusVM* previous;
+
+    explicit ScopedCurrentVMOverride(MobiusVM* vm) : previous(MobiusVM::t_current_vm) {
+        MobiusVM::t_current_vm = vm;
+    }
+
+    ~ScopedCurrentVMOverride() {
+        MobiusVM::t_current_vm = previous;
+    }
+};
+}
+
 MobiusState::MobiusState(MobiusConfig* config)
     : registry_(nullptr), string_pool_(nullptr),
       metamethods_(nullptr), job_system_(nullptr),
@@ -419,6 +433,172 @@ void MobiusState::setUserdataTypeMetatable(MobiusString* type_tag, Table* mt) {
         mt->retain();
         userdata_type_metatables_[type_tag] = mt;
     }
+}
+
+MobiusValueRef MobiusState::createValueRef(const Value& value) {
+    std::lock_guard<std::mutex> lock(value_refs_mutex_);
+    MobiusValueRef ref = next_value_ref_++;
+    if (next_value_ref_ == 0) next_value_ref_ = 1;
+    value_refs_[ref] = value;
+    return ref;
+}
+
+bool MobiusState::releaseValueRef(MobiusValueRef ref) {
+    if (ref == 0) return false;
+    std::lock_guard<std::mutex> lock(value_refs_mutex_);
+    auto it = value_refs_.find(ref);
+    if (it == value_refs_.end()) return false;
+    value_refs_.erase(it);
+    return true;
+}
+
+bool MobiusState::copyValueRef(MobiusValueRef ref, Value* out) const {
+    if (!out || ref == 0) return false;
+    std::lock_guard<std::mutex> lock(value_refs_mutex_);
+    auto it = value_refs_.find(ref);
+    if (it == value_refs_.end()) return false;
+    *out = it->second;
+    return true;
+}
+
+int MobiusState::callValue(const Value& function, const Value* args, int nargs,
+                           int nresults, std::vector<Value>* out_results) {
+    if (!out_results) {
+        return setError(MOBIUS_ERROR_ARGUMENT,
+                        "callValue() requires an output results vector",
+                        nullptr, 0, 0, nullptr);
+    }
+    out_results->clear();
+
+    if (function.type != VAL_FUNCTION && function.type != VAL_NATIVE_FUNCTION) {
+        return setError(MOBIUS_ERROR_TYPE,
+                        "callValue() target is not callable",
+                        nullptr, 0, 0, nullptr);
+    }
+
+    if (nargs < 0 || nresults < 0) {
+        return setError(MOBIUS_ERROR_ARGUMENT,
+                        "callValue() argument counts must be non-negative",
+                        nullptr, 0, 0, nullptr);
+    }
+
+    MobiusVM* vm = activeVM();
+    if (!vm) vm = main_vm_;
+    if (!vm) {
+        return setError(MOBIUS_ERROR_RUNTIME,
+                        "callValue() requires a bound VM",
+                        nullptr, 0, 0, nullptr);
+    }
+
+    ScopedCurrentVMOverride bind_vm(vm);
+
+    NativeCallContext* nctx = &vm->native_ctx_;
+    Value* saved_registers = nctx->registers;
+    int saved_capacity = nctx->capacity;
+    int saved_base = nctx->base;
+    int saved_top = nctx->top;
+
+    if (function.type == VAL_NATIVE_FUNCTION) {
+        int scratch = activeVM() && vm->callStackTop().proto
+            ? vm->callStackTop().base + vm->callStackTop().proto->num_registers
+            : 0;
+        vm->ensureRegisters(scratch + nargs + 16);
+        for (int i = 0; i < nargs; i++) {
+            vm->registers_[scratch + i] = args ? args[i] : Value();
+        }
+
+        nctx->registers = vm->registers_.data();
+        nctx->capacity = (int)vm->registers_.size();
+        nctx->base = scratch;
+        nctx->top = scratch + nargs;
+
+        int rc = function.as.native_function(this, nargs);
+        int result_top = nctx->top;
+
+        nctx->registers = saved_registers;
+        nctx->capacity = saved_capacity;
+        nctx->base = saved_base;
+        nctx->top = saved_top;
+
+        if (rc < 0) return rc;
+        int result_count = (nresults == 0) ? rc : std::min(rc, nresults);
+        for (int i = 0; i < result_count; i++) {
+            if (scratch + i < result_top) out_results->push_back(vm->registers_[scratch + i]);
+            else out_results->push_back(Value());
+        }
+        return result_count;
+    }
+
+    MobiusFunction* mf = function.as.function;
+    if (!mf || !mf->proto) {
+        nctx->registers = saved_registers;
+        nctx->capacity = saved_capacity;
+        nctx->base = saved_base;
+        nctx->top = saved_top;
+        return setError(MOBIUS_ERROR_RUNTIME,
+                        "callValue() function has no bytecode prototype",
+                        nullptr, 0, 0, nullptr);
+    }
+
+    if ((int)mf->param_count != nargs) {
+        nctx->registers = saved_registers;
+        nctx->capacity = saved_capacity;
+        nctx->base = saved_base;
+        nctx->top = saved_top;
+        char buf[128];
+        snprintf(buf, sizeof(buf),
+                 "Function '%s' expects %zu arguments but got %d",
+                 mf->name ? mf->name->data : "anonymous",
+                 mf->param_count, nargs);
+        return setError(MOBIUS_ERROR_ARGUMENT, buf, nullptr, 0, 0, nullptr);
+    }
+
+    Prototype* child_proto = mf->proto;
+    int pcall_base = activeVM() && vm->callStackTop().proto
+        ? vm->callStackTop().base + vm->callStackTop().proto->num_registers
+        : 0;
+    int child_base = pcall_base + 1;
+    int needed = child_base + child_proto->num_registers + 16;
+    vm->ensureRegisters(needed);
+
+    vm->registers_[pcall_base] = function;
+    for (int i = 0; i < nargs; i++) {
+        vm->registers_[child_base + i] = args ? args[i] : Value();
+    }
+
+    nctx->registers = vm->registers_.data();
+    nctx->capacity = (int)vm->registers_.size();
+
+    CallInfo& child_ci = vm->callStackPush(child_proto, child_proto->code.data(),
+                                           child_base, nresults + 1);
+    if (mf->upvalues && mf->upvalue_count > 0) {
+        if (!child_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
+            vm->callStackPop();
+            nctx->registers = saved_registers;
+            nctx->capacity = saved_capacity;
+            nctx->base = saved_base;
+            nctx->top = saved_top;
+            return setError(MOBIUS_ERROR_MEMORY,
+                            "Failed to allocate closure upvalues",
+                            nullptr, 0, 0, nullptr);
+        }
+    }
+
+    size_t depth = vm->callStackSize() - 1;
+    int rc = vm->run(depth);
+
+    nctx->registers = saved_registers;
+    nctx->capacity = saved_capacity;
+    nctx->base = saved_base;
+    nctx->top = saved_top;
+
+    if (rc < 0) return rc;
+
+    int result_count = (nresults > 0) ? nresults : 1;
+    for (int i = 0; i < result_count; i++) {
+        out_results->push_back(vm->registers_[pcall_base + i]);
+    }
+    return result_count;
 }
 
 void MobiusState::clearErrorInternal() {

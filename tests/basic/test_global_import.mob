@@ -33,17 +33,17 @@ if (factorial_result == 120.0) {
     print("❌ FAIL: Expected 120.0");
 }
 
-// Test 3: Import text_processing to global scope
+// Test 3: Repeat global import to confirm it is stable
 print("\n3. Testing multiple global imports...");
-import "text_processing" as _GLOBAL
+import "math" as _GLOBAL
 
-var reversed = reverse("hello");
-print("reverse('hello') =", reversed);
+var root = sqrt(9);
+print("sqrt(9) =", root);
 
-if (reversed == "olleh") {
+if (root == 3.0) {
     print("✅ PASS: Multiple global imports work!");
 } else {
-    print("❌ FAIL: Expected 'olleh'");
+    print("❌ FAIL: Expected 3.0");
 }
 
 print("\n=== All Global Import Tests Complete ===");

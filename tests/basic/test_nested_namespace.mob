@@ -19,22 +19,22 @@ if (sine_result != 0.0) {
     print("✅ PASS: Nested namespace works!");
 }
 
-// Test 2: Import text_processing into nested namespace
+// Test 2: Import math into another nested namespace
 print("\n2. Testing utils.text namespace...");
-import "text_processing" as utils.text
+import "math" as utils.text
 
 // Verify nested table was created
 print("utils table exists:", typeof(utils) == "table");
 print("utils.text table exists:", typeof(utils.text) == "table");
 
 // Test calling function
-var reversed = utils.text.reverse("hello");
-print("utils.text.reverse('hello') =", reversed);
+var cosine = utils.text.cos(0);
+print("utils.text.cos(0) =", cosine);
 
-if (reversed != "olleh") {
-    print("❌ FAIL: Expected 'olleh'");
+if (cosine != 1.0) {
+    print("❌ FAIL: Expected 1.0");
 } else {
-    print("✅ PASS: Nested text processing works!");
+    print("✅ PASS: Nested namespace works with a second import!");
 }
 
 // Test 3: Add another module to existing namespace

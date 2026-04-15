@@ -168,6 +168,52 @@ MOBIUS_API void* mobius_stack_getUserdata(MobiusState* state, int idx,
                                           const char** out_type_name);
 
 /* ====================================================================== */
+/*  Enum construction                                                      */
+/* ====================================================================== */
+
+/**
+ * Push a new enum definition value onto the native stack.
+ *
+ * The pushed value is an enum definition (not a specific member), matching the
+ * runtime representation used by Mobius script `enum` declarations.
+ */
+MOBIUS_API void mobius_stack_pushNewEnum(MobiusState* state, const char* name);
+
+/**
+ * Add an explicit member to an enum definition already on the stack.
+ *
+ * @param enum_idx Stack index of the enum definition value.
+ * @return true on success, false if `enum_idx` does not refer to an enum
+ *         definition or if the member name is invalid.
+ */
+MOBIUS_API bool mobius_stack_enumAddMember(MobiusState* state, int enum_idx,
+                                           const char* member_name, int64_t value);
+
+/**
+ * Add the next auto-incremented member to an enum definition already on the
+ * stack.
+ */
+MOBIUS_API bool mobius_stack_enumAddAutoMember(MobiusState* state, int enum_idx,
+                                               const char* member_name);
+
+/**
+ * Push a specific enum member value from an enum definition already on the
+ * stack. Returns false and leaves the stack unchanged if the member is missing.
+ */
+MOBIUS_API bool mobius_stack_getEnumMember(MobiusState* state, int enum_idx,
+                                           const char* member_name);
+
+/* ====================================================================== */
+/*  Rooted value handles                                                   */
+/* ====================================================================== */
+
+typedef uint64_t MobiusValueRef;
+
+MOBIUS_API MobiusValueRef mobius_ref_value(MobiusState* state, int idx);
+MOBIUS_API bool           mobius_unref_value(MobiusState* state, MobiusValueRef ref);
+MOBIUS_API bool           mobius_push_ref(MobiusState* state, MobiusValueRef ref);
+
+/* ====================================================================== */
 /*  Stack manipulation                                                     */
 /* ====================================================================== */
 
@@ -216,6 +262,17 @@ MOBIUS_API void mobius_remove_global(MobiusState* state, const char* name);
  * @return Number of results on success (>= 0), or negative on error.
  */
 MOBIUS_API int mobius_pcall(MobiusState* state, int nargs, int nresults);
+
+/**
+ * Call a rooted Mobius function from native code without reshaping the
+ * current native stack frame. Arguments are provided as rooted value refs.
+ *
+ * Results are pushed onto the current native stack (or the bound VM stack
+ * when called outside a native function frame).
+ */
+MOBIUS_API int mobius_call_ref(MobiusState* state, MobiusValueRef function_ref,
+                               const MobiusValueRef* arg_refs, size_t nargs,
+                               int nresults);
 
 /* ====================================================================== */
 /*  Table operations (on values already on the stack)                      */

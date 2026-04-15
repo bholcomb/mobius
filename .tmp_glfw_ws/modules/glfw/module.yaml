@@ -1,0 +1,9 @@
+name: glfw
+version: 0.2.0
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/glfw.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: GLFW windowing and input bindings for Mobius

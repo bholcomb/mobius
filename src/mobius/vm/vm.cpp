@@ -906,6 +906,19 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             RA(inst) = obj.as.table->getByString(key.as.string);
         else
             RA(inst) = obj.as.table->get(key);
+    } else if (obj.type == VAL_ENUM && obj.as.enum_def) {
+        if (key.type != VAL_STRING || !key.as.string) {
+            VM_ERROR(vm, f, "Enum member lookup expects a string key");
+            return -1;
+        }
+        const char* member_name = key.as.string->data;
+        const EnumMember* member = obj.as.enum_def->findMember(member_name);
+        if (!member) {
+            VM_ERROR(vm, f, "Invalid enum member '%s' on enum '%s'",
+                            member_name, obj.as.enum_def->name().c_str());
+            return -1;
+        }
+        RA(inst) = Value::makeEnum(obj.as.enum_def, member->value);
     } else if (obj.type == VAL_ARRAY_SLICE && obj.as.array_slice) {
         int64_t idx = MobiusVM::vm_extract_int64(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array_slice->length())) {

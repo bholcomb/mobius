@@ -64,13 +64,13 @@ func validate_manifest(package_dir, manifest) {
         var saw_platform = false
         for (var platform, spec in manifest.platforms) {
             saw_platform = true
-            spec = expect_table(spec, "platforms." + str(platform))
-            if (spec.module_library != nil) {
-                ensure_file(package_dir, expect_string(spec.module_library, "platforms." + str(platform) + ".module_library"), "platform module_library")
+            var platform_spec = expect_table(spec, "platforms." + str(platform))
+            if (platform_spec.module_library != nil) {
+                ensure_file(package_dir, expect_string(platform_spec.module_library, "platforms." + str(platform) + ".module_library"), "platform module_library")
                 has_entry = true
             }
-            if (spec.runtime_libraries != nil) {
-                var libs = expect_array(spec.runtime_libraries, "platforms." + str(platform) + ".runtime_libraries")
+            if (platform_spec.runtime_libraries != nil) {
+                var libs = expect_array(platform_spec.runtime_libraries, "platforms." + str(platform) + ".runtime_libraries")
                 for (var lib in libs) {
                     ensure_file(package_dir, expect_string(lib, "runtime library entry"), "runtime library")
                 }
