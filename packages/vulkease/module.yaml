@@ -1,0 +1,13 @@
+name: vulkease
+version: 0.1.0
+entry:
+  script: vulkease.mob
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/vulkease.so
+    runtime_libraries:
+      - native/linux-x86_64/libvulkease.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: VulkEase graphics bootstrap bindings for Mobius

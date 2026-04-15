@@ -1,0 +1,405 @@
+func __copy_table(values) {
+    var out = {}
+    if (values == nil) {
+        return out
+    }
+    for (var key, value in values) {
+        out[key] = value
+    }
+    return out
+}
+
+func vec2(x, y) {
+    return { x: x, y: y }
+}
+
+func rect(x, y, w, h) {
+    return { x: x, y: y, w: w, h: h }
+}
+
+func color(r, g, b, a) {
+    if (a == nil) {
+        a = 1.0
+    }
+    return { r: r, g: g, b: b, a: a }
+}
+
+func color_to_u32(value) {
+    var r = int(value.r * 255.0 + 0.5)
+    var g = int(value.g * 255.0 + 0.5)
+    var b = int(value.b * 255.0 + 0.5)
+    var a = int(value.a * 255.0 + 0.5)
+    return (a << 24) | (b << 16) | (g << 8) | r
+}
+
+func color_from_u32(value) {
+    var r = ((value >> 0) & 0xFF) / 255.0
+    var g = ((value >> 8) & 0xFF) / 255.0
+    var b = ((value >> 16) & 0xFF) / 255.0
+    var a = ((value >> 24) & 0xFF) / 255.0
+    return color(r, g, b, a)
+}
+
+func rect_contains(r, px, py) {
+    return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h
+}
+
+func vertex(values) { return __copy_table(values) }
+func draw_command(values) { return __copy_table(values) }
+func nine_patch(values) { return __copy_table(values) }
+func sprite(values) { return __copy_table(values) }
+func style_item(values) { return __copy_table(values) }
+func glyph(values) { return __copy_table(values) }
+func texture_data(values) { return __copy_table(values) }
+func style_text(values) { return __copy_table(values) }
+func style_button(values) { return __copy_table(values) }
+func style_toggle(values) { return __copy_table(values) }
+func style_selectable(values) { return __copy_table(values) }
+func style_slider(values) { return __copy_table(values) }
+func style_progress(values) { return __copy_table(values) }
+func style_scrollbar(values) { return __copy_table(values) }
+func style_edit(values) { return __copy_table(values) }
+func style_property(values) { return __copy_table(values) }
+func style_knob(values) { return __copy_table(values) }
+func style_tree(values) { return __copy_table(values) }
+func style_table(values) { return __copy_table(values) }
+func style_separator(values) { return __copy_table(values) }
+func style_tooltip(values) { return __copy_table(values) }
+func style_menu(values) { return __copy_table(values) }
+func style_chart(values) { return __copy_table(values) }
+func style_combo(values) { return __copy_table(values) }
+func style_tab(values) { return __copy_table(values) }
+func style_window_header(values) { return __copy_table(values) }
+func style_window(values) { return __copy_table(values) }
+
+enum Align {
+    LEFT = 1 << 0,
+    RIGHT = 1 << 1,
+    TOP = 1 << 2,
+    BOTTOM = 1 << 3,
+    HCENTER = (1 << 0) | (1 << 1),
+    VCENTER = (1 << 2) | (1 << 3),
+    CENTER = ((1 << 0) | (1 << 1)) | ((1 << 2) | (1 << 3)),
+    DEFAULT = (1 << 0) | ((1 << 2) | (1 << 3))
+}
+
+enum CornerFlags {
+    NONE = 0,
+    LL = 1 << 0,
+    LR = 1 << 1,
+    UR = 1 << 2,
+    UL = 1 << 3,
+    TOP = (1 << 3) | (1 << 2),
+    BOTTOM = (1 << 0) | (1 << 1),
+    LEFT = (1 << 0) | (1 << 3),
+    RIGHT = (1 << 1) | (1 << 2),
+    ALL = (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3)
+}
+
+enum WindowFlags {
+    NONE = 0,
+    BACKGROUND = 1 << 0,
+    TITLE_BAR = 1 << 1,
+    MENU_BAR = 1 << 2,
+    BORDERS = 1 << 3,
+    HORIZONTAL_SCROLLBAR = 1 << 4,
+    VERTICAL_SCROLLBAR = 1 << 5,
+    SCROLLBARS = (1 << 4) | (1 << 5),
+    MOVABLE = 1 << 10,
+    COLLAPSABLE = 1 << 11,
+    RESIZABLE = 1 << 12,
+    INPUTS = 1 << 13,
+    SCROLL_WITH_MOUSE = 1 << 14,
+    FOCUS_ON_APPEARING = 1 << 15,
+    BRING_TO_FRONT = 1 << 16,
+    AUTO_RESIZE = 1 << 17,
+    ROOT = 1 << 20,
+    CHILD = 1 << 21,
+    COMBO = 1 << 22,
+    TOOLTIP = 1 << 23,
+    POPUP = 1 << 24,
+    MODAL = 1 << 25,
+    CHILD_MENU = 1 << 26,
+    DEFAULT = (1 << 0) | (1 << 1) | (1 << 3) | (1 << 5) | (1 << 10) | (1 << 11) | (1 << 12) | (1 << 13) | (1 << 16) | (1 << 14) | (1 << 21),
+    ROOT_DEFAULT = (1 << 2) | (1 << 13) | (1 << 20)
+}
+
+enum Condition {
+    NONE = 0,
+    ALWAYS = 1 << 0,
+    ONCE = 1 << 1,
+    FIRST_USE_EVER = 1 << 2,
+    APPEARING = 1 << 3
+}
+
+enum LayoutDirection {
+    HORIZONTAL = 0,
+    VERTICAL = 1
+}
+
+enum Key {
+    NONE = 0,
+    TAB = 1,
+    LEFT_ARROW = 2,
+    RIGHT_ARROW = 3,
+    UP_ARROW = 4,
+    DOWN_ARROW = 5,
+    PAGE_UP = 6,
+    PAGE_DOWN = 7,
+    HOME = 8,
+    END = 9,
+    INSERT = 10,
+    DELETE = 11,
+    BACKSPACE = 12,
+    SPACE = 13,
+    ENTER = 14,
+    ESCAPE = 15,
+    LEFT_CTRL = 16,
+    LEFT_SHIFT = 17,
+    LEFT_ALT = 18,
+    LEFT_SUPER = 19,
+    RIGHT_CTRL = 20,
+    RIGHT_SHIFT = 21,
+    RIGHT_ALT = 22,
+    RIGHT_SUPER = 23,
+    MENU = 24,
+    NUM_0 = 25,
+    NUM_1 = 26,
+    NUM_2 = 27,
+    NUM_3 = 28,
+    NUM_4 = 29,
+    NUM_5 = 30,
+    NUM_6 = 31,
+    NUM_7 = 32,
+    NUM_8 = 33,
+    NUM_9 = 34,
+    A = 35,
+    B = 36,
+    C = 37,
+    D = 38,
+    E = 39,
+    F = 40,
+    G = 41,
+    H = 42,
+    I = 43,
+    J = 44,
+    K = 45,
+    L = 46,
+    M = 47,
+    N = 48,
+    O = 49,
+    P = 50,
+    Q = 51,
+    R = 52,
+    S = 53,
+    T = 54,
+    U = 55,
+    V = 56,
+    W = 57,
+    X = 58,
+    Y = 59,
+    Z = 60,
+    F1 = 61,
+    F2 = 62,
+    F3 = 63,
+    F4 = 64,
+    F5 = 65,
+    F6 = 66,
+    F7 = 67,
+    F8 = 68,
+    F9 = 69,
+    F10 = 70,
+    F11 = 71,
+    F12 = 72,
+    APOSTROPHE = 73,
+    COMMA = 74,
+    MINUS = 75,
+    PERIOD = 76,
+    SLASH = 77,
+    SEMICOLON = 78,
+    EQUAL = 79,
+    LEFT_BRACKET = 80,
+    BACKSLASH = 81,
+    RIGHT_BRACKET = 82,
+    GRAVE_ACCENT = 83,
+    CAPS_LOCK = 84,
+    SCROLL_LOCK = 85,
+    NUM_LOCK = 86,
+    PRINT_SCREEN = 87,
+    PAUSE = 88,
+    KEYPAD_0 = 89,
+    KEYPAD_1 = 90,
+    KEYPAD_2 = 91,
+    KEYPAD_3 = 92,
+    KEYPAD_4 = 93,
+    KEYPAD_5 = 94,
+    KEYPAD_6 = 95,
+    KEYPAD_7 = 96,
+    KEYPAD_8 = 97,
+    KEYPAD_9 = 98,
+    KEYPAD_DECIMAL = 99,
+    KEYPAD_DIVIDE = 100,
+    KEYPAD_MULTIPLY = 101,
+    KEYPAD_SUBTRACT = 102,
+    KEYPAD_ADD = 103,
+    KEYPAD_ENTER = 104,
+    KEYPAD_EQUAL = 105,
+    COUNT = 106
+}
+
+enum MouseButton {
+    LEFT = 0,
+    RIGHT = 1,
+    MIDDLE = 2,
+    COUNT = 5
+}
+
+enum ModFlags {
+    NONE = 0,
+    CTRL = 1 << 0,
+    SHIFT = 1 << 1,
+    ALT = 1 << 2,
+    SUPER = 1 << 3
+}
+
+enum MouseCursor {
+    NONE = -1,
+    ARROW = 0,
+    TEXT_INPUT = 1,
+    RESIZE_ALL = 2,
+    RESIZE_NS = 3,
+    RESIZE_EW = 4,
+    RESIZE_NESW = 5,
+    RESIZE_NWSE = 6,
+    HAND = 7,
+    NOT_ALLOWED = 8,
+    CROSSHAIR = 9,
+    WAIT = 10,
+    COUNT = 11
+}
+
+enum StyleItemType {
+    COLOR = 0,
+    IMAGE = 1,
+    SPRITE = 2,
+    NINEPATCH = 3
+}
+
+enum TextureFormat {
+    R8 = 0,
+    RGBA8 = 1
+}
+
+enum SelectableFlags {
+    NONE = 0,
+    DONT_CLOSE_POPUP = 1 << 0,
+    SPAN_ALL_COLUMNS = 1 << 1,
+    MENU = 1 << 2,
+    MENU_ITEM = 1 << 3,
+    DISABLED = 1 << 4,
+    DRAW_FILL_WIDTH = 1 << 5,
+    HAS_TOGGLE = 1 << 6
+}
+
+enum SliderFlags {
+    NONE = 0,
+    VERTICAL = 1 << 0
+}
+
+enum InputTextFlags {
+    NONE = 0,
+    READ_ONLY = 1 << 0,
+    PASSWORD = 1 << 1,
+    AUTO_SELECT_ALL = 1 << 2,
+    ENTER_RETURNS = 1 << 3,
+    CHARS_DECIMAL = 1 << 4,
+    CHARS_HEXADECIMAL = 1 << 5,
+    CHARS_NO_BLANK = 1 << 6
+}
+
+enum TreeFlags {
+    NONE = 0,
+    DEFAULT_OPEN = 1 << 0,
+    SELECTED = 1 << 2
+}
+
+enum TabBarFlags {
+    NONE = 0,
+    REORDERABLE = 1 << 0,
+    AUTO_SELECT = 1 << 1
+}
+
+enum ButtonFlags {
+    NONE = 0,
+    REPEAT = 1 << 0,
+    PRESSED_ON_CLICK = 1 << 1,
+    PRESSED_ON_RELEASE = 1 << 2,
+    FLATTEN_CHILDREN = 1 << 3,
+    DONT_CLOSE_POPUPS = 1 << 4,
+    DISABLED = 1 << 5,
+    ALIGN_TEXT_BASELINE = 1 << 6,
+    NO_KEY_MODIFIERS = 1 << 7
+}
+
+enum GroupFlags {
+    NONE = 0,
+    BORDER = 1 << 0,
+    BACKGROUND = 1 << 1,
+    DEFAULT = 1 << 0
+}
+
+enum TableFlags {
+    NONE = 0,
+    BORDERS = 1 << 0,
+    RESIZABLE = 1 << 1,
+    SORTABLE = 1 << 2,
+    ROW_BACKGROUND = 1 << 3,
+    SCROLL_X = 1 << 4,
+    SCROLL_Y = 1 << 5
+}
+
+enum TableColumnFlags {
+    NONE = 0,
+    WIDTH_FIXED = 1 << 0,
+    NO_RESIZE = 1 << 1,
+    NO_SORT = 1 << 2,
+    DEFAULT_HIDDEN = 1 << 3
+}
+
+enum ColorPickerFlags {
+    NONE = 0,
+    NO_ALPHA = 1 << 0,
+    NO_SLIDERS = 1 << 1,
+    NO_HEX = 1 << 2,
+    NO_PREVIEW = 1 << 3
+}
+
+enum FileDialogMode {
+    OPEN = 0,
+    SAVE = 1
+}
+
+enum FileDialogResult {
+    NONE = 0,
+    OK = 1,
+    CANCEL = 2
+}
+
+var Colors = {
+    WHITE: color(1.0, 1.0, 1.0, 1.0),
+    BLACK: color(0.0, 0.0, 0.0, 1.0),
+    TRANSPARENT: color(0.0, 0.0, 0.0, 0.0),
+    RED: color(1.0, 0.0, 0.0, 1.0),
+    GREEN: color(0.0, 1.0, 0.0, 1.0),
+    BLUE: color(0.0, 0.0, 1.0, 1.0),
+    YELLOW: color(1.0, 1.0, 0.0, 1.0),
+    CYAN: color(0.0, 1.0, 1.0, 1.0),
+    MAGENTA: color(1.0, 0.0, 1.0, 1.0),
+    GRAY: color(0.5, 0.5, 0.5, 1.0),
+    LIGHT_GRAY: color(0.75, 0.75, 0.75, 1.0),
+    DARK_GRAY: color(0.25, 0.25, 0.25, 1.0),
+    ORANGE: color(1.0, 0.5, 0.0, 1.0),
+    PINK: color(1.0, 0.75, 0.8, 1.0),
+    PURPLE: color(0.5, 0.0, 0.5, 1.0),
+    BROWN: color(0.6, 0.3, 0.0, 1.0)
+}
