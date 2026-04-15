@@ -39,6 +39,8 @@ staging:
         - "${out_dir}/bin/libmobius-core.so"
     - folder: "bin/modules"
       files:
+        - "${out_dir}/bin/compression.so"
+        - "src/modules/compression/compression.mob"
         - "${out_dir}/bin/math.so"
         - "${out_dir}/bin/os.so"
         - "${out_dir}/bin/regex.so"

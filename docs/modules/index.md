@@ -8,6 +8,7 @@ import "module_name"
 
 Current built-in first-party modules:
 
+- [`compression`](compression.md) - archive/compression helpers with a high-level Mobius API
 - [`crypto`](crypto.md) - dependency-free hashing, encoding, UUID, and random helpers
 - [`datetime`](datetime.md) - structured date/time conversion and ISO helpers
 - [`fiber`](fiber.md) - concurrency helpers, channels, and slices

@@ -4,6 +4,19 @@ project:
 
 targets:
   shared_libraries:
+    - name: compression
+      language: cpp
+      output_prefix: ""
+      sources: ["compression/compression_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+        - "${workspace}/src/modules/compression"
+      libs: ["mobius-core", "dl", "z", "zstd"]
+      depends_on:
+        targets: ["mobius-core"]
+
     - name: math
       language: cpp
       output_prefix: ""

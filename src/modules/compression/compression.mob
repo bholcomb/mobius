@@ -1,0 +1,59 @@
+func __ensure_options(options, func_name) {
+    if (options == nil) {
+        return {}
+    }
+    if (typeof(options) != "table") {
+        throw func_name + "() options must be a table"
+    }
+    return options
+}
+
+func __ensure_string(value, name, func_name) {
+    if (typeof(value) != "string") {
+        throw func_name + "() " + name + " must be a string"
+    }
+    return value
+}
+
+func __normalize_inputs(inputs) {
+    if (typeof(inputs) == "string") {
+        return [inputs]
+    }
+    if (typeof(inputs) == "array") {
+        return inputs
+    }
+    throw "create() inputs must be a string or array"
+}
+
+func inspect(path, options) {
+    path = __ensure_string(path, "path", "inspect")
+    return __inspect_native(path, __ensure_options(options, "inspect"))
+}
+
+func list(path, options) {
+    path = __ensure_string(path, "path", "list")
+    return __list_native(path, __ensure_options(options, "list"))
+}
+
+func extract(path, destination, options) {
+    path = __ensure_string(path, "path", "extract")
+    destination = __ensure_string(destination, "destination", "extract")
+    return __extract_native(path, destination, __ensure_options(options, "extract"))
+}
+
+func create(output_path, inputs, options) {
+    output_path = __ensure_string(output_path, "output_path", "create")
+    return __create_native(output_path, __normalize_inputs(inputs), __ensure_options(options, "create"))
+}
+
+func compress(input_path, output_path, options) {
+    input_path = __ensure_string(input_path, "input_path", "compress")
+    output_path = __ensure_string(output_path, "output_path", "compress")
+    return __compress_native(input_path, output_path, __ensure_options(options, "compress"))
+}
+
+func decompress(input_path, output_path, options) {
+    input_path = __ensure_string(input_path, "input_path", "decompress")
+    output_path = __ensure_string(output_path, "output_path", "decompress")
+    return __decompress_native(input_path, output_path, __ensure_options(options, "decompress"))
+}
