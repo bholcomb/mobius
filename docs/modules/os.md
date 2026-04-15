@@ -14,6 +14,10 @@ Selected constants:
 - `os.platform`
 - `os.separator`
 
+`os.platform` uses the same canonical target keys as packaged modules, such as
+`linux-x86_64`, `linux-aarch64`, `macos-x86_64`, `macos-aarch64`,
+`windows-x86_64`, or `windows-aarch64`.
+
 Function groups:
 
 | Group | Members |

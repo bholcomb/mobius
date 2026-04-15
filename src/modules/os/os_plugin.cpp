@@ -1426,11 +1426,23 @@ static int os_time(MobiusState* state, int arg_count) {
 
 static int os_post_init(MobiusState* state) {
 #ifdef __linux__
-    const char* platform = "linux";
+  #if defined(__aarch64__)
+    const char* platform = "linux-aarch64";
+  #else
+    const char* platform = "linux-x86_64";
+  #endif
 #elif defined(__APPLE__)
-    const char* platform = "darwin";
+  #if defined(__aarch64__) || defined(__arm64__)
+    const char* platform = "macos-aarch64";
+  #else
+    const char* platform = "macos-x86_64";
+  #endif
 #elif defined(_WIN32)
-    const char* platform = "windows";
+  #if defined(_M_ARM64) || defined(__aarch64__)
+    const char* platform = "windows-aarch64";
+  #else
+    const char* platform = "windows-x86_64";
+  #endif
 #else
     const char* platform = "unknown";
 #endif
