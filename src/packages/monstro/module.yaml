@@ -1,0 +1,13 @@
+name: monstro
+version: 0.1.0
+entry:
+  script: monstro.mob
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/monstro.so
+    runtime_libraries:
+      - native/linux-x86_64/libmonstro.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: Monstro UI context and widget bindings for Mobius

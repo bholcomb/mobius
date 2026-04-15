@@ -1,0 +1,26 @@
+project:
+  name: mobius-monstro-package
+  description: "Monstro package candidate for Mobius"
+
+environment:
+  compile:
+    cpp_standard: "c++17"
+    warnings: extra
+
+targets:
+  shared_libraries:
+    - name: monstro
+      language: cpp
+      output_prefix: ""
+      sources: ["monstro_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+        - "/home/bholcomb/projects/side/monstero/include"
+      libs:
+        - mobius-core
+        - dl
+      deps: ["glfw3"]
+      depends_on:
+        targets: ["mobius-core"]

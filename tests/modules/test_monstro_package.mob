@@ -1,0 +1,132 @@
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var repo_root = os.getcwd()
+var mobius_bin = os.join(repo_root, "bin", "mobius")
+var pack_tool = os.join(repo_root, "tools", "pack_module.mob")
+var install_tool = os.join(repo_root, "tools", "install_module.mob")
+var package_source = os.join(repo_root, "packages", "monstro")
+
+var workspace = os.join(os.tmpdir(), "mobius_monstro_pkg_" + str(os.getpid()))
+var modules_root = os.join(workspace, "modules")
+var archive_path = os.join(workspace, "monstro.mz")
+var run_script = os.join(workspace, "run.mob")
+
+assert_test("monstro package staged", os.is_dir(package_source))
+assert_test("create workspace", os.mkdirp(workspace))
+assert_test("write run script", writefile(run_script,
+    "import \"monstro\"\n" +
+    "func ensure(cond) { if (!cond) { exit(1) } }\n" +
+    "ensure(typeof(monstro.Align) == \"enum\")\n" +
+    "ensure(typeof(monstro.WindowFlags) == \"enum\")\n" +
+    "ensure(typeof(monstro.Key) == \"enum\")\n" +
+    "ensure(typeof(monstro.MouseButton) == \"enum\")\n" +
+    "ensure(typeof(monstro.ButtonFlags) == \"enum\")\n" +
+    "var c = monstro.color(1.0, 0.25, 0.5, 1.0)\n" +
+    "ensure(c.r == 1.0 && c.g == 0.25 && c.b == 0.5 && c.a == 1.0)\n" +
+    "ensure(monstro.color_to_u32(monstro.color_from_u32(0x11223344)) == 0x11223344)\n" +
+    "var r = monstro.rect(0, 0, 100, 50)\n" +
+    "ensure(monstro.rect_contains(r, 10, 10))\n" +
+    "ensure(monstro.Colors.WHITE.a == 1.0)\n" +
+    "var ctx = monstro.create_context()\n" +
+    "ensure(typeof(ctx) == \"userdata\")\n" +
+    "ensure(!ctx:is_closed())\n" +
+    "ctx:set_display_size(640, 480)\n" +
+    "var display = ctx:get_display_size()\n" +
+    "ensure(display.width == 640)\n" +
+    "ensure(display.height == 480)\n" +
+    "ctx:set_mouse_pos(32, 48)\n" +
+    "ctx:set_mouse_button(monstro.MouseButton.LEFT, true)\n" +
+    "ctx:set_mouse_wheel(1.0, -2.0)\n" +
+    "ctx:set_key_mods(monstro.ModFlags.CTRL)\n" +
+    "ctx:add_input_text(\"hi\")\n" +
+    "var mouse = ctx:get_mouse_pos()\n" +
+    "ensure(mouse.x == 32)\n" +
+    "ensure(mouse.y == 48)\n" +
+    "ensure(ctx:want_capture_mouse() == true || ctx:want_capture_mouse() == false)\n" +
+    "ensure(ctx:want_capture_keyboard() == true || ctx:want_capture_keyboard() == false)\n" +
+    "ensure(ctx:want_text_input() == true || ctx:want_text_input() == false)\n" +
+    "ctx:begin_frame(0.016)\n" +
+    "ctx:set_next_window_pos(10, 20, monstro.Condition.ALWAYS)\n" +
+    "ctx:set_next_window_size(220, 140, monstro.Condition.ALWAYS)\n" +
+    "var win = ctx:begin_window(\"Monstro Package Test\", monstro.WindowFlags.DEFAULT)\n" +
+    "ensure(typeof(win) == \"table\")\n" +
+    "ctx:label(\"Hello from Monstro\")\n" +
+    "var pressed = ctx:button(\"Click Me\")\n" +
+    "ensure(pressed == true || pressed == false)\n" +
+    "var checkbox = ctx:checkbox(\"Enabled\", true)\n" +
+    "ensure(typeof(checkbox) == \"table\")\n" +
+    "ensure(checkbox.changed == true || checkbox.changed == false)\n" +
+    "ensure(checkbox.value == true || checkbox.value == false)\n" +
+    "var slider = ctx:slider_float(\"Value\", 0.5, 0.0, 1.0)\n" +
+    "ensure(typeof(slider) == \"table\")\n" +
+    "ensure(slider.value >= 0.0 && slider.value <= 1.0)\n" +
+    "ctx:progress_bar(0.5, 100, 12, \"half\")\n" +
+    "var rect = ctx:window_rect()\n" +
+    "ensure(rect.w >= 0)\n" +
+    "ensure(rect.h >= 0)\n" +
+    "var window_size = ctx:window_size()\n" +
+    "ensure(window_size.x >= 0)\n" +
+    "ensure(window_size.y >= 0)\n" +
+    "ctx:end_window()\n" +
+    "ctx:end_frame()\n" +
+    "var draw = ctx:draw_data()\n" +
+    "ensure(typeof(draw) == \"table\")\n" +
+    "ensure(typeof(draw.vertex_buffer) == \"buffer\")\n" +
+    "ensure(typeof(draw.index_buffer) == \"buffer\")\n" +
+    "ensure(typeof(draw.commands) == \"array\")\n" +
+    "ensure(draw.vertex_stride > 0)\n" +
+    "ensure(draw.vertex_count >= 0)\n" +
+    "ensure(draw.index_count >= 0)\n" +
+    "ctx:close()\n" +
+    "ensure(ctx:is_closed())\n" +
+    "print(\"monstro package import ok\")\n"))
+
+var pack_rc = os.system(mobius_bin + " " + pack_tool + " " + package_source + " " + archive_path)
+assert_test("pack monstro package", pack_rc == 0)
+assert_test("monstro archive created", os.is_file(archive_path))
+
+var install_rc = os.system(mobius_bin + " " + install_tool + " " + archive_path + " " + modules_root)
+assert_test("install monstro package", install_rc == 0)
+assert_test("installed monstro manifest exists", os.is_file(os.join(modules_root, "monstro", "module.yaml")))
+assert_test("installed monstro script exists", os.is_file(os.join(modules_root, "monstro", "monstro.mob")))
+assert_test("installed monstro native library exists", os.is_file(os.join(modules_root, "monstro", "native", "linux-x86_64", "monstro.so")))
+assert_test("installed monstro runtime library exists", os.is_file(os.join(modules_root, "monstro", "native", "linux-x86_64", "libmonstro.so")))
+
+var old_cwd = os.getcwd()
+assert_test("chdir into workspace", os.chdir(workspace))
+var import_rc = os.system(mobius_bin + " " + run_script)
+assert_test("import installed monstro package", import_rc == 0)
+assert_test("chdir back to repo root", os.chdir(old_cwd))
+
+os.remove(os.join(modules_root, "monstro", "native", "linux-x86_64", "libmonstro.so"))
+os.remove(os.join(modules_root, "monstro", "native", "linux-x86_64", "monstro.so"))
+os.rmdir(os.join(modules_root, "monstro", "native", "linux-x86_64"))
+os.rmdir(os.join(modules_root, "monstro", "native"))
+os.remove(os.join(modules_root, "monstro", "monstro.mob"))
+os.remove(os.join(modules_root, "monstro", "module.yaml"))
+os.rmdir(os.join(modules_root, "monstro"))
+os.rmdir(modules_root)
+os.remove(archive_path)
+os.remove(run_script)
+os.rmdir(workspace)
+
+print("")
+print("Monstro Package Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}

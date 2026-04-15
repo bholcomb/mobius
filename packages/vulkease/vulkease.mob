@@ -1,0 +1,149 @@
+func __copy_table(values) {
+    var out = {}
+    if (values == nil) {
+        return out
+    }
+    for (var key, value in values) {
+        out[key] = value
+    }
+    return out
+}
+
+func color(r, g, b, a) {
+    return { r: r, g: g, b: b, a: a }
+}
+
+func rect2d(x, y, width, height) {
+    return { x: x, y: y, width: width, height: height }
+}
+
+func viewport(x, y, width, height, min_depth, max_depth) {
+    return {
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        minDepth: min_depth,
+        maxDepth: max_depth
+    }
+}
+
+func message_callback_desc(values) { return __copy_table(values) }
+func buffer_desc(values) { return __copy_table(values) }
+func texture_desc(values) { return __copy_table(values) }
+func external_texture_desc(values) { return __copy_table(values) }
+func sampler_desc(values) { return __copy_table(values) }
+func texture_copy_region(values) { return __copy_table(values) }
+func texture_blit_region(values) { return __copy_table(values) }
+func buffer_texture_copy_region(values) { return __copy_table(values) }
+func sparse_texture_info(values) { return __copy_table(values) }
+func sparse_page_region(values) { return __copy_table(values) }
+func query_pool_desc(values) { return __copy_table(values) }
+func frame_timing_info(values) { return __copy_table(values) }
+func swapchain_desc(values) { return __copy_table(values) }
+func vertex_binding(values) { return __copy_table(values) }
+func vertex_attribute(values) { return __copy_table(values) }
+func blend_attachment(values) { return __copy_table(values) }
+func stencil_op_state(values) { return __copy_table(values) }
+func graphics_pipeline_desc(values) { return __copy_table(values) }
+func draw_state_desc(values) { return __copy_table(values) }
+func render_target_attachment(values) { return __copy_table(values) }
+func render_target(values) { return __copy_table(values) }
+func memory_barrier(values) { return __copy_table(values) }
+func buffer_barrier(values) { return __copy_table(values) }
+func image_barrier(values) { return __copy_table(values) }
+func barrier_desc(values) { return __copy_table(values) }
+func submit_info(values) { return __copy_table(values) }
+func secondary_command_buffer_desc(values) { return __copy_table(values) }
+func performance_stats(values) { return __copy_table(values) }
+func memory_stats(values) { return __copy_table(values) }
+func pipeline_stats(values) { return __copy_table(values) }
+func graphics_push_constants(values) { return __copy_table(values) }
+func compute_push_constants(values) { return __copy_table(values) }
+
+func surface_win32(hwnd) {
+    return {
+        type: SurfaceType.WIN32,
+        win32: { hwnd: hwnd }
+    }
+}
+
+func surface_xlib(display, window) {
+    return {
+        type: SurfaceType.XLIB,
+        xlib: {
+            display: display,
+            window: window
+        }
+    }
+}
+
+func surface_wayland(display, surface) {
+    return {
+        type: SurfaceType.WAYLAND,
+        wayland: {
+            display: display,
+            surface: surface
+        }
+    }
+}
+
+func surface_cocoa(window) {
+    return {
+        type: SurfaceType.COCOA,
+        cocoa: { window: window }
+    }
+}
+
+func surface_android(native_window) {
+    return {
+        type: SurfaceType.ANDROID,
+        android: { nativeWindow: native_window }
+    }
+}
+
+enum Result {
+    SUCCESS = 0,
+    ERROR_OUT_OF_MEMORY = 1,
+    ERROR_DEVICE_LOST = 2,
+    ERROR_INVALID_PARAMETER = 3,
+    ERROR_FEATURE_NOT_SUPPORTED = 4,
+    ERROR_UNSUPPORTED = 5,
+    ERROR_SHADER_COMPILATION_FAILED = 6,
+    ERROR_SWAPCHAIN_OUT_OF_DATE = 7,
+    ERROR_TRANSFER_FAILED = 8,
+    ERROR_NOT_FOUND = 9,
+    ERROR_NOT_INITIALIZED = 10,
+    ERROR_TIMEOUT = 11,
+    ERROR_UNKNOWN = 999
+}
+
+enum MessageSeverity {
+    VERBOSE = 0,
+    INFO = 1,
+    WARNING = 2,
+    ERROR = 3
+}
+
+enum QueryType {
+    OCCLUSION = 0,
+    TIMESTAMP = 1,
+    PIPELINE_STATISTICS = 2
+}
+
+enum SurfaceType {
+    WIN32 = 0,
+    XLIB = 1,
+    WAYLAND = 2,
+    COCOA = 3,
+    ANDROID = 4
+}
+
+enum DefaultSampler {
+    NEAREST = 0,
+    LINEAR = 1,
+    ANISOTROPIC_4X = 2,
+    ANISOTROPIC_16X = 3,
+    SHADOW = 4,
+    COUNT = 5
+}
