@@ -1,0 +1,143 @@
+import "compression"
+import "os"
+import "yaml"
+
+func fail(message) {
+    print("pack_module: " + message)
+    exit(1)
+}
+
+func usage() {
+    print("Usage: ./bin/mobius tools/pack_module.mob <package_dir> [output.mz]")
+}
+
+func expect_string(value, label) {
+    if (typeof(value) != "string" || value == "") {
+        fail(label + " must be a non-empty string")
+    }
+    return value
+}
+
+func expect_table(value, label) {
+    if (typeof(value) != "table") {
+        fail(label + " must be a table")
+    }
+    return value
+}
+
+func expect_array(value, label) {
+    if (typeof(value) != "array") {
+        fail(label + " must be an array")
+    }
+    return value
+}
+
+func ensure_file(base_dir, relative_path, label) {
+    var full_path = os.join(base_dir, relative_path)
+    if (!os.exists(full_path) || !os.is_file(full_path)) {
+        fail(label + " does not exist: " + full_path)
+    }
+    return full_path
+}
+
+func validate_manifest(package_dir, manifest) {
+    manifest = expect_table(manifest, "module.yaml")
+
+    var name = expect_string(manifest.name, "module.yaml name")
+    var version = expect_string(manifest.version, "module.yaml version")
+    var package_dir_name = os.basename(package_dir)
+    if (package_dir_name != name) {
+        fail("package directory basename must match manifest name (" + package_dir_name + " != " + name + ")")
+    }
+
+    var has_entry = false
+
+    if (manifest.entry != nil) {
+        var entry = expect_table(manifest.entry, "module.yaml entry")
+        if (entry.script != nil) {
+            ensure_file(package_dir, expect_string(entry.script, "entry.script"), "entry.script")
+            has_entry = true
+        }
+    }
+
+    if (manifest.platforms != nil) {
+        var saw_platform = false
+        for (var platform, spec in manifest.platforms) {
+            saw_platform = true
+            spec = expect_table(spec, "platforms." + str(platform))
+            if (spec.module_library != nil) {
+                ensure_file(package_dir, expect_string(spec.module_library, "platforms." + str(platform) + ".module_library"), "platform module_library")
+                has_entry = true
+            }
+            if (spec.runtime_libraries != nil) {
+                var libs = expect_array(spec.runtime_libraries, "platforms." + str(platform) + ".runtime_libraries")
+                for (var lib in libs) {
+                    ensure_file(package_dir, expect_string(lib, "runtime library entry"), "runtime library")
+                }
+            }
+        }
+        if (!saw_platform) {
+            fail("module.yaml platforms must not be empty")
+        }
+    }
+
+    if (!has_entry) {
+        fail("module.yaml must declare at least one entry script or platform module_library")
+    }
+
+    return {
+        name: name,
+        version: version
+    }
+}
+
+if (len(argv) < 1 || len(argv) > 2) {
+    usage()
+    exit(1)
+}
+
+var package_dir = argv[0]
+if (!os.exists(package_dir) || !os.is_dir(package_dir)) {
+    fail("package_dir must be an existing directory")
+}
+
+var manifest_path = os.join(package_dir, "module.yaml")
+if (!os.exists(manifest_path) || !os.is_file(manifest_path)) {
+    fail("package_dir must contain module.yaml")
+}
+
+var manifest = yaml.parsefile(manifest_path)
+var info = validate_manifest(package_dir, manifest)
+
+var output_path = nil
+if (len(argv) >= 2) {
+    output_path = argv[1]
+} else {
+    output_path = os.join(os.dirname(package_dir), info.name + "-" + info.version + ".mz")
+}
+
+if (!endswith(lower(output_path), ".mz")) {
+    fail("output archive must use the .mz extension")
+}
+
+var output_dir = os.dirname(output_path)
+if (output_dir != "" && output_dir != "." && !os.exists(output_dir)) {
+    if (!os.mkdirp(output_dir)) {
+        fail("failed to create output directory: " + output_dir)
+    }
+}
+
+if (os.exists(output_path)) {
+    fail("output archive already exists: " + output_path)
+}
+
+var result = compression.create(output_path, [package_dir], {
+    format: "zip",
+    overwrite: "error"
+})
+
+print("Created package:")
+print("  name: " + info.name)
+print("  version: " + info.version)
+print("  archive: " + output_path)
+print("  bytes: " + str(result.bytes_written))

@@ -1,0 +1,6 @@
+name: demo_pkg
+version: 0.1.0
+entry:
+  script: demo_pkg.mob
+metadata:
+  description: Demo script-only package fixture
