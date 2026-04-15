@@ -37,23 +37,88 @@ staging:
       files:
         - "${out_dir}/bin/mobius"
         - "${out_dir}/bin/libmobius-core.so"
-    - folder: "bin/modules"
+    - folder: "bin/modules/compression"
+      files:
+        - "src/modules/compression/module.yaml"
+        - "src/modules/compression/compression.mob"
+    - folder: "bin/modules/compression/native/linux-x86_64"
       files:
         - "${out_dir}/bin/compression.so"
-        - "src/modules/compression/compression.mob"
+    - folder: "bin/modules/math"
+      files:
+        - "src/modules/math/module.yaml"
+    - folder: "bin/modules/math/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/math.so"
+    - folder: "bin/modules/os"
+      files:
+        - "src/modules/os/module.yaml"
+    - folder: "bin/modules/os/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/os.so"
+    - folder: "bin/modules/regex"
+      files:
+        - "src/modules/regex/module.yaml"
+    - folder: "bin/modules/regex/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/regex.so"
+    - folder: "bin/modules/json"
+      files:
+        - "src/modules/json/module.yaml"
+    - folder: "bin/modules/json/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/json.so"
+    - folder: "bin/modules/toml"
+      files:
+        - "src/modules/toml/module.yaml"
+    - folder: "bin/modules/toml/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/toml.so"
+    - folder: "bin/modules/datetime"
+      files:
+        - "src/modules/datetime/module.yaml"
+    - folder: "bin/modules/datetime/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/datetime.so"
+    - folder: "bin/modules/url"
+      files:
+        - "src/modules/url/module.yaml"
+    - folder: "bin/modules/url/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/url.so"
+    - folder: "bin/modules/crypto"
+      files:
+        - "src/modules/crypto/module.yaml"
+    - folder: "bin/modules/crypto/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/crypto.so"
+    - folder: "bin/modules/yaml"
+      files:
+        - "src/modules/yaml/module.yaml"
+    - folder: "bin/modules/yaml/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/yaml.so"
-        - "${out_dir}/bin/http.so"
+    - folder: "bin/modules/http"
+      files:
+        - "src/modules/http/module.yaml"
         - "src/modules/http/http.mob"
+    - folder: "bin/modules/http/native/linux-x86_64"
+      files:
+        - "${out_dir}/bin/http.so"
+    - folder: "bin/modules/web"
+      files:
+        - "src/modules/web/module.yaml"
         - "src/modules/web/web.mob"
-        - "${out_dir}/bin/websocket.so"
+    - folder: "bin/modules/websocket"
+      files:
+        - "src/modules/websocket/module.yaml"
         - "src/modules/websocket/websocket.mob"
+    - folder: "bin/modules/websocket/native/linux-x86_64"
+      files:
+        - "${out_dir}/bin/websocket.so"
+    - folder: "bin/modules/socket"
+      files:
+        - "src/modules/socket/module.yaml"
+    - folder: "bin/modules/socket/native/linux-x86_64"
+      files:
         - "${out_dir}/bin/socket.so"
-        - "${out_dir}/bin/text_processing.so"

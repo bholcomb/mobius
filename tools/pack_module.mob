@@ -113,7 +113,7 @@ var output_path = nil
 if (len(argv) >= 2) {
     output_path = argv[1]
 } else {
-    output_path = os.join(os.dirname(package_dir), info.name + "-" + info.version + ".mz")
+    output_path = os.join("packages", info.name + "-" + info.version + ".mz")
 }
 
 if (!endswith(lower(output_path), ".mz")) {

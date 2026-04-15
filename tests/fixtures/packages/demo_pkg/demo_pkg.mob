@@ -1,0 +1,3 @@
+func hello() {
+    return "hello from demo_pkg"
+}

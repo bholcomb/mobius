@@ -1,0 +1,11 @@
+name: http
+version: 0.1.0
+entry:
+  script: http.mob
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/http.so
+dependencies:
+  mobius_modules: [socket]
+metadata:
+  description: HTTP parsing, building, and client helpers

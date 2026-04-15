@@ -1,0 +1,9 @@
+name: toml
+version: 0.1.0
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/toml.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: TOML parsing and serialization helpers

@@ -1,0 +1,9 @@
+name: socket
+version: 0.1.0
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/socket.so
+dependencies:
+  mobius_modules: []
+metadata:
+  description: TCP client and listener APIs

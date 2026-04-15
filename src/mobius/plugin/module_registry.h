@@ -20,6 +20,7 @@ struct LoadedModule {
     std::string name;
     std::string path;
     void* handle = nullptr;
+    std::vector<void*> extra_handles;
     Plugin* plugin = nullptr;
     PluginStatus status = PLUGIN_STATUS_UNLOADED;
     std::string error_message;
@@ -58,7 +59,8 @@ public:
 
 private:
     LoadedModule* findModule(const char* name);
-    PluginLoadResult loadPlugin(const char* path, MobiusState* state);
+    PluginLoadResult loadPlugin(const char* path, MobiusState* state,
+                                const std::vector<std::string>* preload_paths = nullptr);
 
     mutable std::shared_mutex registry_mutex_;
     std::condition_variable_any module_cv_;

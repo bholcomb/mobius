@@ -82,12 +82,17 @@ The tool:
 2. validates referenced files in the package directory
 3. creates a zip-based `.mz` archive using the `compression` module
 
-If `output.mz` is omitted, the tool writes `<name>-<version>.mz` next to the
-package directory.
+If `output.mz` is omitted, the tool writes `packages/<name>-<version>.mz`.
+
+The `packages/` folder is intended for built package artifacts that can later be
+installed into a modules root such as `./modules/`.
 
 ## Current Scope
 
-The package format and packager are in place, but the runtime package loader
-and `.mz` installer are still separate follow-up tasks. Existing module loading
-continues to use the current flat-file module search rules until that loader
-work lands.
+The runtime loader now resolves modules from package directories only. Built-in
+first-party modules are staged into the same `modules/<name>/module.yaml`
+layout used by installable packages, so there is no separate legacy flat-module
+path for shipped modules.
+
+The remaining follow-up task is the `.mz` installer flow that unpacks a package
+archive into a modules root.
