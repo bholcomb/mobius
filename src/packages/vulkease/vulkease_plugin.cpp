@@ -2,8 +2,6 @@
 
 #include <vulkease.h>
 
-#include <dlfcn.h>
-
 #include <cstdint>
 #include <cstring>
 #include <mutex>
@@ -33,105 +31,33 @@ struct DeviceObject {
 };
 
 struct VulkEaseApi {
-    void* handle = nullptr;
-    std::string error;
-
-    uint32_t (*getVersion)(void) = nullptr;
-    const char* (*resultToString)(VEResult result) = nullptr;
+    uint32_t (*getVersion)(void) = veGetVersion;
+    const char* (*resultToString)(VEResult result) = veResultToString;
     VEResult (*createContext)(const char* application_name, const char* const* extensions,
-                              uint32_t extension_count, VEContext** out_context) = nullptr;
-    VEResult (*destroyContext)(VEContext* context) = nullptr;
-    VEResult (*enumeratePhysicalDevices)(VEContext* context, uint32_t* count) = nullptr;
+                              uint32_t extension_count, VEContext** out_context) = veCreateContext;
+    VEResult (*destroyContext)(VEContext* context) = veDestroyContext;
+    VEResult (*enumeratePhysicalDevices)(VEContext* context, uint32_t* count) = veEnumeratePhysicalDevices;
     VEResult (*getPhysicalDeviceInfo)(VEContext* context, uint32_t index,
                                       VkPhysicalDevice* physical_device, char* device_name,
-                                      VkPhysicalDeviceType* device_type) = nullptr;
+                                      VkPhysicalDeviceType* device_type) = veGetPhysicalDeviceInfo;
     VEResult (*createDevice)(VEContext* context, VkPhysicalDevice preferred_device,
                              const char* const* extensions, uint32_t extension_count,
-                             VEDevice** out_device) = nullptr;
-    VEResult (*destroyDevice)(VEDevice* device) = nullptr;
-    bool (*isInstanceExtensionAvailable)(const char* extension_name) = nullptr;
-    VEResult (*deviceWaitIdle)(VEDevice* device) = nullptr;
-    uint32_t (*getVulkanVersion)(VEDevice* device) = nullptr;
-    bool (*isMeshShaderSupported)(VEDevice* device) = nullptr;
+                             VEDevice** out_device) = veCreateDevice;
+    VEResult (*destroyDevice)(VEDevice* device) = veDestroyDevice;
+    bool (*isInstanceExtensionAvailable)(const char* extension_name) = veIsInstanceExtensionAvailable;
+    VEResult (*deviceWaitIdle)(VEDevice* device) = veDeviceWaitIdle;
+    uint32_t (*getVulkanVersion)(VEDevice* device) = veGetVulkanVersion;
+    bool (*isMeshShaderSupported)(VEDevice* device) = veIsMeshShaderSupported;
 };
 
-static VulkEaseApi g_api;
-static std::mutex g_api_mutex;
-
-template <typename T>
-static bool load_symbol(void* handle, const char* symbol_name, T& out, std::string& error) {
-    dlerror();
-    out = reinterpret_cast<T>(dlsym(handle, symbol_name));
-    const char* sym_error = dlerror();
-    if (!out || sym_error) {
-        error = std::string("missing symbol '") + symbol_name + "': " +
-                (sym_error ? sym_error : "not found");
-        return false;
-    }
-    return true;
-}
-
-static std::string directory_name(const std::string& path) {
-    size_t slash = path.find_last_of('/');
-    if (slash == std::string::npos) return ".";
-    if (slash == 0) return "/";
-    return path.substr(0, slash);
-}
-
-static std::string plugin_directory() {
-    Dl_info info {};
-    if (dladdr(reinterpret_cast<void*>(&plugin_directory), &info) == 0 || !info.dli_fname) {
-        return ".";
-    }
-    return directory_name(info.dli_fname);
-}
+static const VulkEaseApi g_api{};
 
 static bool ensure_api_loaded(MobiusState* state) {
-    std::lock_guard<std::mutex> lock(g_api_mutex);
-    if (g_api.handle) return true;
-
-    const std::string runtime_path = plugin_directory() + "/libvulkease.so";
-    g_api.handle = dlopen(runtime_path.c_str(), RTLD_NOW | RTLD_LOCAL);
-    if (!g_api.handle) {
-        g_api.handle = dlopen("libvulkease.so", RTLD_NOW | RTLD_LOCAL);
-    }
-    if (!g_api.handle) {
-        mobius_error(state, dlerror() ? dlerror() : "failed to load libvulkease.so");
-        return false;
-    }
-
-    std::string error;
-    bool ok =
-        load_symbol(g_api.handle, "veGetVersion", g_api.getVersion, error) &&
-        load_symbol(g_api.handle, "veResultToString", g_api.resultToString, error) &&
-        load_symbol(g_api.handle, "veCreateContext", g_api.createContext, error) &&
-        load_symbol(g_api.handle, "veDestroyContext", g_api.destroyContext, error) &&
-        load_symbol(g_api.handle, "veEnumeratePhysicalDevices", g_api.enumeratePhysicalDevices, error) &&
-        load_symbol(g_api.handle, "veGetPhysicalDeviceInfo", g_api.getPhysicalDeviceInfo, error) &&
-        load_symbol(g_api.handle, "veCreateDevice", g_api.createDevice, error) &&
-        load_symbol(g_api.handle, "veDestroyDevice", g_api.destroyDevice, error) &&
-        load_symbol(g_api.handle, "veIsInstanceExtensionAvailable", g_api.isInstanceExtensionAvailable, error) &&
-        load_symbol(g_api.handle, "veDeviceWaitIdle", g_api.deviceWaitIdle, error) &&
-        load_symbol(g_api.handle, "veGetVulkanVersion", g_api.getVulkanVersion, error) &&
-        load_symbol(g_api.handle, "veIsMeshShaderSupported", g_api.isMeshShaderSupported, error);
-
-    if (!ok) {
-        dlclose(g_api.handle);
-        g_api.handle = nullptr;
-        mobius_error(state, error.c_str());
-        return false;
-    }
-
+    (void)state;
     return true;
 }
 
 static void unload_api() {
-    std::lock_guard<std::mutex> lock(g_api_mutex);
-    if (g_api.handle) {
-        dlclose(g_api.handle);
-        g_api.handle = nullptr;
-    }
-    g_api = VulkEaseApi{};
 }
 
 static void push_string_field(MobiusState* state, int table_idx, const char* key, const char* value) {
@@ -249,10 +175,8 @@ static int close_context_locked(ContextObject* ctx_obj) {
 static void context_object_destructor(void* ptr) {
     ContextObject* ctx_obj = static_cast<ContextObject*>(ptr);
     if (!ctx_obj) return;
-    if (g_api.handle) {
-        std::lock_guard<std::mutex> lock(ctx_obj->mutex);
-        close_context_locked(ctx_obj);
-    }
+    std::lock_guard<std::mutex> lock(ctx_obj->mutex);
+    close_context_locked(ctx_obj);
     delete ctx_obj;
 }
 
@@ -261,8 +185,8 @@ static void device_object_destructor(void* ptr) {
     if (!device_obj) return;
     if (device_obj->owner) {
         std::lock_guard<std::mutex> lock(device_obj->owner->mutex);
-        if (g_api.handle) close_device_locked(device_obj);
-    } else if (g_api.handle && !device_obj->closed && device_obj->handle) {
+        close_device_locked(device_obj);
+    } else if (!device_obj->closed && device_obj->handle) {
         g_api.destroyDevice(device_obj->handle);
         device_obj->handle = nullptr;
         device_obj->closed = true;

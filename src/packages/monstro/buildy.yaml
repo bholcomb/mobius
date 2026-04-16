@@ -6,6 +6,8 @@ environment:
   compile:
     cpp_standard: "c++17"
     warnings: extra
+  link:
+    flags: ["/home/bholcomb/projects/side/monstero/bin/libmonstro.so"]
 
 targets:
   shared_libraries:
@@ -20,7 +22,5 @@ targets:
         - "/home/bholcomb/projects/side/monstero/include"
       libs:
         - mobius-core
-        - dl
-      deps: ["glfw3"]
       depends_on:
         targets: ["mobius-core"]

@@ -50,29 +50,69 @@ assert_test("write run script", writefile(run_script,
     "ctx:set_mouse_pos(32, 48)\n" +
     "ctx:set_mouse_button(monstro.MouseButton.LEFT, true)\n" +
     "ctx:set_mouse_wheel(1.0, -2.0)\n" +
+    "ctx:set_double_click_distance(5.0)\n" +
+    "ctx:set_mouse_drag_threshold(7.0)\n" +
+    "ctx:set_key_repeat_delay(0.2)\n" +
+    "ctx:set_key_repeat_rate(0.05)\n" +
+    "ctx:set_mouse_cursor(monstro.MouseCursor.HAND)\n" +
+    "ctx:set_key(monstro.Key.A, true)\n" +
     "ctx:set_key_mods(monstro.ModFlags.CTRL)\n" +
     "ctx:add_input_text(\"hi\")\n" +
     "var mouse = ctx:get_mouse_pos()\n" +
     "ensure(mouse.x == 32)\n" +
     "ensure(mouse.y == 48)\n" +
+    "ensure(ctx:double_click_distance() > 0.0)\n" +
+    "ensure(ctx:mouse_drag_threshold() > 0.0)\n" +
+    "ensure(ctx:key_repeat_delay() > 0.0)\n" +
+    "ensure(ctx:key_repeat_rate() > 0.0)\n" +
+    "var mouse_cursor_value = ctx:mouse_cursor()\n" +
+    "ensure(ctx:is_mouse_down(monstro.MouseButton.LEFT))\n" +
+    "ensure(ctx:is_key_down(monstro.Key.A))\n" +
+    "var key_mods_value = ctx:key_mods()\n" +
+    "ensure(typeof(ctx:input_text()) == \"string\")\n" +
     "ensure(ctx:want_capture_mouse() == true || ctx:want_capture_mouse() == false)\n" +
     "ensure(ctx:want_capture_keyboard() == true || ctx:want_capture_keyboard() == false)\n" +
     "ensure(ctx:want_text_input() == true || ctx:want_text_input() == false)\n" +
     "ctx:begin_frame(0.016)\n" +
     "ctx:set_next_window_pos(10, 20, monstro.Condition.ALWAYS)\n" +
     "ctx:set_next_window_size(220, 140, monstro.Condition.ALWAYS)\n" +
+    "ctx:set_next_window_focus()\n" +
     "var win = ctx:begin_window(\"Monstro Package Test\", monstro.WindowFlags.DEFAULT)\n" +
     "ensure(typeof(win) == \"table\")\n" +
+    "ensure(typeof(ctx:window_pos()) == \"table\")\n" +
+    "ensure(typeof(ctx:content_region_avail()) == \"table\")\n" +
+    "ctx:begin_layout(monstro.LayoutDirection.VERTICAL)\n" +
     "ctx:label(\"Hello from Monstro\")\n" +
+    "ctx:label_sized(\"Sized\", 60, 18)\n" +
+    "ctx:label_wrapped(\"Wrapped label\", 80)\n" +
     "var pressed = ctx:button(\"Click Me\")\n" +
     "ensure(pressed == true || pressed == false)\n" +
+    "var pressed2 = ctx:button_sized(\"Sized Button\", 80, 20)\n" +
+    "ensure(pressed2 == true || pressed2 == false)\n" +
     "var checkbox = ctx:checkbox(\"Enabled\", true)\n" +
     "ensure(typeof(checkbox) == \"table\")\n" +
     "ensure(checkbox.changed == true || checkbox.changed == false)\n" +
     "ensure(checkbox.value == true || checkbox.value == false)\n" +
+    "var radio = ctx:radio_button(\"Mode\", 0, 1)\n" +
+    "ensure(typeof(radio) == \"table\")\n" +
     "var slider = ctx:slider_float(\"Value\", 0.5, 0.0, 1.0)\n" +
     "ensure(typeof(slider) == \"table\")\n" +
     "ensure(slider.value >= 0.0 && slider.value <= 1.0)\n" +
+    "var slider_ex = ctx:slider_float_ex(\"ValueEx\", 0.5, 0.0, 1.0, 100, 16, monstro.SliderFlags.NONE)\n" +
+    "ensure(typeof(slider_ex) == \"table\")\n" +
+    "var input_i = ctx:input_int(\"Count\", 3, 1, 10)\n" +
+    "ensure(typeof(input_i) == \"table\")\n" +
+    "var input_f = ctx:input_float(\"Amount\", 1.25, 0.1, 1.0)\n" +
+    "ensure(typeof(input_f) == \"table\")\n" +
+    "var knob = ctx:knob(\"Knob\", 0.5, 0.0, 1.0)\n" +
+    "ensure(typeof(knob) == \"table\")\n" +
+    "ctx:image(0, 16, 16)\n" +
+    "ctx:spacer(4)\n" +
+    "ctx:dummy(8, 6)\n" +
+    "ctx:tooltip(\"tip\")\n" +
+    "ctx:separator()\n" +
+    "ctx:separator_text(\"Section\")\n" +
+    "ctx:end_layout()\n" +
     "ctx:progress_bar(0.5, 100, 12, \"half\")\n" +
     "var rect = ctx:window_rect()\n" +
     "ensure(rect.w >= 0)\n" +
@@ -80,6 +120,11 @@ assert_test("write run script", writefile(run_script,
     "var window_size = ctx:window_size()\n" +
     "ensure(window_size.x >= 0)\n" +
     "ensure(window_size.y >= 0)\n" +
+    "ensure(ctx:scroll_x() >= 0 || ctx:scroll_x() <= 0)\n" +
+    "ensure(ctx:scroll_y() >= 0 || ctx:scroll_y() <= 0)\n" +
+    "ensure(ctx:is_window_collapsed() == true || ctx:is_window_collapsed() == false)\n" +
+    "ensure(ctx:is_window_focused() == true || ctx:is_window_focused() == false)\n" +
+    "ensure(ctx:is_window_hovered() == true || ctx:is_window_hovered() == false)\n" +
     "ctx:end_window()\n" +
     "ctx:end_frame()\n" +
     "var draw = ctx:draw_data()\n" +
