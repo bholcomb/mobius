@@ -1,0 +1,9 @@
+# VulkEase dependency
+
+vulkease_lib:
+  description: "VulkEase graphics library"
+
+  linux:
+    include_dirs: ["/home/bholcomb/projects/side/vulkease/src"]
+    lib_dirs: ["/home/bholcomb/projects/side/vulkease/bin"]
+    libs: ["vulkease"]

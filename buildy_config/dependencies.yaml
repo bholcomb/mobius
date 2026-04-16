@@ -5,3 +5,9 @@ sqlite3:
 
 glfw3:
   file: dependencies/glfw3.yaml
+
+vulkease_lib:
+  file: dependencies/vulkease.yaml
+
+monstro_lib:
+  file: dependencies/monstro.yaml

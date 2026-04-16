@@ -1,0 +1,9 @@
+# Monstro dependency
+
+monstro_lib:
+  description: "Monstro UI library"
+
+  linux:
+    include_dirs: ["/home/bholcomb/projects/side/monstero/include"]
+    lib_dirs: ["/home/bholcomb/projects/side/monstero/bin"]
+    libs: ["monstro"]
