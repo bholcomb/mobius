@@ -3,9 +3,9 @@
 **Mobius is a small, fast, Lua-inspired scripting language** — equally at home
 embedded inside a C/C++ application or running standalone scripts. It keeps
 Lua's lightweight feel and familiar table / `:` method model, wraps it in
-C-style syntax, and adds modern conveniences: inferred **type locking**,
-fiber-based **concurrency**, a **pattern-matching `switch`**, enums, and a
-batteries-included **standard library**.
+C-style syntax, and adds modern conveniences: inferred type locking,
+fiber-based concurrency, a pattern-matching `switch`, enums, and a
+batteries-included standard library.
 
 ```mobius
 enum Suit { CLUBS, DIAMONDS, HEARTS, SPADES }
