@@ -12,7 +12,7 @@ func assert_test(name, cond) {
 }
 
 assert_test("argv is array", typeof(argv) == "array")
-assert_test("argv length", len(argv) == 4)
+assert_test("argv length", size(argv) == 4)
 assert_test("argv[0]", argv[0] == "alpha")
 assert_test("argv[1]", argv[1] == "two words")
 assert_test("argv[2]", argv[2] == "--flag")

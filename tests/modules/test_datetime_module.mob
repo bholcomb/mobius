@@ -17,7 +17,7 @@ var now = datetime.now()
 assert_test("now returns table", now is table)
 assert_test("now year reasonable", now.year >= 2024)
 assert_test("now utc false", now.utc == false)
-assert_test("now timestamp integer", typeof(now.timestamp) == "integer")
+assert_test("now timestamp integer", typeof(now.timestamp) == "int64")
 
 var utc_now = datetime.utc_now()
 assert_test("utc_now returns table", utc_now is table)

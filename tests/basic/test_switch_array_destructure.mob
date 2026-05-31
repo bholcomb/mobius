@@ -68,7 +68,7 @@ func test_rest_pattern() {
 
     switch (data) {
         case [first, second, ...rest]:
-            result = "" + first + "," + second + ",rest_len=" + len(rest);
+            result = "" + first + "," + second + ",rest_len=" + size(rest);
             break;
         default:
             result = "no_match";

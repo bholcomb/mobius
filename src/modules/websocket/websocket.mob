@@ -65,7 +65,7 @@ func handshake_request(spec) {
 
 func __copy_buffer(buf) {
     var out = buffer_create(0)
-    if (buf != nil && len(buf) > 0) {
+    if (buf != nil && size(buf) > 0) {
         out:append(buf)
     }
     return out
@@ -76,9 +76,9 @@ func __buffer_tail(buf, offset) {
     if (buf == nil) {
         return out
     }
-    var remaining = len(buf) - offset
+    var remaining = size(buf) - offset
     if (remaining > 0) {
-        out:append(buf:slice(offset, remaining))
+        out:append(buf:slice(offset, offset + remaining))
     }
     return out
 }
@@ -98,7 +98,7 @@ func __conn_send(self, value) {
     }
 
     self.socket:send(frame)
-    return len(frame)
+    return size(frame)
 }
 
 func __conn_recv(self) {

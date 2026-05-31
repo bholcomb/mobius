@@ -21,6 +21,7 @@ void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token
     parser->panic_mode = false;
     parser->source_name = state ? state->getSourceContext() : nullptr;
     parser->state = state;
+    parser->suppress_method_colon = false;
 }
 
 // Parser state functions
@@ -624,7 +625,8 @@ Expr* parse_call(Parser* parser) {
         } else if (parser_match(parser, TOKEN_DOT)) {
             Token key = consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'");
             expr = make_table_dot_expr(expr, key);
-        } else if (parser_check(parser, TOKEN_COLON) &&
+        } else if (!parser->suppress_method_colon &&
+                   parser_check(parser, TOKEN_COLON) &&
                    parser->current + 2 < parser->token_count &&
                    parser->tokens[parser->current + 1].type == TOKEN_IDENTIFIER &&
                    parser->tokens[parser->current + 2].type == TOKEN_LEFT_PAREN) {
@@ -774,10 +776,9 @@ static ValueType parse_type_name(Parser* parser, const char* context) {
     }
 
     if (strcmp(type_name, "string") == 0)                                          return VAL_STRING;
-    if (strcmp(type_name, "int") == 0 || strcmp(type_name, "integer") == 0 ||
-        strcmp(type_name, "int64") == 0)                                          return VAL_INT64;
+    if (strcmp(type_name, "int64") == 0)                                           return VAL_INT64;
     if (strcmp(type_name, "uint64") == 0)                                          return VAL_UINT64;
-    if (strcmp(type_name, "float") == 0 || strcmp(type_name, "float64") == 0)      return VAL_FLOAT64;
+    if (strcmp(type_name, "float64") == 0)                                         return VAL_FLOAT64;
     if (strcmp(type_name, "bool") == 0 || strcmp(type_name, "boolean") == 0)       return VAL_BOOL;
     if (strcmp(type_name, "array") == 0)                                           return VAL_ARRAY;
     if (strcmp(type_name, "buffer") == 0)                                          return VAL_BUFFER;
@@ -1949,27 +1950,34 @@ CasePattern* parse_case_pattern(Parser* parser) {
         
         TokenType op = parser_peek(parser).type;
         parser_advance(parser); // consume the operator
-        
+
+        // Don't let the operand's parse consume the case's terminating ':' as a
+        // method call (e.g. `case >= 100: body` must not read `100:body`).
+        bool saved_suppress = parser->suppress_method_colon;
+        parser->suppress_method_colon = true;
         Expr* expr = parse_expression(parser);
+        parser->suppress_method_colon = saved_suppress;
         return make_expression_pattern(op, expr);
     }
     
-    // Range patterns (e.g., 1..10, 'a'..'z', low..high)
-    if ((parser_check(parser, TOKEN_INTEGER) || parser_check(parser, TOKEN_FLOAT) || 
+    // Range patterns: '..' is inclusive (1..10), '...' is exclusive of the
+    // end (1...10). The scanner emits '...' as a single TOKEN_DOT_DOT_DOT, so
+    // accept either separator here.
+    if ((parser_check(parser, TOKEN_INTEGER) || parser_check(parser, TOKEN_FLOAT) ||
          parser_check(parser, TOKEN_CHAR) || parser_check(parser, TOKEN_STRING) ||
          parser_check(parser, TOKEN_IDENTIFIER)) &&
-        parser->current + 1 < parser->token_count && 
-        parser->tokens[parser->current + 1].type == TOKEN_DOT_DOT) {
-        
+        parser->current + 1 < parser->token_count &&
+        (parser->tokens[parser->current + 1].type == TOKEN_DOT_DOT ||
+         parser->tokens[parser->current + 1].type == TOKEN_DOT_DOT_DOT)) {
+
         Expr* start = parse_primary(parser);  // Parse the start value
-        consume(parser, TOKEN_DOT_DOT, "Expect '..' in range pattern");
-        
-        bool inclusive = true;
-        if (parser_check(parser, TOKEN_DOT)) {
-            parser_advance(parser); // consume the third dot for exclusive range
-            inclusive = false;
+        bool inclusive = parser_check(parser, TOKEN_DOT_DOT);
+        if (inclusive) {
+            consume(parser, TOKEN_DOT_DOT, "Expect '..' in range pattern");
+        } else {
+            consume(parser, TOKEN_DOT_DOT_DOT, "Expect '...' in range pattern");
         }
-        
+
         Expr* end = parse_primary(parser);    // Parse the end value
         return make_range_pattern(start, end, inclusive);
     }

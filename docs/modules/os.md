@@ -6,6 +6,8 @@ Import:
 import "os"
 ```
 
+[← Module reference](index.md)
+
 The `os` module contains cross-platform host integration for filesystem, paths,
 environment variables, processes, and basic time conversion.
 

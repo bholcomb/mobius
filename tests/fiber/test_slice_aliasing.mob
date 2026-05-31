@@ -1,9 +1,8 @@
 print("=== Slice Aliasing Tests ===")
 
-import "fiber"
 
 var arr = [0, 1, 2, 3]
-var slice = fiber.slice(arr, 1, 2)
+var slice = arr:span(1, 3)
 slice[0] = 99
 if (arr[1] != 99) {
     print("FAIL: slice should write through to parent")
@@ -13,7 +12,7 @@ if (arr[1] != 99) {
 func fill_slice(s) {
     s[0] = 7
     s[1] = 8
-    return len(s)
+    return size(s)
 }
 
 var filled = await spawn fill_slice(slice)
@@ -38,12 +37,12 @@ if (!caught) {
 }
 
 shared var shared_arr = [10, 20, 30, 40]
-var shared_slice = fiber.slice(shared_arr, 1, 2)
+var shared_slice = shared_arr:span(1, 3)
 
 func write_shared(s) {
     s[0] = 55
     s[1] = 66
-    return len(s)
+    return size(s)
 }
 
 var shared_len = await spawn write_shared(shared_slice)

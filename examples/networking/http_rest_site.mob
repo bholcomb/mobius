@@ -13,7 +13,7 @@ var todos = [
 ]
 
 func todo_by_id(id) {
-    for (var i = 0; i < len(todos); i += 1) {
+    for (var i = 0; i < size(todos); i += 1) {
         if (todos[i].id == id) {
             return todos[i]
         }
@@ -22,7 +22,7 @@ func todo_by_id(id) {
 }
 
 func todo_index_by_id(id) {
-    for (var i = 0; i < len(todos); i += 1) {
+    for (var i = 0; i < size(todos); i += 1) {
         if (todos[i].id == id) {
             return i
         }
@@ -52,7 +52,7 @@ func toggle_todo(id) {
 
 func completed_count() {
     var count = 0
-    for (var i = 0; i < len(todos); i += 1) {
+    for (var i = 0; i < size(todos); i += 1) {
         if (todos[i].done) {
             count += 1
         }
@@ -76,7 +76,7 @@ func render_todo_item(todo) {
 
 func render_home_page() {
     var items = ""
-    for (var i = 0; i < len(todos); i += 1) {
+    for (var i = 0; i < size(todos); i += 1) {
         items += render_todo_item(todos[i])
     }
 
@@ -86,7 +86,7 @@ func render_home_page() {
 </head><body>
 <h1>Mobius Todo App</h1>
 <p>This example serves both server-rendered HTML and a JSON REST API from the same Mobius process.</p>"""
-    html += "<div class=\"panel\"><strong>Total</strong>: " + str(len(todos)) + " | <strong>Done</strong>: " + str(completed_count()) + "</div>"
+    html += "<div class=\"panel\"><strong>Total</strong>: " + str(size(todos)) + " | <strong>Done</strong>: " + str(completed_count()) + "</div>"
     html += """<div class="panel">
 <h2>Create Todo</h2>
 <form method="POST" action="/todos/create">
@@ -177,7 +177,7 @@ func handle_api(request, conn) {
     if (request.path == "/api/health" && method == "GET") {
         web.json_response(conn, 200, {
             ok: true,
-            todos: len(todos),
+            todos: size(todos),
             completed: completed_count()
         })
         return
@@ -186,7 +186,7 @@ func handle_api(request, conn) {
     if (request.path == "/api/todos" && method == "GET") {
         web.json_response(conn, 200, {
             items: todos,
-            count: len(todos),
+            count: size(todos),
             completed: completed_count()
         })
         return

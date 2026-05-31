@@ -3,9 +3,9 @@
 func check_type(val) {
     switch (val) {
         case is int64:
-            return "integer"
+            return "int64"
         case is float64:
-            return "float"
+            return "float64"
         case is string:
             return "string"
         case is bool:
@@ -15,8 +15,8 @@ func check_type(val) {
     }
 }
 
-if (check_type(42) != "integer") { exit(1) }
-if (check_type(3.14) != "float") { exit(1) }
+if (check_type(42) != "int64") { exit(1) }
+if (check_type(3.14) != "float64") { exit(1) }
 if (check_type("hello") != "string") { exit(1) }
 if (check_type(true) != "boolean") { exit(1) }
 if (check_type(nil) != "other") { exit(1) }

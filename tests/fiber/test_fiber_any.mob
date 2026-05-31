@@ -1,7 +1,6 @@
 // Test fiber.any — returns the result of the first resolved future
 print("=== Fiber Any Tests ===")
 
-import "fiber"
 
 // Test 1: fiber.any with one fast and two slow futures
 func fast() {

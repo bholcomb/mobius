@@ -538,7 +538,7 @@ static int array_view_method_index(MobiusState* state, int arg_count) {
     Value key = state->npop();
     state->npop();
     if (key.type == VAL_STRING && key.as.string) {
-        if (strcmp(key.as.string->data, "length") == 0) {
+        if (strcmp(key.as.string->data, "size") == 0) {
             state->npush(make_int64_value((int64_t)view->count));
             return 1;
         }

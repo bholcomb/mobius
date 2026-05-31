@@ -1,0 +1,18 @@
+// setmetatable/getmetatable transparently unwrap a `shared` binding, targeting
+// the underlying table.
+print("=== setmetatable on shared ===")
+
+shared var cfg = {}
+var ret = setmetatable(cfg, { __index: func(self, k) { return "cfg:" + k } })
+if (cfg.missing != "cfg:missing") { print("FAIL: shared setmetatable read"); exit(1) }
+if (typeof(getmetatable(cfg)) != "table") { print("FAIL: shared getmetatable"); exit(1) }
+
+// works across a fiber too
+func read_one(x) { return x.zzz }
+if (await spawn read_one(cfg) != "cfg:zzz") { print("FAIL: shared metatable across fiber"); exit(1) }
+
+// clearing the metatable with nil
+setmetatable(cfg, nil)
+if (getmetatable(cfg) != nil) { print("FAIL: clear shared metatable"); exit(1) }
+
+print("=== All setmetatable-on-shared tests passed! ===")

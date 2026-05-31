@@ -17,7 +17,7 @@ print("pow(2, 3) =", pow(2, 3));
 print("sqrt(16) =", sqrt(16));
 
 var text = "Hello";
-print("len(text) =", len(text));
+print("size(text) =", size(text));
 print("upper(text) =", upper(text));
 
 print("random() =", random());

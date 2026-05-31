@@ -6,6 +6,8 @@ Import:
 import "socket"
 ```
 
+[← Module reference](index.md)
+
 The `socket` module provides the plain transport layer for Mobius. It is
 intentionally small and blocking: the goal is to establish the base API for
 `http` and `websocket` transports before adding TLS.

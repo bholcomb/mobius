@@ -12,10 +12,10 @@ if (t:size() != 3) { print("FAIL: size, got", t:size()); exit(1) }
 
 // pairs
 var p = t:pairs()
-if (p:length() != 3) { print("FAIL: pairs length, got", p:length()); exit(1) }
+if (p:size() != 3) { print("FAIL: pairs length, got", p:size()); exit(1) }
 var found_name = false
 var found_age = false
-for (var i = 0; i < p:length(); i++) {
+for (var i = 0; i < p:size(); i++) {
     if (p[i][0] == "name" && p[i][1] == "Alice") { found_name = true }
     if (p[i][0] == "age" && p[i][1] == 30) { found_age = true }
 }
@@ -32,7 +32,7 @@ var empty = {}
 if (empty:size() != 0) { print("FAIL: empty size"); exit(1) }
 if (empty:has_key("x")) { print("FAIL: empty has_key"); exit(1) }
 var ep = empty:pairs()
-if (ep:length() != 0) { print("FAIL: empty pairs"); exit(1) }
+if (ep:size() != 0) { print("FAIL: empty pairs"); exit(1) }
 
 // method on inline table literal
 if ({a: 1, b: 2}:size() != 2) { print("FAIL: inline size"); exit(1) }

@@ -54,7 +54,7 @@ if (math_ops.cube(3) != 27) { print("FAIL: lambda in table cube"); exit(1) }
 // Higher-order: map-like pattern
 func transform(arr, f) {
     var result = []
-    for (var i = 0; i < len(arr); i += 1) {
+    for (var i = 0; i < size(arr); i += 1) {
         result:push(f(arr[i]))
     }
     return result

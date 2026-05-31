@@ -140,24 +140,34 @@ int lib_setmetatable(MobiusState* state, int arg_count) {
     
     Value metatable_val = state->npeek(0);
     Value table_val = state->npeek(1);
-    
+
     state->npop();
     state->npop();
-    
-    if (table_val.type != VAL_TABLE || !table_val.as.table) {
+
+    // Unwrap `shared` bindings so setmetatable targets the underlying table.
+    Value target = table_val;
+    if (target.type == VAL_SHARED_CELL && target.as.shared_cell) {
+        target = target.as.shared_cell->load();
+    }
+    if (metatable_val.type == VAL_SHARED_CELL && metatable_val.as.shared_cell) {
+        metatable_val = metatable_val.as.shared_cell->load();
+    }
+
+    if (target.type != VAL_TABLE || !target.as.table) {
         return state->error("setmetatable first argument must be a table");
     }
-    
+
     if ((metatable_val.type == VAL_TABLE && !metatable_val.as.table) ||
         (metatable_val.type != VAL_TABLE && metatable_val.type != VAL_NIL)) {
         return state->error("setmetatable second argument must be a table or nil");
     }
-    
-    Table* table = table_val.as.table;
+
+    Table* table = target.as.table;
     Table* metatable = (metatable_val.type == VAL_TABLE) ? metatable_val.as.table : NULL;
-    
+
     table->setMetatable(metatable);
-    
+
+    // Return the original first argument (preserving a shared binding).
     state->npush(table_val);
     return 1;
 }
@@ -169,11 +179,16 @@ int lib_getmetatable(MobiusState* state, int arg_count) {
     
     Value table_val = state->npeek(0);
     state->npop();
-    
+
+    // Unwrap a `shared` binding to read the underlying table's metatable.
+    if (table_val.type == VAL_SHARED_CELL && table_val.as.shared_cell) {
+        table_val = table_val.as.shared_cell->load();
+    }
+
     if (table_val.type != VAL_TABLE) {
         return state->error("getmetatable argument must be a table");
     }
-    
+
     Table* table = table_val.as.table;
     Table* metatable = table->getMetatable();
     

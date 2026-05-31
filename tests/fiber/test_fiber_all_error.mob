@@ -1,7 +1,6 @@
 // Test fiber.all error propagation when a fiber fails
 print("=== Fiber All Error Tests ===")
 
-import "fiber"
 
 // Test 1: fiber.all propagates error when one future is rejected
 func good_task(x) {
@@ -34,7 +33,7 @@ print("  fiber.all correctly propagated error from failing fiber")
 var good_futures = [spawn good_task(1), spawn good_task(2), spawn good_task(3)]
 var results = fiber.all(good_futures)
 
-if (len(results) != 3) { print("FAIL: fiber.all length"); exit(1) }
+if (size(results) != 3) { print("FAIL: fiber.all length"); exit(1) }
 if (results[0] != 2)   { print("FAIL: results[0] =", results[0]); exit(1) }
 if (results[1] != 4)   { print("FAIL: results[1] =", results[1]); exit(1) }
 if (results[2] != 6)   { print("FAIL: results[2] =", results[2]); exit(1) }

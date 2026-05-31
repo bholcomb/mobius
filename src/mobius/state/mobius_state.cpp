@@ -61,7 +61,12 @@ MobiusConfig mobius_default_config(void) {
     config.enable_hot_reload = false;
     config.override_behavior = MOBIUS_OVERRIDE_ERROR;
 
-    config.fiber_stack_size        = 512 * 1024;  // 512 KiB
+    config.fiber_stack_size        = 512 * 1024;  // 512 KiB — deep native calls
+                                                   // (e.g. Vulkan drivers) overflow
+                                                   // a smaller per-fiber stack.
+    config.main_fiber_stack_size   = 8 * 1024 * 1024;  // 8 MiB — the top-level
+                                                   // script fiber behaves like a
+                                                   // normal thread stack.
     config.initial_fiber_pool_size = 16;
     config.max_fiber_pool_size     = 256;
     unsigned int hw = std::thread::hardware_concurrency();
@@ -847,6 +852,17 @@ int MobiusState::initStdlib() {
 
     Table* fiber_mod = register_fiber_module(this);
     registry_->registerBuiltinModule("fiber", fiber_mod);
+
+    // Expose `fiber` as a builtin global table so scripts can call
+    // fiber.channel(), fiber.sleep(), fiber.all(), etc. without an
+    // `import "fiber"`. The concurrency keywords (spawn/await/yield/
+    // shared/atomic) and channel methods are already always available;
+    // this makes the constructors and helpers first-class too.
+    int fiber_slot = assignGlobalSlot("fiber");
+    if (fiber_slot >= 0) {
+        fiber_mod->retain();
+        setGlobalValue(fiber_slot, make_table_value(fiber_mod));
+    }
 
     Table* channel_mt = create_channel_type_metatable(this);
     setTypeMetatable(VAL_CHANNEL, channel_mt);

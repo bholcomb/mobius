@@ -1,14 +1,16 @@
-# `fiber` Module
+# `fiber` Builtin
 
-Import:
+[← Module reference](index.md)
 
-```mobius
-import "fiber"
-```
+`fiber` is a **builtin global table** — it is always available, with no
+`import` required. It provides the constructors and helpers around concurrent
+execution: channels, structured-concurrency combinators, sleeping,
+and cancellation. (Aliasing array views are created with the `arr:span(start,
+end)` method — see [Concurrency](../guide/concurrency.md#array-spans).)
 
-The `fiber` module provides helpers around concurrent execution primitives.
-Language features such as `spawn`, `await`, `yield`, `shared`, and `atomic(...)`
-are documented in the language reference.
+The concurrency language features themselves — `spawn`, `await`, `yield`,
+`shared`, and `atomic(...)` — and channel methods are also always available.
+They are documented in [Concurrency](../guide/concurrency.md).
 
 Functions:
 
@@ -19,7 +21,6 @@ Functions:
 | `fiber.any(futures)` | Wait for the first completed future in an array. |
 | `fiber.sleep(milliseconds)` | Suspend the current fiber for a duration. |
 | `fiber.cancel(future)` | Cancel a future. |
-| `fiber.slice(array, start, length)` | Create an aliasing slice view into an array. |
 
 Channel methods:
 
@@ -33,13 +34,14 @@ Channel methods:
 Example:
 
 ```mobius
-import "fiber"
-
 var ch = fiber.channel(4)
 
-spawn(func() {
+// Pass the channel as an argument so the fiber shares it by reference.
+func producer(ch) {
     ch:send("ready")
-})
+    ch:close()
+}
+spawn producer(ch)
 
-print(ch:recv())
+print(ch:recv())    // "ready"
 ```

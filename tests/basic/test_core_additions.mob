@@ -42,7 +42,7 @@ if (doubled[0] == 2 && doubled[1] == 4 && doubled[2] == 6) { print("✓ array_ma
 // --- array_filter ---
 var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0; });
 print("evens:", evens[0], evens[1], evens[2]);
-if (evens:length() == 3 && evens[0] == 2) { print("✓ array_filter works"); }
+if (evens:size() == 3 && evens[0] == 2) { print("✓ array_filter works"); }
 
 // --- array_reduce ---
 var sum = [1, 2, 3, 4, 5]:reduce(func(acc, x) { return acc + x; }, 0);

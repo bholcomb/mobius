@@ -2,8 +2,74 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <string>
 #include <mobius/mobius.h>
 #include <mobius/mobius_plugin.h>
+
+#if defined(_WIN32)
+#  include <windows.h>
+#elif defined(__APPLE__)
+#  include <mach-o/dyld.h>
+#  include <limits.h>
+#else
+#  include <unistd.h>
+#  include <limits.h>
+#endif
+
+// Directory containing the running executable, or empty on failure.
+static std::string executable_dir() {
+    std::string path;
+#if defined(_WIN32)
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(nullptr, buf, (DWORD)sizeof(buf));
+    if (len == 0 || len >= sizeof(buf)) return std::string();
+    path.assign(buf, len);
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string tmp(size + 1, '\0');
+    if (_NSGetExecutablePath(&tmp[0], &size) != 0) return std::string();
+    path.assign(tmp.c_str());
+#else
+    char buf[PATH_MAX];
+    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (len < 0) return std::string();
+    buf[len] = '\0';
+    path.assign(buf);
+#endif
+    size_t slash = path.find_last_of("/\\");
+    if (slash == std::string::npos) return std::string();
+    return path.substr(0, slash);
+}
+
+// Register module search directories: bundled modules live next to the
+// executable (<exedir>/modules), and MOBIUS_MODULE_PATH (a PATH-style list)
+// can append more.
+static void register_module_directories(MobiusState* state) {
+    std::string exedir = executable_dir();
+    if (!exedir.empty()) {
+        std::string mods = exedir + "/modules";
+        mobius_add_plugin_directory(state, mods.c_str());
+    }
+
+    const char* env_path = getenv("MOBIUS_MODULE_PATH");
+    if (env_path && *env_path) {
+#if defined(_WIN32)
+        const char list_sep = ';';
+#else
+        const char list_sep = ':';
+#endif
+        std::string s(env_path);
+        size_t start = 0;
+        while (start <= s.size()) {
+            size_t end = s.find(list_sep, start);
+            if (end == std::string::npos) end = s.size();
+            std::string dir = s.substr(start, end - start);
+            if (!dir.empty()) mobius_add_plugin_directory(state, dir.c_str());
+            start = end + 1;
+        }
+    }
+}
 
 int execute_file(MobiusState* state, const char* filename) {
     if (!state || !filename) {
@@ -67,8 +133,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    mobius_add_plugin_directory(state, "./bin/modules");
-    mobius_add_plugin_directory(state, "./modules");
+    register_module_directories(state);
 
     if (mobius_init_stdlib(state) != MOBIUS_OK) {
         fprintf(stderr, "Failed to initialize standard library\n");

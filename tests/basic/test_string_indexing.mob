@@ -28,13 +28,13 @@ if (s[idx] != "l") { exit(1) }
 // Use in a loop to build reversed string
 var original = "abcd"
 var reversed = ""
-for (var i = len(original) - 1; i >= 0; i -= 1) {
+for (var i = size(original) - 1; i >= 0; i -= 1) {
     reversed = reversed + original[i]
 }
 if (reversed != "dcba") { exit(1) }
 
 // String indexing works with len
-if (len(s[0]) != 1) { exit(1) }
+if (size(s[0]) != 1) { exit(1) }
 
 // Character comparison
 var word = "Hello"

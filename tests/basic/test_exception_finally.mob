@@ -22,7 +22,7 @@ try {
 } finally {
     order:push("finally")
 }
-if (order:length() != 3) { print("FAIL: order length"); exit(1) }
+if (order:size() != 3) { print("FAIL: order length"); exit(1) }
 if (order[0] != "try") { print("FAIL: order[0]"); exit(1) }
 if (order[1] != "catch") { print("FAIL: order[1]"); exit(1) }
 if (order[2] != "finally") { print("FAIL: order[2]"); exit(1) }
@@ -35,7 +35,7 @@ try { throw "msg" } catch e { caught_types:push(typeof(e)) }
 try { throw true } catch e { caught_types:push(typeof(e)) }
 try { throw [1,2] } catch e { caught_types:push(typeof(e)) }
 
-if (caught_types[0] != "integer") { print("FAIL: throw int type, got", caught_types[0]); exit(1) }
+if (caught_types[0] != "int64") { print("FAIL: throw int type, got", caught_types[0]); exit(1) }
 if (caught_types[1] != "string") { print("FAIL: throw string type, got", caught_types[1]); exit(1) }
 if (caught_types[2] != "bool") { print("FAIL: throw bool type, got", caught_types[2]); exit(1) }
 if (caught_types[3] != "array") { print("FAIL: throw array type, got", caught_types[3]); exit(1) }

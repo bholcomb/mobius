@@ -15,6 +15,10 @@ typedef struct {
     bool panic_mode;        // Whether we're in panic mode recovery
     MobiusState* state;     // Mobius state we're parsing in
     const char* source_name; // Source filename for error messages (may be NULL)
+    bool suppress_method_colon; // When set, ':' is not parsed as a method call
+                                // (used for switch comparison-case operands so
+                                // `case >= 100: body` doesn't read `100:body`
+                                // as a method call).
 } Parser;
 
 // Parser result structure

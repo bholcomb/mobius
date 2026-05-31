@@ -1,5 +1,5 @@
 var now = time()
-if (typeof(now) != "integer") {
+if (typeof(now) != "int64") {
     print("FAIL: time() type", typeof(now))
     exit(1)
 }

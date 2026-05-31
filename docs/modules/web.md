@@ -6,6 +6,8 @@ Import:
 import "web"
 ```
 
+[← Module reference](index.md)
+
 The `web` module is a higher-level server framework built in Mobius on top of
 `socket`, `http`, `websocket`, `fiber`, and `channel` primitives. It provides a
 router, middleware, request context helpers, and a worker-fan-out server loop.

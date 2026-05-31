@@ -2,7 +2,6 @@
 // into slices, process each slice in a separate fiber, verify results.
 print("=== Slice Parallel Test ===")
 
-import "fiber"
 
 var SIZE = 200
 shared var data = []
@@ -11,7 +10,7 @@ for (var i = 0; i < SIZE; i += 1) {
 }
 
 func double_slice(s) {
-    var n = len(s)
+    var n = size(s)
     for (var i = 0; i < n; i += 1) {
         s[i] = s[i] * 2
     }
@@ -19,10 +18,10 @@ func double_slice(s) {
 }
 
 // Split into 4 slices of 50 elements
-var s1 = fiber.slice(data, 0,   50)
-var s2 = fiber.slice(data, 50,  50)
-var s3 = fiber.slice(data, 100, 50)
-var s4 = fiber.slice(data, 150, 50)
+var s1 = data:span(0, 50)
+var s2 = data:span(50, 100)
+var s3 = data:span(100, 150)
+var s4 = data:span(150, 200)
 
 // Process each slice in parallel
 var f1 = spawn double_slice(s1)

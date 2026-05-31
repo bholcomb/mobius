@@ -14,7 +14,7 @@ if (redirect.foo != "bar") { print("FAIL: __newindex redirect, got", redirect.fo
 // The original table should NOT have the key
 var p = data:pairs()
 var found_in_data = false
-for (var i = 0; i < p:length(); i++) {
+for (var i = 0; i < p:size(); i++) {
     if (p[i][0] == "foo") { found_in_data = true }
 }
 if (found_in_data) { print("FAIL: key should not be in data table"); exit(1) }

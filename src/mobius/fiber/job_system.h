@@ -100,6 +100,10 @@ private:
     int main_fiber_result_ = 0;
     bool main_fiber_done_ = false;
 
+    // Dedicated, larger-stacked fiber for the top-level script (see
+    // executeAsMainFiber). Created lazily, reused across calls, freed in dtor.
+    MobiusFiber* dedicated_main_fiber_ = nullptr;
+
     static thread_local MobiusFiber* t_current_fiber_;
     static thread_local FiberContext t_scheduler_ctx_;
 };

@@ -33,7 +33,7 @@ var running = true;
 while (running) {
     // Handle SDL events
     var events = sdl_poll_events();
-    for (var i = 0; i < events:length(); i = i + 1) {
+    for (var i = 0; i < events:size(); i = i + 1) {
         var event = events[i];
         if (event.type == "quit") {
             running = false;
@@ -101,9 +101,9 @@ while (running) {
                 plot_data_y:push(math.sin(time) * math.cos(time * 0.5));
                 
                 // Keep only last 100 points
-                if (plot_data_x:length() > 100) {
-                    plot_data_x = plot_data_x:slice(1, plot_data_x:length());
-                    plot_data_y = plot_data_y:slice(1, plot_data_y:length());
+                if (plot_data_x:size() > 100) {
+                    plot_data_x = plot_data_x:slice(1, plot_data_x:size());
+                    plot_data_y = plot_data_y:slice(1, plot_data_y:size());
                 }
                 
                 implot_end_plot();
@@ -154,7 +154,7 @@ func render_rotating_triangle(rotation) {
     
     // Render triangle
     gl_begin("TRIANGLES");
-    for (var i = 0; i < vertices:length(); i = i + 6) {
+    for (var i = 0; i < vertices:size(); i = i + 6) {
         gl_color3f(vertices[i+3], vertices[i+4], vertices[i+5]);
         gl_vertex3f(vertices[i], vertices[i+1], vertices[i+2]);
     }

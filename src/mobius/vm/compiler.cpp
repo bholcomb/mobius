@@ -1610,6 +1610,20 @@ bool stmt_requires_shared_identity(Stmt* stmt, const char* name, ValueType retur
             return false;
         case STMT_THROW:
             return expr_requires_shared_identity(stmt->as.throw_stmt.value, name, false);
+        case STMT_FUNCTION: {
+            // A nested function declaration that captures `name` must keep the
+            // variable's shared-cell identity: otherwise the parameter is
+            // unwrapped on entry and the closure captures a plain copy instead
+            // of the shared cell (breaking shared write-through and atomic()).
+            const FunctionStmt& fn = stmt->as.function;
+            for (size_t p = 0; p < fn.param_count; p++) {
+                if (strcmp(fn.params[p].identifier, name) == 0) return false; // shadowed
+            }
+            for (size_t i = 0; i < fn.body_count; i++) {
+                if (stmt_requires_shared_identity(fn.body[i], name, fn.return_type)) return true;
+            }
+            return false;
+        }
         default:
             return false;
     }

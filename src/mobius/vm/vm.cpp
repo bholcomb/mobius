@@ -83,6 +83,39 @@ static inline void release_atomic_locks(MobiusVM* vm, size_t keep_depth) {
     }
 }
 
+// Walk the metatable __index chain from `start`, invoking the first *function*
+// __index found and descending through *table* __index links — i.e. full
+// Lua-style __index resolution, with the function check applied at every level.
+// `getByString`/`get` already resolve a value through a table __index chain;
+// this complements that for the function case (and is used identically for
+// tables and userdata). `receiver` is the original object passed to __index.
+// Returns 1 (+*out) if a function __index produced a value, 0 if none applies,
+// -1 on error. Called only on a miss, so the common fast path is untouched.
+static int vm_index_function_fallback(MobiusVM* vm, const Value& receiver, Table* start,
+                                      const Value& key, Value* out) {
+    MobiusState* state = vm->state_;
+    MobiusString* index_name = state->metamethods()->index();
+    Value receiver_copy = receiver;
+    Value key_copy = key;
+    Table* cur = start;
+    for (int guard = 0; cur && guard < 1000; guard++) {
+        Table* mt = cur->getMetatable();
+        if (!mt) return 0;
+        Value idx = mt->getByString(index_name);
+        if (idx.type == VAL_FUNCTION || idx.type == VAL_NATIVE_FUNCTION) {
+            Value result;
+            int rc = vm->callMetamethod(make_retained_table_value(mt), index_name,
+                                        receiver_copy, key_copy, result);
+            if (rc < 0) return -1;
+            if (rc > 0) { if (out) *out = result; return 1; }
+            return 0;
+        }
+        if (idx.type == VAL_TABLE && idx.as.table) { cur = idx.as.table; continue; }
+        return 0;
+    }
+    return 0;
+}
+
 static inline int vm_userdata_lookup(MobiusVM* vm, const Value& value, const Value& key, Value* out) {
     MobiusState* state = vm->state_;
     if (out) *out = Value();
@@ -90,40 +123,39 @@ static inline int vm_userdata_lookup(MobiusVM* vm, const Value& value, const Val
     Value value_copy = value;
     Value key_copy = key;
 
+    auto try_metatable = [&](Table* mt) -> int {
+        // 1) value via direct entries and any *table* __index chain.
+        Value result = (key_copy.type == VAL_STRING) ? mt->getByString(key_copy.as.string)
+                                                     : mt->get(key_copy);
+        if (result.type != VAL_NIL) { if (out) *out = result; return 1; }
+        // 2) a *function* __index anywhere along the metatable chain.
+        int rc = vm_index_function_fallback(vm, value_copy, mt, key_copy, out);
+        if (rc != 0) return rc;
+        // 3) struct-view convention: __index is a native function stored as a
+        //    direct key on the type metatable itself (not on its metatable).
+        Value direct = mt->getByString(state->metamethods()->index());
+        if (direct.type == VAL_FUNCTION || direct.type == VAL_NATIVE_FUNCTION) {
+            Value res;
+            int crc = vm->callMetamethod(make_retained_table_value(mt), state->metamethods()->index(),
+                                         value_copy, key_copy, res);
+            if (crc < 0) return -1;
+            if (crc > 0) { if (out) *out = res; return 1; }
+        }
+        return 0;
+    };
+
     Table* specific = value_copy.as.userdata->type_tag
         ? state->userdataTypeMetatable(value_copy.as.userdata->type_tag)
         : nullptr;
     if (specific) {
-        Value result = (key_copy.type == VAL_STRING) ? specific->getByString(key_copy.as.string) : specific->get(key_copy);
-        if (result.type != VAL_NIL) {
-            if (out) *out = result;
-            return 1;
-        }
-        Value meta_result;
-        int meta_rc = vm->callMetamethod(make_retained_table_value(specific), state->metamethods()->index(),
-                                         value_copy, key_copy, meta_result);
-        if (meta_rc < 0) return -1;
-        if (meta_rc > 0) {
-            if (out) *out = meta_result;
-            return 1;
-        }
+        int rc = try_metatable(specific);
+        if (rc != 0) return rc;
     }
 
     Table* generic = state->typeMetatable(VAL_USERDATA);
     if (generic) {
-        Value result = (key_copy.type == VAL_STRING) ? generic->getByString(key_copy.as.string) : generic->get(key_copy);
-        if (result.type != VAL_NIL) {
-            if (out) *out = result;
-            return 1;
-        }
-        Value meta_result;
-        int meta_rc = vm->callMetamethod(make_retained_table_value(generic), state->metamethods()->index(),
-                                         value_copy, key_copy, meta_result);
-        if (meta_rc < 0) return -1;
-        if (meta_rc > 0) {
-            if (out) *out = meta_result;
-            return 1;
-        }
+        int rc = try_metatable(generic);
+        if (rc != 0) return rc;
     }
 
     return 0;
@@ -851,7 +883,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
     const Value& obj = RB(inst);
     const Value& key = RKC(inst);
     if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+        std::unique_lock<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
         const Value& inner = obj.as.shared_cell->unsafeValue();
         if (inner.type == VAL_ARRAY && inner.as.array) {
             ArrayValue* arr = inner.as.array;
@@ -862,10 +894,22 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
                 RA(inst) = Value();
             }
         } else if (inner.type == VAL_TABLE && inner.as.table) {
-            if (MOBIUS_LIKELY(key.type == VAL_STRING))
-                RA(inst) = inner.as.table->getByString(key.as.string);
-            else
-                RA(inst) = inner.as.table->get(key);
+            Value inner_tbl = inner;   // retains the table for use outside the lock
+            Table* tbl = inner_tbl.as.table;
+            Value result = (key.type == VAL_STRING) ? tbl->getByString(key.as.string)
+                                                    : tbl->get(key);
+            if (MOBIUS_UNLIKELY(result.type == VAL_NIL && tbl->getMetatable())) {
+                lock.unlock();   // release the cell lock before invoking script
+                uint32_t* saved_ip = f.ip;
+                Value looked;
+                int rc = vm_index_function_fallback(vm, inner_tbl, tbl, key, &looked);
+                vm->refreshFrame(f);
+                f.ip = saved_ip;
+                f.ci->ip = saved_ip;
+                if (rc < 0) return -1;
+                if (rc > 0) result = looked;
+            }
+            RA(inst) = result;
         } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
             int64_t idx = MobiusVM::vm_extract_int64(key);
             if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.array_slice->length())) {
@@ -881,9 +925,11 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
                 RA(inst) = Value();
             }
         } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
+            Value inner_ud = inner;   // retains the userdata for use outside the lock
+            lock.unlock();            // release the cell lock before invoking script
             uint32_t* saved_ip = f.ip;
             Value looked;
-            int lookup_rc = vm_userdata_lookup(vm, inner, key, &looked);
+            int lookup_rc = vm_userdata_lookup(vm, inner_ud, key, &looked);
             vm->refreshFrame(f);
             f.ip = saved_ip;
             f.ci->ip = saved_ip;
@@ -902,10 +948,23 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             RA(inst) = Value();
         }
     } else if (obj.type == VAL_TABLE && obj.as.table) {
+        Table* tbl = obj.as.table;
         if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            RA(inst) = obj.as.table->getByString(key.as.string);
+            RA(inst) = tbl->getByString(key.as.string);
         else
-            RA(inst) = obj.as.table->get(key);
+            RA(inst) = tbl->get(key);
+        // On a miss, follow a *function* __index up the metatable chain (a
+        // *table* __index was already handled by getByString/get above).
+        if (MOBIUS_UNLIKELY(RA(inst).type == VAL_NIL && tbl->getMetatable())) {
+            uint32_t* saved_ip = f.ip;
+            Value looked;
+            int rc = vm_index_function_fallback(vm, obj, tbl, key, &looked);
+            vm->refreshFrame(f);
+            f.ip = saved_ip;
+            f.ci->ip = saved_ip;
+            if (rc < 0) return -1;
+            if (rc > 0) RA(inst) = looked;
+        }
     } else if (obj.type == VAL_ENUM && obj.as.enum_def) {
         if (key.type != VAL_STRING || !key.as.string) {
             VM_ERROR(vm, f, "Enum member lookup expects a string key");
@@ -1134,8 +1193,13 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
     f.regs[a + 1] = obj;
 
     if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
-        const Value& inner = obj.as.shared_cell->unsafeValue();
+        // Snapshot the inner value (retained) and release the cell lock before
+        // any method resolution, which may invoke a function __index.
+        Value inner;
+        {
+            std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+            inner = obj.as.shared_cell->unsafeValue();
+        }
         if (inner.type == VAL_USERDATA) {
             uint32_t* saved_ip = f.ip;
             Value method;
@@ -1159,14 +1223,25 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
             }
         }
         if (inner.type == VAL_TABLE && inner.as.table) {
+            Table* tbl = inner.as.table;
             Value method;
             if (MOBIUS_LIKELY(key.type == VAL_STRING))
-                method = inner.as.table->getByString(key.as.string);
+                method = tbl->getByString(key.as.string);
             else
-                method = inner.as.table->get(key);
+                method = tbl->get(key);
             if (method.type != VAL_NIL) {
                 f.regs[a] = method;
                 return 0;
+            }
+            if (tbl->getMetatable()) {
+                uint32_t* saved_ip = f.ip;
+                Value looked;
+                int rc = vm_index_function_fallback(vm, inner, tbl, key, &looked);
+                vm->refreshFrame(f);
+                f.ip = saved_ip;
+                f.ci->ip = saved_ip;
+                if (rc < 0) return -1;
+                if (rc > 0) { f.regs[a] = looked; return 0; }
             }
         }
         VM_ERROR(vm, f, "Attempt to call method on a shared %s value", value_type_name(inner.type));
@@ -1174,15 +1249,27 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
     }
 
     if (obj.type == VAL_TABLE && obj.as.table) {
+        Table* tbl = obj.as.table;
         Value method;
         if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            method = obj.as.table->getByString(key.as.string);
+            method = tbl->getByString(key.as.string);
         else
-            method = obj.as.table->get(key);
+            method = tbl->get(key);
 
         if (method.type != VAL_NIL) {
             f.regs[a] = method;
             return 0;
+        }
+        // On a miss, follow a *function* __index up the metatable chain.
+        if (tbl->getMetatable()) {
+            uint32_t* saved_ip = f.ip;
+            Value looked;
+            int rc = vm_index_function_fallback(vm, obj, tbl, key, &looked);
+            vm->refreshFrame(f);
+            f.ip = saved_ip;
+            f.ci->ip = saved_ip;
+            if (rc < 0) return -1;
+            if (rc > 0) { f.regs[a] = looked; return 0; }
         }
     }
 
@@ -3022,6 +3109,20 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
     return 0;
 }
 
+// A value crosses the spawn boundary by deep copy only if it's a *non-shared*
+// array or table. Shared containers (already mutex-protected), shared cells,
+// array spans, scalars, and functions are passed by reference so explicit
+// sharing is preserved across fibers.
+static inline bool value_needs_spawn_copy(const Value& v) {
+    if ((v.type == VAL_ARRAY && v.as.array) || (v.type == VAL_TABLE && v.as.table)) {
+        bool shared = (v.flags & VAL_FLAG_SHARED) != 0
+                   || (v.type == VAL_ARRAY && v.as.array->isShared())
+                   || (v.type == VAL_TABLE && v.as.table->isShared());
+        return !shared;
+    }
+    return false;
+}
+
 // ---- NOP ----
 // OP_SPAWN A B C -- spawn R[B] with C-1 args; R[A] = FutureValue
 MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -3037,22 +3138,31 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             VM_ERROR(vm, f, "spawn: function has no bytecode prototype");
             return -1;
         }
-        if (mf->upvalue_count > 0) {
-            VM_ERROR(vm, f, "cannot spawn closure with captured variables; pass values as function arguments");
-            return -1;
-        }
-
         FutureValue* future = new FutureValue();
 
         std::vector<Value> args;
         args.reserve(nargs);
         for (int i = 0; i < nargs; i++) {
             const Value& arg = f.regs[b + 1 + i];
-            if ((arg.type == VAL_ARRAY && arg.as.array) ||
-                (arg.type == VAL_TABLE && arg.as.table)) {
+            if (value_needs_spawn_copy(arg)) {
                 args.push_back(deep_copy_value_for_spawn(arg));
             } else {
                 args.push_back(arg);
+            }
+        }
+
+        // Snapshot captured upvalues using the same value semantics as
+        // arguments: non-shared arrays/tables are deep-copied (each fiber gets
+        // its own), shared cells and spans pass by reference, scalars copy.
+        std::vector<Value> upvalue_snapshot;
+        upvalue_snapshot.reserve(mf->upvalue_count);
+        for (int i = 0; i < mf->upvalue_count; i++) {
+            Upvalue* uv = mf->upvalues[i];
+            Value captured = (uv && uv->location) ? *uv->location : Value();
+            if (value_needs_spawn_copy(captured)) {
+                upvalue_snapshot.push_back(deep_copy_value_for_spawn(captured));
+            } else {
+                upvalue_snapshot.push_back(captured);
             }
         }
 
@@ -3062,7 +3172,8 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
         ((RefCounted*)future)->retain();
 
         JobDecl job;
-        job.entry = [state, proto, args_copy = std::move(args), future]() mutable {
+        job.entry = [state, proto, args_copy = std::move(args),
+                     upvals = std::move(upvalue_snapshot), future]() mutable {
             MobiusVM fiber_vm(state);
             fiber_vm.future_ = future;
             int nargs = (int)args_copy.size();
@@ -3089,6 +3200,25 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             size_t depth_before = fiber_vm.callStackSize();
             fiber_vm.callStackPush(proto, proto->code.data(), base, 2);
 
+            // Recreate the captured upvalues as closed cells owned by this
+            // fiber, and attach them to the running frame so OP_GETUPVAL /
+            // OP_SETUPVAL resolve. Closed upvalues are skipped by closeUpvalues
+            // at frame pop, so this fiber owns and frees them after run().
+            std::vector<Upvalue*> fiber_upvalues;
+            if (!upvals.empty()) {
+                fiber_upvalues.reserve(upvals.size());
+                for (Value& v : upvals) {
+                    Upvalue* uv = new (std::nothrow) Upvalue();
+                    if (!uv) break;
+                    uv->closed = v;
+                    uv->location = &uv->closed;
+                    uv->is_open = false;
+                    fiber_upvalues.push_back(uv);
+                }
+                fiber_vm.callStackTop().setUpvaluesFrom(fiber_upvalues.data(),
+                                                        (int)fiber_upvalues.size());
+            }
+
             uint64_t t0 = get_time_ns_vm();
             int rc = fiber_vm.run(depth_before);
             fiber_vm.metrics_->total_execution_time_ns += get_time_ns_vm() - t0;
@@ -3104,6 +3234,9 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
                 }
                 future->reject(err);
             }
+
+            for (Upvalue* uv : fiber_upvalues) delete uv;
+
             ((RefCounted*)future)->release();
         };
 

@@ -2,7 +2,6 @@
 // cancel it, and verify it terminates with an error.
 print("=== Cancellation Test ===")
 
-import "fiber"
 
 func long_task() {
     fiber.sleep(60000)

@@ -24,7 +24,7 @@ func __read_response_head(sock) {
             var body_offset = sep.index + sep.len
             return {
                 head: substr(text, 0, sep.index),
-                body: raw:slice(body_offset, len(raw) - body_offset)
+                body: raw:slice(body_offset, size(raw))
             }
         }
 
@@ -43,7 +43,7 @@ func __response_has_no_body(method, status) {
 }
 
 func __read_exact(sock, body, needed) {
-    while (len(body) < needed) {
+    while (size(body) < needed) {
         var chunk = sock:recv(4096)
         if (chunk == nil) {
             throw "http.request() connection closed before response body completed"
@@ -51,7 +51,7 @@ func __read_exact(sock, body, needed) {
         body:append(chunk)
     }
 
-    if (len(body) == needed) {
+    if (size(body) == needed) {
         return body
     }
     return body:slice(0, needed)

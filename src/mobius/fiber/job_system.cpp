@@ -43,6 +43,10 @@ JobSystem::JobSystem(MobiusState* owner)
 
 JobSystem::~JobSystem() {
     shutdown();
+    if (dedicated_main_fiber_) {
+        fiber_pool_->destroyDetachedFiber(dedicated_main_fiber_);
+        dedicated_main_fiber_ = nullptr;
+    }
     delete fiber_pool_;
 }
 
@@ -193,11 +197,18 @@ void JobSystem::wakeWaiters() {
 }
 
 void JobSystem::spawnWorkerIfNeeded() {
+    if (shutdown_requested_.load(std::memory_order_acquire)) return;
     int current = active_worker_count_.load(std::memory_order_relaxed);
     while (current < max_workers_) {
         if (active_worker_count_.compare_exchange_weak(
                 current, current + 1, std::memory_order_acq_rel)) {
         std::lock_guard<std::mutex> lock(worker_mutex_);
+        // Re-check under the lock: if shutdown started, don't add a worker the
+        // shutdown loop won't join.
+        if (shutdown_requested_.load(std::memory_order_acquire)) {
+            active_worker_count_.fetch_sub(1, std::memory_order_acq_rel);
+            return;
+        }
         workers_.emplace_back(&JobSystem::workerThreadEntry, this);
 
         size_t count = workers_.size() + 1;
@@ -267,11 +278,32 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
     main_fiber_done_ = false;
     main_fiber_result_ = 0;
 
-    MobiusFiber* fiber = fiber_pool_->acquire();
+    // The top-level script runs on a dedicated fiber with a larger stack than
+    // pooled worker fibers, so deep native call chains (e.g. graphics drivers)
+    // have room. The dedicated fiber is created once and reused across calls.
+    bool from_pool = false;
+    if (!dedicated_main_fiber_) {
+        size_t main_stack = owner_->config().main_fiber_stack_size;
+        if (main_stack == 0) main_stack = owner_->config().fiber_stack_size;
+        dedicated_main_fiber_ = fiber_pool_->createDetachedFiber(main_stack);
+    }
+    MobiusFiber* fiber = dedicated_main_fiber_;
+    if (!fiber) {
+        // Fall back to a pooled fiber if the dedicated stack could not be
+        // allocated (e.g. out of memory).
+        fiber = fiber_pool_->acquire();
+        from_pool = true;
+    }
     if (!fiber) {
         fprintf(stderr, "FATAL: cannot acquire fiber for main script\n");
         return -1;
     }
+
+    // Reset reusable fiber state for this run.
+    fiber->state = FiberState::Idle;
+    fiber->vm = nullptr;
+    fiber->cancel_requested.store(false, std::memory_order_relaxed);
+    fiber->peak_stack_bytes = 0;
     main_fiber_ = fiber;
 
     // Wrap fn so we can capture its return value
@@ -301,7 +333,11 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
         main_done_cv_.wait(lock, [this] { return main_fiber_done_; });
     }
 
-    fiber_pool_->release(main_fiber_);
+    // Only pooled fallback fibers go back to the pool; the dedicated main
+    // fiber is cached and freed in the destructor.
+    if (from_pool) {
+        fiber_pool_->release(fiber);
+    }
     main_fiber_ = nullptr;
 
     return main_fiber_result_;
@@ -311,9 +347,21 @@ void JobSystem::shutdown() {
     shutdown_requested_.store(true, std::memory_order_release);
     ready_cv_.notify_all();
 
-    std::lock_guard<std::mutex> lock(worker_mutex_);
-    for (auto& t : workers_) {
-        if (t.joinable()) t.join();
+    // Join workers WITHOUT holding worker_mutex_: a worker that is finishing up
+    // may call spawnWorkerIfNeeded() (which locks worker_mutex_), so holding it
+    // here while join()-ing would deadlock. Swap the list out under the lock,
+    // then join with the lock released. Loop in case a worker raced in a new
+    // worker before observing the shutdown flag.
+    for (;;) {
+        std::vector<std::thread> to_join;
+        {
+            std::lock_guard<std::mutex> lock(worker_mutex_);
+            to_join.swap(workers_);
+        }
+        if (to_join.empty()) break;
+        ready_cv_.notify_all();
+        for (auto& t : to_join) {
+            if (t.joinable()) t.join();
+        }
     }
-    workers_.clear();
 }

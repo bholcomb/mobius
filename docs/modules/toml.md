@@ -6,6 +6,8 @@ Import:
 import "toml"
 ```
 
+[← Module reference](index.md)
+
 Functions:
 
 | Function | Description |

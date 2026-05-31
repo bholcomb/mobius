@@ -7,7 +7,7 @@ func test_string_type(value) {
         case is string:
             result = "is_string";
             break;
-        case is int:
+        case is int64:
             result = "is_integer";
             break;
         case is array:
@@ -24,10 +24,10 @@ func test_numeric_types(value) {
     var result = "";
     
     switch (value) {
-        case is int:
+        case is int64:
             result = "integer_type";
             break;
-        case is float:
+        case is float64:
             result = "float_type";
             break;
         case is bool:

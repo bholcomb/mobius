@@ -3,19 +3,19 @@ print("=== String Stdlib Tests ===")
 
 // split
 var parts = split("hello,world,foo", ",")
-if (len(parts) != 3) { print("FAIL: split len, got", len(parts)); exit(1) }
+if (size(parts) != 3) { print("FAIL: split len, got", size(parts)); exit(1) }
 if (parts[0] != "hello") { print("FAIL: split[0], got", parts[0]); exit(1) }
 if (parts[1] != "world") { print("FAIL: split[1], got", parts[1]); exit(1) }
 if (parts[2] != "foo") { print("FAIL: split[2], got", parts[2]); exit(1) }
 
 // split with no delimiter match
 var no_split = split("hello", ",")
-if (len(no_split) != 1) { print("FAIL: no split len, got", len(no_split)); exit(1) }
+if (size(no_split) != 1) { print("FAIL: no split len, got", size(no_split)); exit(1) }
 if (no_split[0] != "hello") { print("FAIL: no split[0], got", no_split[0]); exit(1) }
 
 // split empty delimiter (character-by-character)
 var chars = split("abc", "")
-if (len(chars) != 3) { print("FAIL: char split len, got", len(chars)); exit(1) }
+if (size(chars) != 3) { print("FAIL: char split len, got", size(chars)); exit(1) }
 if (chars[0] != "a") { print("FAIL: char split[0]"); exit(1) }
 if (chars[1] != "b") { print("FAIL: char split[1]"); exit(1) }
 if (chars[2] != "c") { print("FAIL: char split[2]"); exit(1) }

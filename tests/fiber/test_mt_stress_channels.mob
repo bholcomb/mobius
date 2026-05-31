@@ -11,7 +11,6 @@
 
 print("=== Multithreaded Channel Stress Test (60 fibers) ===")
 
-import "fiber"
 
 var NUM_PRODUCERS   = 10
 var NUM_WORKERS     = 30
@@ -35,7 +34,7 @@ var dispatch_ch = fiber.channel(128)
 var results_ch  = fiber.channel(128)
 
 // --- Producer: generates work items via blocking send ---
-func producer(id: int, ch, counter, items_per) {
+func producer(id: int64, ch, counter, items_per) {
     for (var i = 0; i < items_per; i += 1) {
         var work_id = id * items_per + i
         ch:send(work_id)
@@ -45,7 +44,7 @@ func producer(id: int, ch, counter, items_per) {
 }
 
 // --- Worker: poll dispatch until closed and drained, then exit cleanly ---
-func worker(id: int, in_ch, out_ch, counter, err, total) {
+func worker(id: int64, in_ch, out_ch, counter, err, total) {
     var processed = 0
     while (true) {
         var recv = in_ch:try_recv()
@@ -77,7 +76,7 @@ func worker(id: int, in_ch, out_ch, counter, err, total) {
 }
 
 // --- Aggregator: poll results until closed and drained, then exit cleanly ---
-func aggregator(id: int, ch, buckets_arr, counter, num_agg) {
+func aggregator(id: int64, ch, buckets_arr, counter, num_agg) {
     var aggregated = 0
     while (true) {
         var recv = ch:try_recv()
@@ -129,9 +128,9 @@ var agg_results = fiber.all(agg_futures)
 
 // === Verification ===
 
-print("  Producers finished:", len(prod_results))
-print("  Workers finished:", len(worker_results))
-print("  Aggregators finished:", len(agg_results))
+print("  Producers finished:", size(prod_results))
+print("  Workers finished:", size(worker_results))
+print("  Aggregators finished:", size(agg_results))
 
 // 1. Producer return values
 for (var i = 0; i < NUM_PRODUCERS; i += 1) {

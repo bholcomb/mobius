@@ -1,7 +1,6 @@
 // Test cancellation edge cases: cancel after completion, double cancel
 print("=== Cancel Edge Case Tests ===")
 
-import "fiber"
 
 // Test 1: cancel after fiber has already completed — should be harmless
 func quick_task() {

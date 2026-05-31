@@ -47,7 +47,7 @@ func handle_websocket(conn, request) {
             print("text:", frame.text)
             conn:send(websocket.build_frame({text: "echo: " + frame.text}))
         } else {
-            print("binary payload bytes:", len(frame.payload))
+            print("binary payload bytes:", size(frame.payload))
             conn:send(websocket.build_frame({payload: frame.payload}))
         }
     }

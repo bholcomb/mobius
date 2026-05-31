@@ -1,12 +1,11 @@
 // Test: fiber.all edge cases — empty array, single element, large N
 print("=== Fiber All Edge Case Tests ===")
 
-import "fiber"
 
 // Test 1: fiber.all with empty array — should return empty array
 var r1 = fiber.all([])
-if (len(r1) != 0) {
-    print("FAIL: fiber.all([]) should return empty array, got length", len(r1))
+if (size(r1) != 0) {
+    print("FAIL: fiber.all([]) should return empty array, got length", size(r1))
     exit(1)
 }
 print("  fiber.all([]) returns empty array")
@@ -17,7 +16,7 @@ func make_val(x) {
 }
 
 var r2 = fiber.all([spawn make_val(21)])
-if (len(r2) != 1) { print("FAIL: length should be 1"); exit(1) }
+if (size(r2) != 1) { print("FAIL: length should be 1"); exit(1) }
 if (r2[0] != 42) { print("FAIL: value should be 42, got", r2[0]); exit(1) }
 print("  fiber.all with single future works")
 
@@ -28,7 +27,7 @@ for (var i = 0; i < 20; i += 1) {
 }
 
 var r3 = fiber.all(futures)
-if (len(r3) != 20) { print("FAIL: length should be 20, got", len(r3)); exit(1) }
+if (size(r3) != 20) { print("FAIL: length should be 20, got", size(r3)); exit(1) }
 
 for (var i = 0; i < 20; i += 1) {
     if (r3[i] != i * 2) {

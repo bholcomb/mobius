@@ -63,12 +63,12 @@ assert_test("write run script", writefile(run_script,
     "insert_stmt:finalize()\n" +
     "ensure(insert_stmt:is_finalized())\n" +
     "var rows = db:query(\"select id, name, score, active, note, payload from items order by id\")\n" +
-    "ensure(len(rows) == 2)\n" +
+    "ensure(size(rows) == 2)\n" +
     "ensure(rows[0].id == 1 && rows[0].name == \"alpha\" && rows[0].score == 11)\n" +
     "ensure(rows[1].id == 2 && rows[1].name == \"beta\" && rows[1].score == 22)\n" +
     "ensure(rows[0].active == 1 && rows[1].active == 0)\n" +
     "ensure(rows[0].note == \"first\" && rows[1].note == nil)\n" +
-    "ensure(typeof(rows[0].payload) == \"buffer\" && len(rows[0].payload) == 3)\n" +
+    "ensure(typeof(rows[0].payload) == \"buffer\" && size(rows[0].payload) == 3)\n" +
     "ensure(rows[0].payload[0] == 1 && rows[0].payload[1] == 2 && rows[0].payload[2] == 255)\n" +
     "ensure(rows[1].payload == nil)\n" +
     "var one = db:query_one(\"select name, active from items where score = ?\", [22])\n" +
@@ -85,7 +85,7 @@ assert_test("write run script", writefile(run_script,
     "ensure(scan:column_value(1) == \"alpha\")\n" +
     "scan:reset()\n" +
     "var again = scan:all()\n" +
-    "ensure(len(again) == 2)\n" +
+    "ensure(size(again) == 2)\n" +
     "scan:finalize()\n" +
     "ensure(scan:is_finalized())\n" +
     "var tx_value = db:transaction(func(conn) {\n" +

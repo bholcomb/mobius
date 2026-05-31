@@ -6,6 +6,8 @@ Import:
 import "compression"
 ```
 
+[← Module reference](index.md)
+
 The `compression` module provides a high-level Mobius API over native
 compression/archive primitives.
 

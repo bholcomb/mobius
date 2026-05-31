@@ -9,7 +9,7 @@ func assert_test(name, cond) {
 var buf = buffer_create(4, 65)
 assert_test("buffer type", typeof(buf) == "buffer")
 assert_test("buffer is type", buf is buffer)
-assert_test("buffer len", len(buf) == 4)
+assert_test("buffer len", size(buf) == 4)
 assert_test("buffer fill", buf[0] == 65 && buf[3] == 65)
 
 buf[1] = 66
@@ -19,7 +19,7 @@ assert_test("buffer index set", buf[1] == 66 && buf[2] == 67)
 buf:append(68)
 buf:append("EF")
 buf:append(buffer_from_string("GH"))
-assert_test("buffer append grows", len(buf) == 9)
+assert_test("buffer append grows", size(buf) == 9)
 
 var text = buf:to_string()
 assert_test("buffer to_string prefix", text[0] == "A")
@@ -27,13 +27,13 @@ assert_test("buffer to_string content", text == "ABCADEFGH")
 
 var grown = buffer_create(0)
 grown[3] = 90
-assert_test("buffer index growth", len(grown) == 4 && grown[0] == 0 && grown[3] == 90)
+assert_test("buffer index growth", size(grown) == 4 && grown[0] == 0 && grown[3] == 90)
 grown = grown:reserve(32)
 assert_test("buffer reserve preserves self", typeof(grown) == "buffer")
-assert_test("buffer reserve preserves len", len(grown) == 4 && grown[3] == 90)
+assert_test("buffer reserve preserves len", size(grown) == 4 && grown[3] == 90)
 
-var slice = buf:slice(2, 4)
-assert_test("buffer slice len", len(slice) == 4)
+var slice = buf:slice(2, 6)
+assert_test("buffer slice len", size(slice) == 4)
 assert_test("buffer slice contents", slice:to_string() == "CADE")
 
 var copy = buf:copy()
@@ -41,7 +41,7 @@ copy[0] = 120
 assert_test("buffer copy independent", buf[0] == 65 && copy[0] == 120)
 
 var roundtrip = buffer_from_string("hello")
-assert_test("buffer from_string", len(roundtrip) == 5 && roundtrip[4] == 111)
+assert_test("buffer from_string", size(roundtrip) == 5 && roundtrip[4] == 111)
 assert_test("buffer address nonzero", roundtrip:address() > 0)
 assert_test("buffer fixed false", roundtrip:is_fixed() == false)
 

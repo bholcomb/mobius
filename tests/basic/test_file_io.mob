@@ -27,7 +27,7 @@ writefile(lines_path, "alpha")
 
 // Test readlines on single-line file
 var lines = readlines(lines_path)
-if (len(lines) != 1) { exit(1) }
+if (size(lines) != 1) { exit(1) }
 if (lines[0] != "alpha") { exit(1) }
 
 // Test file_exists with non-existent file

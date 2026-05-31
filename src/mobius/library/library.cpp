@@ -35,12 +35,12 @@ static const PluginFunction library_registry[] = {
     {"max",        lib_max,        2,        MOBIUS_VAL_UNKNOWN, "Maximum of two or more values"},
     {"pow",        lib_pow,        2,        MOBIUS_VAL_FLOAT64, "Raise base to an exponent"},
     {"sqrt",       lib_sqrt,       1,        MOBIUS_VAL_FLOAT64, "Square root"},
-    {"floor",      lib_floor,      1,        MOBIUS_VAL_INT64,   "Round down to nearest integer"},
-    {"ceil",       lib_ceil,       1,        MOBIUS_VAL_INT64,   "Round up to nearest integer"},
-    {"round",      lib_round,      1,        MOBIUS_VAL_INT64,   "Round to nearest integer"},
+    {"floor",      lib_floor,      1,        MOBIUS_VAL_FLOAT64, "Round down to nearest integer, returned as a float"},
+    {"ceil",       lib_ceil,       1,        MOBIUS_VAL_FLOAT64, "Round up to nearest integer, returned as a float"},
+    {"round",      lib_round,      1,        MOBIUS_VAL_FLOAT64, "Round to nearest integer, returned as a float"},
 
     // String functions
-    {"len",        lib_len,        1,        MOBIUS_VAL_INT64,   "Length of a string or array"},
+    {"size",       lib_len,        1,        MOBIUS_VAL_INT64,   "Number of elements in an array/table, or bytes in a string/buffer"},
     {"upper",      lib_upper,      1,        MOBIUS_VAL_STRING,  "Convert string to uppercase"},
     {"lower",      lib_lower,      1,        MOBIUS_VAL_STRING,  "Convert string to lowercase"},
     {"substr",     lib_substr,     3,        MOBIUS_VAL_STRING,  "Extract a substring (string, start, length)"},

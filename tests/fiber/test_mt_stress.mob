@@ -2,7 +2,6 @@
 // Proves the fiber pool, job system, and worker threads handle load correctly.
 print("=== Stress Test ===")
 
-import "fiber"
 
 var N = 64
 
@@ -23,8 +22,8 @@ for (var i = 0; i < N; i += 1) {
 // Collect all results
 var results = fiber.all(futures)
 
-if (len(results) != N) {
-    print("FAIL: expected", N, "results, got", len(results))
+if (size(results) != N) {
+    print("FAIL: expected", N, "results, got", size(results))
     exit(1)
 }
 

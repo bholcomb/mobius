@@ -15,9 +15,9 @@ func assert_test(name, cond) {
 }
 
 func assert_buffer_equals(name, buf, expected) {
-    var ok = typeof(buf) == "buffer" && len(buf) == len(expected)
+    var ok = typeof(buf) == "buffer" && size(buf) == size(expected)
     var i = 0
-    while (ok && i < len(expected)) {
+    while (ok && i < size(expected)) {
         if (buf[i] != expected[i]) {
             ok = false
         }
@@ -73,7 +73,7 @@ assert_test("build_request host", parsed_built_request.headers.host == "api.exam
 assert_test("build_request content-type", parsed_built_request.headers["content-type"] == "application/json")
 assert_test("build_request x-id", parsed_built_request.headers["x-id"] == "42")
 assert_test("build_request body", parsed_built_request.body == "{\"ok\":true}")
-assert_test("build_request content-length auto", parsed_built_request.content_length == len("{\"ok\":true}"))
+assert_test("build_request content-length auto", parsed_built_request.content_length == size("{\"ok\":true}"))
 
 var built_response = http.build_response({
     status: 101,
@@ -138,7 +138,7 @@ assert_test("request transport status", transport_response.status == 200)
 assert_test("request transport content type", transport_response.content_type == "text/plain")
 assert_test("request transport text helper", transport_response.text == "hello client")
 assert_test("request transport body buffer", typeof(transport_response.body) == "buffer")
-assert_test("request transport body length", len(transport_response.body) == 12)
+assert_test("request transport body length", size(transport_response.body) == 12)
 assert_test("server saw request path", server_request.path == "/transport")
 assert_test("server saw request body", server_request.body == "ping")
 assert_test("server saw request header", server_request.headers["x-test"] == "transport")

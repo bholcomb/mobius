@@ -2,7 +2,6 @@
 // a consumer receives them, and we verify all messages arrive.
 print("=== Channel Pipeline Test ===")
 
-import "fiber"
 
 var COUNT = 50
 

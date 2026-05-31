@@ -47,7 +47,7 @@ var collected = []
 for (var x in range(5)) {
     collected:push(x * x)
 }
-if (len(collected) != 5) { print("FAIL: collected len, got", len(collected)); exit(1) }
+if (size(collected) != 5) { print("FAIL: collected len, got", size(collected)); exit(1) }
 if (collected[0] != 0) { print("FAIL: collected[0]"); exit(1) }
 if (collected[1] != 1) { print("FAIL: collected[1]"); exit(1) }
 if (collected[4] != 16) { print("FAIL: collected[4]"); exit(1) }
@@ -55,7 +55,7 @@ if (collected[4] != 16) { print("FAIL: collected[4]"); exit(1) }
 // Custom iterator: iterate over array elements
 func array_iter(arr) {
     var idx = 0
-    var length = len(arr)
+    var length = size(arr)
     return func(state, control) {
         if (idx >= length) { return nil }
         var val = arr[idx]
@@ -99,7 +99,7 @@ var down = []
 for (var x in countdown(3)) {
     down:push(x)
 }
-if (len(down) != 4) { print("FAIL: countdown len, got", len(down)); exit(1) }
+if (size(down) != 4) { print("FAIL: countdown len, got", size(down)); exit(1) }
 if (down[0] != 3) { print("FAIL: countdown[0]"); exit(1) }
 if (down[3] != 0) { print("FAIL: countdown[3]"); exit(1) }
 

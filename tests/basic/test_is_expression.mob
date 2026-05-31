@@ -4,8 +4,8 @@ print("=== Testing 'is' Expression Operator ===");
 
 // Test 1: Integer type check
 var i = 42;
-if (i is integer) {
-    print("PASS: 42 is integer");
+if (i is int64) {
+    print("PASS: 42 is int64");
 } else {
     print("FAIL: 42 should be integer");
 }
@@ -17,8 +17,8 @@ if (!(i is string)) {
 
 // Test 2: Float type check
 var f = 3.14;
-if (f is float) {
-    print("PASS: 3.14 is float");
+if (f is float64) {
+    print("PASS: 3.14 is float64");
 } else {
     print("FAIL: 3.14 should be float");
 }
@@ -72,7 +72,7 @@ if (dummy is function) {
 }
 
 // Test 9: Use in ternary
-var type_name = (42 is integer) ? "it's an int" : "not an int";
+var type_name = (42 is int64) ? "it's an int" : "not an int";
 if (type_name == "it's an int") {
     print("PASS: is works in ternary");
 } else {
@@ -84,11 +84,11 @@ func check_type(val) {
     if (val is string) {
         return "string";
     }
-    if (val is integer) {
-        return "integer";
+    if (val is int64) {
+        return "int64";
     }
-    if (val is float) {
-        return "float";
+    if (val is float64) {
+        return "float64";
     }
     if (val is bool) {
         return "bool";
@@ -99,8 +99,8 @@ func check_type(val) {
     return "other";
 }
 
-if (check_type("hi") == "string" && check_type(10) == "integer" &&
-    check_type(1.5) == "float" && check_type(true) == "bool" &&
+if (check_type("hi") == "string" && check_type(10) == "int64" &&
+    check_type(1.5) == "float64" && check_type(true) == "bool" &&
     check_type(nil) == "nil") {
     print("PASS: is works in function with multiple types");
 } else {
@@ -115,8 +115,8 @@ if (!(42 is string)) {
 }
 
 // Test 12: Alternative type names
-if (42 is int) {
-    print("PASS: 42 is int (alias for integer)");
+if (42 is int64) {
+    print("PASS: 42 is int64 (alias for integer)");
 } else {
     print("FAIL: 'int' alias should work");
 }

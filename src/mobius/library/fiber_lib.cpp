@@ -344,7 +344,7 @@ Table* register_fiber_module(MobiusState* state) {
     mod->setByString(state->stringPool()->intern("any"),     make_native_function_value(lib_fiber_any));
     mod->setByString(state->stringPool()->intern("sleep"),   make_native_function_value(lib_fiber_sleep));
     mod->setByString(state->stringPool()->intern("cancel"),  make_native_function_value(lib_fiber_cancel));
-    mod->setByString(state->stringPool()->intern("slice"),   make_native_function_value(lib_fiber_slice));
+    // Aliasing views moved to the array method `arr:span(start, end)`.
     return mod;
 }
 

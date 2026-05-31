@@ -1,6 +1,6 @@
 var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0; })
-if (evens:length() != 3) {
-    print("FAIL: filter length", evens:length())
+if (evens:size() != 3) {
+    print("FAIL: filter length", evens:size())
     exit(1)
 }
 if (evens[0] != 2 || evens[2] != 6) {

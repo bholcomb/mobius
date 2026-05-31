@@ -6,6 +6,8 @@ Import:
 import "yaml"
 ```
 
+[← Module reference](index.md)
+
 The `yaml` module provides a dependency-free YAML parser and serializer for the
 common configuration subset:
 

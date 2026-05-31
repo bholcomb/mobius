@@ -5,7 +5,7 @@ const char* number_type_name(NumberType type) {
         case NUM_UNKNOWN: return "unknown";
         case NUM_INT64:   return "int64";
         case NUM_UINT64:  return "uint64";
-        case NUM_FLOAT64: return "float";
+        case NUM_FLOAT64: return "float64";
         default: return "invalid";
     }
 }

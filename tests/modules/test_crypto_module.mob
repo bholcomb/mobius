@@ -14,9 +14,9 @@ func assert_test(name, cond) {
 }
 
 func assert_buffer_equals(name, buf, expected) {
-    var ok = typeof(buf) == "buffer" && len(buf) == len(expected)
+    var ok = typeof(buf) == "buffer" && size(buf) == size(expected)
     var i = 0
-    while (ok && i < len(expected)) {
+    while (ok && i < size(expected)) {
         if (buf[i] != expected[i]) {
             ok = false
         }
@@ -42,17 +42,17 @@ assert_test("hex encode", crypto.hex_encode(buffer_from_string("ABC")) == "41424
 assert_test("hex decode", crypto.hex_decode("414243"):to_string() == "ABC")
 
 var uuid = crypto.uuid4()
-assert_test("uuid length", len(uuid) == 36)
+assert_test("uuid length", size(uuid) == 36)
 assert_test("uuid dashes", uuid[8] == "-" && uuid[13] == "-" && uuid[18] == "-" && uuid[23] == "-")
 assert_test("uuid version 4", uuid[14] == "4")
 
 var rnd = crypto.random_hex(16)
-assert_test("random_hex length", len(rnd) == 32)
+assert_test("random_hex length", size(rnd) == 32)
 assert_test("random_hex differs", rnd != crypto.random_hex(16))
 
 var rnd_bytes = crypto.random_bytes(16)
 assert_test("random_bytes type", typeof(rnd_bytes) == "buffer")
-assert_test("random_bytes length", len(rnd_bytes) == 16)
+assert_test("random_bytes length", size(rnd_bytes) == 16)
 
 var ok_range = true
 for (var i = 0; i < 32; i += 1) {

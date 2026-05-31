@@ -20,6 +20,13 @@ public:
     MobiusFiber* acquire();
     void release(MobiusFiber* fiber);
 
+    // Allocate a standalone fiber with a custom stack size that is NOT part of
+    // the pool (never handed to workers via acquire). The caller owns it and
+    // must free it with destroyDetachedFiber(). Used for the larger-stacked
+    // top-level main fiber.
+    MobiusFiber* createDetachedFiber(size_t stack_size);
+    void destroyDetachedFiber(MobiusFiber* fiber);
+
     size_t activeCount() const;
     size_t totalCount() const;
 

@@ -4,7 +4,6 @@
 // by cancel alone — you must close the channel to unblock them.
 print("=== Cancel + Channel Tests ===")
 
-import "fiber"
 
 // Test 1: cancel a fiber blocked on recv — close the channel to unblock it
 var ch1 = fiber.channel(1)

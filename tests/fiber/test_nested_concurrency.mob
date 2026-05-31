@@ -1,7 +1,6 @@
 // Test: spawn inside spawn — nested concurrency with inner await and fiber.all
 print("=== Nested Concurrency Tests ===")
 
-import "fiber"
 
 // Test 1: spawn inside spawn with inner await
 func inner_work(x) {
@@ -32,7 +31,7 @@ func parallel_sum() {
     var results = fiber.all(futures)
 
     var sum = 0
-    for (var i = 0; i < len(results); i += 1) {
+    for (var i = 0; i < size(results); i += 1) {
         sum += results[i]
     }
     return sum

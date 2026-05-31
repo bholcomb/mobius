@@ -164,7 +164,7 @@ assert_test("stringify quoted reserved word", roundtrip.quoted_true == "true")
 assert_test("stringify quoted empty string", roundtrip.quoted_empty == "")
 assert_test("stringify quoted spaced string", roundtrip.quoted_space == "hello world")
 assert_test("stringify quoted hash string", roundtrip.quoted_hash == "a#b")
-assert_test("stringify empty array", len(roundtrip.empty_arr) == 0)
+assert_test("stringify empty array", size(roundtrip.empty_arr) == 0)
 assert_test("stringify empty object", typeof(roundtrip.empty_obj) == "table")
 
 print("")

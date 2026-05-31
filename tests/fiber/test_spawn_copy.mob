@@ -1,11 +1,10 @@
 print("=== Spawn Copy Tests ===")
 
-import "fiber"
 
 func mutate_array(arr) {
     arr[0] = 99
     arr:push(4)
-    return len(arr)
+    return size(arr)
 }
 
 var plain = [1, 2, 3]
@@ -14,7 +13,7 @@ if (array_len != 4) {
     print("FAIL: child array length expected 4, got", array_len)
     exit(1)
 }
-if (len(plain) != 3 || plain[0] != 1) {
+if (size(plain) != 3 || plain[0] != 1) {
     print("FAIL: parent array was mutated by spawn")
     exit(1)
 }

@@ -7,7 +7,7 @@ if (mapped[0] != 2 || mapped[2] != 4) { print("FAIL: inline map"); exit(1) }
 
 // Chained methods
 var result = [5, 3, 1, 4, 2]:filter(func(x, i) { return x > 2 })
-if (result:length() != 3) { print("FAIL: filter chain length"); exit(1) }
+if (result:size() != 3) { print("FAIL: filter chain length"); exit(1) }
 
 // Map then reduce
 var sum = [1, 2, 3]:map(func(x, i) { return x * x }):reduce(func(acc, x) { return acc + x }, 0)
@@ -18,17 +18,17 @@ var idx = [10, 20, 30]:find(20)
 if (idx != 1) { print("FAIL: inline find"); exit(1) }
 
 // Length on inline
-var l = [1, 2, 3, 4, 5]:length()
+var l = [1, 2, 3, 4, 5]:size()
 if (l != 5) { print("FAIL: inline length"); exit(1) }
 
 // Slice on inline
 var sl = [10, 20, 30, 40, 50]:slice(1, 4)
-if (sl:length() != 3) { print("FAIL: inline slice length"); exit(1) }
+if (sl:size() != 3) { print("FAIL: inline slice length"); exit(1) }
 if (sl[0] != 20 || sl[2] != 40) { print("FAIL: inline slice values"); exit(1) }
 
 // Concat on inline
 var c = [1, 2]:concat([3, 4])
-if (c:length() != 4) { print("FAIL: inline concat"); exit(1) }
+if (c:size() != 4) { print("FAIL: inline concat"); exit(1) }
 
 // Any/all on inline
 if (![1, 2, 100]:any(func(x) { return x == 100 })) { print("FAIL: inline any"); exit(1) }
@@ -40,11 +40,11 @@ if (!{key: "val"}:has_key("key")) { print("FAIL: inline table has_key"); exit(1)
 
 // Methods in expressions
 var arr = [1, 2, 3]
-if (arr:length() + 10 != 13) { print("FAIL: method in expression"); exit(1) }
+if (arr:size() + 10 != 13) { print("FAIL: method in expression"); exit(1) }
 if (arr:find(2) * 5 != 5) { print("FAIL: method result arithmetic"); exit(1) }
 
 // Method result as function argument
-print("length is", [1, 2, 3]:length())
+print("length is", [1, 2, 3]:size())
 
 // Method call inside if condition
 if (![1, 2, 3]:any(func(x) { return x == 2 })) {
@@ -53,6 +53,6 @@ if (![1, 2, 3]:any(func(x) { return x == 2 })) {
 
 // Method call in variable declaration
 var filtered = [1, 2, 3, 4, 5]:filter(func(x, i) { return x > 3 })
-if (filtered:length() != 2) { print("FAIL: method in var decl"); exit(1) }
+if (filtered:size() != 2) { print("FAIL: method in var decl"); exit(1) }
 
 print("=== All method chaining tests passed! ===")

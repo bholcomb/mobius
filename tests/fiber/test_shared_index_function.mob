@@ -1,0 +1,38 @@
+// A function __index is honored when a value is accessed through a `shared`
+// binding (the shared-cell lock is released around the __index callback), both
+// directly and across spawned fibers.
+print("=== shared __index function ===")
+
+// shared table, function __index (read)
+var c = {}
+setmetatable(c, { __index: func(self, k) { return "cfg:" + k } })
+shared var cfg = c
+if (cfg.missing != "cfg:missing") { print("FAIL: shared read"); exit(1) }
+
+// shared table, function __index returning a callable (method)
+var a = {}
+setmetatable(a, { __index: func(self, k) { return func(s) { return "m:" + k } } })
+shared var api = a
+if (api:doThing() != "m:doThing") { print("FAIL: shared method"); exit(1) }
+
+// shared table whose __index is a TABLE chain ending in a function (every level)
+var Deep = {}
+setmetatable(Deep, { __index: func(self, k) { return "deep:" + k } })
+var o = {}
+setmetatable(o, { __index: Deep })
+shared var obj = o
+if (obj.x != "deep:x") { print("FAIL: shared chained function __index"); exit(1) }
+
+// across many spawned fibers (lookup runs without the cell lock held)
+var b = {}
+setmetatable(b, { __index: func(self, k) { return 1 } })
+shared var s = b
+func read_one(x) { return x.anything }
+var futs = []
+for (var i = 0; i < 20; i++) { futs:push(spawn read_one(s)) }
+var results = fiber.all(futs)
+var sum = 0
+for (var i = 0; i < results:size(); i++) { sum += results[i] }
+if (sum != 20) { print("FAIL: shared function __index across fibers, got", sum); exit(1) }
+
+print("=== All shared __index function tests passed! ===")

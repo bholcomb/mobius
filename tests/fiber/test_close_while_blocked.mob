@@ -1,7 +1,6 @@
 // Test: close a channel while another fiber is blocked on recv or send
 print("=== Close While Blocked Tests ===")
 
-import "fiber"
 
 // Test 1: close while blocked on recv — recv should unblock and error
 var ch1 = fiber.channel(1)

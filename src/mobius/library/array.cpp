@@ -1,5 +1,6 @@
 #include "library/array.h"
 #include "data/array.h"
+#include "data/array_slice.h"
 #include "data/shared_cell.h"
 #include "data/table.h"
 #include "data/value.h"
@@ -224,6 +225,39 @@ int array_method_slice(MobiusState* state, int arg_count) {
     }
 
     state->npush(make_array_value(slice_array));
+    return 1;
+}
+
+// arr:span(start, end) — aliasing view (write-through) over [start, end),
+// unlike arr:slice which copies. If the array is held in a shared cell, the
+// span synchronizes through that parent, making it safe to hand to fibers.
+int array_method_span(MobiusState* state, int arg_count) {
+    if (arg_count != 3) return state->error("arr:span expects 2 arguments (start, end)");
+
+    ArraySelfAccess access;
+    ArrayValue* arr = extract_array_self(state, "arr:span: self is not an array", &access);
+    if (!arr) return -1;
+
+    Value end_val = state->npop();
+    Value start_val = state->npop();
+    state->npop();  // pop self
+
+    if (start_val.type != VAL_INT64 || end_val.type != VAL_INT64) {
+        return state->error("arr:span start and end must be integers");
+    }
+
+    int64_t start = start_val.as.i64;
+    int64_t end = end_val.as.i64;
+    if (start < 0 || end < start || (uint64_t)end > (uint64_t)arr->length()) {
+        return state->error("arr:span: range out of bounds for array");
+    }
+
+    ArraySlice* slice = new (std::nothrow) ArraySlice(arr, (size_t)start,
+                                                      (size_t)(end - start), access.cell);
+    if (!slice) {
+        return state->error("arr:span: failed to allocate span");
+    }
+    state->npush(make_array_slice_value(slice));
     return 1;
 }
 
@@ -558,8 +592,9 @@ Table* create_array_type_metatable(MobiusState* state) {
     mt->setByString(state->stringPool()->intern("pop"),     make_native_function_value(array_method_pop));
     mt->setByString(state->stringPool()->intern("get"),     make_native_function_value(array_method_get));
     mt->setByString(state->stringPool()->intern("set"),     make_native_function_value(array_method_set));
-    mt->setByString(state->stringPool()->intern("length"),  make_native_function_value(array_method_length));
+    mt->setByString(state->stringPool()->intern("size"),    make_native_function_value(array_method_length));
     mt->setByString(state->stringPool()->intern("slice"),   make_native_function_value(array_method_slice));
+    mt->setByString(state->stringPool()->intern("span"),    make_native_function_value(array_method_span));
     mt->setByString(state->stringPool()->intern("concat"),  make_native_function_value(array_method_concat));
     mt->setByString(state->stringPool()->intern("reverse"), make_native_function_value(array_method_reverse));
     mt->setByString(state->stringPool()->intern("find"),    make_native_function_value(array_method_find));

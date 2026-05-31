@@ -1,4 +1,3 @@
-import "fiber"
 import "http"
 import "json"
 import "socket"
@@ -30,19 +29,19 @@ func __read_http_request(conn) {
             var request = http.parse_request(header_text)
             var body_offset = sep.index + sep.len
             var body = buffer_create(0)
-            if (len(raw) > body_offset) {
-                body:append(raw:slice(body_offset, len(raw) - body_offset))
+            if (size(raw) > body_offset) {
+                body:append(raw:slice(body_offset, size(raw)))
             }
 
             if (request.content_length != nil) {
-                while (len(body) < request.content_length) {
+                while (size(body) < request.content_length) {
                     var chunk = conn:recv(4096)
                     if (chunk == nil) {
                         throw "request body ended before content-length bytes were read"
                     }
                     body:append(chunk)
                 }
-                if (len(body) > request.content_length) {
+                if (size(body) > request.content_length) {
                     body = body:slice(0, request.content_length)
                 }
             }
@@ -54,7 +53,7 @@ func __read_http_request(conn) {
 
         var chunk = conn:recv(4096)
         if (chunk == nil) {
-            if (len(raw) == 0) {
+            if (size(raw) == 0) {
                 return nil
             }
             throw "connection closed before request headers completed"
@@ -65,7 +64,7 @@ func __read_http_request(conn) {
 
 func __copy_buffer(buf) {
     var out = buffer_create(0)
-    if (buf != nil && len(buf) > 0) {
+    if (buf != nil && size(buf) > 0) {
         out:append(buf)
     }
     return out
@@ -76,9 +75,9 @@ func __buffer_tail(buf, offset) {
     if (buf == nil) {
         return out
     }
-    var remaining = len(buf) - offset
+    var remaining = size(buf) - offset
     if (remaining > 0) {
-        out:append(buf:slice(offset, remaining))
+        out:append(buf:slice(offset, offset + remaining))
     }
     return out
 }
@@ -90,8 +89,8 @@ func __normalize_path(path) {
     if (path[0] != "/") {
         path = "/" + path
     }
-    while (len(path) > 1 && endswith(path, "/")) {
-        path = substr(path, 0, len(path) - 1)
+    while (size(path) > 1 && endswith(path, "/")) {
+        path = substr(path, 0, size(path) - 1)
     }
     return path
 }
@@ -99,7 +98,7 @@ func __normalize_path(path) {
 func __path_segments(path) {
     var parts = split(__normalize_path(path), "/")
     var out = []
-    for (var i = 0; i < len(parts); i += 1) {
+    for (var i = 0; i < size(parts); i += 1) {
         if (parts[i] != "") {
             out:push(parts[i])
         }
@@ -132,16 +131,16 @@ func html_escape(text) {
 func __route_matches(route_path, request_path) {
     var route_segments = __path_segments(route_path)
     var request_segments = __path_segments(request_path)
-    if (len(route_segments) != len(request_segments)) {
+    if (size(route_segments) != size(request_segments)) {
         return nil
     }
 
     var params = {}
-    for (var i = 0; i < len(route_segments); i += 1) {
+    for (var i = 0; i < size(route_segments); i += 1) {
         var route_seg = route_segments[i]
         var request_seg = request_segments[i]
         if (startswith(route_seg, ":")) {
-            params[substr(route_seg, 1, len(route_seg) - 1)] = request_seg
+            params[substr(route_seg, 1, size(route_seg) - 1)] = request_seg
         } else if (route_seg != request_seg) {
             return nil
         }
@@ -357,7 +356,7 @@ func __make_ctx(app_value, request, conn, params) {
 
 func __find_route(app_value, method, path, websocket_only) {
     var normalized = __normalize_path(path)
-    for (var i = 0; i < len(app_value.routes); i += 1) {
+    for (var i = 0; i < size(app_value.routes); i += 1) {
         var route = app_value.routes[i]
         if (route.websocket != websocket_only) {
             continue
@@ -396,7 +395,7 @@ func __write_response(conn, response) {
 }
 
 func __run_handlers(ctx, route_handler, index) {
-    if (index < len(ctx.app.middleware)) {
+    if (index < size(ctx.app.middleware)) {
         var middleware = ctx.app.middleware[index]
         var next = func() {
             return __run_handlers(ctx, route_handler, index + 1)
@@ -670,7 +669,7 @@ func __app_serve(self, listener, options) {
         conn_ch:close()
     }
 
-    for (var i = 0; i < len(workers); i += 1) {
+    for (var i = 0; i < size(workers); i += 1) {
         await workers[i]
     }
     return accepted
