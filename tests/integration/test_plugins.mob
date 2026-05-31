@@ -21,7 +21,7 @@ print("sqrt(16) =", sqrt(16));
 print("\n=== String Operations Test ===");
 var text = "Hello Mobius";
 print("text =", text);
-print("len(text) =", len(text));
+print("size(text) =", size(text));
 print("upper(text) =", upper(text));
 print("lower(text) =", lower(text));
 

@@ -1,7 +1,6 @@
 // Test blocking ch:send() and ch:recv() across fibers
 print("=== Channel Blocking Tests ===")
 
-import "fiber"
 
 // Test 1: ch:recv() blocks until another fiber sends
 var ch1 = fiber.channel(1)

@@ -35,7 +35,7 @@ assert_test("write run script", writefile(run_script,
     "var version = glfw.version()\n" +
     "if (version.major != 3) { exit(1) }\n" +
     "if (version.minor < 4) { exit(1) }\n" +
-    "if (len(glfw.version_string()) == 0) { exit(1) }\n" +
+    "if (size(glfw.version_string()) == 0) { exit(1) }\n" +
     "var vk = glfw.vulkan_supported()\n" +
     "if (!(vk == true || vk == false)) { exit(1) }\n" +
     "if (glfw.initialized()) { exit(1) }\n" +
@@ -58,18 +58,18 @@ assert_test("write run script", writefile(run_script,
     "glfw.window_hint(glfw.Hint.VISIBLE, false)\n" +
     "glfw.window_hint(glfw.Hint.CLIENT_API, glfw.ClientApi.NO_API)\n" +
     "var required_ext = glfw.required_instance_extensions()\n" +
-    "if (!(required_ext == nil || len(required_ext) >= 0)) { exit(1) }\n" +
+    "if (!(required_ext == nil || size(required_ext) >= 0)) { exit(1) }\n" +
     "var monitors = glfw.monitors()\n" +
-    "if (len(monitors) > 0) {\n" +
+    "if (size(monitors) > 0) {\n" +
     "    var primary = glfw.primary_monitor()\n" +
     "    if (primary == nil) { exit(1) }\n" +
     "    var name = primary:name()\n" +
-    "    if (name != nil && len(name) == 0) { exit(1) }\n" +
+    "    if (name != nil && size(name) == 0) { exit(1) }\n" +
     "    var mode = primary:video_mode()\n" +
     "    if (mode == nil) { exit(1) }\n" +
     "    if (mode.width <= 0 || mode.height <= 0) { exit(1) }\n" +
     "    var modes = primary:video_modes()\n" +
-    "    if (len(modes) == 0) { exit(1) }\n" +
+    "    if (size(modes) == 0) { exit(1) }\n" +
     "    var mon_pos = primary:get_pos()\n" +
     "    var work = primary:get_workarea()\n" +
     "    var physical = primary:get_physical_size()\n" +

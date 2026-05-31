@@ -1,7 +1,6 @@
 // Test: ch:try_send / ch:try_recv under concurrent load
 print("=== Concurrent Try Send/Recv Tests ===")
 
-import "fiber"
 
 // Test 1: multiple producers try_send to a bounded channel, count successes
 var ch = fiber.channel(10)

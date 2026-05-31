@@ -5,7 +5,7 @@
 print("=== Test 1: Basic Operations ===");
 var arr1 = [1, 2, 3, 4, 5];
 print("Array:", arr1);
-print("Length:", arr1:length());
+print("Length:", arr1:size());
 print("First element:", arr1[0]);
 print("Last element:", arr1[4]);
 
@@ -13,7 +13,7 @@ print("Last element:", arr1[4]);
 print("\n=== Test 2: Empty Array ===");
 var empty = [];
 print("Empty array:", empty);
-print("Length:", empty:length());
+print("Length:", empty:size());
 
 // Test 3: Array with mixed types
 print("\n=== Test 3: Mixed Types ===");
@@ -59,7 +59,7 @@ print("Source array:", source);
 var slice1 = source:slice(2, 5);
 print("Slice [2:5]:", slice1);
 
-var slice2 = source:slice(3, len(source));
+var slice2 = source:slice(3, size(source));
 print("Slice [3:]:", slice2);
 
 var slice3 = source:slice(0, 3);
@@ -114,6 +114,6 @@ while (i < 10) {
     i = i + 1;
 }
 print("Large array (squares):", large);
-print("Length:", large:length());
+print("Length:", large:size());
 
 print("\n=== All Array Tests Completed ===");

@@ -26,19 +26,19 @@ func read_http_request(conn) {
             var request = http.parse_request(header_text)
             var body_offset = sep.index + sep.len
             var body = buffer_create(0)
-            if (len(raw) > body_offset) {
-                body:append(raw:slice(body_offset, len(raw) - body_offset))
+            if (size(raw) > body_offset) {
+                body:append(raw:slice(body_offset, size(raw)))
             }
 
             if (request.content_length != nil) {
-                while (len(body) < request.content_length) {
+                while (size(body) < request.content_length) {
                     var chunk = conn:recv(4096)
                     if (chunk == nil) {
                         throw "request body ended before content-length bytes were read"
                     }
                     body:append(chunk)
                 }
-                if (len(body) > request.content_length) {
+                if (size(body) > request.content_length) {
                     body = body:slice(0, request.content_length)
                 }
             }
@@ -50,7 +50,7 @@ func read_http_request(conn) {
 
         var chunk = conn:recv(4096)
         if (chunk == nil) {
-            if (len(raw) == 0) {
+            if (size(raw) == 0) {
                 return nil
             }
             throw "connection closed before request headers completed"
@@ -128,32 +128,32 @@ func html_escape(text) {
 }
 
 func starts_with(text, prefix) {
-    if (len(text) < len(prefix)) {
+    if (size(text) < size(prefix)) {
         return false
     }
-    return substr(text, 0, len(prefix)) == prefix
+    return substr(text, 0, size(prefix)) == prefix
 }
 
 func ends_with(text, suffix) {
-    if (len(text) < len(suffix)) {
+    if (size(text) < size(suffix)) {
         return false
     }
-    return substr(text, len(text) - len(suffix), len(suffix)) == suffix
+    return substr(text, size(text) - size(suffix), size(suffix)) == suffix
 }
 
 func strip_prefix(text, prefix) {
     if (!starts_with(text, prefix)) {
         return nil
     }
-    return substr(text, len(prefix), len(text) - len(prefix))
+    return substr(text, size(prefix), size(text) - size(prefix))
 }
 
 func between_prefix_and_suffix(text, prefix, suffix) {
     if (!starts_with(text, prefix) || !ends_with(text, suffix)) {
         return nil
     }
-    var start = len(prefix)
-    var count = len(text) - len(prefix) - len(suffix)
+    var start = size(prefix)
+    var count = size(text) - size(prefix) - size(suffix)
     if (count < 0) {
         return nil
     }

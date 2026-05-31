@@ -97,7 +97,7 @@ assert_test("explicit positive int", n9.n == 99)
 // ============================================================================
 
 var a1 = toml.parse("arr = [1, 2, 3]")
-assert_test("integer array len", len(a1.arr) == 3)
+assert_test("integer array len", size(a1.arr) == 3)
 assert_test("integer array[0]", a1.arr[0] == 1)
 assert_test("integer array[2]", a1.arr[2] == 3)
 
@@ -105,14 +105,14 @@ var a2 = toml.parse("arr = [\"a\", \"b\", \"c\"]")
 assert_test("string array", a2.arr[1] == "b")
 
 var a3 = toml.parse("arr = []")
-assert_test("empty array", len(a3.arr) == 0)
+assert_test("empty array", size(a3.arr) == 0)
 
 var a4 = toml.parse("arr = [[1, 2], [3, 4]]")
 assert_test("nested array", a4.arr[0][0] == 1)
 assert_test("nested array[1][1]", a4.arr[1][1] == 4)
 
 var a5 = toml.parse("arr = [\n  1,\n  2,\n  3,\n]")
-assert_test("multiline array", len(a5.arr) == 3)
+assert_test("multiline array", size(a5.arr) == 3)
 assert_test("multiline array trailing comma", a5.arr[2] == 3)
 
 // ============================================================================
@@ -153,7 +153,7 @@ assert_test("multiple dotted keys color", dk2.fruit.color == "red")
 // ============================================================================
 
 var aot1 = toml.parse("[[items]]\nname = \"A\"\n\n[[items]]\nname = \"B\"\n\n[[items]]\nname = \"C\"")
-assert_test("array of tables len", len(aot1.items) == 3)
+assert_test("array of tables len", size(aot1.items) == 3)
 assert_test("array of tables[0]", aot1.items[0].name == "A")
 assert_test("array of tables[1]", aot1.items[1].name == "B")
 assert_test("array of tables[2]", aot1.items[2].name == "C")
@@ -221,7 +221,7 @@ var aot_input = "[[products]]\nname = \"Hammer\"\nprice = 9\n\n[[products]]\nnam
 var aot_doc = toml.parse(aot_input)
 var aot_str = toml.stringify(aot_doc)
 var aot_doc2 = toml.parse(aot_str)
-assert_test("aot roundtrip len", len(aot_doc2.products) == 2)
+assert_test("aot roundtrip len", size(aot_doc2.products) == 2)
 assert_test("aot roundtrip[0] name", aot_doc2.products[0].name == "Hammer")
 assert_test("aot roundtrip[1] name", aot_doc2.products[1].name == "Nail")
 assert_test("aot roundtrip[1] price", aot_doc2.products[1].price == 1)
@@ -236,7 +236,7 @@ writefile(pf_path, pf_toml)
 
 var pf_doc = toml.parsefile(pf_path)
 assert_test("parsefile title", pf_doc.title == "Test Config")
-assert_test("parsefile servers len", len(pf_doc.servers) == 2)
+assert_test("parsefile servers len", size(pf_doc.servers) == 2)
 assert_test("parsefile servers[0] name", pf_doc.servers[0].name == "alpha")
 assert_test("parsefile settings timeout", pf_doc.settings.timeout == 30)
 os.remove(pf_path)

@@ -6,7 +6,7 @@ print("=== Array Bounds and Error Tests ===");
 // Test bounds checking with array indexing
 var arr = [1, 2, 3];
 print("Test array:", arr);
-print("Length:", arr:length());
+print("Length:", arr:size());
 
 // Valid accesses
 print("Valid [0]:", arr[0]);

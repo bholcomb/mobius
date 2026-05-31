@@ -44,7 +44,7 @@ assert_test("write run script", writefile(run_script,
     "ensure(desc.size == 64 && desc.debugName == \"buf\")\n" +
     "var version = vulkease.version()\n" +
     "ensure(version.major == 2)\n" +
-    "ensure(len(vulkease.result_string(vulkease.Result.SUCCESS)) > 0)\n" +
+    "ensure(size(vulkease.result_string(vulkease.Result.SUCCESS)) > 0)\n" +
     "var surface_ok = vulkease.instance_extension_available(\"VK_KHR_surface\")\n" +
     "ensure(surface_ok == true || surface_ok == false)\n" +
     "var ctx = nil\n" +
@@ -56,7 +56,7 @@ assert_test("write run script", writefile(run_script,
     "}\n" +
     "var devices = ctx:physical_devices()\n" +
     "ensure(typeof(devices) == \"array\")\n" +
-    "if (len(devices) > 0) {\n" +
+    "if (size(devices) > 0) {\n" +
     "    ensure(typeof(devices[0].name) == \"string\")\n" +
     "    ensure(typeof(devices[0].type) == \"string\")\n" +
     "    var dev = ctx:create_device()\n" +

@@ -3,6 +3,7 @@
 #include "data/array.h"
 #include "data/array_slice.h"
 #include "data/buffer.h"
+#include "data/table.h"
 #include "data/shared_cell.h"
 #include "state/mobius_state.h"
 
@@ -36,7 +37,7 @@ static MobiusString* intern_owned_string(MobiusState* state, char* buf, size_t l
 
 int lib_len(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
-        return state->error("len expects exactly 1 argument");
+        return state->error("size expects exactly 1 argument");
     }
     
     Value arg = state->npeek(0);
@@ -54,8 +55,10 @@ int lib_len(MobiusState* state, int arg_count) {
         state->npush(make_int64_value((int64_t)arg.as.array_slice->length()));
     } else if (arg.type == VAL_BUFFER && arg.as.buffer) {
         state->npush(make_int64_value((int64_t)arg.as.buffer->size()));
+    } else if (arg.type == VAL_TABLE && arg.as.table) {
+        state->npush(make_int64_value((int64_t)arg.as.table->size()));
     } else {
-        return state->error("len expects a string, array, or buffer argument");
+        return state->error("size expects a string, array, table, or buffer argument");
     }
     
     return 1;

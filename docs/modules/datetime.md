@@ -6,6 +6,8 @@ Import:
 import "datetime"
 ```
 
+[← Module reference](index.md)
+
 The `datetime` module provides structured date/time values on top of the lower
 level time helpers in `os`.
 

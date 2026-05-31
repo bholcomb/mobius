@@ -16,9 +16,9 @@ func assert_test(name, cond) {
 }
 
 func assert_buffer_equals(name, buf, expected) {
-    var ok = typeof(buf) == "buffer" && len(buf) == len(expected)
+    var ok = typeof(buf) == "buffer" && size(buf) == size(expected)
     var i = 0
-    while (ok && i < len(expected)) {
+    while (ok && i < size(expected)) {
         if (buf[i] != expected[i]) {
             ok = false
         }

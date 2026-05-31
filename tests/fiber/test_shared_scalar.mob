@@ -1,6 +1,5 @@
 print("=== Shared Scalar Tests ===")
 
-import "fiber"
 
 var NUM_FIBERS = 8
 var INCREMENTS = 250

@@ -6,6 +6,8 @@ Import:
 import "regex"
 ```
 
+[← Module reference](index.md)
+
 Functions:
 
 | Function | Description |

@@ -132,14 +132,14 @@ func benchmark_strings() {
     var i = 0;
     while (i < 1000) {
         result = concat(base, " World ", str(i));
-        var len_result = len(result);
+        var len_result = size(result);
         var upper_result = upper(result);
         i = i + 1;
     }
     
     var duration = ns_to_sec(clock() - start);
     print("   Time: ", duration, "s");
-    print("   Final length: ", len(result));
+    print("   Final length: ", size(result));
     return result;
 }
 

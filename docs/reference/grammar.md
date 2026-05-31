@@ -1,12 +1,13 @@
-# Mobius Language Grammar
+# Grammar
 
-Formal grammar for the Mobius scripting language. This document is the
-canonical source of truth for the language syntax. The parser and scanner
-implementations should conform to this specification.
+The formal grammar for Mobius. This is the canonical reference for the syntax;
+the scanner and parser conform to it.
 
-**Semantic note:** Variables are type-locked. The type is inferred from the
-first non-nil assignment and cannot change. The grammar itself is unchanged —
-type locking is enforced at compile time and runtime, not through new syntax.
+**Semantic note:** Variables are type-locked — a variable's type is inferred from
+its first non-nil assignment and cannot change. Type locking is enforced at
+compile and run time, not through syntax.
+
+[← Documentation home](../index.md) · [Standard Library](standard-library.md)
 
 ## Notation
 
@@ -37,6 +38,7 @@ declaration         ::= function_decl
                       | var_decl
                       | shared_var_decl
                       | enum_decl
+                      | struct_decl
                       | statement
 
 function_decl       ::= "func" IDENTIFIER "(" [ param_list ] ")" [ ":" func_type_name ] block
@@ -53,9 +55,7 @@ type_annotation     ::= ":" type_name
 
 type_name           ::= "int64" | "uint64" | "float64"
 
-func_type_name      ::= "int" | "integer" | "int64"
-                      | "uint64"
-                      | "float" | "float64"
+func_type_name      ::= "int64" | "uint64" | "float64"
                       | "bool" | "boolean"
                       | "string"
                       | "array" | "table"
@@ -73,6 +73,32 @@ enum_body           ::= enum_member { "," enum_member } [ "," ]
 enum_member         ::= IDENTIFIER [ "=" expression ]
 ```
 
+## Struct declarations
+
+```
+struct_decl         ::= "struct" IDENTIFIER [ "packed" | "native" ] "{" { struct_member } "}"
+
+struct_member       ::= field_member
+                      | union_member
+                      | nested_struct
+
+field_member        ::= IDENTIFIER [ "at" INTEGER ] ":" struct_type terminator
+
+union_member        ::= "union" "{" { struct_member } "}"
+
+nested_struct       ::= "struct" "{" { struct_member } "}"
+
+struct_type         ::= struct_scalar [ "[" INTEGER "]" ]
+                      | IDENTIFIER [ "[" INTEGER "]" ]     // a previously declared layout
+
+struct_scalar       ::= "int8" | "uint8" | "byte"
+                      | "int16" | "uint16"
+                      | "int32" | "uint32"
+                      | "int64" | "uint64"
+                      | "float32" | "float64"
+                      | "bool" | "bool8"
+```
+
 ## Statements
 
 ```
@@ -81,9 +107,11 @@ statement           ::= block
                       | while_stmt
                       | for_stmt
                       | switch_stmt
+                      | try_stmt
                       | return_stmt
                       | break_stmt
                       | continue_stmt
+                      | throw_stmt
                       | import_stmt
                       | pragma_stmt
                       | yield_stmt
@@ -97,18 +125,22 @@ if_stmt             ::= "if" "(" expression ")" statement
 
 while_stmt          ::= "while" "(" expression ")" statement
 
-for_stmt            ::= "for" "(" for_init ";" [ expression ] ";" [ expression ] ")" statement
+for_stmt            ::= "for" "(" c_for_header | for_in_header ")" statement
+
+c_for_header        ::= for_init ";" [ expression ] ";" [ expression ]
 
 for_init            ::= var_decl
                       | expr_stmt
                       | <empty>
+
+for_in_header       ::= [ "var" ] IDENTIFIER [ "," IDENTIFIER ] "in" expression
 
 switch_stmt         ::= "switch" "(" expression ")" "{" { switch_clause } "}"
 
 switch_clause       ::= case_clause
                       | default_clause
 
-case_clause         ::= "case" case_pattern_list ":" { statement }
+case_clause         ::= "case" case_pattern_list [ "when" expression ] ":" { statement }
 
 case_pattern_list   ::= case_pattern { "," case_pattern }
 
@@ -124,19 +156,23 @@ expression_pattern  ::= comparison_op expression
 
 comparison_op       ::= "==" | "!=" | ">" | ">=" | "<" | "<="
 
-range_pattern       ::= literal ".." literal
-                      | literal "..." literal
+range_pattern       ::= literal ".." literal      // inclusive of both ends
+                      | literal "..." literal     // exclusive of the end
 
 type_pattern        ::= "is" type_identifier
 
-type_identifier     ::= "nil" | "bool" | "boolean"
-                      | "int" | "integer" | "float"
+type_identifier     ::= "int64" | "uint64" | "float64"
+                      | "bool" | "boolean" | "nil"
                       | "string"
                       | "array" | "table" | "function"
 
 enum_pattern        ::= IDENTIFIER "." IDENTIFIER
 
 value_pattern       ::= literal
+
+try_stmt            ::= "try" block "catch" IDENTIFIER block [ "finally" block ]
+
+throw_stmt          ::= "throw" expression terminator
 
 return_stmt         ::= "return" [ expression ] terminator
 
@@ -159,6 +195,8 @@ expr_stmt           ::= expression terminator
 
 terminator          ::= ";" | NEWLINE | EOF
 ```
+
+> `"as"` in `import` is recognized contextually, not reserved as a keyword.
 
 ## Expressions
 
@@ -202,6 +240,7 @@ postfix             ::= primary { call_tail }
 call_tail           ::= "(" [ arg_list ] ")"
                       | "[" expression "]"
                       | "." IDENTIFIER
+                      | ":" IDENTIFIER "(" [ arg_list ] ")"   // method call
                       | "++" | "--"
 
 arg_list            ::= expression { "," expression }
@@ -250,9 +289,13 @@ INTEGER             ::= DIGIT { DIGIT }
                       | "0x" HEX_DIGIT { HEX_DIGIT }
                       | "0b" BIN_DIGIT { BIN_DIGIT }
 
-FLOAT               ::= DIGIT { DIGIT } "." DIGIT { DIGIT }
+FLOAT               ::= DIGIT { DIGIT } "." DIGIT { DIGIT } [ EXPONENT ]
+                      | DIGIT { DIGIT } EXPONENT
+
+EXPONENT            ::= ( "e" | "E" ) [ "+" | "-" ] DIGIT { DIGIT }
 
 STRING              ::= '"' { STRING_CHAR } '"'
+                      | '"""' { <any character> } '"""'
 
 CHAR                ::= "'" CHAR_CHAR "'"
 
@@ -269,29 +312,33 @@ CHAR_CHAR           ::= <any character except "'" and '\'>
 ESCAPE_CHAR         ::= "n" | "t" | "r" | "\" | '"' | "'" | "0"
 ```
 
+> Numeric literals do not permit `_` digit separators. Triple-quoted strings
+> (`""" … """`) may span multiple lines and contain unescaped `"`.
+
 ## Keywords
 
 ```
-and     atomic   await    break    case     continue  default  else
-elif    enum     false    for      func     if        import   is
-nil     not      or       return   shared   spawn     switch
-true    var      while    yield
+and     at      atomic   await    break    case     catch     continue
+default elif    else     enum     false    finally  for       func
+if      import  in       is       nil      not      or        return
+shared  spawn   struct   switch   throw    true     try       union
+var     when    while    yield
 ```
 
 ## Operator Precedence (low to high)
 
-| Precedence | Operators                          | Associativity |
-|------------|------------------------------------|---------------|
-| 1          | `=` `+=` `-=` `*=` `/=`            | right         |
-| 2          | `or` `\|\|`                        | left          |
-| 3          | `and` `&&`                         | left          |
-| 4          | `\|` (bitwise or)                  | left          |
-| 5          | `^` (bitwise xor)                  | left          |
-| 6          | `&` (bitwise and)                  | left          |
-| 7          | `==` `!=`                          | left          |
-| 8          | `<` `<=` `>` `>=`                  | left          |
-| 9          | `<<` `>>` (shift)                  | left          |
-| 10         | `+` `-`                            | left          |
-| 11         | `*` `/` `%`                        | left          |
-| 12         | `!` `-` `not` `+` `~` (unary)      | right         |
-| 13         | `()` `[]` `.` `++` `--` (postfix)  | left          |
+| Precedence | Operators                                | Associativity |
+|------------|------------------------------------------|---------------|
+| 1          | `=` `+=` `-=` `*=` `/=`                  | right         |
+| 2          | `or` `\|\|`                              | left          |
+| 3          | `and` `&&`                               | left          |
+| 4          | `\|` (bitwise or)                        | left          |
+| 5          | `^` (bitwise xor)                        | left          |
+| 6          | `&` (bitwise and)                        | left          |
+| 7          | `==` `!=`                                | left          |
+| 8          | `<` `<=` `>` `>=`                        | left          |
+| 9          | `<<` `>>` (shift)                        | left          |
+| 10         | `+` `-`                                  | left          |
+| 11         | `*` `/` `%`                              | left          |
+| 12         | `!` `-` `not` `+` `~` (unary)            | right         |
+| 13         | `()` `[]` `.` `:` `++` `--` (postfix)    | left          |

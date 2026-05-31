@@ -18,7 +18,6 @@
 
 print("=== Shared Variables and Atomic Operations ===")
 
-import "fiber"
 
 var NUM_FIBERS = 8
 var INCREMENTS_PER_FIBER = 500
@@ -169,7 +168,7 @@ print("  Atomic shared scalar:", atomic_scalar, "(exact)")
 // ---------------------------------------------------------------------------
 
 shared var slice_parent = [0, 0]
-var shared_slice = fiber.slice(slice_parent, 0, 1)
+var shared_slice = slice_parent:span(0, 1)
 
 func atomic_slice_increment(s, n) {
     for (var i = 0; i < n; i += 1) {
@@ -210,7 +209,7 @@ print("  atomic() on non-shared correctly raised error")
 var slice_caught_error = false
 try {
     var local_arr = [0, 1]
-    var local_slice = fiber.slice(local_arr, 0, 1)
+    var local_slice = local_arr:span(0, 1)
     atomic(local_slice[0] = local_slice[0] + 1)
 } catch e {
     slice_caught_error = true

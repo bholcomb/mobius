@@ -1,0 +1,37 @@
+// A metatable __index may be a function (called as __index(self, key)) or a
+// table (a prototype chain). Both work for tables and userdata, and the
+// function form is honored at every level of a chain.
+print("=== __index function/table resolution ===")
+
+// 1) function __index on a plain table (read)
+var t = {}
+setmetatable(t, { __index: func(self, k) { return "fn:" + k } })
+if (t.anything != "fn:anything") { print("FAIL: table function __index read"); exit(1) }
+
+// 2) table __index chain (value) still resolves
+var Base = { x: 10 }
+var P = {}
+setmetatable(P, { __index: Base })
+if (P.x != 10) { print("FAIL: table __index value chain"); exit(1) }
+
+// 3) function __index at the END of a table chain (checked at every level)
+var Deep = {}
+setmetatable(Deep, { __index: func(self, k) { return "deep:" + k } })
+var Mid = { midval: 1 }
+setmetatable(Mid, { __index: Deep })
+var obj = {}
+setmetatable(obj, { __index: Mid })
+if (obj.midval != 1) { print("FAIL: mid-chain direct value"); exit(1) }
+if (obj.missing != "deep:missing") { print("FAIL: function __index deep in chain"); exit(1) }
+
+// 4) method resolved through a function __index that returns a callable
+var api = {}
+setmetatable(api, { __index: func(self, k) { return func(s) { return "called:" + k } } })
+if (api:doThing() != "called:doThing") { print("FAIL: method via function __index"); exit(1) }
+
+// 5) a direct field still shadows __index
+var d = { name: "direct" }
+setmetatable(d, { __index: func(self, k) { return "fallback" } })
+if (d.name != "direct") { print("FAIL: direct field shadow"); exit(1) }
+
+print("=== All __index function tests passed! ===")

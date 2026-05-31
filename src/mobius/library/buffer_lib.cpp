@@ -273,23 +273,23 @@ int buffer_method_copy(MobiusState* state, int arg_count) {
 }
 
 int buffer_method_slice(MobiusState* state, int arg_count) {
-    if (arg_count != 3) return state->error("buffer:slice expects 2 arguments (start, length)");
+    if (arg_count != 3) return state->error("buffer:slice expects 2 arguments (start, end)");
 
     BufferSelfAccess access;
     BufferValue* buffer = extract_buffer_self(state, "buffer:slice: self is not a buffer", &access);
     if (!buffer) return -1;
 
-    Value length_value = state->npop();
+    Value end_value = state->npop();
     Value start_value = state->npop();
     state->npop();
 
-    if (start_value.type != VAL_INT64 || length_value.type != VAL_INT64) {
-        return state->error("buffer:slice start and length must be integers");
+    if (start_value.type != VAL_INT64 || end_value.type != VAL_INT64) {
+        return state->error("buffer:slice start and end must be integers");
     }
 
     int64_t start = std::max<int64_t>(0, start_value.as.i64);
-    int64_t length = std::max<int64_t>(0, length_value.as.i64);
-    if (start >= (int64_t)buffer->size() || length == 0) {
+    int64_t end = std::min<int64_t>((int64_t)buffer->size(), end_value.as.i64);
+    if (start >= end) {
         BufferValue* empty = make_buffer_copy(0);
         if (!empty) return state->error("failed to create buffer slice");
         state->npush(make_buffer_value(empty));
@@ -297,7 +297,7 @@ int buffer_method_slice(MobiusState* state, int arg_count) {
     }
 
     size_t actual_start = (size_t)start;
-    size_t actual_length = std::min<size_t>((size_t)length, buffer->size() - actual_start);
+    size_t actual_length = (size_t)(end - start);
     BufferValue* slice = make_buffer_copy(0);
     if (!slice) return state->error("failed to create buffer slice");
     if (!slice->appendBytes(buffer->data() + actual_start, actual_length)) {
@@ -344,7 +344,7 @@ Table* create_buffer_type_metatable(MobiusState* state) {
     if (!mt) return nullptr;
     mt->setByString(state->stringPool()->intern("get"),       make_native_function_value(buffer_method_get));
     mt->setByString(state->stringPool()->intern("set"),       make_native_function_value(buffer_method_set));
-    mt->setByString(state->stringPool()->intern("length"),    make_native_function_value(buffer_method_length));
+    mt->setByString(state->stringPool()->intern("size"),      make_native_function_value(buffer_method_length));
     mt->setByString(state->stringPool()->intern("resize"),    make_native_function_value(buffer_method_resize));
     mt->setByString(state->stringPool()->intern("reserve"),   make_native_function_value(buffer_method_reserve));
     mt->setByString(state->stringPool()->intern("append"),    make_native_function_value(buffer_method_append));

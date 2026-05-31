@@ -6,6 +6,8 @@ Import:
 import "websocket"
 ```
 
+[← Module reference](index.md)
+
 The `websocket` module provides dependency-free WebSocket protocol helpers for
 handshakes and frame encoding/decoding, plus a first plain-TCP client transport
 API.

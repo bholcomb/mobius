@@ -1,0 +1,25 @@
+// Regression: a script that spawns fibers and falls off the end (without
+// awaiting them) must terminate cleanly. A lock-ordering bug in JobSystem
+// shutdown previously let this deadlock intermittently.
+print("=== Spawn Without Await Exit ===")
+
+func work(n) {
+    var s = 0
+    for (var i = 0; i < n; i++) { s += i }
+    return s
+}
+
+shared var hits = [0]
+func bump(h) {
+    func go() { atomic(h[0] = h[0] + 1) }
+    return go
+}
+var inc = bump(hits)
+
+// Fire-and-forget a batch of fibers, then end the program immediately.
+for (var i = 0; i < 16; i++) {
+    spawn work(50)
+    spawn inc()
+}
+
+print("=== reached end of script ===")

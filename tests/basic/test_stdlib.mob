@@ -28,7 +28,7 @@ print("round(3.6) =", round(3.6));
 print("\n=== String Functions ===");
 var text = "Hello World";
 print("text =", text);
-print("len(text) =", len(text));
+print("size(text) =", size(text));
 print("upper(text) =", upper(text));
 print("lower(text) =", lower(text));
 print("substr(text, 0, 5) =", substr(text, 0, 5));

@@ -23,11 +23,11 @@ if (s4 != "foo and bar") { print("FAIL: multi interp, got", s4); exit(1) }
 
 // Interpolation with function call
 var s5 = `type: ${typeof(42)}`
-if (s5 != "type: integer") { print("FAIL: func call interp, got", s5); exit(1) }
+if (s5 != "type: int64") { print("FAIL: func call interp, got", s5); exit(1) }
 
 // Nested expressions
 var arr = [10, 20, 30]
-var s6 = `length: ${arr:length()}`
+var s6 = `length: ${arr:size()}`
 if (s6 != "length: 3") { print("FAIL: method call interp, got", s6); exit(1) }
 
 // Empty interpolation body

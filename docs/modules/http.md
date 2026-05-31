@@ -6,6 +6,8 @@ Import:
 import "http"
 ```
 
+[← Module reference](index.md)
+
 The `http` module provides dependency-free HTTP protocol helpers plus a first
 plain-TCP client request path. TLS is not included yet.
 
@@ -46,7 +48,7 @@ var req = http.build_request({
     method: "POST",
     path: "/submit",
     host: "example.com",
-    headers: {"content-type": "application/json"},
+    headers: { ["content-type"] = "application/json" },
     body: "{\"ok\":true}"
 })
 

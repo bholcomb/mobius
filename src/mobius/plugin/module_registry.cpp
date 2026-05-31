@@ -388,18 +388,19 @@ static ModulePaths resolve_module_paths(const char* name, const char* caller_sou
     for (const auto& d : state->pluginDirectories()) append_search_dir(search_dirs, seen_dirs, d);
     for (int i = 0; default_dirs[i]; i++) append_search_dir(search_dirs, seen_dirs, default_dirs[i]);
 
+    // Resolve per directory in priority order so the nearest directory wins:
+    // a module sitting next to the importing script (or earlier on the search
+    // path) takes precedence over a same-named module in a later directory,
+    // regardless of packaged-vs-flat layout. Within a single directory the
+    // order is packaged, then native-flat (.so [+ .mob]), then script-flat.
     for (const auto& dir : search_dirs) {
         ModulePaths packaged = resolve_packaged_module_paths(dir, name);
         if (!packaged.error_message.empty()) return packaged;
         if (packaged.found) return packaged;
-    }
 
-    for (const auto& dir : search_dirs) {
         ModulePaths native = resolve_flat_module_paths(dir, name, true, true);
         if (native.has_so) return native;
-    }
 
-    for (const auto& dir : search_dirs) {
         ModulePaths script = resolve_flat_module_paths(dir, name, false, true);
         if (script.found) return script;
     }

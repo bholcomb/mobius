@@ -1,7 +1,6 @@
 // Test channel operations
 print("=== Channel Tests ===")
 
-import "fiber"
 
 // Create a channel
 var ch = fiber.channel(3)

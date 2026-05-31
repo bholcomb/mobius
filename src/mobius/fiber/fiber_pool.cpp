@@ -123,6 +123,33 @@ void FiberPool::release(MobiusFiber* fiber) {
     free_list_.push_back(fiber);
 }
 
+MobiusFiber* FiberPool::createDetachedFiber(size_t stack_size) {
+    size_t page_size = get_page_size();
+    size_t usable = align_up(stack_size, page_size);
+    void* mem = alloc_stack(usable, page_size);
+    if (!mem) return nullptr;
+
+    MobiusFiber* fiber = new MobiusFiber();
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        fiber->id = next_id_++;
+    }
+    fiber->stack_memory = mem;
+    fiber->stack_size = usable;
+    fiber->state = FiberState::Idle;
+    fiber->vm = nullptr;
+    fiber->cancel_requested.store(false, std::memory_order_relaxed);
+    fiber->peak_stack_bytes = 0;
+    // Intentionally not tracked in all_fibers_/free_list_: detached fibers are
+    // owned by the caller and never reused by the worker pool.
+    return fiber;
+}
+
+void FiberPool::destroyDetachedFiber(MobiusFiber* fiber) {
+    if (!fiber) return;
+    deallocateFiber(fiber);
+}
+
 size_t FiberPool::activeCount() const {
     std::lock_guard<std::mutex> lock(mutex_);
     // active = total - free

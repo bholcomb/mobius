@@ -15,7 +15,7 @@ func assert_test(name, cond) {
 }
 
 func has_entry(entries, path, entry_type) {
-    for (var i = 0; i < len(entries); i += 1) {
+    for (var i = 0; i < size(entries); i += 1) {
         var entry = entries[i]
         if (entry.path == path && entry.type == entry_type) {
             return true

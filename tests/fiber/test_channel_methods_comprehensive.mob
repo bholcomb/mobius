@@ -1,5 +1,4 @@
 // Comprehensive test of all channel methods via : syntax
-import "fiber"
 
 print("=== Channel Methods Comprehensive ===")
 
@@ -77,7 +76,7 @@ func consumer(ch) {
 spawn producer(ch2)
 var f = spawn consumer(ch2)
 var results = await f
-if (results:length() != 5) { print("FAIL: producer/consumer length, got", results:length()); exit(1) }
+if (results:size() != 5) { print("FAIL: producer/consumer length, got", results:size()); exit(1) }
 if (results[0] != 0) { print("FAIL: results[0]"); exit(1) }
 if (results[4] != 40) { print("FAIL: results[4]"); exit(1) }
 

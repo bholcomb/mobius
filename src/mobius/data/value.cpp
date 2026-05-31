@@ -524,9 +524,9 @@ const char* value_type_name(ValueType type) {
     switch (type) {
         case VAL_NIL: return "nil";
         case VAL_BOOL: return "bool";
-        case VAL_INT64: return "integer";
+        case VAL_INT64: return "int64";
         case VAL_UINT64:  return "uint64";
-        case VAL_FLOAT64: return "float";
+        case VAL_FLOAT64: return "float64";
         case VAL_STRING: return "string";
         case VAL_CHAR: return "char";
         case VAL_ARRAY: return "array";

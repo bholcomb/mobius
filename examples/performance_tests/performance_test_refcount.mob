@@ -30,7 +30,7 @@ while (i < 100) {
 
 var concat_time = clock() - start_time;
 print("String concatenation 100 times took:", concat_time, "ns");
-print("Final result length:", len(result));
+print("Final result length:", size(result));
 
 // Test 3: Mixed string operations
 print("\nTest 3: Mixed string operations");

@@ -86,8 +86,19 @@ typedef struct {
 
     /* -- Fiber configuration -- */
 
-    size_t fiber_stack_size;         /* Per-fiber stack size in bytes.
-                                       Default: 131072 (128 KiB). */
+    size_t fiber_stack_size;         /* Per-fiber stack size in bytes for pooled
+                                       worker fibers (spawned work).
+                                       Default: 524288 (512 KiB).  Deep native
+                                       calls (e.g. Vulkan drivers) can overflow a
+                                       smaller per-fiber stack. */
+
+    size_t main_fiber_stack_size;    /* Stack size in bytes for the top-level
+                                       (main) script fiber, which hosts the whole
+                                       script and any deep native calls it makes.
+                                       Larger than fiber_stack_size so it behaves
+                                       like a normal thread stack.
+                                       Default: 8388608 (8 MiB). 0 = use
+                                       fiber_stack_size. */
 
     size_t initial_fiber_pool_size;  /* Fibers pre-allocated on first spawn.
                                        Default: 16. Pool doubles on exhaustion. */

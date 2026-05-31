@@ -6,6 +6,8 @@ Import:
 import "json"
 ```
 
+[← Module reference](index.md)
+
 Functions:
 
 | Function | Description |

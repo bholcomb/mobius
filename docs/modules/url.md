@@ -6,6 +6,8 @@ Import:
 import "url"
 ```
 
+[← Module reference](index.md)
+
 The `url` module provides URL parsing, rebuilding, percent-encoding, and query
 string helpers.
 

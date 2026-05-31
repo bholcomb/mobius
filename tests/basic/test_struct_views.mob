@@ -61,7 +61,7 @@ var vec = vec_buffer:view_as(Vec2)
 vec.x = 1.5
 vec.y = -2.25
 assert_test("packed scalar fields roundtrip", vec.x == 1.5 && vec.y == -2.25)
-assert_test("view metadata access", vec.offset == 0 && vec.buffer:length() == Vec2.size)
+assert_test("view metadata access", vec.offset == 0 && vec.buffer:size() == Vec2.size)
 
 var vertex_buffer = buffer_create(Vertex.size)
 var vertex = vertex_buffer:view_as(Vertex)
@@ -78,7 +78,7 @@ assert_test("union aliases same memory", alias.second == 99)
 
 var pixel_buffer = buffer_create(RGBA.size * 4)
 var pixels = pixel_buffer:array_view_as(RGBA)
-assert_test("array view infers count", pixels.length == 4)
+assert_test("array view infers count", pixels.size == 4)
 pixels[0].r = 10
 pixels[0].g = 20
 pixels[0].b = 30
@@ -95,7 +95,7 @@ var header2 = header_buffer:view_as(Header, 2)
 assert_test("views share underlying buffer", header2.tag == 42 && header2.version == 7)
 
 var tail = pixel_buffer:array_view_as(RGBA, RGBA.size)
-assert_test("offset array view count", tail.length == 3)
+assert_test("offset array view count", tail.size == 3)
 
 shared var shared_vec_buffer = buffer_create(Vec2.size)
 var shared_vec = shared_vec_buffer:view_as(Vec2)

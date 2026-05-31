@@ -9,7 +9,7 @@ print("=== Type-Specialized Arithmetic Tests ===")
 // --- Integer-specialized operations ---
 
 // 1. Integer addition (OP_ADD_II)
-func int_add(a: int, b: int): int {
+func int_add(a: int64, b: int64): int64 {
     return a + b
 }
 
@@ -21,7 +21,7 @@ if (r1 == 300) {
 }
 
 // 2. Integer subtraction (OP_SUB_II)
-func int_sub(a: int, b: int): int {
+func int_sub(a: int64, b: int64): int64 {
     return a - b
 }
 
@@ -33,7 +33,7 @@ if (r2 == 377) {
 }
 
 // 3. Integer multiplication (OP_MUL_II)
-func int_mul(a: int, b: int): int {
+func int_mul(a: int64, b: int64): int64 {
     return a * b
 }
 
@@ -45,7 +45,7 @@ if (r3 == 408) {
 }
 
 // 4. Integer division (OP_DIV_II)
-func int_div(a: int, b: int): int {
+func int_div(a: int64, b: int64): int64 {
     return a / b
 }
 
@@ -57,7 +57,7 @@ if (r4 == 14) {
 }
 
 // 5. Integer modulo (OP_MOD_II)
-func int_mod(a: int, b: int): int {
+func int_mod(a: int64, b: int64): int64 {
     return a % b
 }
 
@@ -71,7 +71,7 @@ if (r5 == 2) {
 // --- Float-specialized operations ---
 
 // 6. Float addition (OP_ADD_FF)
-func float_add(a: float, b: float): float {
+func float_add(a: float64, b: float64): float64 {
     return a + b
 }
 
@@ -83,7 +83,7 @@ if (r6 > 3.79 && r6 < 3.81) {
 }
 
 // 7. Float subtraction (OP_SUB_FF)
-func float_sub(a: float, b: float): float {
+func float_sub(a: float64, b: float64): float64 {
     return a - b
 }
 
@@ -95,7 +95,7 @@ if (r7 > 7.29 && r7 < 7.31) {
 }
 
 // 8. Float multiplication (OP_MUL_FF)
-func float_mul(a: float, b: float): float {
+func float_mul(a: float64, b: float64): float64 {
     return a * b
 }
 
@@ -107,7 +107,7 @@ if (r8 == 10.0) {
 }
 
 // 9. Float division (OP_DIV_FF)
-func float_div(a: float, b: float): float {
+func float_div(a: float64, b: float64): float64 {
     return a / b
 }
 
@@ -119,7 +119,7 @@ if (r9 == 2.5) {
 }
 
 // 10. Float modulo (OP_MOD_FF)
-func float_mod(a: float, b: float): float {
+func float_mod(a: float64, b: float64): float64 {
     return a % b
 }
 
@@ -133,7 +133,7 @@ if (r10 > 1.49 && r10 < 1.51) {
 // --- Edge cases ---
 
 // 11. Negative integer operations
-func neg_ops(a: int, b: int): int {
+func neg_ops(a: int64, b: int64): int64 {
     return (a + b) * (a - b)
 }
 
@@ -145,7 +145,7 @@ if (r11 == -91) {
 }
 
 // 12. Chained integer operations in a loop
-func sum_range(start: int, end: int): int {
+func sum_range(start: int64, end: int64): int64 {
     var total = 0
     for (var i = start; i <= end; i++) {
         total = total + i
@@ -161,7 +161,7 @@ if (r12 == 5050) {
 }
 
 // 13. Chained float operations
-func quadratic(a: float, b: float, c: float, x: float): float {
+func quadratic(a: float64, b: float64, c: float64, x: float64): float64 {
     return a * x * x + b * x + c
 }
 
@@ -173,7 +173,7 @@ if (r13 == 38.0) {
 }
 
 // 14. Division and modulo together
-func divmod(a: int, b: int): array {
+func divmod(a: int64, b: int64): array {
     return [a / b, a % b]
 }
 
@@ -185,7 +185,7 @@ if (r14[0] == 3 && r14[1] == 2) {
 }
 
 // 15. Recursive with specialized ops (sum using annotations)
-func recursive_sum(n: int): int {
+func recursive_sum(n: int64): int64 {
     if (n <= 0) return 0
     return n + recursive_sum(n - 1)
 }
@@ -198,7 +198,7 @@ if (r15 == 5050) {
 }
 
 // 16. Float comparison after specialized arithmetic
-func distance(x1: float, y1: float, x2: float, y2: float): float {
+func distance(x1: float64, y1: float64, x2: float64, y2: float64): float64 {
     var dx = x2 - x1
     var dy = y2 - y1
     return sqrt(dx * dx + dy * dy)

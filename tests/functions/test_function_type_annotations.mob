@@ -3,7 +3,7 @@
 print("=== Function Type Annotation Tests ===")
 
 // 1. Fully annotated function (int params, int return)
-func add_ints(a: int, b: int): int {
+func add_ints(a: int64, b: int64): int64 {
     return a + b
 }
 
@@ -15,7 +15,7 @@ if (r1 == 30) {
 }
 
 // 2. Float annotations
-func add_floats(a: float, b: float): float {
+func add_floats(a: float64, b: float64): float64 {
     return a + b
 }
 
@@ -39,7 +39,7 @@ if (r3 == "Hello, Mobius") {
 }
 
 // 4. Mixed annotations (some params annotated, some not)
-func mixed(a: int, b) {
+func mixed(a: int64, b) {
     return a + b
 }
 
@@ -51,7 +51,7 @@ if (r4 == 30) {
 }
 
 // 5. Return type only, no param annotations
-func pi_value(): float {
+func pi_value(): float64 {
     return 3.14159
 }
 
@@ -75,7 +75,7 @@ if (r6 == 12) {
 }
 
 // 7. Bool annotations
-func is_positive(n: int): bool {
+func is_positive(n: int64): bool {
     return n > 0
 }
 
@@ -86,7 +86,7 @@ if (is_positive(5) == true && is_positive(-3) == false) {
 }
 
 // 8. Recursive function with annotations (fibonacci)
-func fibonacci(n: int): int {
+func fibonacci(n: int64): int64 {
     if (n <= 1) return n
     return fibonacci(n - 1) + fibonacci(n - 2)
 }
@@ -99,7 +99,7 @@ if (fib10 == 55) {
 }
 
 // 9. Recursive function with annotations (factorial)
-func factorial(n: int): int {
+func factorial(n: int64): int64 {
     if (n <= 1) return 1
     return n * factorial(n - 1)
 }
@@ -112,7 +112,7 @@ if (fact6 == 720) {
 }
 
 // 10. Function expression with annotations
-var doubler = func(x: int): int {
+var doubler = func(x: int64): int64 {
     return x * 2
 }
 
@@ -136,7 +136,7 @@ if (r11 == "count=42") {
 }
 
 // 12. Array return type
-func make_pair(a: int, b: int): array {
+func make_pair(a: int64, b: int64): array {
     return [a, b]
 }
 
@@ -148,7 +148,7 @@ if (r12[0] == 1 && r12[1] == 2) {
 }
 
 // 13. Table return type
-func make_point(x: float, y: float): table {
+func make_point(x: float64, y: float64): table {
     return {x: x, y: y}
 }
 
@@ -160,8 +160,8 @@ if (r13.x == 3.0 && r13.y == 4.0) {
 }
 
 // 14. Type aliases (int vs integer vs int64 should all work)
-func alias_test_int(a: int): int { return a + 1 }
-func alias_test_integer(a: integer): integer { return a + 2 }
+func alias_test_int(a: int64): int64 { return a + 1 }
+func alias_test_integer(a: int64): int64 { return a + 2 }
 func alias_test_int64(a: int64): int64 { return a + 3 }
 
 if (alias_test_int(10) == 11 && alias_test_integer(10) == 12 && alias_test_int64(10) == 13) {
@@ -171,7 +171,7 @@ if (alias_test_int(10) == 11 && alias_test_integer(10) == 12 && alias_test_int64
 }
 
 // 15. Float aliases (float vs float64)
-func alias_float(a: float): float { return a + 0.1 }
+func alias_float(a: float64): float64 { return a + 0.1 }
 func alias_float64(a: float64): float64 { return a + 0.2 }
 
 var rf1 = alias_float(1.0)
@@ -205,11 +205,11 @@ if (r17 == nil) {
 }
 
 // 18. Higher-order function with annotated callback
-func apply(f: function, x: int): int {
+func apply(f: function, x: int64): int64 {
     return f(x)
 }
 
-func triple(n: int): int {
+func triple(n: int64): int64 {
     return n * 3
 }
 
@@ -221,8 +221,8 @@ if (r18 == 21) {
 }
 
 // 19. Annotated closure
-func make_adder(n: int): function {
-    return func(x: int): int {
+func make_adder(n: int64): function {
+    return func(x: int64): int64 {
         return x + n
     }
 }

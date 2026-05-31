@@ -1,7 +1,6 @@
 // Test fiber.sleep
 print("=== Fiber Sleep Tests ===")
 
-import "fiber"
 
 // fiber.sleep(0) should be a no-op
 fiber.sleep(0)

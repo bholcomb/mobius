@@ -1,7 +1,6 @@
 // Test: fiber.any behavior when futures fail
 print("=== Fiber Any Failure Tests ===")
 
-import "fiber"
 
 // Test 1: fiber.any with one fast success and one slow failure — picks the success
 func fast_success() {

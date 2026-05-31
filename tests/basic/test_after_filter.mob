@@ -1,5 +1,5 @@
 var evens = [1, 2, 3, 4]:filter(func(x, i) { return x % 2 == 0; });
-print("filter done, len:", evens:length());
+print("filter done, len:", evens:size());
 
 // Simple operations after filter
 var a = 10;

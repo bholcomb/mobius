@@ -16,7 +16,7 @@ for (var i, v in [100, 200, 300]) {
     indices:push(i)
     values:push(v)
 }
-if (indices:length() != 3) { print("FAIL: for-in i,v length"); exit(1) }
+if (indices:size() != 3) { print("FAIL: for-in i,v length"); exit(1) }
 if (indices[0] != 0 || indices[2] != 2) { print("FAIL: for-in indices"); exit(1) }
 if (values[0] != 100 || values[2] != 300) { print("FAIL: for-in values"); exit(1) }
 
@@ -26,14 +26,14 @@ var keys = []
 for (var k in t) {
     keys:push(k)
 }
-if (keys:length() != 3) { print("FAIL: for-in table keys length"); exit(1) }
+if (keys:size() != 3) { print("FAIL: for-in table keys length"); exit(1) }
 
 // for-in on table: key + value
 var pairs_list = []
 for (var k, v in t) {
     pairs_list:push(k + "=" + str(v))
 }
-if (pairs_list:length() != 3) { print("FAIL: for-in table k,v length"); exit(1) }
+if (pairs_list:size() != 3) { print("FAIL: for-in table k,v length"); exit(1) }
 
 // for-in on empty array
 var count = 0

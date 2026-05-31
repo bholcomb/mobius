@@ -1,7 +1,6 @@
 // Test exception propagation through await
 print("=== Fiber Exception Propagation Tests ===")
 
-import "fiber"
 
 // Test 1: await on a fiber that errors should throw in the caller
 func will_error() {

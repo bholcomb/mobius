@@ -12,7 +12,7 @@ arr:push(30);
 print("Pushed 3 elements");
 
 // Test length
-var len = arr:length();
+var len = arr:size();
 print("Array length: " + len);
 
 // Test get
@@ -29,6 +29,6 @@ print("After setting index 1 to 99: " + modified);
 // Test pop
 var popped = arr:pop();
 print("Popped element: " + popped);
-print("New length: " + arr:length());
+print("New length: " + arr:size());
 
 print("=== Array Test Complete ===");

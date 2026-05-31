@@ -6,6 +6,8 @@ Import:
 import "math"
 ```
 
+[← Module reference](index.md)
+
 The `math` module provides extended functions and constants. Core numeric helpers
 such as `abs`, `sqrt`, `pow`, `floor`, `ceil`, `round`, `min`, and `max` are
 available without importing this module.

@@ -3,15 +3,15 @@ print("=== Array Methods Comprehensive ===")
 
 // array_create with required capacity
 var a = array_create(5)
-if (a:length() != 0) { print("FAIL: empty array_create length"); exit(1) }
+if (a:size() != 0) { print("FAIL: empty array_create length"); exit(1) }
 
 // array_create with fill_value
 var b = array_create(4, 0)
-if (b:length() != 4) { print("FAIL: fill array length, got", b:length()); exit(1) }
+if (b:size() != 4) { print("FAIL: fill array length, got", b:size()); exit(1) }
 if (b[0] != 0 || b[3] != 0) { print("FAIL: fill values"); exit(1) }
 
 var c = array_create(3, "x")
-if (c:length() != 3) { print("FAIL: fill string length"); exit(1) }
+if (c:size() != 3) { print("FAIL: fill string length"); exit(1) }
 if (c[0] != "x" || c[2] != "x") { print("FAIL: fill string values"); exit(1) }
 
 // push
@@ -19,7 +19,7 @@ var arr = []
 arr:push(10)
 arr:push(20)
 arr:push(30)
-if (arr:length() != 3) { print("FAIL: push/length"); exit(1) }
+if (arr:size() != 3) { print("FAIL: push/length"); exit(1) }
 
 // get
 if (arr:get(0) != 10) { print("FAIL: get(0)"); exit(1) }
@@ -34,7 +34,7 @@ arr:set(1, 20)
 // pop
 var popped = arr:pop()
 if (popped != 30) { print("FAIL: pop value, got", popped); exit(1) }
-if (arr:length() != 2) { print("FAIL: pop length"); exit(1) }
+if (arr:size() != 2) { print("FAIL: pop length"); exit(1) }
 arr:push(30)
 
 // find
@@ -43,12 +43,12 @@ if (arr:find(999) != -1) { print("FAIL: find missing"); exit(1) }
 
 // slice
 var s = arr:slice(0, 2)
-if (s:length() != 2) { print("FAIL: slice length"); exit(1) }
+if (s:size() != 2) { print("FAIL: slice length"); exit(1) }
 if (s[0] != 10 || s[1] != 20) { print("FAIL: slice values"); exit(1) }
 
 // concat
 var cat = [1, 2]:concat([3, 4])
-if (cat:length() != 4) { print("FAIL: concat length"); exit(1) }
+if (cat:size() != 4) { print("FAIL: concat length"); exit(1) }
 if (cat[0] != 1 || cat[3] != 4) { print("FAIL: concat values"); exit(1) }
 
 // reverse
@@ -67,7 +67,7 @@ if (nums[0] != 9 || nums[5] != 1) { print("FAIL: sort comparator"); exit(1) }
 
 // map
 var doubled = [1, 2, 3]:map(func(x, i) { return x * 2 })
-if (doubled:length() != 3) { print("FAIL: map length"); exit(1) }
+if (doubled:size() != 3) { print("FAIL: map length"); exit(1) }
 if (doubled[0] != 2 || doubled[1] != 4 || doubled[2] != 6) { print("FAIL: map values"); exit(1) }
 
 // map uses index parameter
@@ -76,7 +76,7 @@ if (indexed[0] != 0 || indexed[1] != 1 || indexed[2] != 2) { print("FAIL: map in
 
 // filter
 var evens = [1, 2, 3, 4, 5, 6]:filter(func(x, i) { return x % 2 == 0 })
-if (evens:length() != 3) { print("FAIL: filter length"); exit(1) }
+if (evens:size() != 3) { print("FAIL: filter length"); exit(1) }
 if (evens[0] != 2 || evens[1] != 4 || evens[2] != 6) { print("FAIL: filter values"); exit(1) }
 
 // reduce
@@ -102,12 +102,12 @@ if ([2, 4, 5]:all(func(x) { return x % 2 == 0 })) { print("FAIL: all false"); ex
 
 // empty array edge cases
 var empty = []
-if (empty:length() != 0) { print("FAIL: empty length"); exit(1) }
+if (empty:size() != 0) { print("FAIL: empty length"); exit(1) }
 if (empty:find(1) != -1) { print("FAIL: empty find"); exit(1) }
 var mapped_empty = empty:map(func(x, i) { return x })
-if (mapped_empty:length() != 0) { print("FAIL: empty map"); exit(1) }
+if (mapped_empty:size() != 0) { print("FAIL: empty map"); exit(1) }
 var filtered_empty = empty:filter(func(x, i) { return true })
-if (filtered_empty:length() != 0) { print("FAIL: empty filter"); exit(1) }
+if (filtered_empty:size() != 0) { print("FAIL: empty filter"); exit(1) }
 var reduced_empty = empty:reduce(func(acc, x) { return acc + x }, 42)
 if (reduced_empty != 42) { print("FAIL: empty reduce, got", reduced_empty); exit(1) }
 if (empty:any(func(x) { return true })) { print("FAIL: empty any"); exit(1) }

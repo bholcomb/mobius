@@ -13,7 +13,7 @@ func run() {
         {["value"] = 3}
     ]
 
-    for (var i = 0; i < len(rows); i += 1) {
+    for (var i = 0; i < size(rows); i += 1) {
         var row = rows[i]
         if (row.value != i + 1) {
             print("numeric for local regalloc: FAIL")

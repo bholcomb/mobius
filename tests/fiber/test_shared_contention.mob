@@ -2,7 +2,6 @@
 // Verifies mutex protection prevents corruption (no crashes, consistent state)
 print("=== Shared Contention Tests ===")
 
-import "fiber"
 
 // Test 1: shared array — 4 fibers writing DIFFERENT values to the same slot
 // Last writer wins, but no crash or corruption
@@ -80,11 +79,11 @@ await h2
 await h3
 await h4
 
-if (len(results) != 100) {
-    print("FAIL: results length =", len(results), "expected 100")
+if (size(results) != 100) {
+    print("FAIL: results length =", size(results), "expected 100")
     exit(1)
 }
-print("  4 fibers pushing to same array: length =", len(results))
+print("  4 fibers pushing to same array: length =", size(results))
 
 // Test 4: disjoint index writes remain correct under contention
 shared var data = []

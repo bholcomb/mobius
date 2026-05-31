@@ -1,7 +1,6 @@
 // Test that fiber.sleep actually delays for the requested duration
 print("=== Fiber Sleep Timing Tests ===")
 
-import "fiber"
 
 // Test 1: sleep(50) should take at least 40ms and no more than 300ms
 var t0 = clock()

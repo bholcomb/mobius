@@ -44,7 +44,7 @@ assert_test("parse escaped carriage return", json.parse("\"a\\rb\"") == "a\rb")
 assert_test("parse unicode escape", json.parse("\"\\u0041\"") == "A")
 var euro = json.parse("\"\\u20AC\"")
 assert_test("parse unicode escape is string", euro is string)
-assert_test("parse unicode escape len", len(euro) == 3)
+assert_test("parse unicode escape len", size(euro) == 3)
 
 // ============================================================================
 // json.parse — arrays
@@ -52,23 +52,23 @@ assert_test("parse unicode escape len", len(euro) == 3)
 
 var a1 = json.parse("[]")
 assert_test("parse empty array", a1 is array)
-assert_test("parse empty array len", len(a1) == 0)
+assert_test("parse empty array len", size(a1) == 0)
 
 var a2 = json.parse("[1, 2, 3]")
-assert_test("parse int array len", len(a2) == 3)
+assert_test("parse int array len", size(a2) == 3)
 assert_test("parse int array[0]", a2[0] == 1)
 assert_test("parse int array[1]", a2[1] == 2)
 assert_test("parse int array[2]", a2[2] == 3)
 
 var a3 = json.parse("[\"a\", true, null, 42]")
-assert_test("parse mixed array len", len(a3) == 4)
+assert_test("parse mixed array len", size(a3) == 4)
 assert_test("parse mixed[0] string", a3[0] == "a")
 assert_test("parse mixed[1] bool", a3[1] == true)
 assert_test("parse mixed[2] null", a3[2] == nil)
 assert_test("parse mixed[3] int", a3[3] == 42)
 
 var a4 = json.parse("[[1, 2], [3, 4]]")
-assert_test("parse nested arrays", len(a4) == 2)
+assert_test("parse nested arrays", size(a4) == 2)
 assert_test("parse nested[0][0]", a4[0][0] == 1)
 assert_test("parse nested[1][1]", a4[1][1] == 4)
 
@@ -92,7 +92,7 @@ var o4 = json.parse("{\"nested\": {\"a\": 1}}")
 assert_test("parse nested object", o4.nested.a == 1)
 
 var o5 = json.parse("{\"items\": [1, 2, 3]}")
-assert_test("parse object with array", len(o5.items) == 3)
+assert_test("parse object with array", size(o5.items) == 3)
 assert_test("parse object array[1]", o5.items[1] == 2)
 
 // ============================================================================
@@ -115,7 +115,7 @@ assert_test("tmp json path", json_tmp is string)
 assert_test("write json fixture", writefile(json_tmp, "{\"file\": true, \"items\": [1, 2, 3]}"))
 var from_file = json.parsefile(json_tmp)
 assert_test("parsefile object field", from_file.file == true)
-assert_test("parsefile array len", len(from_file.items) == 3)
+assert_test("parsefile array len", size(from_file.items) == 3)
 assert_test("parsefile array[2]", from_file.items[2] == 3)
 os.remove(json_tmp)
 
@@ -206,7 +206,7 @@ assert_test("stringify nan as null", json.stringify(nan) == "null")
 var rt_input = "{\"name\":\"Bob\",\"scores\":[10,20,30],\"meta\":{\"active\":true,\"level\":null}}"
 var rt_parsed = json.parse(rt_input)
 assert_test("roundtrip name", rt_parsed.name == "Bob")
-assert_test("roundtrip scores", len(rt_parsed.scores) == 3)
+assert_test("roundtrip scores", size(rt_parsed.scores) == 3)
 assert_test("roundtrip scores[2]", rt_parsed.scores[2] == 30)
 assert_test("roundtrip meta active", rt_parsed.meta.active == true)
 assert_test("roundtrip meta level nil", rt_parsed.meta.level == nil)
@@ -225,7 +225,7 @@ var deeply_nested = json.parse("{\"a\": {\"b\": {\"c\": {\"d\": 42}}}}")
 assert_test("deeply nested parse", deeply_nested.a.b.c.d == 42)
 
 var arr_of_objs = json.parse("[{\"id\": 1}, {\"id\": 2}, {\"id\": 3}]")
-assert_test("array of objects len", len(arr_of_objs) == 3)
+assert_test("array of objects len", size(arr_of_objs) == 3)
 assert_test("array of objects[1].id", arr_of_objs[1].id == 2)
 
 var float_precision = json.parse("1.7976931348623157e+308")

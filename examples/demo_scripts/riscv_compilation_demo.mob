@@ -30,7 +30,7 @@ func array_demo() {
     var sum = 0;
     
     // Loop demonstrates RISC-V branch instructions
-    for (var i = 0; i < numbers:length(); i = i + 1) {
+    for (var i = 0; i < numbers:size(); i = i + 1) {
         sum = sum + numbers[i];
     }
     

@@ -1,0 +1,71 @@
+// Spawned closures may capture upvalues. Captured values are marshalled with
+// the same value semantics as arguments: non-shared data is copied (each spawn
+// gets its own), while `shared` variables keep their identity and are shared by
+// reference (including across fibers).
+print("=== Spawn Upvalue Tests ===")
+
+// 1) capture a scalar upvalue
+func make_adder(n) {
+    func add(x) { return x + n }
+    return add
+}
+var add10 = make_adder(10)
+var r1 = await spawn add10(5)
+if (r1 != 15) { print("FAIL: scalar capture, got", r1); exit(1) }
+
+// 2) a dozen spawns of the same closure capturing a non-shared array get
+//    independent copies — each fiber pushes once, so each sees size 3
+func make_worker(base) {
+    func work(delta) {
+        base:push(delta)
+        return base:size()
+    }
+    return work
+}
+var w = make_worker([0, 0])
+var futs = []
+for (var i = 0; i < 12; i++) { futs:push(spawn w(i)) }
+var sizes = fiber.all(futs)
+for (var i = 0; i < sizes:size(); i++) {
+    if (sizes[i] != 3) { print("FAIL: isolated copy, got", sizes[i]); exit(1) }
+}
+
+// 3) a captured non-shared array is a snapshot: mutating it in the fiber does
+//    not affect the original
+var original = [1, 2, 3]
+func make_appender(arr) {
+    func append_one() { arr:push(99); return arr:size() }
+    return append_one
+}
+var r3 = await spawn make_appender(original)()
+if (r3 != 4) { print("FAIL: snapshot mutated, got", r3); exit(1) }
+if (original:size() != 3) { print("FAIL: original changed, got", original:size()); exit(1) }
+
+// 4) a captured `shared` variable keeps its identity: write-through to the
+//    same cell is visible in the parent after the fiber completes
+shared var box = [0]
+func make_setter(b) {
+    func set_it(v) { b[0] = v; return b[0] }
+    return set_it
+}
+var setter = make_setter(box)
+var r4 = await spawn setter(42)
+if (r4 != 42) { print("FAIL: shared capture read-back, got", r4); exit(1) }
+if (box[0] != 42) { print("FAIL: shared capture write-through, got", box[0]); exit(1) }
+
+// 5) atomic() works on a captured shared upvalue across many fibers
+shared var counter = [0]
+func make_bumper(c) {
+    func bump() { atomic(c[0] = c[0] + 1); return c[0] }
+    return bump
+}
+var bump = make_bumper(counter)
+// direct call: atomic() must recognize the captured shared cell
+if (bump() != 1) { print("FAIL: atomic shared upvalue (direct)"); exit(1) }
+// and across many fibers
+var bfuts = []
+for (var i = 0; i < 19; i++) { bfuts:push(spawn bump()) }
+fiber.all(bfuts)
+if (counter[0] != 20) { print("FAIL: atomic shared upvalue, got", counter[0]); exit(1) }
+
+print("=== All spawn upvalue tests passed! ===")
