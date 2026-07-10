@@ -1140,6 +1140,21 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     int reg = (dest >= 0) ? dest : allocReg();
     int save_reg = current_->free_reg;
 
+    ValueType lt = inferExprType(expr->left);
+    ValueType rt = inferExprType(expr->right);
+    bool both_i64 = (lt == VAL_INT64 && rt == VAL_INT64);
+    bool both_f64 = (lt == VAL_FLOAT64 && rt == VAL_FLOAT64);
+
+    // The generic binary handlers (OP_ADD, OP_LT, OP_BAND, …) all unwrap their
+    // operands via shared_unwrap. Only the type-specialized _II/_FF variants
+    // assume already-unwrapped operands. So a maybe-shared operand needs an
+    // explicit OP_SHARED_LOAD only when a specialized op will consume it;
+    // otherwise the unwrap is redundant work the consuming op repeats.
+    bool operands_need_unwrap = both_i64 || both_f64;
+    auto compile_operand = [&](Expr* e) {
+        return operands_need_unwrap ? compileUnwrappedExpr(e) : compileExpr(e);
+    };
+
     // Try RK encoding: if either operand is a literal, reference it directly
     // from the constant pool instead of loading it into a register.
     uint8_t rk_left, rk_right;
@@ -1147,18 +1162,11 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     bool right_is_rk = !right_maybe_shared && tryExprAsRK(expr->right, &rk_right);
 
     if (!left_is_rk) {
-        int left = compileUnwrappedExpr(expr->left);
-        rk_left = (uint8_t)left;
+        rk_left = (uint8_t)compile_operand(expr->left);
     }
     if (!right_is_rk) {
-        int right = compileUnwrappedExpr(expr->right);
-        rk_right = (uint8_t)right;
+        rk_right = (uint8_t)compile_operand(expr->right);
     }
-
-    ValueType lt = inferExprType(expr->left);
-    ValueType rt = inferExprType(expr->right);
-    bool both_i64 = (lt == VAL_INT64 && rt == VAL_INT64);
-    bool both_f64 = (lt == VAL_FLOAT64 && rt == VAL_FLOAT64);
 
     switch (expr->op.type) {
         case TOKEN_PLUS:
@@ -1794,10 +1802,13 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             return reg;
         }
 
-        case EXPR_ARRAY_INDEX:
+        case EXPR_ARRAY_INDEX: {
+            OpCode set_op = (inferExprType(expr->target->as.array_index.array) == VAL_ARRAY)
+                            ? OP_ASET : OP_INDEX_SET;
             return compile_index_assignment(expr->target->as.array_index.array,
                                             expr->target->as.array_index.index,
-                                            OP_INDEX_SET);
+                                            set_op);
+        }
 
         case EXPR_TABLE_INDEX:
             return compile_index_assignment(expr->target->as.table_index.table,
@@ -1980,10 +1991,15 @@ int Compiler::compileArrayIndex(ArrayIndexExpr* expr, int dest) {
     int reg = (dest >= 0) ? dest : allocReg();
     int save = current_->free_reg;
 
+    // Take the array fast path when the container's type is statically known to
+    // be an array; OP_AGET falls back to INDEX_GET for anything else, so an
+    // over-optimistic inference is still correct.
+    OpCode get_op = (inferExprType(expr->array) == VAL_ARRAY) ? OP_AGET : OP_INDEX_GET;
+
     int arr_reg = compileExpr(expr->array);
     int idx_reg = compileExpr(expr->index);
 
-    emitABC(OP_INDEX_GET, (uint8_t)reg, (uint8_t)arr_reg, (uint8_t)idx_reg);
+    emitABC(get_op, (uint8_t)reg, (uint8_t)arr_reg, (uint8_t)idx_reg);
 
     setFreeReg(save);
     if (dest < 0) {

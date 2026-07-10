@@ -285,6 +285,15 @@ enum OpCode : uint8_t {
     // -- Debug / sentinel --
     OP_NOP,         //           no operation (padding / breakpoint target)
 
+    // -- Array fast paths --
+    // Emitted in place of INDEX_GET/INDEX_SET when the compiler has inferred the
+    // container is a VAL_ARRAY. They handle the common plain-array integer-index
+    // case inline and delegate everything else (shared arrays, non-int keys,
+    // a container that turned out not to be an array) to the generic handler, so
+    // their observable behaviour is identical.
+    OP_AGET,        // A B C     R[A] = R[B].array[R[C]]     (fallback: INDEX_GET)
+    OP_ASET,        // A B C     R[A].array[RK(B)] = RK(C)   (fallback: INDEX_SET)
+
     OP_MAX_OPCODE
 };
 
@@ -448,6 +457,9 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"TYPECHECK_LOCKED",   FMT_ABC},
 
         {"NOP",       FMT_ABC},
+
+        {"AGET",      FMT_ABC},
+        {"ASET",      FMT_ABC},
     };
     static_assert(sizeof(info) / sizeof(info[0]) == OP_MAX_OPCODE,
                   "opcode_info table must match OpCode enum");

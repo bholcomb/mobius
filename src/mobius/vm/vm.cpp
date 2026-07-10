@@ -1192,6 +1192,53 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
     return 0;
 }
 
+// ---- Array fast paths (OP_AGET / OP_ASET) ----
+//
+// Emitted when the compiler has inferred the container is an array. They peel
+// the plain-array integer-index case out of the generic INDEX_GET/INDEX_SET
+// dispatch (which also branches on shared cells, tables, slices, buffers, and
+// userdata). Anything the fast path does not recognize falls through to the
+// generic handler, so behaviour is identical — the inference only needs to be
+// right often enough to be worth the extra opcode.
+
+MOBIUS_FORCEINLINE static int vm_op_aget(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    const Value& obj = RB(inst);
+    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+        const Value& key = RC(inst);
+        if (MOBIUS_LIKELY(key.type == VAL_INT64)) {
+            ArrayValue* arr = obj.as.array;
+            int64_t idx = key.as.i64;
+            if (MOBIUS_UNLIKELY(arr->isShared())) return vm_op_index_get(vm, f, inst);
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length()))
+                RA(inst) = arr->unsafeGet((size_t)idx);
+            else
+                RA(inst) = Value();
+            return 0;
+        }
+    }
+    return vm_op_index_get(vm, f, inst);
+}
+
+MOBIUS_FORCEINLINE static int vm_op_aset(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    Value& obj = RA(inst);
+    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+        const Value& key = RKB(inst);
+        if (MOBIUS_LIKELY(key.type == VAL_INT64)) {
+            ArrayValue* arr = obj.as.array;
+            int64_t idx = key.as.i64;
+            // In-bounds store into a plain array is the whole fast path.
+            // Negative indices, growth, and live-slice checks stay in the
+            // generic handler.
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length() &&
+                              !arr->isShared())) {
+                arr->set((size_t)idx, RKC(inst));
+                return 0;
+            }
+        }
+    }
+    return vm_op_index_set(vm, f, inst);
+}
+
 // ---- Method self (OP_SELF) ----
 MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
@@ -3463,6 +3510,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_TYPELOCK,
         &&L_OP_TYPECHECK_LOCKED,
         &&L_OP_NOP,
+        &&L_OP_AGET, &&L_OP_ASET,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
                   "dispatch_table must match OpCode enum");
@@ -3672,6 +3720,8 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_TYPELOCK, vm_op_typelock)
     VM_HANDLER(OP_TYPECHECK_LOCKED, vm_op_typecheck_locked)
     VM_HANDLER(OP_NOP, vm_op_nop)
+    VM_HANDLER(OP_AGET, vm_op_aget)
+    VM_HANDLER(OP_ASET, vm_op_aset)
 
     VM_DEFAULT()
         f.ci->ip = f.ip;
