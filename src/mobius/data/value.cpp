@@ -26,6 +26,10 @@
 
 void Value::releaseRefSlow() {
     switch (type) {
+        case VAL_STRING:
+            // Normally handled inline by releaseRef(); here for completeness.
+            if (as.string) as.string->release();
+            break;
         case VAL_ARRAY:
             if (as.array) as.array->release();
             break;
@@ -101,7 +105,15 @@ Value make_string_value(MobiusString* string) {
     Value value;
     value.type = VAL_STRING;
     value.as.string = string;
+    if (string) string->retain();
     return value;
+}
+
+Value make_string_value_adopt(MobiusString* string) {
+    Value value;
+    value.type = VAL_STRING;
+    value.as.string = string;
+    return value;   // takes over the caller's reference
 }
 
 Value make_array_value(ArrayValue* array) {
@@ -550,6 +562,51 @@ Value make_string_value_from_cstr(MobiusState* state, const char* cstr) {
     }
     MobiusString* str = state->stringPool()->intern(cstr);
     return make_string_value(str);
+}
+
+// str()-facing conversion. Unbounded results (numbers, char) become heap
+// strings so they can be reclaimed; interning them would leak, since a program
+// that stringifies a counter produces unboundedly many distinct strings. An
+// argument that is already a string passes through (retained); the bounded and
+// rare cases (nil, bool, type names, pointer forms) reuse value_to_interned_string.
+Value value_to_string_value(MobiusState* state, const Value& value) {
+    if (!state || !state->stringPool()) return make_nil_value();
+
+    char buffer[128];
+    int len = -1;
+    switch (value.type) {
+        case VAL_STRING:
+            return make_string_value(value.as.string);   // retain; may be interned or heap
+        case VAL_INT64: {
+            auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value.as.i64);
+            if (ec != std::errc()) return make_nil_value();
+            len = (int)(ptr - buffer);
+            break;
+        }
+        case VAL_UINT64: {
+            auto [ptr, ec] = std::to_chars(buffer, buffer + sizeof(buffer), value.as.u64);
+            if (ec != std::errc()) return make_nil_value();
+            len = (int)(ptr - buffer);
+            break;
+        }
+        case VAL_FLOAT64:
+            if (value.as.double_val == (double)(long long)value.as.double_val)
+                len = snprintf(buffer, sizeof(buffer), "%.1f", value.as.double_val);
+            else
+                len = snprintf(buffer, sizeof(buffer), "%g", value.as.double_val);
+            break;
+        case VAL_CHAR:
+            buffer[0] = value.as.character; len = 1;
+            break;
+        default: {
+            // Bounded or rare: reuse the interned path.
+            MobiusString* s = value_to_interned_string(state, value);
+            return s ? make_string_value(s) : make_nil_value();
+        }
+    }
+    if (len < 0) return make_nil_value();
+    MobiusString* s = StringInternPool::createHeap(buffer, (size_t)len);
+    return s ? make_string_value_adopt(s) : make_nil_value();
 }
 
 MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {

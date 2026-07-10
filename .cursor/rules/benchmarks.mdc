@@ -6,5 +6,27 @@ alwaysApply: false
 # Benchmark Procedures
 - **Files to run**: Benchmark files are in `benchmarks/`
 - **Comparisons**: There are lua and python versions of the benchmarks to compare the mobius benchmark to
-- **Procedure**: Run the benchmarks for each language 5 times an average the times together to reduce noise.  Save the output of the lua and python benchmarks to files in the `benchmarks/` folder so you do not need to always re-run them.  
+- **Procedure**: Use the runner rather than invoking the three scripts by hand:
+
+  ```bash
+  python3 benchmarks/run_benchmarks.py --runs 5 --json benchmarks/benchmark_summary_latest.json
+  ```
+
+  It runs each implementation N times and reports the **median** per benchmark
+  (medians, not means — a single scheduler hiccup skews a mean). Pass `--lua PATH`
+  if `lua` is not on `PATH`, and `--only mobius` to skip the other languages while
+  iterating on the VM.
+- **Semantic parity**: each benchmark prints `BENCH <id> <seconds> <checksum>`, and
+  the runner **refuses to report timings unless every checksum agrees** across the
+  three languages. This is not decoration. Mobius `/` truncates and `%` is a
+  C-style remainder, while Lua and Python floor both — so any negative
+  intermediate silently makes the three scripts compute different values. If you
+  change a workload, change it in all three files and keep every intermediate
+  non-negative.
+- **Fair comparisons**: use each language's canonical counted loop (Mobius/Lua
+  `for`, Python `range`) — never a `while` in one and a `for` in another, since
+  Mobius compiles `for` to `IFORPREP`/`IFORLOOP`. Do setup (key building, array
+  preallocation) outside the timed region.
+- **Saved output**: `benchmark_comprehensive_{mobius,lua,python}_latest.txt` hold the
+  raw output, and `benchmark_summary_latest.json` holds medians plus checksums.
 - **Permissions**: You do not need to ask permission to run benchmarks

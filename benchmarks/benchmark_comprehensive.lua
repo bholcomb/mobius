@@ -1,38 +1,43 @@
--- Comprehensive Lua benchmark aligned with benchmark_comprehensive.mob
--- Arrays benchmark dense numeric storage.
--- Tables benchmark hash-map usage with string keys.
+-- Comprehensive Lua benchmark, semantically identical to
+-- benchmark_comprehensive.mob and benchmark_comprehensive.py.
+--
+-- Every benchmark returns an integer checksum; run_benchmarks.py refuses to
+-- report timings unless all three languages agree on every checksum. If you
+-- change a workload here, change it in all three.
+--
+-- Note on operators: Mobius `/` truncates and `%` is a C-style remainder,
+-- while Lua `//` and `%` floor. They agree only on non-negative operands, so
+-- every intermediate below is kept non-negative and integer division is
+-- avoided entirely.
+--
+-- Output format, one line per benchmark, consumed by run_benchmarks.py:
+--   BENCH <id> <seconds> <checksum>
 
-print("=== Lua Comprehensive Performance Benchmark ===\n")
-print("Benchmark model: arrays = dense integer storage, tables = string-key hash maps\n")
+print("=== Lua Comprehensive Performance Benchmark ===")
+print("Benchmark model: arrays = dense integer storage, tables = string-key hash maps")
 
-local function build_table_keys(count)
-    local keys = {}
-    for i = 1, count do
-        keys[i] = "key_" .. tostring(i - 1)
-    end
-    return keys
+local clock = os.clock
+
+local function report(id, start, checksum)
+    print(string.format("BENCH %s %.9f %d", id, clock() - start, checksum))
 end
 
 -- ============================================================================
--- 1. Arithmetic Operations
+-- 1. Arithmetic (integer)
 -- ============================================================================
 local function benchmark_arithmetic()
-    print("1. Arithmetic Operations...")
-    local start = os.clock()
-    local result = 0
-    for i = 0, 999999 do
-        result = result + i * 2 - 1
-        result = result // 2
-        result = result % 1000
+    local start = clock()
+    local r = 0
+    for i = 0, 9999999 do
+        r = (r + i * 2 + 1) % 1000003
+        r = (r * 3 + 7) % 1000003
     end
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print(string.format("   Ops/sec:  %d", math.floor(1000000 / duration)))
-    return result
+    report("arith", start, r)
+    return r
 end
 
 -- ============================================================================
--- 2. Function Calls
+-- 2. Function calls — recursive fibonacci
 -- ============================================================================
 local function fibonacci(n)
     if n <= 1 then
@@ -42,165 +47,150 @@ local function fibonacci(n)
 end
 
 local function benchmark_function_calls()
-    print("\n2. Function Calls (Fibonacci)...")
-    local start = os.clock()
-    local result = 0
-    for _ = 1, 10 do
-        result = fibonacci(20)
-    end
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print(string.format("   Result:  %d", result))
+    local start = clock()
+    local result = fibonacci(30)
+    report("fib", start, result)
     return result
 end
 
 -- ============================================================================
--- 3. Array Operations (dense numeric storage)
+-- 3. Array operations (dense numeric storage). Array is preallocated.
 -- ============================================================================
 local function benchmark_arrays()
-    print("\n3. Array Operations (Dense Numeric Storage)...")
-    local start = os.clock()
-
+    local n = 1000000
     local arr = {}
-    for i = 1, 10000 do
-        arr[i] = (i - 1) * 2
-    end
+    for i = 0, n - 1 do arr[i] = 0 end     -- setup: outside the timer
+    local start = clock()
 
+    for i = 0, n - 1 do
+        arr[i] = i * 2
+    end
     local sum = 0
-    for i = 1, 10000 do
+    for i = 0, n - 1 do
         sum = sum + arr[i]
     end
 
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print(string.format("   Sum:  %d", sum))
+    report("array", start, sum)
     return sum
 end
 
 -- ============================================================================
--- 4. Table Operations (hash map string keys)
+-- 4. Table operations (string-key hash map). Keys built outside the timer.
 -- ============================================================================
+local function build_table_keys(count)
+    local keys = {}
+    for i = 0, count - 1 do
+        keys[i] = "key_" .. tostring(i)
+    end
+    return keys
+end
+
 local function benchmark_tables()
-    print("\n4. Table Operations (String-Key Hash Map)...")
-    local keys = build_table_keys(5000)
-    local start = os.clock()
+    local n = 50000
+    local keys = build_table_keys(n)       -- setup: outside the timer
+    local start = clock()
 
     local tbl = {}
-    for i = 1, 5000 do
-        tbl[keys[i]] = (i - 1) * 3
+    for i = 0, n - 1 do
+        tbl[keys[i]] = i * 3
     end
 
     local sum = 0
-    for i = 1, 5000 do
-        sum = sum + tbl[keys[i]]
-    end
-
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print(string.format("   Sum:  %d", sum))
-    return sum
-end
-
--- ============================================================================
--- 5. String Operations
--- ============================================================================
-local function benchmark_strings()
-    print("\n5. String Operations...")
-    local start = os.clock()
-
-    local base = "Hello"
-    local result = ""
-    for i = 0, 999 do
-        result = base .. " World " .. tostring(i)
-        local len_result = #result
-        local upper_result = string.upper(result)
-        if len_result == 0 or upper_result == "" then
-            error("unreachable")
+    for pass = 0, 9 do
+        for i = 0, n - 1 do
+            sum = sum + tbl[keys[i]]
         end
     end
 
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print(string.format("   Final length:  %d", #result))
-    return result
+    report("table", start, sum)
+    return sum
 end
 
 -- ============================================================================
--- 6. Nested Loops
+-- 5. String operations
+-- ============================================================================
+local function benchmark_strings()
+    local base = "Hello"
+    local start = clock()
+
+    local total = 0
+    for i = 0, 199999 do
+        local result = base .. " World " .. tostring(i)
+        total = total + #result
+        local upper_result = string.upper(result)
+        total = total + #upper_result
+    end
+
+    report("string", start, total)
+    return total
+end
+
+-- ============================================================================
+-- 6. Nested loops
 -- ============================================================================
 local function benchmark_nested_loops()
-    print("\n6. Nested Loops...")
-    local start = os.clock()
+    local start = clock()
 
     local sum = 0
-    for i = 0, 499 do
-        for j = 0, 499 do
+    for i = 0, 2999 do
+        for j = 0, 2999 do
             sum = sum + i * j
         end
     end
 
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print(string.format("   Sum:  %d", sum))
+    report("nested", start, sum)
     return sum
 end
 
 -- ============================================================================
--- 7. Object Creation/Destruction
+-- 7. Object creation / destruction
 -- ============================================================================
 local function benchmark_object_lifecycle()
-    print("\n7. Object Creation/Destruction...")
-    local start = os.clock()
+    local start = clock()
 
-    for i = 0, 9999 do
+    local total = 0
+    for i = 0, 299999 do
         local temp_array = {1, 2, 3, 4, 5}
         local temp_table = {a = 1, b = 2, c = 3}
         local temp_str = "temp" .. tostring(i)
-        if temp_array[1] == 0 or temp_table.a == 0 or temp_str == "" then
-            error("unreachable")
-        end
+        total = total + temp_array[1] + temp_table.a + #temp_str
     end
 
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print("   Objects created: 30000")
-    return 10000
+    report("objlife", start, total)
+    return total
 end
 
 -- ============================================================================
--- 8. Mixed Workload
+-- 8. Mixed workload
 -- ============================================================================
 local function benchmark_mixed()
-    print("\n8. Mixed Workload...")
-    local start = os.clock()
+    local n = 100000
+    local start = clock()
 
     local data = {}
-    for i = 1, 1000 do
-        local idx = i - 1
+    for i = 0, n - 1 do
         local record = {
-            id = idx,
-            value = idx * 2,
-            name = "item_" .. tostring(idx)
+            id = i,
+            value = i * 2,
+            name = "item_" .. tostring(i)
         }
         data[i] = record
     end
 
     local total = 0
-    for i = 1, 1000 do
-        total = total + data[i].value
+    for i = 0, n - 1 do
+        local record = data[i]
+        total = total + record.value + #record.name
     end
 
-    local duration = os.clock() - start
-    print(string.format("   Time:  %f s", duration))
-    print(string.format("   Total:  %d", total))
+    report("mixed", start, total)
     return total
 end
 
 -- ============================================================================
--- Run All Benchmarks
+-- Run all benchmarks
 -- ============================================================================
-print("Starting benchmarks...\n")
-local overall_start = os.clock()
+local overall_start = clock()
 
 benchmark_arithmetic()
 benchmark_function_calls()
@@ -211,8 +201,4 @@ benchmark_nested_loops()
 benchmark_object_lifecycle()
 benchmark_mixed()
 
-local overall_duration = os.clock() - overall_start
-
-print("\n=== Overall Results ===")
-print(string.format("Total time:  %f s", overall_duration))
-print("Benchmark complete!")
+print(string.format("BENCH %s %.9f %d", "total", clock() - overall_start, 0))

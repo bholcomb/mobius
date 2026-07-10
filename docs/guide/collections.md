@@ -175,6 +175,24 @@ var all = person:pairs()
 print(all[0][0], "=", all[0][1])   // e.g. name = Alice
 ```
 
+### Iteration order
+
+Table iteration order is **unspecified, and differs between runs of the same
+program**. Keys are placed by hash, and the string hash is seeded with a random
+value at process start so that a program accepting untrusted table keys (query
+parameters, JSON object keys) cannot be fed keys crafted to collide. Do not rely
+on the order of `pairs()` or of `for (var k in tbl)`; sort the keys if you need a
+stable order.
+
+To reproduce an order while debugging, pin the seed with the `MOBIUS_HASH_SEED`
+environment variable (decimal, or `0x`-prefixed hex):
+
+```bash
+MOBIUS_HASH_SEED=42 bin/mobius script.mob
+```
+
+Arrays are ordered; only tables are affected.
+
 ---
 
 ## Metatables

@@ -457,6 +457,24 @@ static void run_plugin_post_init(Plugin* plugin, Table* mod_table, MobiusState* 
 // ModuleRegistry implementation
 // ============================================================================
 
+void ModuleRegistry::releaseModuleValues() {
+    std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+    for (auto& entry : module_records_) {
+        ModuleRecord& rec = entry.second;
+        if (rec.globals) {
+            // These slots are a copy of the owning state's root globals, so
+            // they hold the same interned-string pointers. Run the Value
+            // destructors now, while the string pool is still alive.
+            rec.globals->slots.clear();
+            rec.globals->slot_map.clear();
+            rec.globals->slot_names.clear();
+            rec.globals->count.store(0, std::memory_order_relaxed);
+            rec.globals->backing_table = nullptr;   // borrowed, not owned here
+        }
+        rec.table = nullptr;   // borrowed; the module table is owned via globals
+    }
+}
+
 ModuleRegistry::~ModuleRegistry() {
     for (auto& mod : modules_) {
         if (mod && mod->plugin && mod->plugin->cleanup_plugin) {

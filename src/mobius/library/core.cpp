@@ -197,11 +197,10 @@ int lib_str(MobiusState* state, int arg_count) {
         }
     }
 
-    MobiusString* str = value_to_interned_string(state, arg);
-    Value result = str ? make_string_value(str) : make_nil_value();
-    
+    Value result = value_to_string_value(state, arg);
+
     state->npop();
     state->npush(result);
-    
+
     return 1;
 }

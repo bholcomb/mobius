@@ -53,6 +53,13 @@ public:
     Table* resolveModule(const char* name, const char* caller_source, MobiusState* state);
     void registerBuiltinModule(const char* name, Table* module_table);
 
+    // Release every Value held by cached module environments. Module records
+    // live in this process-lifetime singleton (destroyed at atexit), but the
+    // strings and tables in their global slots are owned by a MobiusState's
+    // string pool. A MobiusState must call this before it frees that pool, or
+    // the atexit teardown dereferences freed strings. Safe to call repeatedly.
+    void releaseModuleValues();
+
     bool debugMode() const { return debug_mode_; }
     void setDebugMode(bool mode) { debug_mode_ = mode; }
     const std::string& lastError() const { return last_error_; }

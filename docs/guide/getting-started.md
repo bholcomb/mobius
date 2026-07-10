@@ -143,6 +143,13 @@ The `fiber` builtin (a global table) and all the functions in the
 [Standard Library](../reference/standard-library.md) are built into the runtime
 and need no `import`.
 
+## Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `MOBIUS_MODULE_PATH` | Extra module search directories (`:`-separated; `;` on Windows). |
+| `MOBIUS_HASH_SEED`   | Pin the string-hash seed (decimal or `0x…`). By default it is randomized per process, so [table iteration order](collections.md#iteration-order) varies between runs. Set this to reproduce an order while debugging. |
+
 ---
 
 ## Where to go next

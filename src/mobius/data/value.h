@@ -60,7 +60,7 @@ struct UserdataObject {
 enum ValueType : int8_t {
     // Internal sentinel — type not yet determined (compiler/VM only, never user-visible)
     VAL_UNKNOWN = -1,
-    // Non-refcounted (inline) types — must stay below VAL_ARRAY
+    // Non-refcounted (inline) types — must stay below VAL_STRING
     VAL_NIL,
     VAL_BOOL,
     VAL_INT64,   // signed int64_t  — stored in as.i64
@@ -68,8 +68,11 @@ enum ValueType : int8_t {
     VAL_FLOAT64,
     VAL_CHAR,
     VAL_NATIVE_FUNCTION,
-    VAL_STRING,  // interned; owned by StringInternPool, not refcounted
-    // Refcounted (heap-allocated) types — must stay at VAL_ARRAY or above
+    // Refcounted (heap-allocated) types — must stay at VAL_STRING or above.
+    // Interned strings carry an immortal refcount, so retain/release on them is
+    // a load and a branch rather than an atomic; only computed (heap) strings
+    // are actually counted.
+    VAL_STRING,
     VAL_ARRAY,
     VAL_FUNCTION,
     VAL_TABLE,
@@ -81,6 +84,9 @@ enum ValueType : int8_t {
     VAL_SHARED_CELL,
     VAL_BUFFER
 };
+
+// Values of this type and above own a reference to a heap object.
+static constexpr ValueType VAL_FIRST_REFCOUNTED = VAL_STRING;
 
 static constexpr int VALUE_TYPE_COUNT = (int)VAL_BUFFER + 1;
 
@@ -125,7 +131,7 @@ public:
 
     Value& operator=(const Value& other) {
         if (this != &other) {
-            if (MOBIUS_LIKELY(type < VAL_ARRAY && other.type < VAL_ARRAY)) {
+            if (MOBIUS_LIKELY(type < VAL_FIRST_REFCOUNTED && other.type < VAL_FIRST_REFCOUNTED)) {
                 type = other.type; flags = other.flags;
                 aux = other.aux; as.i64 = other.as.i64;
             } else {
@@ -204,7 +210,14 @@ public:
 
 private:
     inline void retain() const {
-        if (type < VAL_ARRAY) return;
+        if (type < VAL_FIRST_REFCOUNTED) return;
+        // Strings are the most-copied heap value by a wide margin, so they get
+        // their own branch ahead of the switch. Interned strings are immortal:
+        // MobiusString::retain() sees the sentinel and does nothing.
+        if (MOBIUS_LIKELY(type == VAL_STRING)) {
+            if (as.string) as.string->retain();
+            return;
+        }
         switch (type) {
             case VAL_ARRAY:    if (as.array) ((RefCounted*)as.array)->retain(); break;
             case VAL_FUNCTION: if (as.function) as.function->ref_count.fetch_add(1, std::memory_order_relaxed); break;
@@ -220,7 +233,15 @@ private:
         }
     }
     inline void releaseRef() {
-        if (type < VAL_ARRAY) return;
+        if (type < VAL_FIRST_REFCOUNTED) return;
+        // Inlined for the same reason retain() special-cases strings, and to
+        // keep them out of releaseRefSlow(), which is an exported (non-inlined)
+        // call.
+        if (MOBIUS_LIKELY(type == VAL_STRING)) {
+            if (as.string) as.string->release();
+            type = VAL_NIL;
+            return;
+        }
         releaseRefSlow();
     }
     MOBIUS_API void releaseRefSlow();
@@ -270,9 +291,17 @@ inline Value make_float_value(double val) {
     return value;
 }
 
+// Retains `string` (a no-op for interned/immortal strings).
 MOBIUS_API Value make_string_value(MobiusString* string);
+// Takes ownership of one existing reference — for a freshly created heap string,
+// which is returned with refcount 1. Do not use with an interned string you did
+// not create.
+MOBIUS_API Value make_string_value_adopt(MobiusString* string);
 MOBIUS_API Value make_string_value_from_cstr(MobiusState* state, const char* cstr);
 MOBIUS_API MobiusString* value_to_interned_string(MobiusState* state, const Value& value);
+// str()-facing: heap (reclaimable) result for numeric/char values, pass-through
+// for strings, interned for the bounded/rare cases. Returns an owned Value.
+MOBIUS_API Value value_to_string_value(MobiusState* state, const Value& value);
 MOBIUS_API Value make_function_value(struct MobiusFunction* function);
 MOBIUS_API Value make_native_function_value(MobiusCFunction function);
 MOBIUS_API Value make_userdata_value(MobiusState* state, void* ptr, UserdataDestructor destructor,

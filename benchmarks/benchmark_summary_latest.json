@@ -1,212 +1,73 @@
 {
-  "mobius": {
-    "runs": [
-      {
-        "1. Arithmetic Operations": 0.0228315,
-        "2. Function Calls (Fibonacci)": 0.0136599,
-        "3. Array Operations (Dense Numeric Storage)": 0.00054473,
-        "4. Table Operations (String-Key Hash Map)": 0.000756565,
-        "5. String Operations": 0.00101848,
-        "6. Nested Loops": 0.00318361,
-        "7. Object Creation/Destruction": 0.0105605,
-        "8. Mixed Workload": 0.00149165,
-        "Total": 0.0585022
-      },
-      {
-        "1. Arithmetic Operations": 0.0225418,
-        "2. Function Calls (Fibonacci)": 0.0135476,
-        "3. Array Operations (Dense Numeric Storage)": 0.000539219,
-        "4. Table Operations (String-Key Hash Map)": 0.000754149,
-        "5. String Operations": 0.00101952,
-        "6. Nested Loops": 0.00320142,
-        "7. Object Creation/Destruction": 0.0107293,
-        "8. Mixed Workload": 0.00148904,
-        "Total": 0.0583043
-      },
-      {
-        "1. Arithmetic Operations": 0.0227768,
-        "2. Function Calls (Fibonacci)": 0.0143299,
-        "3. Array Operations (Dense Numeric Storage)": 0.000557825,
-        "4. Table Operations (String-Key Hash Map)": 0.000751946,
-        "5. String Operations": 0.00103239,
-        "6. Nested Loops": 0.00319749,
-        "7. Object Creation/Destruction": 0.0112552,
-        "8. Mixed Workload": 0.00152485,
-        "Total": 0.0599204
-      },
-      {
-        "1. Arithmetic Operations": 0.0228203,
-        "2. Function Calls (Fibonacci)": 0.013844,
-        "3. Array Operations (Dense Numeric Storage)": 0.000550461,
-        "4. Table Operations (String-Key Hash Map)": 0.000747527,
-        "5. String Operations": 0.00100956,
-        "6. Nested Loops": 0.00320218,
-        "7. Object Creation/Destruction": 0.01053,
-        "8. Mixed Workload": 0.00147453,
-        "Total": 0.0586326
-      },
-      {
-        "1. Arithmetic Operations": 0.0221647,
-        "2. Function Calls (Fibonacci)": 0.0140464,
-        "3. Array Operations (Dense Numeric Storage)": 0.000563726,
-        "4. Table Operations (String-Key Hash Map)": 0.000763387,
-        "5. String Operations": 0.00103601,
-        "6. Nested Loops": 0.00320163,
-        "7. Object Creation/Destruction": 0.0106651,
-        "8. Mixed Workload": 0.00150328,
-        "Total": 0.0584219
-      }
-    ],
-    "averages": {
-      "1. Arithmetic Operations": 0.02262702,
-      "2. Function Calls (Fibonacci)": 0.01388556,
-      "3. Array Operations (Dense Numeric Storage)": 0.0005511922,
-      "4. Table Operations (String-Key Hash Map)": 0.0007547148,
-      "5. String Operations": 0.001023192,
-      "6. Nested Loops": 0.003197266,
-      "7. Object Creation/Destruction": 0.01074802,
-      "8. Mixed Workload": 0.0014966699999999999,
-      "Total": 0.058756279999999994
+  "checksums": {
+    "lua": {
+      "arith": 530765,
+      "array": 999999000000,
+      "fib": 832040,
+      "mixed": 10000888890,
+      "nested": 20236502250000,
+      "objlife": 3488890,
+      "string": 6977780,
+      "table": 37499250000,
+      "total": 0
+    },
+    "mobius": {
+      "arith": 530765,
+      "array": 999999000000,
+      "fib": 832040,
+      "mixed": 10000888890,
+      "nested": 20236502250000,
+      "objlife": 3488890,
+      "string": 6977780,
+      "table": 37499250000,
+      "total": 0
+    },
+    "python": {
+      "arith": 530765,
+      "array": 999999000000,
+      "fib": 832040,
+      "mixed": 10000888890,
+      "nested": 20236502250000,
+      "objlife": 3488890,
+      "string": 6977780,
+      "table": 37499250000,
+      "total": 0
     }
   },
-  "lua": {
-    "runs": [
-      {
-        "1. Arithmetic Operations": 0.01821,
-        "2. Function Calls (Fibonacci)": 0.00444,
-        "3. Array Operations (Dense Numeric Storage)": 0.000348,
-        "4. Table Operations (String-Key Hash Map)": 0.000605,
-        "5. String Operations": 0.000504,
-        "6. Nested Loops": 0.001553,
-        "7. Object Creation/Destruction": 0.005443,
-        "8. Mixed Workload": 0.000475,
-        "Total": 0.033415
-      },
-      {
-        "1. Arithmetic Operations": 0.016429,
-        "2. Function Calls (Fibonacci)": 0.004388,
-        "3. Array Operations (Dense Numeric Storage)": 0.000365,
-        "4. Table Operations (String-Key Hash Map)": 0.000607,
-        "5. String Operations": 0.0005,
-        "6. Nested Loops": 0.001511,
-        "7. Object Creation/Destruction": 0.005297,
-        "8. Mixed Workload": 0.000481,
-        "Total": 0.031388
-      },
-      {
-        "1. Arithmetic Operations": 0.018139,
-        "2. Function Calls (Fibonacci)": 0.004745,
-        "3. Array Operations (Dense Numeric Storage)": 0.000432,
-        "4. Table Operations (String-Key Hash Map)": 0.000802,
-        "5. String Operations": 0.000628,
-        "6. Nested Loops": 0.002187,
-        "7. Object Creation/Destruction": 0.006174,
-        "8. Mixed Workload": 0.000476,
-        "Total": 0.035941
-      },
-      {
-        "1. Arithmetic Operations": 0.016494,
-        "2. Function Calls (Fibonacci)": 0.004389,
-        "3. Array Operations (Dense Numeric Storage)": 0.000352,
-        "4. Table Operations (String-Key Hash Map)": 0.000601,
-        "5. String Operations": 0.000512,
-        "6. Nested Loops": 0.001461,
-        "7. Object Creation/Destruction": 0.005265,
-        "8. Mixed Workload": 0.000469,
-        "Total": 0.031369
-      },
-      {
-        "1. Arithmetic Operations": 0.016467,
-        "2. Function Calls (Fibonacci)": 0.004363,
-        "3. Array Operations (Dense Numeric Storage)": 0.000358,
-        "4. Table Operations (String-Key Hash Map)": 0.000608,
-        "5. String Operations": 0.000505,
-        "6. Nested Loops": 0.001467,
-        "7. Object Creation/Destruction": 0.005226,
-        "8. Mixed Workload": 0.000465,
-        "Total": 0.031273
-      }
-    ],
-    "averages": {
-      "1. Arithmetic Operations": 0.0171478,
-      "2. Function Calls (Fibonacci)": 0.004465,
-      "3. Array Operations (Dense Numeric Storage)": 0.00037099999999999996,
-      "4. Table Operations (String-Key Hash Map)": 0.0006446,
-      "5. String Operations": 0.0005298,
-      "6. Nested Loops": 0.0016358,
-      "7. Object Creation/Destruction": 0.005481,
-      "8. Mixed Workload": 0.0004732,
-      "Total": 0.0326772
+  "medians_seconds": {
+    "lua": {
+      "arith": 0.119822,
+      "array": 0.009721,
+      "fib": 0.033166,
+      "mixed": 0.040442,
+      "nested": 0.036913,
+      "objlife": 0.079594,
+      "string": 0.066444,
+      "table": 0.011784,
+      "total": 0.421426
+    },
+    "mobius": {
+      "arith": 0.113861,
+      "array": 0.0213364,
+      "fib": 0.0654141,
+      "mixed": 0.07886,
+      "nested": 0.044036,
+      "objlife": 0.130756,
+      "string": 0.0740283,
+      "table": 0.0200762,
+      "total": 0.575323
+    },
+    "python": {
+      "arith": 0.844753068,
+      "array": 0.054852264,
+      "fib": 0.069796046,
+      "mixed": 0.031053195,
+      "nested": 0.280120874,
+      "objlife": 0.053490303,
+      "string": 0.027266022,
+      "table": 0.027707957,
+      "total": 1.410250479
     }
   },
-  "python": {
-    "runs": [
-      {
-        "1. Arithmetic Operations": 0.117149,
-        "2. Function Calls (Fibonacci)": 0.008623,
-        "3. Array Operations (Dense Numeric Storage)": 0.000784,
-        "4. Table Operations (String-Key Hash Map)": 0.000745,
-        "5. String Operations": 0.000207,
-        "6. Nested Loops": 0.010587,
-        "7. Object Creation/Destruction": 0.002704,
-        "8. Mixed Workload": 0.000378,
-        "Total": 0.141963
-      },
-      {
-        "1. Arithmetic Operations": 0.115272,
-        "2. Function Calls (Fibonacci)": 0.008563,
-        "3. Array Operations (Dense Numeric Storage)": 0.000764,
-        "4. Table Operations (String-Key Hash Map)": 0.000746,
-        "5. String Operations": 0.000206,
-        "6. Nested Loops": 0.010561,
-        "7. Object Creation/Destruction": 0.002733,
-        "8. Mixed Workload": 0.00035,
-        "Total": 0.139954
-      },
-      {
-        "1. Arithmetic Operations": 0.113716,
-        "2. Function Calls (Fibonacci)": 0.008468,
-        "3. Array Operations (Dense Numeric Storage)": 0.000797,
-        "4. Table Operations (String-Key Hash Map)": 0.00075,
-        "5. String Operations": 0.000214,
-        "6. Nested Loops": 0.010504,
-        "7. Object Creation/Destruction": 0.002751,
-        "8. Mixed Workload": 0.000361,
-        "Total": 0.138329
-      },
-      {
-        "1. Arithmetic Operations": 0.117915,
-        "2. Function Calls (Fibonacci)": 0.008575,
-        "3. Array Operations (Dense Numeric Storage)": 0.000764,
-        "4. Table Operations (String-Key Hash Map)": 0.000746,
-        "5. String Operations": 0.000207,
-        "6. Nested Loops": 0.010887,
-        "7. Object Creation/Destruction": 0.002819,
-        "8. Mixed Workload": 0.000315,
-        "Total": 0.142987
-      },
-      {
-        "1. Arithmetic Operations": 0.112381,
-        "2. Function Calls (Fibonacci)": 0.008528,
-        "3. Array Operations (Dense Numeric Storage)": 0.000783,
-        "4. Table Operations (String-Key Hash Map)": 0.000748,
-        "5. String Operations": 0.000207,
-        "6. Nested Loops": 0.010498,
-        "7. Object Creation/Destruction": 0.002764,
-        "8. Mixed Workload": 0.000358,
-        "Total": 0.137033
-      }
-    ],
-    "averages": {
-      "1. Arithmetic Operations": 0.1152866,
-      "2. Function Calls (Fibonacci)": 0.0085514,
-      "3. Array Operations (Dense Numeric Storage)": 0.0007784,
-      "4. Table Operations (String-Key Hash Map)": 0.000747,
-      "5. String Operations": 0.0002082,
-      "6. Nested Loops": 0.0106074,
-      "7. Object Creation/Destruction": 0.0027542,
-      "8. Mixed Workload": 0.0003524,
-      "Total": 0.1400532
-    }
-  }
+  "runs": 5
 }
