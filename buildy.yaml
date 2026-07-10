@@ -28,8 +28,8 @@ workspace:
     - src/modules
     - src/packages/sqlite
     - src/packages/glfw
-    - src/packages/vulkease
-    - src/packages/monstro
+      #    - src/packages/vulkease
+      #    - src/packages/monstro
     - examples
 
 dependencies:
@@ -144,19 +144,19 @@ staging:
     - folder: "packages/glfw/native/linux-x86_64"
       files:
         - "${out_dir}/bin/glfw.so"
-    - folder: "packages/vulkease"
-      files:
-        - "src/packages/vulkease/module.yaml"
-        - "src/packages/vulkease/vulkease.mob"
-    - folder: "packages/vulkease/native/linux-x86_64"
-      files:
-        - "${out_dir}/bin/vulkease.so"
-        - "/home/bholcomb/projects/side/vulkease/bin/libvulkease.so"
-    - folder: "packages/monstro"
-      files:
-        - "src/packages/monstro/module.yaml"
-        - "src/packages/monstro/monstro.mob"
-    - folder: "packages/monstro/native/linux-x86_64"
-      files:
-        - "${out_dir}/bin/monstro.so"
-        - "/home/bholcomb/projects/side/monstero/bin/libmonstro.so"
+          #    - folder: "packages/vulkease"
+          #      files:
+          #        - "src/packages/vulkease/module.yaml"
+          #        - "src/packages/vulkease/vulkease.mob"
+          #    - folder: "packages/vulkease/native/linux-x86_64"
+          #      files:
+          #        - "${out_dir}/bin/vulkease.so"
+          #        - "/home/bholcomb/projects/side/vulkease/bin/libvulkease.so"
+          #    - folder: "packages/monstro"
+          #      files:
+          #        - "src/packages/monstro/module.yaml"
+          #        - "src/packages/monstro/monstro.mob"
+          #    - folder: "packages/monstro/native/linux-x86_64"
+          #      files:
+          #        - "${out_dir}/bin/monstro.so"
+          #        - "/home/bholcomb/projects/side/monstero/bin/libmonstro.so"
