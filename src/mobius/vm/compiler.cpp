@@ -1630,10 +1630,17 @@ bool stmt_requires_shared_identity(Stmt* stmt, const char* name, ValueType retur
 }
 
 std::vector<bool> compute_param_shared_identity_flags(Token* params, size_t param_count,
+                                                      const ValueType* param_types,
                                                       Stmt** body, size_t body_count,
                                                       ValueType return_type) {
     std::vector<bool> needs_identity(param_count, false);
     for (size_t i = 0; i < param_count; i++) {
+        // A parameter declared with a scalar type can never hold a SharedCell:
+        // param_unwrap_on_entry snapshots a shared argument at the call
+        // boundary. Keeping the cell alive in the register would only force a
+        // redundant OP_SHARED_LOAD at every use.
+        if (param_types && type_prefers_plain_binding(param_types[i])) continue;
+
         const char* name = params[i].identifier;
         for (size_t j = 0; j < body_count; j++) {
             if (stmt_requires_shared_identity(body[j], name, return_type)) {
@@ -2821,6 +2828,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     child_fs.proto->param_unwrap_on_entry.assign(stmt->param_count, 0);
     std::vector<bool> param_needs_identity =
         compute_param_shared_identity_flags(stmt->params, stmt->param_count,
+                                            stmt->param_types,
                                             stmt->body, stmt->body_count,
                                             child_fs.proto->return_type);
     for (size_t i = 0; i < stmt->param_count; i++) {
@@ -3942,6 +3950,7 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     child_fs.proto->param_unwrap_on_entry.assign(expr->param_count, 0);
     std::vector<bool> param_needs_identity =
         compute_param_shared_identity_flags(expr->params, expr->param_count,
+                                            expr->param_types,
                                             expr->body, expr->body_count,
                                             child_fs.proto->return_type);
     for (size_t i = 0; i < expr->param_count; i++) {

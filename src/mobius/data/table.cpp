@@ -11,6 +11,31 @@
 
 static const Value kNilValue;
 
+// Compare a stored table key against the string being looked up.
+//
+// Interned strings are pointer-equal when they are content-equal, and that
+// single-compare fast path is kept. But it must not be the *only* path: it is
+// only sound while every string in the process is interned. Falling back to
+// (hash, length, bytes) keeps lookup correct for strings that were never
+// interned, which is what lets the pool skip interning computed strings.
+//
+// The full-hash check makes the byte compare rare: the probe already matched on
+// the 7-bit tag, so reaching memcmp requires a 64-bit hash collision.
+// Build with -DMOBIUS_TABLE_NO_PTR_FASTPATH to force every lookup down the
+// content-comparison path. While all strings are interned the fallback is
+// otherwise unreachable, so this is how it gets test coverage.
+static MOBIUS_FORCEINLINE bool string_key_equals(const Value& stored, const MobiusString* key) {
+    if (stored.type != VAL_STRING) return false;
+    const MobiusString* s = stored.as.string;
+#ifndef MOBIUS_TABLE_NO_PTR_FASTPATH
+    if (MOBIUS_LIKELY(s == key)) return true;
+#endif
+    if (!s || !key) return false;
+    return s->hash == key->hash &&
+           s->length == key->length &&
+           memcmp(s->data, key->data, s->length) == 0;
+}
+
 static size_t next_power_of_2(size_t n) {
     if (n <= 1) return 1;
     n--;
@@ -265,8 +290,7 @@ const Value& Table::getByStringUnlocked(MobiusString* key) const {
         uint8_t t = tags_[index];
         if (t == TAG_EMPTY) break;
         if (t == tag) {
-            const Value& k = entries_[index].key;
-            if (k.type == VAL_STRING && k.as.string == key)
+            if (string_key_equals(entries_[index].key, key))
                 return entries_[index].value;
         }
         index = (index + 1) & mask;
@@ -350,17 +374,14 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
             }
 
             TableEntry& e = entries_[index];
-            e.key.type = VAL_STRING;
-            e.key.as.string = key;
-            e.key.flags = 0;
+            e.key = make_string_value(key);   // retains: the table owns its key
             e.value = value;
             tags_[index] = tag;
             size_++;
             return true;
         }
         if (t == tag) {
-            const Value& k = entries_[index].key;
-            if (k.type == VAL_STRING && k.as.string == key) {
+            if (string_key_equals(entries_[index].key, key)) {
                 entries_[index].value = value;
                 return true;
             }
@@ -369,9 +390,7 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
     } while (index != start);
 
     TableEntry& e = entries_[start];
-    e.key.type = VAL_STRING;
-    e.key.as.string = key;
-    e.key.flags = 0;
+    e.key = make_string_value(key);   // retains: the table owns its key
     e.value = value;
     tags_[start] = tag;
     size_++;

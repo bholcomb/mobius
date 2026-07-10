@@ -38,3 +38,5 @@ Thumbs.db
 build/
 
 
+
+benchmarks/__pycache__/

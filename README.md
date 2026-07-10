@@ -130,33 +130,42 @@ plugin and userdata examples, networking servers, and pure-Mobius demo scripts
 
 Mobius compiles to a register-based bytecode VM with type-specialized opcodes.
 The table below is a mixed micro-benchmark suite
-([`benchmarks/benchmark_comprehensive.*`](benchmarks/)), run on one machine and
-averaged over five runs — **milliseconds, lower is better**:
+([`benchmarks/benchmark_comprehensive.*`](benchmarks/)) against Lua 5.4.7 and
+CPython 3, run on one machine — **median of five runs, milliseconds, lower is
+better**:
 
-| Benchmark | Mobius | Lua | CPython |
-|-----------|-------:|----:|--------:|
-| Arithmetic                     | 22.6 | 17.1 | 115.3 |
-| Recursive calls (Fibonacci)    | 13.9 |  4.5 |   8.6 |
-| Array ops (dense numeric)      | 0.55 | 0.37 |  0.78 |
-| Table ops (string-key map)     | 0.75 | 0.64 |  0.75 |
-| String ops                     | 1.02 | 0.53 |  0.21 |
-| Nested loops                   | 3.20 | 1.64 | 10.61 |
-| Object create / destroy        | 10.7 |  5.5 |   2.8 |
-| Mixed workload                 | 1.50 | 0.47 |  0.35 |
-| **Total**                      | **58.8** | **32.7** | **140.1** |
+| Benchmark | Mobius | Lua | CPython | Mobius/Lua |
+|-----------|-------:|----:|--------:|-----------:|
+| Arithmetic (integer)           |  113.9 |  119.8 |   844.8 | **0.95×** |
+| Recursive calls (fib 30)       |   65.4 |   33.2 |    69.8 | 1.97× |
+| Array ops (dense numeric)      |   21.3 |    9.7 |    54.9 | 2.19× |
+| Table ops (string-key map)     |   20.1 |   11.8 |    27.7 | 1.70× |
+| String ops                     |   74.0 |   66.4 |    27.3 | 1.11× |
+| Nested loops                   |   44.0 |   36.9 |   280.1 | 1.19× |
+| Object create / destroy        |  130.8 |   79.6 |    53.5 | 1.64× |
+| Mixed workload                 |   78.9 |   40.4 |    31.1 | 1.95× |
+| **Total**                      | **575.3** | **421.4** | **1410.3** | **1.37×** |
 
 Takeaways:
 
-- **~2.4× faster than CPython** overall on this suite, and within roughly
-  **1.8× of Lua**.
-- Type locking pays off most on **arithmetic and tight numeric loops**, where
-  Mobius is several times faster than CPython.
-- Lua still leads on deep recursion and object churn; CPython remains
-  competitive or ahead on recursion-heavy, string, and allocation-heavy code —
-  areas with room to improve.
+- **~2.5× faster than CPython** overall, and within **1.4× of Lua**.
+- Type locking pays off most on **arithmetic and tight numeric loops** — Mobius
+  is *faster than Lua* on integer arithmetic, and 7× faster than CPython on it.
+- Strings are near parity with Lua (**1.1×**): computed strings are refcounted
+  rather than interned, so they are reclaimed instead of accumulating.
+- Lua still leads on **recursion** (parameters are the values the compiler cannot
+  type from an initializer) and on **object creation**. CPython, with its heavily
+  tuned string and dict machinery, stays ahead on string-heavy code.
+
+Every benchmark reports an integer checksum, and the runner refuses to print
+timings unless all three languages agree on every one — the three
+implementations are guaranteed to be computing the same thing. Reproduce with:
+
+```bash
+python3 benchmarks/run_benchmarks.py --runs 5
+```
 
 These are indicative micro-benchmarks, not a rigorous cross-language benchmark.
-Reproduce them with the harness in [`benchmarks/`](benchmarks/).
 
 ## Status
 

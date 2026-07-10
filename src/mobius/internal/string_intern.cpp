@@ -4,25 +4,93 @@
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>
+#include <chrono>
+#include <mutex>
 #include <new>
+#include <random>
 
 // ============================================================================
-// HASH FUNCTION (Lua-style)
+// HASH SEED
 // ============================================================================
 
-static uint32_t compute_string_hash(const char* str, size_t len) {
-    uint32_t hash = (uint32_t)len;
-    size_t step;
+// The string hash is seeded with a value chosen once per process.
+//
+// Without a secret seed, an attacker who controls table keys — query
+// parameters, JSON object keys, header names — can precompute keys that all
+// hash to one bucket and turn table insertion into O(n^2). Randomizing the seed
+// makes those keys unpredictable. This is the same mitigation Lua 5.4 and
+// CPython apply.
+//
+// The cost is that table iteration order (`pairs()`) now varies between runs.
+// Set MOBIUS_HASH_SEED to a decimal or 0x-prefixed value to pin the seed and
+// recover a reproducible order when debugging or diffing output.
+static uint64_t g_string_hash_seed = 0x9E3779B97F4A7C15ull;
+static std::once_flag g_string_hash_seed_once;
 
-    if (len < 40) {
-        step = 1;
-    } else {
-        step = (len / 32) + 1;
+static uint64_t generate_string_hash_seed() {
+    if (const char* env = getenv("MOBIUS_HASH_SEED")) {
+        char* end = nullptr;
+        unsigned long long pinned = strtoull(env, &end, 0);
+        if (end != env) return (uint64_t)pinned;
     }
 
-    for (size_t i = len; i >= step; i -= step) {
-        hash = hash ^ ((hash << 5) + (hash >> 2) + (unsigned char)str[i - 1]);
+    uint64_t seed = 0;
+    std::random_device rd;
+    seed  = ((uint64_t)rd() << 32) ^ (uint64_t)rd();
+    seed ^= (uint64_t)std::chrono::steady_clock::now().time_since_epoch().count();
+    seed ^= (uint64_t)(uintptr_t)&g_string_hash_seed;   // ASLR
+
+    // A zero seed would degrade the finalizer for the empty string.
+    return seed ? seed : 0x9E3779B97F4A7C15ull;
+}
+
+// Called from the StringInternPool constructor, which necessarily runs before
+// any string can be interned. Keeping it out of compute_string_hash() avoids a
+// guard check on every hash.
+void mobius_init_string_hash_seed() {
+    std::call_once(g_string_hash_seed_once,
+                   [] { g_string_hash_seed = generate_string_hash_seed(); });
+}
+
+static constexpr uint64_t MIX_A = 0xff51afd7ed558ccdull;
+static constexpr uint64_t MIX_B = 0xc4ceb9fe1a85ec53ull;
+static constexpr uint64_t FNV_PRIME_64 = 0x100000001b3ull;
+
+// Word-at-a-time hash over every byte, with a murmur3-style finalizer.
+//
+// This reads all of the input. The previous hash sampled only ~32 bytes of any
+// string of length >= 40 (`step = len/32 + 1`, walking backwards) and seeded
+// from `len`, so same-length strings that differed only at unsampled positions
+// all produced the SAME value: 20k distinct 128-byte strings collapsed to one
+// hash, turning every intern and every table probe on them into a linear scan
+// with a full memcmp. Correctness held (find() compares bytes) but throughput
+// collapsed, and the collisions are trivially constructible — a hash-flooding
+// vector for any table keyed by attacker-supplied strings.
+//
+// Hashing all bytes byte-at-a-time (FNV-1a) fixes the collisions but runs at
+// only ~1.2 GB/s, ~50x the cost of the memcpy that interning already performs.
+// Consuming 8 bytes per multiply reaches ~9.9 GB/s, so the hash costs a small
+// multiple of the copy instead of dominating it.
+static uint64_t compute_string_hash(const char* str, size_t len) {
+    uint64_t hash = g_string_hash_seed ^ (uint64_t)len;
+
+    size_t i = 0;
+    for (; i + 8 <= len; i += 8) {
+        uint64_t chunk;
+        memcpy(&chunk, str + i, 8);   // compiles to one unaligned load
+        chunk *= MIX_A;
+        chunk ^= chunk >> 33;
+        hash ^= chunk;
+        hash *= MIX_B;
     }
+    for (; i < len; i++) {
+        hash ^= (unsigned char)str[i];
+        hash *= FNV_PRIME_64;
+    }
+
+    hash ^= hash >> 33;
+    hash *= MIX_A;
+    hash ^= hash >> 33;
 
     return hash;
 }
@@ -50,7 +118,7 @@ bool MobiusString::operator==(const MobiusString& other) const {
 // SHARD METHODS
 // ============================================================================
 
-MobiusString* StringInternPool::Shard::find(const char* data, size_t len, uint32_t hash) const {
+MobiusString* StringInternPool::Shard::find(const char* data, size_t len, uint64_t hash) const {
     if (buckets.empty()) return nullptr;
     size_t bucket = hash & (buckets.size() - 1);
     MobiusString* str = buckets[bucket];
@@ -77,26 +145,62 @@ MobiusString* StringInternPool::Shard::find(const char* data, size_t len, uint32
     return nullptr;
 }
 
-MobiusString* StringInternPool::Shard::insert(const char* data, size_t len, uint32_t hash) {
+// Allocate one block holding the header followed by `capacity + 1` characters.
+// Returns a string whose `data` points at its own inline storage. `rc` selects
+// immortal (interned) or a live refcount (heap).
+static MobiusString* alloc_string_block(size_t capacity, uint32_t rc) {
+    if (capacity > MobiusString::MAX_LENGTH) return nullptr;
+    void* mem = ::operator new(sizeof(MobiusString) + capacity + 1, std::nothrow);
+    if (!mem) return nullptr;
+    MobiusString* str = static_cast<MobiusString*>(mem);
+    str->data = reinterpret_cast<const char*>(str) + sizeof(MobiusString);
+    str->length = 0;
+    new (&str->refcount) std::atomic<uint32_t>(rc);
+    str->hash = 0;
+    str->next = nullptr;
+    return str;
+}
+
+void MobiusString::destroy() {
+    // Header and characters are one block. Heap strings are never linked into
+    // a pool bucket, so there is nothing to unlink.
+    ::operator delete(this);
+}
+
+MobiusString* StringInternPool::allocHeap(size_t capacity) {
+    return alloc_string_block(capacity, 1);
+}
+
+MobiusString* StringInternPool::finishHeap(MobiusString* s, size_t len) {
+    if (!s) return nullptr;
+    char* buf = s->mutableData();
+    buf[len] = '\0';
+    s->length = (uint32_t)len;
+    s->hash = compute_string_hash(buf, len);
+    return s;
+}
+
+MobiusString* StringInternPool::createHeap(const char* data, size_t length) {
+    MobiusString* s = alloc_string_block(length, 1);
+    if (!s) return nullptr;
+    memcpy(s->mutableData(), data, length);
+    return finishHeap(s, length);
+}
+
+MobiusString* StringInternPool::Shard::insert(const char* data, size_t len, uint64_t hash) {
     float current_load = (float)(string_count + 1) / (float)buckets.size();
     if (current_load > load_factor) {
         resize();
     }
 
-    MobiusString* str = new (std::nothrow) MobiusString();
+    MobiusString* str = alloc_string_block(len, MobiusString::IMMORTAL_RC);
     if (!str) return nullptr;
 
-    char* data_copy = new (std::nothrow) char[len + 1];
-    if (!data_copy) {
-        delete str;
-        return nullptr;
-    }
-
+    char* data_copy = str->mutableData();
     memcpy(data_copy, data, len);
     data_copy[len] = '\0';
 
-    str->data = data_copy;
-    str->length = len;
+    str->length = (uint32_t)len;
     str->hash = hash;
     str->next = nullptr;
 
@@ -109,30 +213,19 @@ MobiusString* StringInternPool::Shard::insert(const char* data, size_t len, uint
     return str;
 }
 
-MobiusString* StringInternPool::Shard::insertOwned(char* data, size_t len, uint32_t hash) {
+// Link an already-populated block (from allocUninterned) into the shard.
+// `str->length` and `str->hash` must already be set.
+void StringInternPool::Shard::insertPrepared(MobiusString* str) {
     float current_load = (float)(string_count + 1) / (float)buckets.size();
     if (current_load > load_factor) {
         resize();
     }
 
-    MobiusString* str = new (std::nothrow) MobiusString();
-    if (!str) {
-        delete[] data;
-        return nullptr;
-    }
-
-    str->data = data;
-    str->length = len;
-    str->hash = hash;
-    str->next = nullptr;
-
-    size_t bucket = hash & (buckets.size() - 1);
+    size_t bucket = str->hash & (buckets.size() - 1);
     str->next = buckets[bucket];
     buckets[bucket] = str;
 
     string_count++;
-
-    return str;
 }
 
 void StringInternPool::Shard::resize() {
@@ -158,6 +251,8 @@ void StringInternPool::Shard::resize() {
 // ============================================================================
 
 StringInternPool::StringInternPool(size_t initial_bucket_count) {
+    mobius_init_string_hash_seed();
+
     if (initial_bucket_count == 0) {
         initial_bucket_count = 256;
     }
@@ -181,8 +276,8 @@ StringInternPool::~StringInternPool() {
             MobiusString* str = head;
             while (str) {
                 MobiusString* next = str->next;
-                delete[] str->data;
-                delete str;
+                // Header and characters are one block.
+                ::operator delete(str);
                 str = next;
             }
         }
@@ -196,8 +291,9 @@ MobiusString* StringInternPool::intern(const char* data) {
 
 MobiusString* StringInternPool::intern(const char* data, size_t length) {
     if (!data) return nullptr;
+    if (length > MobiusString::MAX_LENGTH) return nullptr;
 
-    uint32_t hash = compute_string_hash(data, length);
+    uint64_t hash = compute_string_hash(data, length);
     int shard_idx = shardIndex(hash);
     Shard& shard = shards_[shard_idx];
 
@@ -211,22 +307,35 @@ MobiusString* StringInternPool::intern(const char* data, size_t length) {
     return shard.insert(data, length, hash);
 }
 
-MobiusString* StringInternPool::internOwned(char* data, size_t length) {
-    if (!data) return nullptr;
+MobiusString* StringInternPool::allocUninterned(size_t capacity) {
+    return alloc_string_block(capacity, MobiusString::IMMORTAL_RC);
+}
 
-    uint32_t hash = compute_string_hash(data, length);
-    int shard_idx = shardIndex(hash);
-    Shard& shard = shards_[shard_idx];
+void StringInternPool::freeUninterned(MobiusString* candidate) {
+    if (candidate) ::operator delete(candidate);
+}
 
+MobiusString* StringInternPool::internFinalize(MobiusString* candidate, size_t actual_length) {
+    if (!candidate) return nullptr;
+
+    char* buf = candidate->mutableData();
+    buf[actual_length] = '\0';
+    candidate->length = (uint32_t)actual_length;
+
+    uint64_t hash = compute_string_hash(buf, actual_length);
+    candidate->hash = hash;
+
+    Shard& shard = shards_[shardIndex(hash)];
     std::lock_guard<std::mutex> lock(shard.mutex);
 
-    MobiusString* existing = shard.find(data, length, hash);
+    MobiusString* existing = shard.find(buf, actual_length, hash);
     if (existing) {
-        delete[] data;
+        ::operator delete(candidate);
         return existing;
     }
 
-    return shard.insertOwned(data, length, hash);
+    shard.insertPrepared(candidate);
+    return candidate;
 }
 
 void StringInternPool::stats(size_t* out_bucket_count, size_t* out_string_count,

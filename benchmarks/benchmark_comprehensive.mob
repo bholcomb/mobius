@@ -1,39 +1,53 @@
 // Comprehensive Mobius Performance Benchmark
-// Arrays benchmark dense numeric storage.
-// Tables benchmark hash-map usage with string keys.
+//
+// This file is kept semantically identical to benchmark_comprehensive.lua and
+// benchmark_comprehensive.py. Every benchmark returns an integer checksum, and
+// run_benchmarks.py refuses to report timings unless all three languages agree
+// on every checksum. If you change a workload here, change it in all three.
+//
+// Ground rules that keep the comparison honest:
+//   * Only operators with identical semantics across the three languages.
+//     Mobius `/` truncates and `%` is a C-style remainder; Lua `//` and `%`
+//     floor. They agree only on non-negative operands, so every intermediate
+//     value below is kept non-negative, and integer division is avoided.
+//   * Each language uses its own canonical counted loop (Mobius/Lua `for`,
+//     Python `range`), never a hand-rolled `while` in one and `for` in another.
+//   * Setup (key building, array preallocation) happens outside the timed
+//     region, so each benchmark measures the operation it names.
+//
+// Output format, one line per benchmark, consumed by run_benchmarks.py:
+//   BENCH <id> <seconds> <checksum>
 
-print("=== Mobius Comprehensive Performance Benchmark ===\n");
-print("Benchmark model: arrays = dense integer storage, tables = string-key hash maps\n");
+print("=== Mobius Comprehensive Performance Benchmark ===");
+print("Benchmark model: arrays = dense integer storage, tables = string-key hash maps");
 
-// ============================================================================
-// 1. Arithmetic Operations
-// ============================================================================
 func ns_to_sec(ns) {
     return float(ns) / 1000000000.0;
 }
 
-func benchmark_arithmetic() {
-    print("1. Arithmetic Operations...");
-    var start = clock();
-    var result = 0;
-    var i = 0;
-    while (i < 1000000) {
-        result = result + i * 2 - 1;
-        result = result / 2;
-        result = result % 1000;
-        i = i + 1;
-    }
-    var duration_ns = clock() - start;
-    var duration = ns_to_sec(duration_ns);
-    print("   Time: ", duration, "s");
-    print("   Ops/sec: ", int(1000000.0 / duration));
-    return result;
+func report(id, start_ns, checksum) {
+    print("BENCH", id, ns_to_sec(clock() - start_ns), checksum);
 }
 
 // ============================================================================
-// 2. Function Calls
+// 1. Arithmetic (integer). Operands stay non-negative so % matches Lua/Python.
 // ============================================================================
-func fibonacci(n: int): int {
+func benchmark_arithmetic() {
+    var start = clock();
+    var r = 0;
+    for (var i = 0; i < 10000000; i++) {
+        r = (r + i * 2 + 1) % 1000003;
+        r = (r * 3 + 7) % 1000003;
+    }
+    report("arith", start, r);
+    return r;
+}
+
+// ============================================================================
+// 2. Function calls — recursive fibonacci.
+// Deliberately left un-annotated: this is the un-specialized call path.
+// ============================================================================
+func fibonacci(n) {
     if (n <= 1) {
         return n;
     }
@@ -41,191 +55,148 @@ func fibonacci(n: int): int {
 }
 
 func benchmark_function_calls() {
-    print("\n2. Function Calls (Fibonacci)...");
     var start = clock();
-    var result = 0;
-    var i = 0;
-    while (i < 10) {
-        result = fibonacci(20);
-        i = i + 1;
-    }
-    var duration = ns_to_sec(clock() - start);
-    print("   Time: ", duration, "s");
-    print("   Result: ", result);
+    var result = fibonacci(30);
+    report("fib", start, result);
     return result;
 }
 
 // ============================================================================
-// 3. Array Operations (dense numeric storage)
+// 3. Array operations (dense numeric storage). Array is preallocated.
 // ============================================================================
 func benchmark_arrays() {
-    print("\n3. Array Operations (Dense Numeric Storage)...");
+    var n = 1000000;
+    var arr = array_create(n, 0);       // setup: outside the timer
     var start = clock();
 
-    var arr = array_create(10000);
-    var i = 0;
-    while (i < 10000) {
+    for (var i = 0; i < n; i++) {
         arr[i] = i * 2;
-        i = i + 1;
     }
-
     var sum = 0;
-    i = 0;
-    while (i < 10000) {
+    for (var i = 0; i < n; i++) {
         sum = sum + arr[i];
-        i = i + 1;
     }
 
-    var duration = ns_to_sec(clock() - start);
-    print("   Time: ", duration, "s");
-    print("   Sum: ", sum);
+    report("array", start, sum);
     return sum;
 }
 
 // ============================================================================
-// 4. Table Operations (hash map string keys)
+// 4. Table operations (string-key hash map). Keys are built outside the timer.
 // ============================================================================
 func build_table_keys(count) {
     var keys = array_create(count);
-    var i = 0;
-    while (i < count) {
+    for (var i = 0; i < count; i++) {
         keys:push(concat("key_", str(i)));
-        i = i + 1;
     }
     return keys;
 }
 
 func benchmark_tables() {
-    print("\n4. Table Operations (String-Key Hash Map)...");
-    var keys = build_table_keys(5000);
+    var n = 50000;
+    var keys = build_table_keys(n);     // setup: outside the timer
     var start = clock();
 
     var tbl = {};
-    var i = 0;
-    while (i < 5000) {
+    for (var i = 0; i < n; i++) {
         tbl[keys[i]] = i * 3;
-        i = i + 1;
     }
 
     var sum = 0;
-    i = 0;
-    while (i < 5000) {
-        sum = sum + tbl[keys[i]];
-        i = i + 1;
+    for (var pass = 0; pass < 10; pass++) {
+        for (var i = 0; i < n; i++) {
+            sum = sum + tbl[keys[i]];
+        }
     }
 
-    var duration = ns_to_sec(clock() - start);
-    print("   Time: ", duration, "s");
-    print("   Sum: ", sum);
+    report("table", start, sum);
     return sum;
 }
 
 // ============================================================================
-// 5. String Operations
+// 5. String operations — build, measure, upcase.
 // ============================================================================
 func benchmark_strings() {
-    print("\n5. String Operations...");
-    var start = clock();
-    
     var base = "Hello";
-    var result = "";
-    var i = 0;
-    while (i < 1000) {
-        result = concat(base, " World ", str(i));
-        var len_result = size(result);
+    var start = clock();
+
+    var total = 0;
+    for (var i = 0; i < 200000; i++) {
+        var result = concat(base, " World ", str(i));
+        total = total + size(result);
         var upper_result = upper(result);
-        i = i + 1;
+        total = total + size(upper_result);
     }
-    
-    var duration = ns_to_sec(clock() - start);
-    print("   Time: ", duration, "s");
-    print("   Final length: ", size(result));
-    return result;
+
+    report("string", start, total);
+    return total;
 }
 
 // ============================================================================
-// 6. Nested Loops
+// 6. Nested loops.
 // ============================================================================
 func benchmark_nested_loops() {
-    print("\n6. Nested Loops...");
     var start = clock();
-    
+
     var sum = 0;
-    var i = 0;
-    while (i < 500) {
-        var j = 0;
-        while (j < 500) {
+    for (var i = 0; i < 3000; i++) {
+        for (var j = 0; j < 3000; j++) {
             sum = sum + i * j;
-            j = j + 1;
         }
-        i = i + 1;
     }
-    
-    var duration = ns_to_sec(clock() - start);
-    print("   Time: ", duration, "s");
-    print("   Sum: ", sum);
+
+    report("nested", start, sum);
     return sum;
 }
 
 // ============================================================================
-// 7. Object Creation/Destruction
+// 7. Object creation / destruction — allocation churn, inside the timer.
 // ============================================================================
 func benchmark_object_lifecycle() {
-    print("\n7. Object Creation/Destruction...");
     var start = clock();
-    
-    var i = 0;
-    while (i < 10000) {
+
+    var total = 0;
+    for (var i = 0; i < 300000; i++) {
         var temp_array = [1, 2, 3, 4, 5];
         var temp_table = {a: 1, b: 2, c: 3};
         var temp_str = concat("temp", str(i));
-        i = i + 1;
+        total = total + temp_array[0] + temp_table.a + size(temp_str);
     }
-    
-    var duration = ns_to_sec(clock() - start);
-    print("   Time: ", duration, "s");
-    print("   Objects created: 30000");
-    return i;
+
+    report("objlife", start, total);
+    return total;
 }
 
 // ============================================================================
-// 8. Mixed Workload
+// 8. Mixed workload — build records, then aggregate a field.
 // ============================================================================
 func benchmark_mixed() {
-    print("\n8. Mixed Workload...");
+    var n = 100000;
     var start = clock();
-    
-    var data = array_create(1000);
-    var i = 0;
-    while (i < 1000) {
+
+    var data = array_create(n);
+    for (var i = 0; i < n; i++) {
         var record = {
             id: i,
             value: i * 2,
             name: concat("item_", str(i))
         };
         data:push(record);
-        i = i + 1;
     }
-    
-    // Process the data
+
     var total = 0;
-    i = 0;
-    while (i < 1000) {
+    for (var i = 0; i < n; i++) {
         var record = data:get(i);
-        total = total + record.value;
-        i = i + 1;
+        total = total + record.value + size(record.name);
     }
-    
-    var duration = ns_to_sec(clock() - start);
-    print("   Time: ", duration, "s");
-    print("   Total: ", total);
+
+    report("mixed", start, total);
     return total;
 }
 
 // ============================================================================
-// Run All Benchmarks
+// Run all benchmarks
 // ============================================================================
-print("Starting benchmarks...\n");
 var overall_start = clock();
 
 benchmark_arithmetic();
@@ -237,8 +208,4 @@ benchmark_nested_loops();
 benchmark_object_lifecycle();
 benchmark_mixed();
 
-var overall_duration = ns_to_sec(clock() - overall_start);
-
-print("\n=== Overall Results ===");
-print("Total time: ", overall_duration, "s");
-print("Benchmark complete!");
+print("BENCH", "total", ns_to_sec(clock() - overall_start), 0);

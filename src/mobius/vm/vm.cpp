@@ -658,9 +658,9 @@ static MOBIUS_FORCEINLINE Value prepare_param_value(const Prototype* proto, int 
 MOBIUS_FORCEINLINE static int vm_op_move(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
     const Value& src = RB(inst);
-    if (MOBIUS_LIKELY(src.type < VAL_ARRAY)) {
+    if (MOBIUS_LIKELY(src.type < VAL_FIRST_REFCOUNTED)) {
         Value& dst = RA(inst);
-        if (MOBIUS_LIKELY(dst.type < VAL_ARRAY)) {
+        if (MOBIUS_LIKELY(dst.type < VAL_FIRST_REFCOUNTED)) {
             dst.rawCopyFrom(src);
         } else {
             dst = src;
@@ -753,7 +753,15 @@ MOBIUS_FORCEINLINE static int vm_op_loadint(MobiusVM* vm, VMFrame& f, uint32_t i
 
 MOBIUS_FORCEINLINE static int vm_op_shared_load(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    RA(inst) = shared_unwrap(RB(inst));
+    // Assign straight from the source register on the common (non-cell) path.
+    // Going through shared_unwrap() would materialize a by-value temporary,
+    // costing an extra Value copy plus a retain/release pair on every unwrap.
+    const Value& src = RB(inst);
+    if (MOBIUS_UNLIKELY(src.type == VAL_SHARED_CELL && src.as.shared_cell)) {
+        RA(inst) = src.as.shared_cell->load();
+    } else {
+        RA(inst) = src;
+    }
     return 0;
 }
 

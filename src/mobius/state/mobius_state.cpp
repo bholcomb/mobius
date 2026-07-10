@@ -385,7 +385,12 @@ MobiusState::~MobiusState() {
 
     delete metamethods_;
 
-    // Don't free module registry — it's a global singleton freed via atexit()
+    // The module registry is a global singleton freed via atexit(), which runs
+    // AFTER this state frees its string pool below. Its cached module
+    // environments hold copies of this state's global slots — i.e. this state's
+    // interned strings — so release those Values now, while the pool is alive.
+    // Otherwise the atexit teardown dereferences freed strings.
+    if (registry_) registry_->releaseModuleValues();
     registry_ = nullptr;
 
     // Destroy main VM before the string pool — VM registers hold

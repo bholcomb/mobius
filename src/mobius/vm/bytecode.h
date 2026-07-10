@@ -98,9 +98,7 @@ struct Prototype {
         auto it = string_const_map_.find(str->data);
         if (it != string_const_map_.end()) return it->second;
 
-        Value v;
-        v.type = VAL_STRING;
-        v.as.string = str;
+        Value v = make_string_value(str);   // retains; no-op for interned strings
         int idx = addConstant(v);
         if (idx >= 0) string_const_map_[str->data] = idx;
         return idx;
