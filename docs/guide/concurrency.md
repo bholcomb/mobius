@@ -192,6 +192,18 @@ print(msg)    // 42
 | `ch:close()`         | Close the channel; pending receivers unblock, buffered values drain. |
 | `ch:is_closed()`     | `true` if the channel has been closed.                               |
 
+Values sent through a channel follow the same rule as `spawn` arguments:
+non-shared arrays, tables, and buffers are **deep-copied** on `send`, so the
+receiving fiber gets its own isolated value and neither side can race the
+other. A [`shared`](#shared-variables) value keeps its identity — send a
+`shared var` when both fibers should see the same synchronized data:
+
+```mobius
+shared var totals = [0, 0, 0]
+ch:send(totals)                 // receiver gets the SAME shared array
+ch:send({x: 1})                 // receiver gets its own copy
+```
+
 ---
 
 ## The fiber builtin

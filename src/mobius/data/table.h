@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <vector>
 #include <functional>
-#include <mutex>
 
 #define INITIAL_TABLE_CAPACITY 8
 
@@ -50,10 +49,6 @@ public:
 
     MobiusState* getState() const { return state_; }
 
-    void markShared();
-    bool isShared() const { return shared_; }
-    std::recursive_mutex& mutex() { return mutex_; }
-
     static constexpr uint8_t TAG_EMPTY = 0x00;
 
     const std::vector<TableEntry>& entries() const { return entries_; }
@@ -85,8 +80,6 @@ private:
     size_t size_;
     Table* metatable_;
     MobiusState* state_;
-    bool shared_ = false;
-    mutable std::recursive_mutex mutex_;
 };
 
 // Hash helpers

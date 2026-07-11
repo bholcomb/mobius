@@ -231,10 +231,6 @@ void Table::resize(size_t new_capacity) {
 }
 
 const Value& Table::get(const Value& key) const {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        return getUnlocked(key);
-    }
     return getUnlocked(key);
 }
 
@@ -265,10 +261,6 @@ const Value& Table::getUnlocked(const Value& key) const {
 }
 
 const Value& Table::getByString(MobiusString* key) const {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        return getByStringUnlocked(key);
-    }
     return getByStringUnlocked(key);
 }
 
@@ -313,10 +305,6 @@ const Value& Table::getByStringUnlocked(MobiusString* key) const {
 }
 
 bool Table::set(const Value& key, const Value& value) {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        return setUnlocked(key, value);
-    }
     return setUnlocked(key, value);
 }
 
@@ -348,10 +336,6 @@ bool Table::setUnlocked(const Value& key, const Value& value) {
 }
 
 bool Table::setByString(MobiusString* key, const Value& value) {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        return setByStringUnlocked(key, value);
-    }
     return setByStringUnlocked(key, value);
 }
 
@@ -405,13 +389,6 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
 }
 
 bool Table::hasKey(const Value& key) const {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        if (size_ == 0) return false;
-        size_t h = hash_value_raw(key);
-        size_t index = findIndex(key, h);
-        return tags_[index] != TAG_EMPTY && entries_[index].key.exactlyEqual(key);
-    }
     if (size_ == 0) return false;
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
@@ -419,10 +396,6 @@ bool Table::hasKey(const Value& key) const {
 }
 
 bool Table::remove(const Value& key) {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        return removeUnlocked(key);
-    }
     return removeUnlocked(key);
 }
 
@@ -462,23 +435,8 @@ bool Table::removeUnlocked(const Value& key) {
 }
 
 Table* Table::copy() const {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        Table* c = new (std::nothrow) Table(state_, entries_.size());
-        if (!c) return nullptr;
-
-        for (size_t i = 0; i < entries_.size(); i++) {
-            if (tags_[i] != TAG_EMPTY) {
-                c->set(entries_[i].key, entries_[i].value);
-            }
-        }
-        c->setMetatable(metatable_);
-        return c;
-    }
-
     Table* c = new (std::nothrow) Table(state_, entries_.size());
     if (!c) return nullptr;
-
     for (size_t i = 0; i < entries_.size(); i++) {
         if (tags_[i] != TAG_EMPTY) {
             c->set(entries_[i].key, entries_[i].value);
@@ -489,35 +447,9 @@ Table* Table::copy() const {
 }
 
 void Table::forEach(const std::function<void(const Value& key, const Value& value)>& fn) const {
-    if (MOBIUS_UNLIKELY(shared_)) {
-        std::lock_guard lock(mutex_);
-        for (size_t i = 0; i < entries_.size(); i++) {
-            if (tags_[i] != TAG_EMPTY) {
-                fn(entries_[i].key, entries_[i].value);
-            }
-        }
-        return;
-    }
     for (size_t i = 0; i < entries_.size(); i++) {
         if (tags_[i] != TAG_EMPTY) {
             fn(entries_[i].key, entries_[i].value);
-        }
-    }
-}
-
-void Table::markShared() {
-    if (shared_) return;
-    shared_ = true;
-    for (size_t i = 0; i < entries_.size(); i++) {
-        if (tags_[i] != TAG_EMPTY) {
-            Value& val = entries_[i].value;
-            if (val.type == VAL_ARRAY && val.as.array) {
-                val.as.array->markShared();
-                val.flags |= VAL_FLAG_SHARED;
-            } else if (val.type == VAL_TABLE && val.as.table) {
-                val.as.table->markShared();
-                val.flags |= VAL_FLAG_SHARED;
-            }
         }
     }
 }
