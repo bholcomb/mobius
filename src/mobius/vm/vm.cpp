@@ -588,6 +588,19 @@ static MOBIUS_FORCEINLINE GlobalEnvironment* frame_globals(MobiusVM* vm, const V
     return f.proto && f.proto->globals ? f.proto->globals : vm->state_->rootGlobalEnvironment();
 }
 
+// Point the frame cache at a freshly pushed child frame, using values the
+// caller already has in registers rather than re-reading them from the new
+// CallInfo (as refreshFrame would). `ci` must be the pushed CallInfo.
+static MOBIUS_FORCEINLINE void enter_child_frame(MobiusVM* vm, VMFrame& f, CallInfo* ci,
+                                                 Prototype* child, int child_base) {
+    f.ci    = ci;
+    f.proto = child;
+    f.base  = child_base;
+    f.regs  = vm->registers_.data() + child_base;
+    f.tags  = vm->type_tags_.data() + child_base;
+    f.ip    = child->code.data();
+}
+
 MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
     f.ci = &callStackTop();
     f.proto = f.ci->proto;
@@ -2451,8 +2464,8 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
     }
 
     f.ci->ip = f.ip;
-    vm->callStackPush(child, child->code.data(), child_base, c);
-    vm->refreshFrame(f);
+    CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
+    enter_child_frame(vm, f, &new_ci, child, child_base);
     return 0;
 }
 
@@ -2506,7 +2519,7 @@ MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t
             }
         }
 
-        vm->refreshFrame(f);
+        enter_child_frame(vm, f, &new_ci, child, child_base);
         return 0;
     }
 
