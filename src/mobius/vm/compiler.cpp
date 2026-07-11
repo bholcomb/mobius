@@ -425,11 +425,36 @@ Compiler::DirectCallTarget Compiler::resolveDirectCallTarget(const char* name) {
         if (!proto || !proto->upvalues.empty()) continue;
         if (readonly_function_globals_.find(proto->name) == readonly_function_globals_.end()) continue;
         if (proto->name == name) {
+            if (i >= 0x8000) break;   // 0x8000 flags an extern target; leave room
             target.valid = true;
             target.proto = proto;
             target.proto_index = (uint16_t)i;
             return target;
         }
+    }
+
+    // A readonly global function defined in an enclosing scope (e.g. a sibling
+    // top-level function). Its binding is stable, so dispatch straight to its
+    // prototype instead of loading and refcounting the function value. The
+    // target is owned by an enclosing prototype; borrow it via extern_protos and
+    // flag the index with 0x8000.
+    auto it = readonly_function_protos_.find(name);
+    if (it != readonly_function_protos_.end() && it->second &&
+        it->second->upvalues.empty()) {
+        Prototype* proto = it->second;
+        std::vector<Prototype*>& externs = current_->proto->extern_protos;
+        size_t idx = externs.size();
+        for (size_t i = 0; i < externs.size(); i++) {
+            if (externs[i] == proto) { idx = i; break; }
+        }
+        if (idx == externs.size()) {
+            if (externs.size() >= 0x8000) return target;   // out of index space
+            externs.push_back(proto);
+        }
+        target.valid = true;
+        target.proto = proto;
+        target.proto_index = (uint16_t)(0x8000u | idx);
+        return target;
     }
 
     return target;
@@ -2891,6 +2916,12 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
             } else {
                 emitABx(OP_GLOBAL_READONLY, 1, (uint16_t)slot);
                 readonly_function_globals_.insert(name);
+                // Record the prototype so calls to this global from inside other
+                // functions can dispatch directly (see resolveDirectCallTarget).
+                // Only closure-free functions qualify; a global function has no
+                // enclosing locals to capture, but guard anyway.
+                if (child_proto->upvalues.empty())
+                    readonly_function_protos_[name] = child_proto;
             }
         }
         global_types_[name] = VAL_FUNCTION;
