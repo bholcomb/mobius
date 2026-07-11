@@ -321,6 +321,7 @@ bool Table::set(const Value& key, const Value& value) {
 }
 
 bool Table::setUnlocked(const Value& key, const Value& value) {
+    mm_cache_name_ = nullptr;   // this table may be someone's metatable
     if (size_ * 4 >= entries_.size() * 3) {
         resize(entries_.size() * 2);
     }
@@ -355,6 +356,7 @@ bool Table::setByString(MobiusString* key, const Value& value) {
 }
 
 bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
+    mm_cache_name_ = nullptr;   // this table may be someone's metatable
     if (!key) return false;
 
     if (size_ * 4 >= entries_.size() * 3) {
@@ -425,6 +427,7 @@ bool Table::remove(const Value& key) {
 }
 
 bool Table::removeUnlocked(const Value& key) {
+    mm_cache_name_ = nullptr;   // this table may be someone's metatable
     if (size_ == 0) return false;
 
     size_t h = hash_value_raw(key);
@@ -527,7 +530,16 @@ bool Table::hasMetamethod(MobiusString* method_name) const {
 
 const Value& Table::getMetamethod(MobiusString* method_name) const {
     if (!metatable_ || !method_name) return kNilValue;
-    return metatable_->getByString(method_name);
+    // Serve repeated probes of the same metamethod name from the metatable's
+    // one-entry cache: every field miss and method call on an object re-looks
+    // up __index, which cost a hash probe per access.
+    Table* mt = metatable_;
+    if (MOBIUS_LIKELY(mt->mm_cache_name_ == method_name))
+        return mt->mm_cache_value_;
+    const Value& v = mt->getByString(method_name);
+    mt->mm_cache_value_ = v;
+    mt->mm_cache_name_ = method_name;
+    return mt->mm_cache_value_;
 }
 
 // ============================================================================

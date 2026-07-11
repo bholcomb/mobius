@@ -72,6 +72,14 @@ private:
     size_t findIndex(const Value& key, size_t hash) const;
     void insertEntry(const Value& key, const Value& value, size_t hash);
 
+    // One-entry metamethod lookup cache, used when THIS table serves as a
+    // metatable: getMetamethod probes the same interned name (__index, __eq,
+    // ...) on every field miss / method call, so cache the last probe.
+    // Interned names are pointer-unique, so identity compare suffices.
+    // Any mutation of this table invalidates (mm_cache_name_ = nullptr).
+    mutable MobiusString* mm_cache_name_ = nullptr;
+    mutable Value mm_cache_value_;
+
     std::vector<TableEntry> entries_;
     std::vector<uint8_t> tags_;
     size_t size_;
