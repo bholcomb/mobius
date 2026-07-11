@@ -146,9 +146,11 @@ Table::Table(MobiusState* state, size_t initial_capacity)
     initial_capacity = next_power_of_2(initial_capacity);
     entries_.resize(initial_capacity);
     tags_.resize(initial_capacity, TAG_EMPTY);
+    gc_track(&gc_, GC_TABLE, this);
 }
 
 Table::~Table() {
+    gc_untrack(&gc_);
     if (metatable_) {
         metatable_->RefCounted::release();
     }

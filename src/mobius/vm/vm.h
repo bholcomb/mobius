@@ -32,8 +32,12 @@ struct Upvalue {
     Value  closed;
     bool   is_open;
     std::atomic<int> refcount;
+    GcHeader gc_;   // tracing-GC registry link
 
-    Upvalue() : location(nullptr), is_open(true), refcount(1) {}
+    Upvalue() : location(nullptr), is_open(true), refcount(1) {
+        gc_track(&gc_, GC_UPVALUE, this);
+    }
+    ~Upvalue() { gc_untrack(&gc_); }
 
     void retain() { refcount.fetch_add(1, std::memory_order_relaxed); }
     void release() {

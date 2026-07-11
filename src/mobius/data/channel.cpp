@@ -81,3 +81,10 @@ size_t Channel::size() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return count_;
 }
+
+void Channel::forEachBuffered(void (*cb)(const Value&, void*), void* ud) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (size_t i = 0; i < count_; i++) {
+        cb(buffer_[(head_ + i) % capacity_], ud);
+    }
+}

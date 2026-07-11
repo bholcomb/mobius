@@ -1,0 +1,76 @@
+#ifndef MOBIUS_GC_H
+#define MOBIUS_GC_H
+
+// ============================================================================
+// Tracing-GC groundwork (stage 1 of the per-fiber collector).
+//
+// The end-state design: each fiber owns a heap of the cycle-capable,
+// fiber-local types (Table, ArrayValue, MobiusFunction closures, Upvalue) and
+// collects it independently at yield/allocation points — sound because a value
+// crossing a fiber boundary is deep-copied unless it is `shared`. Everything
+// else (SharedCell, Channel, FutureValue, userdata, strings, ...) stays
+// reference counted; those are the small cross-fiber "shared domain".
+//
+// THIS stage only adds the scaffolding, with reference counting still owning
+// every free:
+//   * every traced-type object carries a GcHeader and is linked into a global
+//     registry at construction, unlinked at destruction;
+//   * gc_traverse_children() enumerates an object's traced children, and
+//     gc_visit_value_children() extracts traced objects from a Value —
+//     including THROUGH refcounted pass-through holders (shared cells,
+//     channels, futures, slices), which the shadow marker will need.
+//
+// The registry is one global list guarded by one mutex. That is deliberate
+// stage-1 simplicity: the unlink-on-free path (and its lock) disappears
+// entirely once the sweep owns freeing, and the list splits per-fiber in the
+// stage that closes the cross-fiber escape routes.
+// ============================================================================
+
+#include <cstddef>
+#include <cstdint>
+
+class Value;
+
+enum GcObjectType : uint8_t {
+    GC_TABLE = 0,
+    GC_ARRAY,
+    GC_FUNCTION,
+    GC_UPVALUE,
+};
+
+// Flags layout: bits 0-1 type, bit 2 mark, bit 3 shared-domain (later stages).
+struct GcHeader {
+    GcHeader* prev = nullptr;
+    GcHeader* next = nullptr;
+    void*     obj = nullptr;   // owning object (avoids offsetof on vptr types)
+    uint32_t  flags = 0;
+
+    GcObjectType type() const { return (GcObjectType)(flags & 0x3); }
+    bool marked() const { return (flags & 0x4) != 0; }
+    void setMarked(bool m) { if (m) flags |= 0x4; else flags &= ~0x4u; }
+};
+
+// Link/unlink an object into the global registry. Thread-safe; called from
+// the tracked types' constructors/destructors.
+void gc_track(GcHeader* h, GcObjectType type, void* obj);
+void gc_untrack(GcHeader* h);
+
+// Number of currently tracked objects (all types).
+size_t gc_tracked_count();
+
+// Invoke `cb(child, ud)` for every TRACED object directly referenced by `h`
+// (table entries + metatable, array elements, closure upvalues, an upvalue's
+// closed value). Refcounted children are not reported — they are not traced.
+typedef void (*GcVisitFn)(GcHeader* child, void* ud);
+void gc_traverse_children(GcHeader* h, GcVisitFn cb, void* ud);
+
+// Extract the traced object(s) a Value leads to, looking THROUGH the
+// refcounted pass-through holders: an array slice reports its owner array, a
+// shared cell reports what its inner value leads to, a channel its buffered
+// values, a future its result.
+void gc_visit_value_children(const Value& v, GcVisitFn cb, void* ud);
+
+// Walk every tracked object under the registry lock (shadow verification).
+void gc_for_each_tracked(GcVisitFn cb, void* ud);
+
+#endif // MOBIUS_GC_H

@@ -3,6 +3,8 @@
 
 #include <atomic>
 
+#include "internal/gc.h"
+
 struct Stmt;
 struct Prototype;
 struct MobiusString;
@@ -18,6 +20,10 @@ typedef struct MobiusFunction {
     struct Prototype* proto;      // Bytecode prototype (VM path, nullptr for AST functions)
     struct Upvalue** upvalues;    // Captured upvalues (VM closures)
     int upvalue_count;            // Number of upvalues
+    GcHeader gc_;                 // tracing-GC registry link
+
+    MobiusFunction() { gc_track(&gc_, GC_FUNCTION, this); }
+    ~MobiusFunction() { gc_untrack(&gc_); }
 } MobiusFunction;
 
 #endif // MOBIUS_FUNCTION_H
