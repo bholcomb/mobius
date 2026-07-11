@@ -209,6 +209,11 @@ private:
     std::unordered_map<std::string, bool> global_maybe_shared_;
     std::unordered_map<std::string, ValueType> native_return_types_;
     std::unordered_set<std::string> readonly_function_globals_;
+    // Prototypes of readonly global functions, by name, for resolving direct
+    // calls to a global function from inside another function. Only functions
+    // already compiled (defined earlier) are present; a forward reference falls
+    // back to a plain call.
+    std::unordered_map<std::string, Prototype*> readonly_function_protos_;
 
     // --- Helpers ---
     Prototype* endCompiler();

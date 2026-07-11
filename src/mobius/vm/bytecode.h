@@ -42,8 +42,15 @@ struct Prototype {
     std::vector<Value> constants;
 
     // -- Nested function prototypes --
-    // OP_CLOSURE references these by index.
+    // OP_CLOSURE references these by index. Owned: deleted by ~Prototype.
     std::vector<Prototype*> protos;
+
+    // -- Direct-call targets in an enclosing scope --
+    // BORROWED references to the prototypes of readonly global functions that
+    // this function calls directly (OP_CALL_DIRECT with the 0x8000 index flag).
+    // Their bindings are stable (the globals are readonly) and they are owned by
+    // an enclosing prototype, so they are NOT deleted here.
+    std::vector<Prototype*> extern_protos;
 
     // -- Upvalue descriptors --
     // One per upvalue this function captures. OP_GETUPVAL / OP_SETUPVAL

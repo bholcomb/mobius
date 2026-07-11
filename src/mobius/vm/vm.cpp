@@ -2407,9 +2407,13 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
 
     Prototype* child = nullptr;
     if (proto_idx == BX_MASK) {
-        child = f.ci->proto;
+        child = f.ci->proto;                              // self-recursion
+    } else if (proto_idx & 0x8000u) {                     // readonly global function
+        uint16_t ext = proto_idx & 0x7FFFu;
+        if ((size_t)ext < f.ci->proto->extern_protos.size())
+            child = f.ci->proto->extern_protos[ext];
     } else if ((size_t)proto_idx < f.ci->proto->protos.size()) {
-        child = f.ci->proto->protos[proto_idx];
+        child = f.ci->proto->protos[proto_idx];           // nested prototype
     }
 
     if (!child) {

@@ -330,6 +330,10 @@ void disassemble_instruction(const Prototype* proto, int offset) {
                 if (bx == BX_MASK) {
                     printf("direct %s-call self %d args %d results (+1 fused word)",
                            (op == OP_CALL_DIRECT_PLAIN) ? "plain " : "", b2 - 1, c2 - 1);
+                } else if (bx & 0x8000u) {
+                    printf("direct %s-call extern[%u] %d args %d results (+1 fused word)",
+                           (op == OP_CALL_DIRECT_PLAIN) ? "plain " : "", (unsigned)(bx & 0x7FFFu),
+                           b2 - 1, c2 - 1);
                 } else {
                     printf("direct %s-call proto[%u] %d args %d results (+1 fused word)",
                            (op == OP_CALL_DIRECT_PLAIN) ? "plain " : "", (unsigned)bx, b2 - 1, c2 - 1);
