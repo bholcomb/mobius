@@ -121,6 +121,12 @@ typedef struct {
     int length;             // Length of the token string (for compatibility)
     int line;               // Line number where token appears
     int column;             // Column number where token starts
+
+    // Decoded byte length of literal.string. String literals are length-
+    // tracked because escape processing can produce embedded NULs ("a\0b");
+    // consuming them via strlen truncates. Only meaningful when
+    // literal.string is set — writers of literal.string must set this.
+    size_t string_length;
     
     // Literal value (for tokens that have computed values)
     union {

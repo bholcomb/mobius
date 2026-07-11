@@ -395,6 +395,14 @@ bool mobius_stack_asBool(MobiusState* state, int idx) {
 const char* mobius_stack_asString(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     if (!val) return "";
+    // Pin heap strings for the duration of the enclosing native call: plugins
+    // routinely pop the Value and keep using the returned pointer, which was
+    // safe when every string was interned (immortal) but would dangle for a
+    // refcounted heap string.
+    if (val->type == VAL_STRING) {
+        MobiusVM* vm = state->activeVM();
+        if (vm) vm->pinForNative(val->as.string);
+    }
     return stack_value_to_string(val);
 }
 
@@ -405,9 +413,12 @@ const char* mobius_stack_getStringData(MobiusState* state, int idx, size_t* out_
         return "";
     }
 
+    MobiusVM* pin_vm = state->activeVM();   // see mobius_stack_asString
+
     if (val->type == VAL_SHARED_CELL && val->as.shared_cell) {
         Value inner = val->as.shared_cell->load();
         if (inner.type == VAL_STRING && inner.as.string) {
+            if (pin_vm) pin_vm->pinForNative(inner.as.string);
             if (out_length) *out_length = inner.as.string->length;
             return inner.as.string->data;
         }
@@ -416,6 +427,7 @@ const char* mobius_stack_getStringData(MobiusState* state, int idx, size_t* out_
     }
 
     if (val->type == VAL_STRING && val->as.string) {
+        if (pin_vm) pin_vm->pinForNative(val->as.string);
         if (out_length) *out_length = val->as.string->length;
         return val->as.string->data;
     }
@@ -1164,7 +1176,9 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
             nctx->registers[nctx->top++] = args[i];
         }
         if (args != inline_args) delete[] args;
+        size_t keepalive_mark = vm->native_keepalive_.size();
         rc = func_val.as.native_function(state, nargs);
+        vm->trimNativeKeepalive(keepalive_mark);
         if (rc < 0) return -1;
         return rc;
     }

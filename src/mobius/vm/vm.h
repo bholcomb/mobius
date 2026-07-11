@@ -21,12 +21,24 @@ struct InternalError;
 // Upvalue — runtime representation of a captured variable
 // ============================================================================
 
+// Reference counted: an Upvalue is legitimately shared — between sibling
+// closures capturing the same variable, between a closure and the frame that
+// tracks it for closing, and across fibers when a closure is spawned. Before
+// refcounting, nothing ever freed these: every captured variable leaked its
+// Upvalue plus whatever the closed Value pinned. Atomic because closures
+// cross fiber worker threads.
 struct Upvalue {
     Value* location;
     Value  closed;
     bool   is_open;
+    std::atomic<int> refcount;
 
-    Upvalue() : location(nullptr), is_open(true) {}
+    Upvalue() : location(nullptr), is_open(true), refcount(1) {}
+
+    void retain() { refcount.fetch_add(1, std::memory_order_relaxed); }
+    void release() {
+        if (refcount.fetch_sub(1, std::memory_order_acq_rel) == 1) delete this;
+    }
 };
 
 // ============================================================================
@@ -56,7 +68,16 @@ struct CallInfo {
     CallInfo(const CallInfo&) = delete;
     CallInfo& operator=(const CallInfo&) = delete;
 
+    // The list owns one reference to each entry: retained on insertion
+    // (pushUpvalue / setUpvaluesFrom), released whenever entries are dropped.
+
+    void releaseEntries() {
+        for (int i = 0; i < upvalue_count; i++)
+            if (upvalues[i]) upvalues[i]->release();
+    }
+
     void initUpvalues() {
+        releaseEntries();
         if (upvalues != inline_upvals) delete[] upvalues;
         upvalues = inline_upvals;
         upvalue_count = 0;
@@ -69,7 +90,9 @@ struct CallInfo {
     }
 
     bool setUpvaluesFrom(Upvalue** src, int count) {
+        releaseEntries();
         if (upvalues != inline_upvals) delete[] upvalues;
+        upvalue_count = 0;
         if (count <= CALLINFO_INLINE_UPVALS) {
             upvalues = inline_upvals;
             upvalue_capacity = CALLINFO_INLINE_UPVALS;
@@ -78,12 +101,14 @@ struct CallInfo {
             if (!upvalues) {
                 upvalues = inline_upvals;
                 upvalue_capacity = CALLINFO_INLINE_UPVALS;
-                upvalue_count = 0;
                 return false;
             }
             upvalue_capacity = count;
         }
-        for (int i = 0; i < count; i++) upvalues[i] = src[i];
+        for (int i = 0; i < count; i++) {
+            upvalues[i] = src[i];
+            if (src[i]) src[i]->retain();
+        }
         upvalue_count = count;
         return true;
     }
@@ -104,10 +129,12 @@ struct CallInfo {
             upvalue_capacity = new_cap;
         }
         upvalues[upvalue_count++] = uv;
+        uv->retain();
         return true;
     }
 
     void clearUpvalues() {
+        releaseEntries();
         if (upvalues != inline_upvals) delete[] upvalues;
         upvalues = inline_upvals;
         upvalue_count = 0;
@@ -115,6 +142,7 @@ struct CallInfo {
     }
 
     ~CallInfo() {
+        releaseEntries();
         if (upvalues != inline_upvals) delete[] upvalues;
     }
 };
@@ -199,11 +227,34 @@ public:
     };
     std::vector<AtomicLock> atomic_locks_;
 
+    // Heap strings pinned on behalf of native code. mobius_stack_asString and
+    // friends hand out borrowed `const char*` pointers; plugins routinely pop
+    // the Value and keep using the pointer, which was safe when every string
+    // was interned (immortal) but dangles for refcounted heap strings. Each
+    // borrowed heap string is retained here and released when the enclosing
+    // native call returns (callNative trims to its entry size, handling
+    // nesting).
+    std::vector<MobiusString*> native_keepalive_;
+    void pinForNative(MobiusString* s) {
+        if (s && !s->isImmortal()) { s->retain(); native_keepalive_.push_back(s); }
+    }
+    void trimNativeKeepalive(size_t keep) {
+        while (native_keepalive_.size() > keep) {
+            native_keepalive_.back()->release();
+            native_keepalive_.pop_back();
+        }
+    }
+
     struct TryBlock {
         size_t call_stack_depth;
         uint32_t* catch_ip;
         int catch_reg;
         int base;
+        // atomic_locks_.size() at TRY_BEGIN: locks acquired inside the try
+        // must be released when an exception unwinds to this handler,
+        // otherwise a caught error inside atomic(){} leaves the cell mutex
+        // held and the next atomic on another fiber deadlocks.
+        size_t atomic_depth;
     };
     std::vector<TryBlock> try_stack_;
 
@@ -212,16 +263,9 @@ public:
     void growCallStack();
 
     void ensureRegisters(int needed) {
-        if (MOBIUS_UNLIKELY(needed > register_capacity_)) {
-            registers_.resize(needed, Value());
-            type_tags_.resize(needed, VAL_UNKNOWN);
-            register_capacity_ = (int)registers_.size();
-            native_ctx_.registers = registers_.data();
-            native_ctx_.capacity  = register_capacity_;
-            if ((size_t)register_capacity_ > metrics_->peak_registers)
-                metrics_->peak_registers = register_capacity_;
-        }
+        if (MOBIUS_UNLIKELY(needed > register_capacity_)) growRegisters(needed);
     }
+    void growRegisters(int needed);   // rebases open upvalues on reallocation
 
 private:
     int callNative(MobiusCFunction func, int func_reg, int nargs, int nresults);

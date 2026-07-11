@@ -104,13 +104,10 @@ bool MobiusString::operator==(const MobiusString& other) const {
     if (hash != other.hash) return false;
     if (length != other.length) return false;
 
-    if (length >= 40) {
-        size_t mid = length / 2;
-        if (data[0] != other.data[0]) return false;
-        if (data[length - 1] != other.data[length - 1]) return false;
-        if (data[mid] != other.data[mid]) return false;
-    }
-
+    // hash + length already matched above; reaching here requires a 64-bit
+    // hash collision, so go straight to the byte compare. (The char-sampling
+    // heuristic that used to live here paid off only under the old partial
+    // hash.)
     return memcmp(data, other.data, length) == 0;
 }
 
@@ -124,20 +121,9 @@ MobiusString* StringInternPool::Shard::find(const char* data, size_t len, uint64
     MobiusString* str = buckets[bucket];
 
     while (str) {
-        if (str->hash == hash && str->length == len) {
-            if (len >= 40) {
-                size_t mid = len / 2;
-                if (str->data[0] == data[0] &&
-                    str->data[len - 1] == data[len - 1] &&
-                    str->data[mid] == data[mid] &&
-                    memcmp(str->data, data, len) == 0) {
-                    return str;
-                }
-            } else {
-                if (memcmp(str->data, data, len) == 0) {
-                    return str;
-                }
-            }
+        if (str->hash == hash && str->length == len &&
+            memcmp(str->data, data, len) == 0) {
+            return str;
         }
         str = str->next;
     }

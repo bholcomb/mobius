@@ -49,6 +49,8 @@ private:
         std::vector<int> break_jumps;      // JMP instructions to patch on loop exit
         std::vector<int> continue_jumps;   // JMP instructions to patch to increment (for loops)
         int scope_depth;                   // scope depth at loop entry
+        int open_trys_at_entry = 0;        // open try blocks when the loop began;
+                                           // break/continue must TRY_END down to this
     };
 
     // --- Compiler state for one function scope ---
@@ -62,6 +64,12 @@ private:
         int max_reg = 0;               // high-water mark
 
         std::vector<LoopContext> loops; // stack of active loops
+
+        // Try blocks whose handlers are live at the current statement. Any
+        // control transfer that exits a try region (return, break, continue)
+        // must emit one OP_TRY_END per crossed region, or the VM keeps a
+        // stale handler that hijacks a later unrelated throw.
+        int open_trys = 0;
     };
 
     FunctionState* current_;

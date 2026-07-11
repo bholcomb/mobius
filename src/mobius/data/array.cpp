@@ -3,7 +3,12 @@
 #include "data/value.h"
 
 static Value& invalid_array_value() {
-    static Value nil_value = make_nil_value();
+    // Handed out for out-of-bounds access through the non-const operator[],
+    // so a caller CAN write through it. thread_local + reset-to-nil on every
+    // call keeps a stray OOB write from (a) racing across fibers and (b)
+    // becoming the permanent result of every later OOB read.
+    static thread_local Value nil_value;
+    nil_value = make_nil_value();
     return nil_value;
 }
 
