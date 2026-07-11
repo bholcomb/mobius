@@ -162,6 +162,7 @@ private:
 
     // --- Condition compilation (fused compare+branch) ---
     int compileConditionJump(Expr* condition);
+    void compileConditionJumps(Expr* condition, std::vector<int>& false_jumps);
 
     // --- Statement compilation ---
     void compileStmt(Stmt* stmt);

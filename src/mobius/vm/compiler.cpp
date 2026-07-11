@@ -1744,7 +1744,16 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 
         uint8_t rk_key;
         if (index_expr->type == EXPR_LITERAL) {
-            int ki = current_->proto->addConstant(index_expr->as.literal.value);
+            // Deduplicated: addConstant() has no dedup, so every `a[0] = ...`
+            // statement used to append a fresh pool entry, pushing RK indices
+            // past the 127 limit in key-heavy functions.
+            const Value& kv = index_expr->as.literal.value;
+            int ki;
+            if (kv.type == VAL_INT64)        ki = current_->proto->addIntConstant(kv.as.i64);
+            else if (kv.type == VAL_FLOAT64) ki = current_->proto->addFloatConstant(kv.as.double_val);
+            else if (kv.type == VAL_STRING && kv.as.string)
+                ki = current_->proto->addStringConstant(kv.as.string);
+            else                             ki = current_->proto->addConstant(kv);
             rk_key = makeRK(ki);
         } else {
             int key_reg = compileExpr(index_expr);
@@ -2486,6 +2495,54 @@ void Compiler::compileBlockStmt(BlockStmt* stmt) {
 // OP_JMP, skipping the 4-instruction LOADBOOL+TEST pattern.
 // Returns the jump index to patch (jumps when condition is FALSE).
 
+// Branch-context lowering for compound conditions. Appends to `false_jumps`
+// every emitted jump that is taken when the condition is FALSE; jumps taken on
+// a short-circuit TRUE are patched internally to the end of the condition
+// sequence (i.e. into the then-branch). This lets `if (a < b && c < d)` compile
+// to two fused compare+branch pairs instead of materializing booleans through
+// cmp + JMP + LOADBOOL x2 + TEST per operand (~10 instructions down to 4).
+void Compiler::compileConditionJumps(Expr* cond, std::vector<int>& false_jumps) {
+    while (cond->type == EXPR_GROUPING) cond = cond->as.grouping.expression;
+
+    if (cond->type == EXPR_LITERAL) {
+        // Constant condition: `while (true)` emits no per-iteration test.
+        if (!is_truthy(cond->as.literal.value))
+            false_jumps.push_back(emitJump());
+        return;
+    }
+
+    if (cond->type == EXPR_UNARY &&
+        (cond->as.unary.op.type == TOKEN_BANG || cond->as.unary.op.type == TOKEN_NOT)) {
+        // !x : else when x is true. Emit x's false-jumps over an
+        // unconditional jump-to-else; x-false lands after it (condition true).
+        std::vector<int> inner_false;
+        compileConditionJumps(cond->as.unary.right, inner_false);
+        false_jumps.push_back(emitJump());
+        for (int j : inner_false) patchJump(j);
+        return;
+    }
+
+    if (cond->type == EXPR_BINARY) {
+        TokenType op = cond->as.binary.op.type;
+        if (op == TOKEN_AND || op == TOKEN_AND_AND) {
+            compileConditionJumps(cond->as.binary.left, false_jumps);
+            compileConditionJumps(cond->as.binary.right, false_jumps);
+            return;
+        }
+        if (op == TOKEN_OR || op == TOKEN_OR_OR) {
+            std::vector<int> left_false;
+            compileConditionJumps(cond->as.binary.left, left_false);
+            int jmp_true = emitJump();               // left true: skip the right test
+            for (int j : left_false) patchJump(j);   // left false: evaluate right
+            compileConditionJumps(cond->as.binary.right, false_jumps);
+            patchJump(jmp_true);                     // lands at end of condition
+            return;
+        }
+    }
+
+    false_jumps.push_back(compileConditionJump(cond));
+}
+
 int Compiler::compileConditionJump(Expr* condition) {
     if (condition->type == EXPR_BINARY) {
         BinaryExpr* bin = &condition->as.binary;
@@ -2618,7 +2675,8 @@ int Compiler::compileConditionJump(Expr* condition) {
 void Compiler::compileIfStmt(IfStmt* stmt) {
     currentLine_ = 0;
 
-    int jmp_else = compileConditionJump(stmt->condition);
+    std::vector<int> else_jumps;
+    compileConditionJumps(stmt->condition, else_jumps);
 
     // Then branch
     unreachable_ = false;
@@ -2628,13 +2686,13 @@ void Compiler::compileIfStmt(IfStmt* stmt) {
     if (stmt->else_branch) {
         unreachable_ = false;
         int jmp_end = emitJump();
-        patchJump(jmp_else);
+        for (int j : else_jumps) patchJump(j);
         compileStmt(stmt->else_branch);
         bool else_unreachable = unreachable_;
         patchJump(jmp_end);
         unreachable_ = then_unreachable && else_unreachable;
     } else {
-        patchJump(jmp_else);
+        for (int j : else_jumps) patchJump(j);
         unreachable_ = false;
     }
 }
@@ -2655,7 +2713,8 @@ void Compiler::compileWhileStmt(WhileStmt* stmt) {
     loop.open_trys_at_entry = current_->open_trys;
     current_->loops.push_back(loop);
 
-    int jmp_exit = compileConditionJump(stmt->condition);
+    std::vector<int> exit_jumps;
+    compileConditionJumps(stmt->condition, exit_jumps);
 
     unreachable_ = false;
     compileStmt(stmt->body);
@@ -2667,7 +2726,7 @@ void Compiler::compileWhileStmt(WhileStmt* stmt) {
         current_->proto->emitJump(offset, currentLine_);
     }
 
-    patchJump(jmp_exit);
+    for (int j : exit_jumps) patchJump(j);
 
     // Patch break jumps
     for (int jmp : current_->loops.back().break_jumps) {
@@ -2881,11 +2940,11 @@ void Compiler::compileForStmt(ForStmt* stmt) {
     loop.open_trys_at_entry = current_->open_trys;
     current_->loops.push_back(loop);
 
-    int jmp_exit = -1;
+    std::vector<int> exit_jumps;
 
     // Condition
     if (stmt->condition) {
-        jmp_exit = compileConditionJump(stmt->condition);
+        compileConditionJumps(stmt->condition, exit_jumps);
     }
 
     // Body
@@ -2909,9 +2968,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
     int offset = loop_start - (current_->proto->currentPC() + 1);
     current_->proto->emitJump(offset, currentLine_);
 
-    if (jmp_exit >= 0) {
-        patchJump(jmp_exit);
-    }
+    for (int j : exit_jumps) patchJump(j);
 
     // Patch break jumps
     for (int jmp : current_->loops.back().break_jumps) {
@@ -3901,7 +3958,7 @@ void Compiler::peepholeOptimize(Prototype* proto) {
         // Pattern 1: MOVE A,B,_ + ADDI A,sBx  =>  MOVE_ADDI A,B,_ | AsBx(_,A,sBx)
         if (op == OP_MOVE && i + 1 < n && !is_target[i + 1]) {
             OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
-            if (op2 == OP_ADDI) {
+            if (op2 == OP_ADDI || op2 == OP_SUBI) {
                 uint8_t move_a = DECODE_A(code[i]);
                 uint8_t move_b = DECODE_B(code[i]);
                 uint8_t addi_a = DECODE_A(code[i + 1]);
@@ -3909,7 +3966,12 @@ void Compiler::peepholeOptimize(Prototype* proto) {
                     new_code.push_back(ENCODE_ABC(OP_MOVE_ADDI, move_a, move_b, 0));
                     new_lines.push_back(lines[i]);
                     remap[i + 1] = (int)new_code.size();
-                    new_code.push_back(code[i + 1]); // keep ADDI encoding as data word
+                    // SUBI is rewritten as ADDI with a negated immediate at
+                    // fusion time, keeping the hot handler branch-free.
+                    uint32_t data_word = code[i + 1];
+                    if (op2 == OP_SUBI)
+                        data_word = ENCODE_AsBx(OP_ADDI, addi_a, -DECODE_sBx(code[i + 1]));
+                    new_code.push_back(data_word);
                     new_lines.push_back(lines[i + 1]);
                     i++;
                     continue;
@@ -4068,12 +4130,13 @@ void Compiler::compilePragmaStmt(PragmaStmt* stmt) {
 int Compiler::compileTernary(TernaryExpr* expr, int dest) {
     int result_reg = (dest >= 0) ? dest : allocReg();
 
-    int jmp_else = compileConditionJump(expr->condition);
+    std::vector<int> else_jumps;
+    compileConditionJumps(expr->condition, else_jumps);
 
     compileExpr(expr->then_expr, result_reg);
     int jmp_end = emitJump();
 
-    patchJump(jmp_else);
+    for (int j : else_jumps) patchJump(j);
     compileExpr(expr->else_expr, result_reg);
     patchJump(jmp_end);
 
