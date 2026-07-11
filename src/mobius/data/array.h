@@ -8,6 +8,7 @@
 
 #include "data/value.h"
 #include "internal/ref_counted.h"
+#include "internal/gc.h"
 
 class ArrayValue : public RefCounted {
 public:
@@ -36,6 +37,8 @@ public:
     Value* data() { return elements.data(); }
     const Value* data() const { return elements.data(); }
 
+    GcHeader* gcHeader() { return &gc_; }
+
     void acquireSlice() { active_slice_count_.fetch_add(1, std::memory_order_relaxed); }
     void releaseSlice() { active_slice_count_.fetch_sub(1, std::memory_order_relaxed); }
     bool hasActiveSlices() const { return active_slice_count_.load(std::memory_order_acquire) > 0; }
@@ -43,6 +46,7 @@ public:
 private:
     std::vector<Value> elements;
     std::atomic<size_t> active_slice_count_{0};
+    GcHeader gc_;   // tracing-GC registry link (see internal/gc.h)
 };
 
 #endif // MOBIUS_ARRAY_H

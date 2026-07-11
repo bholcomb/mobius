@@ -21,6 +21,11 @@ public:
 
     void close();
     bool isClosed() const { return closed_; }
+
+    // Visit buffered (queued, not yet received) values under the lock — used
+    // by the GC to reach values in transit between fibers.
+    void forEachBuffered(void (*cb)(const Value&, void*), void* ud);
+
     size_t capacity() const { return capacity_; }
     size_t size() const;
 

@@ -1,4 +1,5 @@
 #include "library/core.h"
+#include "internal/gc.h"
 #include "data/value.h"
 #include "data/table.h"
 #include "data/metamethods.h"
@@ -202,5 +203,14 @@ int lib_str(MobiusState* state, int arg_count) {
     state->npop();
     state->npush(result);
 
+    return 1;
+}
+
+// Introspection for the tracing-GC work: number of tracked heap objects
+// (tables, arrays, closures, upvalues). Used by tests to verify object
+// lifetimes; not a public API.
+int lib_gc_objects(MobiusState* state, int arg_count) {
+    (void)arg_count;
+    state->npush(make_int64_value((int64_t)gc_tracked_count()));
     return 1;
 }

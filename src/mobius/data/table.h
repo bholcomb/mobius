@@ -3,6 +3,7 @@
 
 #include "data/value.h"
 #include "internal/ref_counted.h"
+#include "internal/gc.h"
 
 #include <cstddef>
 #include <vector>
@@ -54,6 +55,8 @@ public:
     const std::vector<TableEntry>& entries() const { return entries_; }
     const std::vector<uint8_t>& tags() const { return tags_; }
 
+    GcHeader* gcHeader() { return &gc_; }
+
 private:
     static inline uint8_t tagFromHash(size_t h) { return 0x80 | (uint8_t)(h >> 57); }
 
@@ -74,6 +77,8 @@ private:
     // Any mutation of this table invalidates (mm_cache_name_ = nullptr).
     mutable MobiusString* mm_cache_name_ = nullptr;
     mutable Value mm_cache_value_;
+
+    GcHeader gc_;   // tracing-GC registry link (see internal/gc.h)
 
     std::vector<TableEntry> entries_;
     std::vector<uint8_t> tags_;
