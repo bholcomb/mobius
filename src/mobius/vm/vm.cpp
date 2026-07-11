@@ -890,10 +890,6 @@ MOBIUS_FORCEINLINE static int vm_op_lock_shared(MobiusVM* vm, VMFrame& f, uint32
         val.as.shared_cell->mutex().lock();
     } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice && val.as.array_slice->ownerCell()) {
         val.as.array_slice->ownerCell()->mutex().lock();
-    } else if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
-        val.as.array->mutex().lock();
-    } else if (val.type == VAL_TABLE && val.as.table && val.as.table->isShared()) {
-        val.as.table->mutex().lock();
     }
     return 0;
 }
@@ -905,10 +901,6 @@ MOBIUS_FORCEINLINE static int vm_op_unlock_shared(MobiusVM* vm, VMFrame& f, uint
         val.as.shared_cell->mutex().unlock();
     } else if (val.type == VAL_ARRAY_SLICE && val.as.array_slice && val.as.array_slice->ownerCell()) {
         val.as.array_slice->ownerCell()->mutex().unlock();
-    } else if (val.type == VAL_ARRAY && val.as.array && val.as.array->isShared()) {
-        val.as.array->mutex().unlock();
-    } else if (val.type == VAL_TABLE && val.as.table && val.as.table->isShared()) {
-        val.as.table->mutex().unlock();
     }
     return 0;
 }
@@ -1061,7 +1053,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         ArrayValue* arr = obj.as.array;
         int64_t idx = vm_index_or_neg1(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
-            RA(inst) = arr->isShared() ? arr->get((size_t)idx) : arr->unsafeGet((size_t)idx);
+            RA(inst) = arr->unsafeGet((size_t)idx);
         } else {
             RA(inst) = Value();
         }
@@ -1321,7 +1313,6 @@ MOBIUS_FORCEINLINE static int vm_op_aget(MobiusVM* vm, VMFrame& f, uint32_t inst
         if (MOBIUS_LIKELY(key.type == VAL_INT64)) {
             ArrayValue* arr = obj.as.array;
             int64_t idx = key.as.i64;
-            if (MOBIUS_UNLIKELY(arr->isShared())) return vm_op_index_get(vm, f, inst);
             if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length()))
                 RA(inst) = arr->unsafeGet((size_t)idx);
             else
@@ -1342,8 +1333,7 @@ MOBIUS_FORCEINLINE static int vm_op_aset(MobiusVM* vm, VMFrame& f, uint32_t inst
             // In-bounds store into a plain array is the whole fast path.
             // Negative indices, growth, and live-slice checks stay in the
             // generic handler.
-            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length() &&
-                              !arr->isShared())) {
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
                 arr->set((size_t)idx, RKC(inst));
                 return 0;
             }
@@ -3299,10 +3289,7 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
 // sharing is preserved across fibers.
 static inline bool value_needs_spawn_copy(const Value& v) {
     if ((v.type == VAL_ARRAY && v.as.array) || (v.type == VAL_TABLE && v.as.table)) {
-        bool shared = (v.flags & VAL_FLAG_SHARED) != 0
-                   || (v.type == VAL_ARRAY && v.as.array->isShared())
-                   || (v.type == VAL_TABLE && v.as.table->isShared());
-        return !shared;
+        return (v.flags & VAL_FLAG_SHARED) == 0;
     }
     return false;
 }
@@ -3539,17 +3526,11 @@ MOBIUS_FORCEINLINE static int vm_op_atomic_begin(MobiusVM* vm, VMFrame& f, uint3
         }
         held_mutex = &val.as.array_slice->ownerCell()->mutex();
     } else if (val.type == VAL_ARRAY && val.as.array) {
-        if (!val.as.array->isShared()) {
-            VM_ERROR(vm, f, "atomic: array is not shared; use 'shared var' to declare it");
-            return -1;
-        }
-        held_mutex = &val.as.array->mutex();
+        VM_ERROR(vm, f, "atomic: array is not shared; use 'shared var' to declare it");
+        return -1;
     } else if (val.type == VAL_TABLE && val.as.table) {
-        if (!val.as.table->isShared()) {
-            VM_ERROR(vm, f, "atomic: table is not shared; use 'shared var' to declare it");
-            return -1;
-        }
-        held_mutex = &val.as.table->mutex();
+        VM_ERROR(vm, f, "atomic: table is not shared; use 'shared var' to declare it");
+        return -1;
     } else {
         VM_ERROR(vm, f, "atomic: expected a shared array or table, got %s", value_type_name(val.type));
         return -1;
