@@ -1,0 +1,132 @@
+// Regression tests for the 2026-07 compiler/VM audit fixes.
+// Each section names the bug it guards against.
+
+func check(cond, msg) {
+    if (!cond) { print("FAIL:", msg); exit(1) }
+}
+
+// --- 1. `return` inside try must pop the handler ---------------------------
+// A stale handler used to hijack a later, unrelated throw and jump into the
+// returned-from function's code.
+func returns_from_try() {
+    try {
+        return "from-try"
+    } catch e {
+        print("FAIL: catch ran on return"); exit(1)
+    }
+    return "fellthrough"
+}
+check(returns_from_try() == "from-try", "return inside try")
+
+var caught = ""
+try {
+    returns_from_try()
+    throw "outer-throw"
+} catch e {
+    caught = e
+}
+check(caught == "outer-throw", "throw after try/return reaches the right handler, got: " + caught)
+
+// break out of a try inside a loop must also pop the handler
+var loop_done = false
+for (var i = 0; i < 3; i++) {
+    try {
+        if (i == 1) { break }
+    } catch e {
+        print("FAIL: catch ran on break"); exit(1)
+    }
+}
+try {
+    throw "after-break"
+} catch e {
+    check(e == "after-break", "throw after break-from-try")
+    loop_done = true
+}
+check(loop_done, "break-from-try handler cleanup")
+
+// the return expression itself must still be catchable
+func throws_in_return() {
+    try {
+        return undefined_function_zzz()
+    } catch e {
+        return "caught"
+    }
+}
+check(throws_in_return() == "caught", "throwing return expression is caught")
+
+// --- 2. Large-integer equality ---------------------------------------------
+// Comparison used to widen int64 to double: 2^53 == 2^53+1 was true.
+check((9007199254740993 == 9007199254740992) == false, "2^53+1 != 2^53")
+check((9007199254740993 == 9007199254740992.0) == false, "2^53+1 != 2^53 float")
+check(9007199254740992 == 9007199254740992.0, "int == equal float")
+
+// --- 3. await in an expression must not clobber the future -----------------
+func await_work() { return 42 }
+func await_test() {
+    var fut = spawn await_work()
+    var x = 1 + await fut
+    check(x == 43, "await arithmetic")
+    check(typeof(fut) == "future", "future variable survives expression await")
+}
+await_test()
+
+// --- 4. Numeric for-loop with a float limit ---------------------------------
+// The IFOR fast path used to reinterpret float bits as the trip count.
+var n_iters = 0
+var float_limit = 2.5
+for (var i = 0; i < float_limit; i++) {
+    n_iters = n_iters + 1
+    if (n_iters > 10) { break }
+}
+check(n_iters == 3, "float-limit for loop runs 3 iterations, ran " + str(n_iters))
+
+// --- 5. table remove with __newindex must not teleport entries -------------
+var overflow = {}
+var main_tbl = {}
+setmetatable(main_tbl, {["__newindex"] = overflow})
+// Populate through raw sets BEFORE the metatable is honored for new keys:
+// remove() cluster repair must not divert displaced neighbors into overflow.
+var keys = []
+for (var i = 0; i < 64; i++) { keys:push("k" + str(i)) }
+setmetatable(main_tbl, nil)
+for (var i = 0; i < 64; i++) { main_tbl[keys[i]] = i }
+setmetatable(main_tbl, {["__newindex"] = overflow})
+main_tbl:remove("k10")
+main_tbl:remove("k33")
+var missing = 0
+for (var i = 0; i < 64; i++) {
+    if (i != 10 && i != 33) {
+        if (main_tbl[keys[i]] == nil) { missing = missing + 1 }
+    }
+}
+check(missing == 0, "remove teleported " + str(missing) + " entries")
+check(overflow:size() == 0, "overflow gained " + str(overflow:size()) + " entries from remove")
+
+// --- 6. Embedded NULs in string literals and concat ------------------------
+var nul_str = "x\0y"
+check(size(nul_str) == 3, "literal with NUL has size 3, got " + str(size(nul_str)))
+check(size(nul_str + "z") == 4, "+ concat preserves NUL")
+check(size(concat(nul_str, "z")) == 4, "concat() preserves NUL")
+check(("a\0b" < "a\0c") == true, "NUL-safe string ordering")
+
+// --- 7. String + operator semantics -----------------------------------------
+check("n=" + 42 == "n=42", "string + int literal")
+check(3.5 + "x" == "3.5x", "float + string concatenates, not arithmetic")
+check("b:" + true == "b:true", "string + bool")
+check("" + nil == "nil", "string + nil")
+check(1 + 2 == 3, "int + int still arithmetic")
+
+// --- 8. Float array index is out-of-bounds, not bit-reinterpreted ----------
+var farr = [10, 20, 30]
+check(farr[1.0] == 20, "integral float index coerces")
+check(farr[1.5] == nil, "fractional index reads nil")
+farr[1.5] = 99
+check(size(farr) == 3, "fractional index write is a no-op, size " + str(size(farr)))
+
+// --- 9. and/or produce operand values (type inference regression) ----------
+var fallback = nil or "default"
+check(fallback == "default", "or yields operand value")
+fallback = "changed"     // must not trip a bogus type-lock diagnostic
+check(fallback == "changed", "or-typed variable reassignable")
+
+print("All audit regression tests passed")

@@ -234,7 +234,12 @@ Expr* parse_primary(Parser* parser) {
         Token token = parser_previous(parser);
         // Create a MobiusString from the token's string literal
         if (token.literal.string) {
-            Value value = make_string_value_from_cstr(parser->state, token.literal.string);
+            // Length-aware: escape processing can leave embedded NULs, which
+            // the strlen-based path would truncate at literal-creation time.
+            size_t n = token.string_length ? token.string_length
+                                           : strlen(token.literal.string);
+            MobiusString* s = parser->state->stringPool()->intern(token.literal.string, n);
+            Value value = make_string_value(s);
             return make_literal_expr(value);
         } else {
             Value value = make_string_value_from_cstr(parser->state, "");
@@ -1995,7 +2000,14 @@ CasePattern* parse_case_pattern(Parser* parser) {
         return make_value_pattern(value);
     } else if (parser_check(parser, TOKEN_STRING)) {
         Token token = parser_advance(parser);
-        Value value = make_string_value_from_cstr(parser->state, token.literal.string);
+        Value value;
+        if (token.literal.string) {
+            size_t n = token.string_length ? token.string_length
+                                           : strlen(token.literal.string);
+            value = make_string_value(parser->state->stringPool()->intern(token.literal.string, n));
+        } else {
+            value = make_string_value_from_cstr(parser->state, "");
+        }
         return make_value_pattern(value);
     } else if (parser_check(parser, TOKEN_TRUE)) {
         parser_advance(parser);

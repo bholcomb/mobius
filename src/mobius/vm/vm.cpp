@@ -53,6 +53,34 @@ inline bool MobiusVM::vm_use_unsigned(const Value& l, const Value& r) {
     return l.type == VAL_UINT64 || r.type == VAL_UINT64;
 }
 
+// Container-subscript extraction. The old code read v.as.i64 raw, so a float
+// (or any non-integer) key had its bit pattern reinterpreted as an index —
+// a[1.5] read a garbage element on get, and on set could try to grow the
+// array to ~10^18 elements. Integral floats coerce (a[2.0] == a[2]); anything
+// else yields -1, which every index path already treats as out of bounds.
+static MOBIUS_FORCEINLINE int64_t vm_index_or_neg1(const Value& v) {
+    if (MOBIUS_LIKELY(v.type == VAL_INT64)) return v.as.i64;
+    if (v.type == VAL_UINT64)
+        return v.as.u64 <= (uint64_t)INT64_MAX ? (int64_t)v.as.u64 : -1;
+    if (v.type == VAL_FLOAT64) {
+        double d = v.as.double_val;
+        if (d >= 0.0 && d < 9223372036854775808.0) {
+            int64_t i = (int64_t)d;
+            if ((double)i == d) return i;
+        }
+    }
+    return -1;
+}
+
+// Lexicographic string ordering that respects the tracked length (strings can
+// contain NULs, which strcmp would treat as terminators).
+static MOBIUS_FORCEINLINE bool mobius_string_less(const MobiusString* a, const MobiusString* b) {
+    size_t n = a->length < b->length ? a->length : b->length;
+    int c = memcmp(a->data, b->data, n);
+    if (c != 0) return c < 0;
+    return a->length < b->length;
+}
+
 static inline bool vm_value_to_byte(const Value& value, uint8_t* out) {
     if (value.type == VAL_INT64) {
         if (value.as.i64 < 0 || value.as.i64 > 255) return false;
@@ -71,6 +99,15 @@ static inline Value make_retained_table_value(Table* table) {
     if (!table) return Value();
     table->retain();
     return make_table_value(table);
+}
+
+// Error messages contain dynamic data (names, indices, formatted values), so
+// interning them would grow the string pool forever in a loop that catches
+// errors. Build a refcounted heap string instead.
+static Value make_error_string_value(const char* msg) {
+    if (!msg) return make_nil_value();
+    MobiusString* s = StringInternPool::createHeap(msg, strlen(msg));
+    return s ? make_string_value_adopt(s) : make_nil_value();
 }
 
 static inline void release_atomic_locks(MobiusVM* vm, size_t keep_depth) {
@@ -213,6 +250,36 @@ MobiusVM::~MobiusVM() {
     }
 }
 
+void MobiusVM::growRegisters(int needed) {
+    // Open upvalues hold raw Value* into registers_; if resize moves the
+    // buffer they dangle, and GETUPVAL/SETUPVAL would touch freed memory.
+    // Every open upvalue is tracked in the upvalue list of the frame whose
+    // register it points into, so walking live frames finds them all.
+    uintptr_t old_data = (uintptr_t)registers_.data();
+    registers_.resize(needed, Value());
+    type_tags_.resize(needed, VAL_UNKNOWN);
+    uintptr_t new_data = (uintptr_t)registers_.data();
+
+    if (MOBIUS_UNLIKELY(new_data != old_data)) {
+        for (size_t d = 0; d <= call_depth_; d++) {
+            CallInfo& ci = call_stack_[d];
+            for (int i = 0; i < ci.upvalue_count; i++) {
+                Upvalue* uv = ci.upvalues[i];
+                if (uv && uv->is_open) {
+                    uintptr_t off = (uintptr_t)uv->location - old_data;
+                    uv->location = (Value*)(new_data + off);
+                }
+            }
+        }
+    }
+
+    register_capacity_ = (int)registers_.size();
+    native_ctx_.registers = registers_.data();
+    native_ctx_.capacity  = register_capacity_;
+    if ((size_t)register_capacity_ > metrics_->peak_registers)
+        metrics_->peak_registers = register_capacity_;
+}
+
 void MobiusVM::growCallStack() {
     size_t new_cap = call_stack_capacity_ * 2;
     CallInfo* new_stack = new CallInfo[new_cap];
@@ -231,12 +298,15 @@ void MobiusVM::growCallStack() {
             src.upvalues = src.inline_upvals;
             src.upvalue_count = 0;
         } else {
-            // Inline: copy elements, fix pointer
+            // Inline: copy elements, fix pointer. Ownership of the entries'
+            // references moves with them — zero the source count so the old
+            // slot's destructor doesn't release them a second time.
             for (int j = 0; j < src.upvalue_count; j++)
                 dst.inline_upvals[j] = src.inline_upvals[j];
             dst.upvalues = dst.inline_upvals;
             dst.upvalue_count = src.upvalue_count;
             dst.upvalue_capacity = CALLINFO_INLINE_UPVALS;
+            src.upvalue_count = 0;
         }
     }
     delete[] call_stack_;
@@ -348,7 +418,9 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
     native_ctx_.top       = args_base + nargs;
     native_ctx_.capacity  = (int)registers_.size();
 
+    size_t keepalive_mark = native_keepalive_.size();
     int rc = func(state_, nargs);
+    trimNativeKeepalive(keepalive_mark);   // release strings pinned for this call
 
     int result_top = native_ctx_.top;
 
@@ -500,7 +572,9 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         native_ctx_.top       = scratch + 2;
         native_ctx_.capacity  = (int)registers_.size();
 
+        size_t keepalive_mark = native_keepalive_.size();
         int rc = method.as.native_function(state_, 2);
+        trimNativeKeepalive(keepalive_mark);
 
         int result_top = native_ctx_.top;
         native_ctx_.base = saved_base;
@@ -535,11 +609,16 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         int scratch = caller_base + caller_num_regs;
 
         Prototype* child = mf->proto;
+        // Copy operands before ensureRegisters: a caller passing references
+        // into registers_ would otherwise see them invalidated by the resize
+        // (the native branch above already copies defensively).
+        Value lhs_copy = lhs;
+        Value rhs_copy = rhs;
         ensureRegisters(scratch + 3 + child->num_registers + 16);
 
         registers_[scratch]     = method;
-        registers_[scratch + 1] = lhs;
-        registers_[scratch + 2] = rhs;
+        registers_[scratch + 1] = lhs_copy;
+        registers_[scratch + 2] = rhs_copy;
 
         int child_base = scratch + 1;
         if (!child->param_unwrap_on_entry.empty()) {
@@ -640,6 +719,20 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
     : f.regs[DECODE_C(inst)])
 #define KBx(inst) f.proto->constants[DECODE_Bx(inst)]
 
+// Bind an operand without copying on the common (non-cell) path: a Value copy
+// is 16 bytes plus a retain/release pair for refcounted types, paid per
+// operand per instruction in the generic handlers. `storage` must outlive the
+// returned reference. CAUTION: the reference may alias a VM register — any
+// branch that can re-enter the VM (metamethods) or reallocate registers_ must
+// copy first.
+static MOBIUS_FORCEINLINE const Value& shared_peek(const Value& v, Value& storage) {
+    if (MOBIUS_UNLIKELY(v.type == VAL_SHARED_CELL && v.as.shared_cell)) {
+        storage = v.as.shared_cell->load();
+        return storage;
+    }
+    return v;
+}
+
 static MOBIUS_FORCEINLINE Value shared_unwrap(const Value& value) {
     if (value.type == VAL_SHARED_CELL && value.as.shared_cell) {
         return value.as.shared_cell->load();
@@ -721,7 +814,9 @@ int MobiusVM::callTernaryMetamethod(const Value& table_val, MobiusString* mm_nam
     native_ctx_.top = scratch + 3;
     native_ctx_.capacity = (int)registers_.size();
 
+    size_t keepalive_mark = native_keepalive_.size();
     int rc = method.as.native_function(state_, 3);
+    trimNativeKeepalive(keepalive_mark);
 
     native_ctx_.base = saved_base;
     native_ctx_.top = saved_top;
@@ -908,7 +1003,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         const Value& inner = obj.as.shared_cell->unsafeValue();
         if (inner.type == VAL_ARRAY && inner.as.array) {
             ArrayValue* arr = inner.as.array;
-            int64_t idx = MobiusVM::vm_extract_int64(key);
+            int64_t idx = vm_index_or_neg1(key);
             if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
                 RA(inst) = arr->unsafeGet((size_t)idx);
             } else {
@@ -921,7 +1016,8 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
                                                     : tbl->get(key);
             if (MOBIUS_UNLIKELY(result.type == VAL_NIL && tbl->getMetatable())) {
                 lock.unlock();   // release the cell lock before invoking script
-                uint32_t* saved_ip = f.ip;
+                f.ci->ip = f.ip;
+        uint32_t* saved_ip = f.ip;
                 Value looked;
                 int rc = vm_index_function_fallback(vm, inner_tbl, tbl, key, &looked);
                 vm->refreshFrame(f);
@@ -932,14 +1028,14 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
             }
             RA(inst) = result;
         } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
+            int64_t idx = vm_index_or_neg1(key);
             if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.array_slice->length())) {
                 RA(inst) = inner.as.array_slice->get((size_t)idx);
             } else {
                 RA(inst) = Value();
             }
         } else if (inner.type == VAL_BUFFER && inner.as.buffer) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
+            int64_t idx = vm_index_or_neg1(key);
             if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.buffer->size())) {
                 RA(inst) = make_int64_value((int64_t)inner.as.buffer->get((size_t)idx));
             } else {
@@ -948,7 +1044,8 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
             Value inner_ud = inner;   // retains the userdata for use outside the lock
             lock.unlock();            // release the cell lock before invoking script
-            uint32_t* saved_ip = f.ip;
+            f.ci->ip = f.ip;
+        uint32_t* saved_ip = f.ip;
             Value looked;
             int lookup_rc = vm_userdata_lookup(vm, inner_ud, key, &looked);
             vm->refreshFrame(f);
@@ -962,7 +1059,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         }
     } else if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
         ArrayValue* arr = obj.as.array;
-        int64_t idx = MobiusVM::vm_extract_int64(key);
+        int64_t idx = vm_index_or_neg1(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
             RA(inst) = arr->isShared() ? arr->get((size_t)idx) : arr->unsafeGet((size_t)idx);
         } else {
@@ -977,7 +1074,8 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         // On a miss, follow a *function* __index up the metatable chain (a
         // *table* __index was already handled by getByString/get above).
         if (MOBIUS_UNLIKELY(RA(inst).type == VAL_NIL && tbl->getMetatable())) {
-            uint32_t* saved_ip = f.ip;
+            f.ci->ip = f.ip;
+        uint32_t* saved_ip = f.ip;
             Value looked;
             int rc = vm_index_function_fallback(vm, obj, tbl, key, &looked);
             vm->refreshFrame(f);
@@ -1000,20 +1098,21 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         }
         RA(inst) = Value::makeEnum(obj.as.enum_def, member->value);
     } else if (obj.type == VAL_ARRAY_SLICE && obj.as.array_slice) {
-        int64_t idx = MobiusVM::vm_extract_int64(key);
+        int64_t idx = vm_index_or_neg1(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.array_slice->length())) {
             RA(inst) = obj.as.array_slice->get((size_t)idx);
         } else {
             RA(inst) = Value();
         }
     } else if (obj.type == VAL_BUFFER && obj.as.buffer) {
-        int64_t idx = MobiusVM::vm_extract_int64(key);
+        int64_t idx = vm_index_or_neg1(key);
         if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.buffer->size())) {
             RA(inst) = make_int64_value((int64_t)obj.as.buffer->get((size_t)idx));
         } else {
             RA(inst) = Value();
         }
     } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
+        f.ci->ip = f.ip;
         uint32_t* saved_ip = f.ip;
         Value looked;
         int lookup_rc = vm_userdata_lookup(vm, obj, key, &looked);
@@ -1024,7 +1123,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         RA(inst) = looked;
     } else if (obj.type == VAL_STRING && obj.as.string) {
         if (key.type == VAL_INT64) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
+            int64_t idx = vm_index_or_neg1(key);
             MobiusString* s = obj.as.string;
             if (idx >= 0 && idx < (int64_t)s->length) {
                 char buf[2] = { s->data[idx], '\0' };
@@ -1051,7 +1150,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
         std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
         Value& inner = obj.as.shared_cell->unsafeValue();
         if (inner.type == VAL_ARRAY && inner.as.array) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
+            int64_t idx = vm_index_or_neg1(key);
             if (MOBIUS_LIKELY(idx >= 0)) {
                 ArrayValue* arr = inner.as.array;
                 if ((int64_t)arr->length() <= idx && arr->hasActiveSlices()) {
@@ -1068,7 +1167,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
             else
                 inner.as.table->set(key, val);
         } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
+            int64_t idx = vm_index_or_neg1(key);
             if (idx >= 0 && idx < (int64_t)inner.as.array_slice->length()) {
                 inner.as.array_slice->set((size_t)idx, val);
             } else {
@@ -1077,7 +1176,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
                 return -1;
             }
         } else if (inner.type == VAL_BUFFER && inner.as.buffer) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
+            int64_t idx = vm_index_or_neg1(key);
             uint8_t byte = 0;
             if (idx < 0) {
                 VM_ERROR(vm, f, "Buffer index must be non-negative");
@@ -1127,7 +1226,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
             return -1;
         }
     } else if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
-        int64_t idx = MobiusVM::vm_extract_int64(key);
+        int64_t idx = vm_index_or_neg1(key);
         if (MOBIUS_LIKELY(idx >= 0)) {
             ArrayValue* arr = obj.as.array;
             if ((int64_t)arr->length() <= idx && arr->hasActiveSlices()) {
@@ -1144,7 +1243,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
         else
             obj.as.table->set(key, val);
     } else if (obj.type == VAL_ARRAY_SLICE && obj.as.array_slice) {
-        int64_t idx = MobiusVM::vm_extract_int64(key);
+        int64_t idx = vm_index_or_neg1(key);
         if (idx >= 0 && idx < (int64_t)obj.as.array_slice->length()) {
             obj.as.array_slice->set((size_t)idx, val);
         } else {
@@ -1153,7 +1252,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
             return -1;
         }
     } else if (obj.type == VAL_BUFFER && obj.as.buffer) {
-        int64_t idx = MobiusVM::vm_extract_int64(key);
+        int64_t idx = vm_index_or_neg1(key);
         uint8_t byte = 0;
         if (idx < 0) {
             VM_ERROR(vm, f, "Buffer index must be non-negative");
@@ -1216,7 +1315,8 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
 
 MOBIUS_FORCEINLINE static int vm_op_aget(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& obj = RB(inst);
-    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
+    if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array &&
+                      !IS_CONSTANT(DECODE_C(inst)))) {   // C must be a register here
         const Value& key = RC(inst);
         if (MOBIUS_LIKELY(key.type == VAL_INT64)) {
             ArrayValue* arr = obj.as.array;
@@ -1269,7 +1369,8 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
             inner = obj.as.shared_cell->unsafeValue();
         }
         if (inner.type == VAL_USERDATA) {
-            uint32_t* saved_ip = f.ip;
+            f.ci->ip = f.ip;
+        uint32_t* saved_ip = f.ip;
             Value method;
             int lookup_rc = vm_userdata_lookup(vm, inner, key, &method);
             vm->refreshFrame(f);
@@ -1302,7 +1403,8 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
                 return 0;
             }
             if (tbl->getMetatable()) {
-                uint32_t* saved_ip = f.ip;
+                f.ci->ip = f.ip;
+        uint32_t* saved_ip = f.ip;
                 Value looked;
                 int rc = vm_index_function_fallback(vm, inner, tbl, key, &looked);
                 vm->refreshFrame(f);
@@ -1330,7 +1432,8 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         }
         // On a miss, follow a *function* __index up the metatable chain.
         if (tbl->getMetatable()) {
-            uint32_t* saved_ip = f.ip;
+            f.ci->ip = f.ip;
+        uint32_t* saved_ip = f.ip;
             Value looked;
             int rc = vm_index_function_fallback(vm, obj, tbl, key, &looked);
             vm->refreshFrame(f);
@@ -1342,16 +1445,21 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
     }
 
     Value method;
-    if (obj.type == VAL_USERDATA) {
+    // Capture before any callback: `obj` references a register, and the
+    // lookup below can re-enter the VM and reallocate registers_.
+    ValueType obj_type = obj.type;
+    if (obj_type == VAL_USERDATA) {
+        Value obj_copy = obj;
+        f.ci->ip = f.ip;
         uint32_t* saved_ip = f.ip;
-        int lookup_rc = vm_userdata_lookup(vm, obj, key, &method);
+        int lookup_rc = vm_userdata_lookup(vm, obj_copy, key, &method);
         vm->refreshFrame(f);
         f.ip = saved_ip;
         f.ci->ip = saved_ip;
         if (lookup_rc < 0) return -1;
     }
-    if (obj.type != VAL_USERDATA) {
-        Table* mt = vm->state_->typeMetatable(obj.type);
+    if (obj_type != VAL_USERDATA) {
+        Table* mt = vm->state_->typeMetatable(obj_type);
         if (mt && key.type == VAL_STRING) {
             method = mt->getByString(key.as.string);
         }
@@ -1361,7 +1469,7 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         return 0;
     }
 
-    VM_ERROR(vm, f, "Attempt to call method on a %s value", value_type_name(obj.type));
+    VM_ERROR(vm, f, "Attempt to call method on a %s value", value_type_name(obj_type));
     return -1;
 }
 
@@ -1405,8 +1513,9 @@ MOBIUS_FORCEINLINE static int vm_arith_generic(
         IntOp int_op, UIntOp uint_op, FloatOp float_op,
         MobiusString* (Metamethods::*mm)() const,
         const char* verb, bool supports_string_concat = false) {
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         Value& dst = RA(inst);
         dst.as.i64 = int_op(lhs.as.i64, rhs.as.i64);
@@ -1423,29 +1532,47 @@ MOBIUS_FORCEINLINE static int vm_arith_generic(
         else
             RA(inst) = make_int64_value(int_op(MobiusVM::vm_extract_int64(lhs),
                                                 MobiusVM::vm_extract_int64(rhs)));
-    } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
+    } else if ((lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) &&
+               (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64) &&
+               (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64)) {
+        // Mixed float arithmetic requires BOTH operands numeric. This branch
+        // used to fire on `3.5 + "x"`, extracting 0.0 from the string and
+        // returning 3.5 instead of falling through to concatenation.
         Value& dst = RA(inst);
         dst.as.double_val = float_op(MobiusVM::vm_extract_double(lhs),
                                      MobiusVM::vm_extract_double(rhs));
         dst.type = VAL_FLOAT64; dst.flags = 0;
     } else if (supports_string_concat && (lhs.type == VAL_STRING || rhs.type == VAL_STRING)) {
-        std::string result;
-        auto append_val = [&](const Value& v) {
-            if (v.type == VAL_STRING && v.as.string) {
-                result.append(v.as.string->data, v.as.string->length);
-            } else {
-                char* s = value_to_string(v);
-                if (s) { result.append(s); free(s); }
-            }
-        };
-        append_val(lhs);
-        append_val(rhs);
-        RA(inst) = make_string_value_from_cstr(vm->state_, result.c_str());
+        // Build the result as a refcounted heap string, sized up front.
+        // The previous implementation appended through a std::string and then
+        // INTERNED the result — so every distinct concat was immortal (a leak),
+        // cost ~4 allocations + a shard mutex, and `.c_str()` truncated at
+        // embedded NULs. Non-string operands are stringified through
+        // value_to_string_value, which yields heap strings for the unbounded
+        // cases (numbers) and interned ones only for bounded types (nil, bool).
+        Value ltmp = (lhs.type == VAL_STRING) ? lhs : value_to_string_value(vm->state_, lhs);
+        Value rtmp = (rhs.type == VAL_STRING) ? rhs : value_to_string_value(vm->state_, rhs);
+        const MobiusString* ls = (ltmp.type == VAL_STRING) ? ltmp.as.string : nullptr;
+        const MobiusString* rs = (rtmp.type == VAL_STRING) ? rtmp.as.string : nullptr;
+        size_t ll = ls ? ls->length : 0;
+        size_t rl = rs ? rs->length : 0;
+        MobiusString* out_s = StringInternPool::allocHeap(ll + rl);
+        if (MOBIUS_UNLIKELY(!out_s)) {
+            VM_ERROR(vm, f, "Out of memory in string concatenation");
+            return -1;
+        }
+        if (ll) memcpy(out_s->mutableData(), ls->data, ll);
+        if (rl) memcpy(out_s->mutableData() + ll, rs->data, rl);
+        StringInternPool::finishHeap(out_s, ll + rl);
+        RA(inst) = make_string_value_adopt(out_s);
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-        const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+        // Materialize copies: the metamethod re-enters the VM, which may
+        // reallocate registers_ and invalidate the operand references.
+        Value lhs_c = lhs, rhs_c = rhs;
+        const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
         Value out;
         f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, (vm->state_->metamethods()->*mm)(), lhs, rhs, out);
+        int rc = vm->callMetamethod(tbl, (vm->state_->metamethods()->*mm)(), lhs_c, rhs_c, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
         if (rc == 0) {
@@ -1486,8 +1613,9 @@ MOBIUS_FORCEINLINE static int vm_op_mul(MobiusVM* vm, VMFrame& f, uint32_t inst)
 }
 
 MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
@@ -1495,10 +1623,11 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
         dst.as.i64 = lhs.as.i64 / rv;
         dst.type = VAL_INT64; dst.flags = 0;
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-        const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+        Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
+        const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
         Value out;
         f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->div(), lhs, rhs, out);
+        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->div(), lhs_c, rhs_c, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
         if (rc == 0) { VM_ERROR(vm, f, "Cannot divide: no __div metamethod on table"); return -1; }
@@ -1515,8 +1644,9 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
 }
 
 MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
@@ -1550,10 +1680,11 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
         dst.as.double_val = fmod(lv, rv);
         dst.type = VAL_FLOAT64; dst.flags = 0;
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-        const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+        Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
+        const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
         Value out;
         f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->mod(), lhs, rhs, out);
+        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->mod(), lhs_c, rhs_c, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
         if (rc == 0) { VM_ERROR(vm, f, "Cannot modulo: no __mod metamethod on table"); return -1; }
@@ -1595,12 +1726,14 @@ MOBIUS_FORCEINLINE static int vm_op_not(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // ---- Bitwise ----
 
 MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t inst, char op) {
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     if ((lhs.type != VAL_INT64 && lhs.type != VAL_UINT64) ||
         (rhs.type != VAL_INT64 && rhs.type != VAL_UINT64)) {
         if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-            const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+            Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
+            const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
             MobiusString* mm = nullptr;
             const char* name = nullptr;
             switch (op) {
@@ -1613,7 +1746,7 @@ MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t i
             if (mm) {
                 Value out;
                 f.ci->ip = f.ip;
-                int rc = vm->callMetamethod(tbl, mm, lhs, rhs, out);
+                int rc = vm->callMetamethod(tbl, mm, lhs_c, rhs_c, out);
                 vm->refreshFrame(f);
                 if (rc < 0) return -1;
                 if (rc == 1) { RA(inst) = out; return 0; }
@@ -1679,17 +1812,27 @@ MOBIUS_FORCEINLINE static int vm_op_bnot(MobiusVM* vm, VMFrame& f, uint32_t inst
 
 MOBIUS_FORCEINLINE static int vm_op_eq(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     bool eq;
     if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
         const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
-        Value out;
-        f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->eq(), lhs, rhs, out);
-        vm->refreshFrame(f);
-        if (rc < 0) return -1;
-        eq = (rc == 1) ? is_truthy(out) : (lhs == rhs);
+        // Without a metatable there can be no __eq: skip the metamethod
+        // machinery (which costs a hash probe of the table itself) and use
+        // identity. Table == with no metamethod is by far the common case.
+        if (MOBIUS_LIKELY(!tbl.as.table || !tbl.as.table->getMetatable())) {
+            eq = (lhs == rhs);
+        } else {
+            Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
+            Value tbl_c = tbl;
+            Value out;
+            f.ci->ip = f.ip;
+            int rc = vm->callMetamethod(tbl_c, vm->state_->metamethods()->eq(), lhs_c, rhs_c, out);
+            vm->refreshFrame(f);
+            if (rc < 0) return -1;
+            eq = (rc == 1) ? is_truthy(out) : (lhs_c == rhs_c);
+        }
     } else {
         eq = (lhs == rhs);
     }
@@ -1699,8 +1842,9 @@ MOBIUS_FORCEINLINE static int vm_op_eq(MobiusVM* vm, VMFrame& f, uint32_t inst) 
 
 MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
     bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
     bool lt;
@@ -1714,12 +1858,13 @@ MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) 
             lt = MobiusVM::vm_extract_double(lhs) < MobiusVM::vm_extract_double(rhs);
         }
     } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
-        lt = strcmp(lhs.as.string->data, rhs.as.string->data) < 0;
+        lt = mobius_string_less(lhs.as.string, rhs.as.string);
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-        const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+        Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
+        const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
         Value out;
         f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->lt(), lhs, rhs, out);
+        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->lt(), lhs_c, rhs_c, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
         if (rc == 0) { VM_ERROR(vm, f, "Cannot compare: no __lt metamethod on table"); return -1; }
@@ -1734,8 +1879,9 @@ MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) 
 
 MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
     bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
     bool le;
@@ -1749,12 +1895,13 @@ MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) 
             le = MobiusVM::vm_extract_double(lhs) <= MobiusVM::vm_extract_double(rhs);
         }
     } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
-        le = strcmp(lhs.as.string->data, rhs.as.string->data) <= 0;
+        le = !mobius_string_less(rhs.as.string, lhs.as.string);
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
-        const Value& tbl = (lhs.type == VAL_TABLE) ? lhs : rhs;
+        Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
+        const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
         Value out;
         f.ci->ip = f.ip;
-        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->le(), lhs, rhs, out);
+        int rc = vm->callMetamethod(tbl, vm->state_->metamethods()->le(), lhs_c, rhs_c, out);
         vm->refreshFrame(f);
         if (rc < 0) return -1;
         if (rc == 0) { VM_ERROR(vm, f, "Cannot compare: no __le metamethod on table"); return -1; }
@@ -2114,8 +2261,9 @@ MOBIUS_FORCEINLINE static int vm_op_isnum(MobiusVM* vm, VMFrame& f, uint32_t ins
 MOBIUS_FORCEINLINE static int vm_op_typecompat(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
     int a = DECODE_A(inst);
-    Value lhs = shared_unwrap(RKB(inst));
-    Value rhs = shared_unwrap(RKC(inst));
+    Value lhs_s, rhs_s;
+    const Value& lhs = shared_peek(RKB(inst), lhs_s);
+    const Value& rhs = shared_peek(RKC(inst), rhs_s);
     bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_FLOAT64);
     bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_FLOAT64);
     bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
@@ -2253,10 +2401,37 @@ MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 // ---- For loops ----
 
+// Validate one IFOR register (index/limit). The compiler only emits the IFOR
+// shape when start and limit statically infer as int64, so this guard is a
+// backstop for cases the inference can't see (a shared cell slipped through,
+// a wrong annotation). Unwraps cells; coerces integral floats; errors rather
+// than reinterpreting float bits as a trip count.
+static bool ifor_coerce_int64(Value& v) {
+    if (MOBIUS_LIKELY(v.type == VAL_INT64)) return true;
+    if (v.type == VAL_SHARED_CELL && v.as.shared_cell) {
+        v = v.as.shared_cell->load();
+        return ifor_coerce_int64(v);
+    }
+    if (v.type == VAL_UINT64 && v.as.u64 <= (uint64_t)INT64_MAX) {
+        v = make_int64_value((int64_t)v.as.u64);
+        return true;
+    }
+    if (v.type == VAL_FLOAT64) {
+        double d = v.as.double_val;
+        int64_t i = (int64_t)d;
+        if ((double)i == d) { v = make_int64_value(i); return true; }
+    }
+    return false;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_iforprep(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm;
     int a = DECODE_A(inst);
-    f.regs[a].type = VAL_INT64;
+    if (MOBIUS_UNLIKELY(!ifor_coerce_int64(f.regs[a]) ||
+                        !ifor_coerce_int64(f.regs[a + 1]))) {
+        VM_ERROR(vm, f, "for loop bounds must be integers (got %s and %s)",
+                 value_type_name(f.regs[a].type), value_type_name(f.regs[a + 1].type));
+        return -1;
+    }
     f.regs[a].as.i64 -= f.regs[a + 2].as.i64;
     f.ip += DECODE_sBx(inst);
     return 0;
@@ -2300,112 +2475,14 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
+    // The second fused word is the original INDEX_GET instruction. Delegate to
+    // the generic handler rather than re-implementing indexing: an earlier
+    // inline copy here silently diverged from INDEX_GET (no function-__index
+    // fallback, no enum access, no slice indexing), so whether those features
+    // worked depended on whether the peephole had fused the pair. The fusion's
+    // win — one dispatch saved and the fused global load — is preserved.
     uint32_t inst2 = *f.ip++;
-    uint8_t c2 = DECODE_C(inst2);
-    const Value& key = IS_CONSTANT(c2)
-        ? f.ci->proto->constants[RK_AS_CONSTANT(c2)]
-        : f.regs[c2];
-    const Value& obj = f.regs[a];
-    if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
-        const Value& inner = obj.as.shared_cell->unsafeValue();
-        if (inner.type == VAL_ARRAY && inner.as.array) {
-            ArrayValue* arr = inner.as.array;
-            int64_t idx = MobiusVM::vm_extract_int64(key);
-            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length()))
-                f.regs[a] = arr->unsafeGet((size_t)idx);
-            else
-                f.regs[a] = Value();
-        } else if (inner.type == VAL_TABLE && inner.as.table) {
-            if (MOBIUS_LIKELY(key.type == VAL_STRING))
-                f.regs[a] = inner.as.table->getByString(key.as.string);
-            else
-                f.regs[a] = inner.as.table->get(key);
-        } else if (inner.type == VAL_ARRAY_SLICE && inner.as.array_slice) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
-            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.array_slice->length()))
-                f.regs[a] = inner.as.array_slice->get((size_t)idx);
-            else
-                f.regs[a] = Value();
-        } else if (inner.type == VAL_BUFFER && inner.as.buffer) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
-            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)inner.as.buffer->size()))
-                f.regs[a] = make_int64_value((int64_t)inner.as.buffer->get((size_t)idx));
-            else
-                f.regs[a] = Value();
-        } else if (inner.type == VAL_USERDATA && inner.as.userdata) {
-            uint32_t* saved_ip = f.ip;
-            Value looked;
-            int lookup_rc = vm_userdata_lookup(vm, inner, key, &looked);
-            vm->refreshFrame(f);
-            f.ip = saved_ip;
-            f.ci->ip = saved_ip;
-            if (lookup_rc < 0) return -1;
-            f.regs[a] = looked;
-        } else if (inner.type == VAL_STRING && inner.as.string) {
-            if (key.type == VAL_INT64) {
-                int64_t idx = MobiusVM::vm_extract_int64(key);
-                MobiusString* s = inner.as.string;
-                if (idx >= 0 && idx < (int64_t)s->length) {
-                    char buf[2] = { s->data[idx], '\0' };
-                    f.regs[a] = make_string_value(vm->state_->stringPool()->intern(buf, 1));
-                } else {
-                    f.regs[a] = Value();
-                }
-            } else {
-                VM_ERROR(vm, f, "String index must be an integer");
-                return -1;
-            }
-        } else {
-            VM_ERROR(vm, f, "Attempt to index a shared %s value", value_type_name(inner.type));
-            return -1;
-        }
-    } else if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
-        ArrayValue* arr = obj.as.array;
-        int64_t idx = MobiusVM::vm_extract_int64(key);
-        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length()))
-            f.regs[a] = arr->isShared() ? arr->get((size_t)idx) : arr->unsafeGet((size_t)idx);
-        else
-            f.regs[a] = Value();
-    } else if (obj.type == VAL_TABLE && obj.as.table) {
-        if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            f.regs[a] = obj.as.table->getByString(key.as.string);
-        else
-            f.regs[a] = obj.as.table->get(key);
-    } else if (obj.type == VAL_BUFFER && obj.as.buffer) {
-        int64_t idx = MobiusVM::vm_extract_int64(key);
-        if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)obj.as.buffer->size()))
-            f.regs[a] = make_int64_value((int64_t)obj.as.buffer->get((size_t)idx));
-        else
-            f.regs[a] = Value();
-    } else if (obj.type == VAL_USERDATA && obj.as.userdata) {
-        uint32_t* saved_ip = f.ip;
-        Value looked;
-        int lookup_rc = vm_userdata_lookup(vm, obj, key, &looked);
-        vm->refreshFrame(f);
-        f.ip = saved_ip;
-        f.ci->ip = saved_ip;
-        if (lookup_rc < 0) return -1;
-        f.regs[a] = looked;
-    } else if (obj.type == VAL_STRING && obj.as.string) {
-        if (key.type == VAL_INT64) {
-            int64_t idx = MobiusVM::vm_extract_int64(key);
-            MobiusString* s = obj.as.string;
-            if (idx >= 0 && idx < (int64_t)s->length) {
-                char buf[2] = { s->data[idx], '\0' };
-                f.regs[a] = make_string_value(vm->state_->stringPool()->intern(buf, 1));
-            } else {
-                f.regs[a] = Value();
-            }
-        } else {
-            VM_ERROR(vm, f, "String index must be an integer");
-            return -1;
-        }
-    } else {
-        VM_ERROR(vm, f, "Attempt to index a %s value", value_type_name(obj.type));
-        return -1;
-    }
-    return 0;
+    return vm_op_index_get(vm, f, inst2);
 }
 
 // ---- Call / Tailcall ----
@@ -2679,6 +2756,18 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
     int ret_base = f.ci->base;
     int ret_nresults = f.ci->nresults;
     vm->callStackPop();
+    // Discard try handlers registered by the frame being returned from
+    // (i.e. `return` inside `try`). A stale handler would catch a later,
+    // unrelated throw and jump into the dead frame's code. The compiler also
+    // emits TRY_END before returns; this is the backstop for paths it can't
+    // see (native unwinds, tailcalls).
+    if (MOBIUS_UNLIKELY(!vm->try_stack_.empty())) {
+        while (!vm->try_stack_.empty() &&
+               vm->try_stack_.back().call_stack_depth > vm->callStackSize()) {
+            release_atomic_locks(vm, vm->try_stack_.back().atomic_depth);
+            vm->try_stack_.pop_back();
+        }
+    }
     int func_reg_abs = ret_base - 1;
     if (ret_nresults != 0) {
         int to_copy = ret_nresults - 1;
@@ -2709,7 +2798,11 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
     }
     auto cleanup_function = [&]() {
         delete[] mf->param_names;
-        delete[] mf->upvalues;
+        if (mf->upvalues) {
+            for (int u2 = 0; u2 < mf->upvalue_count; u2++)
+                if (mf->upvalues[u2]) mf->upvalues[u2]->release();
+            delete[] mf->upvalues;
+        }
         delete mf;
     };
     mf->name = child_proto->name.empty() ? nullptr :
@@ -2755,6 +2848,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                     }
                 }
                 if (existing) {
+                    existing->retain();              // mf's own reference
                     mf->upvalues[u] = existing;
                 } else {
                     Upvalue* uv = new (std::nothrow) Upvalue();
@@ -2766,7 +2860,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                     uv->location = reg_ptr;
                     uv->is_open = true;
                     if (!f.ci->pushUpvalue(uv)) {
-                        delete uv;
+                        uv->release();               // drop the creation reference
                         cleanup_function();
                         VM_ERROR(vm, f, "Failed to grow open upvalue list");
                         return -1;
@@ -2777,6 +2871,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                 }
             } else {
                 if (desc.index < f.ci->upvalue_count) {
+                    f.ci->upvalues[desc.index]->retain();   // mf's own reference
                     mf->upvalues[u] = f.ci->upvalues[desc.index];
                 } else {
                     mf->upvalues[u] = new (std::nothrow) Upvalue();
@@ -2853,7 +2948,10 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
     f.regs[call_reg + 2] = f.regs[a + 2];
 
     f.ci->ip = f.ip;
-    int rc = vm->callFunction(vm->callStackTop(), call_reg, 2, 2);
+    // Request two results (nresults = count + 1): a two-variable
+    // `for k, v in iterFn` previously requested one and never wrote the
+    // second variable, which kept whatever stale value occupied its register.
+    int rc = vm->callFunction(vm->callStackTop(), call_reg, 2, 3);
     if (rc < 0) return -1;
 
     if (rc > 0) {
@@ -2863,13 +2961,15 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
 
     vm->refreshFrame(f);
 
-    Value& result = f.regs[call_reg];
-    if (result.type == VAL_NIL) {
+    Value r1 = f.regs[call_reg];
+    Value r2 = f.regs[call_reg + 1];
+    if (r1.type == VAL_NIL) {
         return 0;
     }
 
-    f.regs[a + 2] = result;
-    f.regs[a + 3] = result;
+    f.regs[a + 2] = r1;          // control value for the next call
+    f.regs[a + 3] = r1;          // first user variable
+    if (c >= 2) f.regs[a + 4] = r2;
 
     f.ip++;
     return 0;
@@ -3136,6 +3236,7 @@ MOBIUS_FORCEINLINE static int vm_op_try_begin(MobiusVM* vm, VMFrame& f, uint32_t
     tb.catch_ip = f.ip + sbx;
     tb.catch_reg = a;
     tb.base = f.base;
+    tb.atomic_depth = vm->atomic_locks_.size();
     vm->try_stack_.push_back(tb);
     if (vm->try_stack_.size() > vm->metrics_->peak_try_depth)
         vm->metrics_->peak_try_depth = vm->try_stack_.size();
@@ -3150,20 +3251,31 @@ MOBIUS_FORCEINLINE static int vm_op_try_end(MobiusVM* vm, VMFrame& f, uint32_t i
     return 0;
 }
 
-MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t inst, size_t base_depth) {
     uint8_t a = DECODE_A(inst);
     Value thrown_value = f.regs[a];
 
-    if (vm->try_stack_.empty()) {
+    // A handler is usable only if it was registered by a frame belonging to
+    // THIS run() invocation (call_stack_depth > base_depth). Handlers below
+    // base_depth belong to an outer dispatch loop — we are inside a nested
+    // run() started by a metamethod or iterator call. Unwinding to them from
+    // here would pop past this run's base and leave it executing outer-frame
+    // code; instead convert to an error and propagate out through the nested
+    // run's caller, so each run() level unwinds itself.
+    if (vm->try_stack_.empty() ||
+        vm->try_stack_.back().call_stack_depth <= base_depth) {
         if (thrown_value.type == VAL_STRING && thrown_value.as.string) {
             VM_ERROR(vm, f, "%s", thrown_value.as.string->data);
         } else {
-            VM_ERROR(vm, f, "Uncaught exception");
+            char* s = value_to_string(thrown_value);
+            VM_ERROR(vm, f, "%s", s ? s : "Uncaught exception");
+            free(s);
         }
         return -1;
     }
 
     MobiusVM::TryBlock& tb = vm->try_stack_.back();
+    release_atomic_locks(vm, tb.atomic_depth);
 
     while (vm->callStackSize() > tb.call_stack_depth) {
         if (MOBIUS_UNLIKELY(vm->callStackTop().upvalue_count > 0))
@@ -3307,16 +3419,29 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
                 future->reject(err);
             }
 
-            for (Upvalue* uv : fiber_upvalues) delete uv;
+            for (Upvalue* uv : fiber_upvalues) uv->release();
 
             ((RefCounted*)future)->release();
         };
 
         JobSystem* js = state->jobSystem();
+        if (MOBIUS_UNLIKELY(!js)) {
+            // The job holds the +1 retained above; drop it along with the
+            // creation reference before erroring, or the future leaks.
+            ((RefCounted*)future)->release();
+            ((RefCounted*)future)->release();
+            VM_ERROR(vm, f, "spawn requires the fiber job system, which is not running");
+            return -1;
+        }
         frame_globals(vm, f)->shared.store(true, std::memory_order_release);
         js->submit(std::move(job));
 
-        RA(inst) = make_future_value(future);
+        RA(inst) = make_future_value(future);   // retains (+1) for the register
+        // Drop the creation reference from `new FutureValue()` above. Live refs
+        // are now exactly: the job's (released when the fiber finishes) and the
+        // register's (released when the script drops the value). Without this,
+        // every spawn leaked its future.
+        ((RefCounted*)future)->release();
         return 0;
 
     } else if (func_val.type == VAL_NATIVE_FUNCTION) {
@@ -3551,11 +3676,18 @@ int MobiusVM::run(size_t base_depth) {
 #endif
 
     // Handlers that delegate to extracted functions
+    // On error: use the innermost try handler, but ONLY if it was registered
+    // by a frame belonging to this run() invocation (depth > base_depth).
+    // Handlers below base_depth belong to an outer dispatch loop; unwinding to
+    // them from a nested run (metamethod / iterator call) would corrupt both
+    // runs' frame state — instead return -1 so each run level unwinds itself.
     #define VM_HANDLER(op, fn) VM_CASE(op) {                           \
         int _rc = fn(this, f, inst);                                    \
         if (MOBIUS_UNLIKELY(_rc < 0)) {                                 \
-            if (!try_stack_.empty()) {                                   \
+            if (!try_stack_.empty() &&                                   \
+                try_stack_.back().call_stack_depth > base_depth) {       \
                 TryBlock& _tb = try_stack_.back();                       \
+                release_atomic_locks(this, _tb.atomic_depth);            \
                 while (callStackSize() > _tb.call_stack_depth) {         \
                     if (callStackTop().upvalue_count > 0)                 \
                         closeUpvalues(callStackTop(), 0);                 \
@@ -3563,12 +3695,8 @@ int MobiusVM::run(size_t base_depth) {
                 }                                                        \
                 InternalError* _ie = state_->getLastError();              \
                 const char* err = _ie ? _ie->message : nullptr;          \
-                if (err) {                                               \
-                    registers_[_tb.base + _tb.catch_reg] =               \
-                        make_string_value_from_cstr(state_, err);        \
-                } else {                                                 \
-                    registers_[_tb.base + _tb.catch_reg] = make_nil_value();  \
-                }                                                        \
+                registers_[_tb.base + _tb.catch_reg] =                   \
+                    make_error_string_value(err);                        \
                 callStackTop().ip = _tb.catch_ip;                        \
                 try_stack_.pop_back();                                    \
                 refreshFrame(f);                                         \
@@ -3672,8 +3800,13 @@ int MobiusVM::run(size_t base_depth) {
     VM_CASE(OP_TAILCALL) {
         int rc = vm_op_tailcall(this, f, inst, base_depth);
         if (MOBIUS_UNLIKELY(rc < 0)) {
-            if (!try_stack_.empty()) {
+            // Same handler-selection rules as VM_HANDLER: only a try block
+            // registered within this run() may catch, and its atomic locks
+            // must be released on the way to the catch.
+            if (!try_stack_.empty() &&
+                try_stack_.back().call_stack_depth > base_depth) {
                 TryBlock& _tb = try_stack_.back();
+                release_atomic_locks(this, _tb.atomic_depth);
                 while (callStackSize() > _tb.call_stack_depth) {
                     if (callStackTop().upvalue_count > 0)
                         closeUpvalues(callStackTop(), 0);
@@ -3681,12 +3814,7 @@ int MobiusVM::run(size_t base_depth) {
                 }
                 InternalError* _ie = state_->getLastError();
                 const char* err = _ie ? _ie->message : nullptr;
-                if (err) {
-                    registers_[_tb.base + _tb.catch_reg] =
-                        make_string_value_from_cstr(state_, err);
-                } else {
-                    registers_[_tb.base + _tb.catch_reg] = make_nil_value();
-                }
+                registers_[_tb.base + _tb.catch_reg] = make_error_string_value(err);
                 callStackTop().ip = _tb.catch_ip;
                 try_stack_.pop_back();
                 refreshFrame(f);
@@ -3726,7 +3854,15 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_CANCEL_CHECK, vm_op_cancel_check)
     VM_HANDLER(OP_ATOMIC_BEGIN, vm_op_atomic_begin)
     VM_HANDLER(OP_ATOMIC_END, vm_op_atomic_end)
-    VM_HANDLER(OP_THROW, vm_op_throw)
+    VM_CASE(OP_THROW) {
+        // vm_op_throw needs base_depth for the nested-run guard; on failure
+        // (no usable handler in this run) the error simply exits this run —
+        // the guard inside vm_op_throw already established there is no
+        // handler above base_depth, so no catch dispatch is needed here.
+        int rc = vm_op_throw(this, f, inst, base_depth);
+        if (MOBIUS_UNLIKELY(rc < 0)) return -1;
+        VM_NEXT();
+    }
     VM_HANDLER(OP_SELF, vm_op_self)
     VM_HANDLER(OP_LT_II, vm_op_lt_ii)
     VM_HANDLER(OP_LE_II, vm_op_le_ii)

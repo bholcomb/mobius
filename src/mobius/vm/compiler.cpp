@@ -96,6 +96,16 @@ int Compiler::allocReg() {
     if (current_->free_reg > current_->max_reg) {
         current_->max_reg = current_->free_reg;
     }
+    if (reg > 127) {
+        // Registers 128..255 collide with the RK constant encoding (bit 0x80
+        // marks a constant-pool reference in B/C operand fields), so a
+        // register-heavy function would silently read constants instead of
+        // registers. Fail loudly instead.
+        fprintf(stderr, "Compile error [%s:%d]: function requires more than 128 registers\n",
+                current_->proto->source.c_str(), currentLine_);
+        had_error_ = true;
+        return 127;
+    }
     if (reg > 255) {
         fprintf(stderr, "Compile error: register overflow (> 255) — function uses too many locals/temporaries\n");
         had_error_ = true;
@@ -555,8 +565,14 @@ ValueType Compiler::inferExprType(Expr* expr) {
                 case TOKEN_AMPERSAND: case TOKEN_PIPE: case TOKEN_CARET:
                 case TOKEN_LEFT_SHIFT: case TOKEN_RIGHT_SHIFT:
                     return VAL_INT64;
-                case TOKEN_AND: case TOKEN_OR:
-                    return VAL_BOOL;
+                case TOKEN_AND: case TOKEN_OR: {
+                    // Short-circuit ops yield an OPERAND value, not a bool
+                    // (`x or "fallback"` is a string). Only claim BOOL when
+                    // both sides are bool; agree on a common type otherwise.
+                    ValueType l = inferExprType(expr->as.binary.left);
+                    ValueType r = inferExprType(expr->as.binary.right);
+                    return (l == r) ? l : VAL_UNKNOWN;
+                }
                 default:
                     return VAL_UNKNOWN;
             }
@@ -945,27 +961,31 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             }
         }
 
-        // Comparison folding on numeric literals
-        if (both_num) {
-            auto to_double = [](const Value& v) -> double {
-                if (v.type == VAL_UINT64)  return (double)v.as.u64;
-                if (v.type == VAL_INT64) return (double)v.as.i64;
-                return v.as.double_val;
-            };
+        // Comparison folding on numeric literals. Fold only pairs that
+        // compare exactly in their own domain: widening int64 to double made
+        // 2^53+1 == 2^53 fold to true. Mixed int/float pairs are left to the
+        // runtime handlers, which compare exactly.
+        bool same_int   = (lv.type == VAL_INT64  && rv.type == VAL_INT64);
+        bool same_uint  = (lv.type == VAL_UINT64 && rv.type == VAL_UINT64);
+        bool same_float = (l_flt && r_flt);
+        if (same_int || same_uint || same_float) {
             bool folded = false;
             bool cmp_result = false;
 
-            double a = to_double(lv), b = to_double(rv);
-
-            switch (expr->op.type) {
-                case TOKEN_LESS:          cmp_result = a < b;  folded = true; break;
-                case TOKEN_LESS_EQUAL:    cmp_result = a <= b; folded = true; break;
-                case TOKEN_GREATER:       cmp_result = a > b;  folded = true; break;
-                case TOKEN_GREATER_EQUAL: cmp_result = a >= b; folded = true; break;
-                case TOKEN_EQUAL_EQUAL:   cmp_result = a == b; folded = true; break;
-                case TOKEN_BANG_EQUAL:    cmp_result = a != b; folded = true; break;
-                default: break;
-            }
+            auto cmp = [&](auto a, auto b) -> void {
+                switch (expr->op.type) {
+                    case TOKEN_LESS:          cmp_result = a < b;  folded = true; break;
+                    case TOKEN_LESS_EQUAL:    cmp_result = a <= b; folded = true; break;
+                    case TOKEN_GREATER:       cmp_result = a > b;  folded = true; break;
+                    case TOKEN_GREATER_EQUAL: cmp_result = a >= b; folded = true; break;
+                    case TOKEN_EQUAL_EQUAL:   cmp_result = a == b; folded = true; break;
+                    case TOKEN_BANG_EQUAL:    cmp_result = a != b; folded = true; break;
+                    default: break;
+                }
+            };
+            if (same_int)        cmp(lv.as.i64, rv.as.i64);
+            else if (same_uint)  cmp(lv.as.u64, rv.as.u64);
+            else                 cmp(lv.as.double_val, rv.as.double_val);
 
             if (folded) {
                 int reg = (dest >= 0) ? dest : allocReg();
@@ -1034,9 +1054,19 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     bool left_maybe_shared = exprMayBeShared(expr->left);
     bool right_maybe_shared = exprMayBeShared(expr->right);
 
+    // `+` doubles as string concatenation. When either operand is provably a
+    // string, the numeric fast paths below (ADDI immediates, ADDK inline
+    // constants) must not fire — they emit integer/float ops that error at
+    // runtime on a string operand ("n=" + 42 used to fail with "ADDI requires
+    // numeric operand"). The generic OP_ADD handles concat.
+    bool provably_string_concat =
+        expr->op.type == TOKEN_PLUS &&
+        (inferExprType(expr->left) == VAL_STRING ||
+         inferExprType(expr->right) == VAL_STRING);
+
     // Try arithmetic-with-immediate (AsBx format): R[A] = R[A] op sBx
     // sBx range is -SBX16_BIAS..SBX16_BIAS (±32767)
-    {
+    if (!provably_string_concat) {
         OpCode imm_op = OP_NOP;
         switch (expr->op.type) {
             case TOKEN_PLUS:    imm_op = OP_ADDI; break;
@@ -1097,7 +1127,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     // Try inline-data constant opcode (*K): one register operand, one 64-bit
     // constant embedded in the instruction stream. Handles any numeric literal
     // regardless of range.
-    {
+    if (!provably_string_concat) {
         OpCode k_op = OP_NOP;
         switch (expr->op.type) {
             case TOKEN_PLUS:    k_op = OP_ADDK; break;
@@ -2157,6 +2187,30 @@ int Compiler::compileIncrement(IncrementExpr* expr, int dest) {
 
     if (local >= 0) {
         int save = current_->free_reg;
+
+        // Plain (provably non-shared) local: increment in place. The general
+        // path below exists only because a shared binding needs the value
+        // moved through its cell under a lock — for an ordinary loop counter
+        // it emitted a 5-7 instruction LOCK/LOAD/OP/STORE/UNLOCK sequence
+        // where one OP_INC suffices.
+        if (!localMayBeShared(local)) {
+            if (expr->is_prefix) {
+                emitABC(op, (uint8_t)local, (uint8_t)local, 0);
+                if (dest >= 0 && dest != local) {
+                    emitABC(OP_MOVE, (uint8_t)dest, (uint8_t)local, 0);
+                    return dest;
+                }
+                return local;
+            } else {
+                int reg = (dest >= 0) ? dest : allocReg();
+                emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)local, 0);   // old value
+                emitABC(op, (uint8_t)local, (uint8_t)local, 0);
+                if (dest < 0) setFreeReg(reg + 1);
+                else setFreeReg(save);
+                return reg;
+            }
+        }
+
         if (expr->is_prefix) {
             int result_reg = (dest >= 0) ? dest : allocReg();
             emitABC(OP_LOCK_SHARED, (uint8_t)local, 0, 0);
@@ -2186,6 +2240,23 @@ int Compiler::compileIncrement(IncrementExpr* expr, int dest) {
     int save = current_->free_reg;
     int reg = (dest >= 0) ? dest : allocReg();
     int tmp = allocReg();
+
+    // Plain (provably non-shared) global: skip the shared-cell lock protocol.
+    if (!globalMayBeShared(name)) {
+        if (expr->is_prefix) {
+            emitGetGlobal(reg, name);
+            emitABC(op, (uint8_t)reg, (uint8_t)reg, 0);
+            emitSetGlobal(reg, name);
+        } else {
+            emitGetGlobal(reg, name);
+            emitABC(OP_MOVE, (uint8_t)tmp, (uint8_t)reg, 0);
+            emitABC(op, (uint8_t)tmp, (uint8_t)tmp, 0);
+            emitSetGlobal(tmp, name);
+        }
+        if (dest < 0) setFreeReg(reg + 1);
+        else setFreeReg(save);
+        return reg;
+    }
 
     emitGetGlobal(tmp, name);
     emitABC(OP_LOCK_SHARED, (uint8_t)tmp, 0, 0);
@@ -2571,12 +2642,17 @@ void Compiler::compileIfStmt(IfStmt* stmt) {
 // --- While statement ---
 
 void Compiler::compileWhileStmt(WhileStmt* stmt) {
+    // Scope the hoisted-global registers to this loop (the for-loop paths do
+    // the same); otherwise each sequential while leaks its hoist registers
+    // until function end, inflating num_registers.
+    beginScope();
     int hoisted = hoistLoopGlobals(stmt->body);
 
     LoopContext loop;
     loop.start_pc = current_->proto->currentPC();
     loop.is_for_loop = false;
     loop.scope_depth = current_->scope_depth;
+    loop.open_trys_at_entry = current_->open_trys;
     current_->loops.push_back(loop);
 
     int jmp_exit = compileConditionJump(stmt->condition);
@@ -2600,6 +2676,7 @@ void Compiler::compileWhileStmt(WhileStmt* stmt) {
     current_->loops.pop_back();
 
     if (hoisted > 0) hoisted_globals_stack_.pop_back();
+    endScope();
     unreachable_ = false;
 }
 
@@ -2698,8 +2775,14 @@ void Compiler::compileForStmt(ForStmt* stmt) {
     int64_t step_val = 0;
     bool count_up = true;
 
+    // The IFOR fast path is only sound when start and limit are integers:
+    // vm_op_iforprep/iforloop operate on raw i64 register contents, and the
+    // `<` to `<= limit-1` rewrite is wrong for fractional limits. Gate on
+    // statically-proven int64; anything else takes the generic loop below.
     if (isNumericForLoop(stmt, &var_name, &start_expr, &limit_expr,
-                         &step_val, &count_up)) {
+                         &step_val, &count_up) &&
+        inferExprType(start_expr) == VAL_INT64 &&
+        inferExprType(limit_expr) == VAL_INT64) {
         beginScope();
 
         int hoisted = hoistLoopGlobals(stmt->body);
@@ -2750,7 +2833,8 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         loop.start_pc = current_->proto->currentPC();
         loop.is_for_loop = true;
         loop.scope_depth = current_->scope_depth;
-        current_->loops.push_back(loop);
+        loop.open_trys_at_entry = current_->open_trys;
+    current_->loops.push_back(loop);
 
         // Body
         unreachable_ = false;
@@ -2794,6 +2878,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
     loop.start_pc = current_->proto->currentPC();
     loop.is_for_loop = true;
     loop.scope_depth = current_->scope_depth;
+    loop.open_trys_at_entry = current_->open_trys;
     current_->loops.push_back(loop);
 
     int jmp_exit = -1;
@@ -2951,17 +3036,27 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
         }
 
         // Tail call optimization: if the return value is a direct call,
-        // emit OP_TAILCALL instead of OP_CALL + OP_RETURN.
-        if (stmt->value->type == EXPR_CALL) {
+        // emit OP_TAILCALL instead of OP_CALL + OP_RETURN. Not inside a try:
+        // a tail call replaces the frame, which would leave the handler's
+        // catch_ip pointing into the replaced function's code. Fall through
+        // to the plain call + TRY_END + RETURN path instead.
+        if (stmt->value->type == EXPR_CALL && current_->open_trys == 0) {
             compileTailCall(&stmt->value->as.call);
             return;
         }
 
         int save = current_->free_reg;
         int reg = compileExpr(stmt->value);
+        // The return expression is evaluated with the handlers still armed
+        // (so `try { return risky() } catch ...` catches); pop them only on
+        // the way out.
+        for (int i = 0; i < current_->open_trys; i++)
+            emitABC(OP_TRY_END, 0, 0, 0);
         emitReturn(reg, 1);
         setFreeReg(save);
     } else {
+        for (int i = 0; i < current_->open_trys; i++)
+            emitABC(OP_TRY_END, 0, 0, 0);
         emitReturn(0, 0);
     }
 }
@@ -2978,6 +3073,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
     switch_loop.start_pc = current_->proto->currentPC();
     switch_loop.is_for_loop = false;
     switch_loop.scope_depth = current_->scope_depth;
+    switch_loop.open_trys_at_entry = current_->open_trys;
     current_->loops.push_back(switch_loop);
 
     std::vector<int> break_jumps;
@@ -3309,6 +3405,10 @@ void Compiler::compileBreakStmt() {
         had_error_ = true;
         return;
     }
+    // Pop handlers for try regions entered inside the loop that this break
+    // is jumping out of.
+    for (int i = current_->loops.back().open_trys_at_entry; i < current_->open_trys; i++)
+        emitABC(OP_TRY_END, 0, 0, 0);
     int jmp = emitJump();
     current_->loops.back().break_jumps.push_back(jmp);
 }
@@ -3324,6 +3424,11 @@ void Compiler::compileContinueStmt() {
     }
 
     LoopContext& loop = current_->loops.back();
+
+    // Pop handlers for try regions entered inside the loop body; the next
+    // iteration re-arms them via its own TRY_BEGIN.
+    for (int i = loop.open_trys_at_entry; i < current_->open_trys; i++)
+        emitABC(OP_TRY_END, 0, 0, 0);
 
     if (loop.is_for_loop) {
         // For loop: the increment hasn't been emitted yet.
@@ -3695,8 +3800,14 @@ void Compiler::collectGlobalCallNames(Stmt* stmt,
 // hoistLoopGlobals — pre-load globals used as call targets before a loop body.
 // Returns the number of registers consumed (for cleanup after loop).
 int Compiler::hoistLoopGlobals(Stmt* body) {
+    std::unordered_set<std::string> all_names;
+    collectGlobalCallNames(body, all_names);
+    // Only hoist globals whose binding cannot change: readonly function
+    // globals. Hoisting a mutable global serves a stale copy for the whole
+    // loop if the body (or anything it calls) reassigns it.
     std::unordered_set<std::string> globals;
-    collectGlobalCallNames(body, globals);
+    for (const auto& name : all_names)
+        if (readonly_function_globals_.count(name)) globals.insert(name);
     if (globals.empty()) return 0;
 
     HoistedGlobals hg;
@@ -3742,8 +3853,11 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             int offset = DECODE_sBx_wide(code[i]);
             target = (int)i + 1 + offset;
         } else if (info.format == FMT_AsBx) {
-            if (op == OP_TESTJMP ||
+            if (op == OP_TESTJMP || op == OP_TRY_BEGIN ||
                 op == OP_IFORPREP || op == OP_IFORLOOP) {
+                // OP_TRY_BEGIN's sBx is its pc-relative catch offset: it is a
+                // jump target like any other and must survive fusion, or the
+                // catch handler lands past (or inside) the real catch block.
                 int offset = DECODE_sBx(code[i]);
                 target = (int)i + 1 + offset;
             }
@@ -3875,7 +3989,7 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             // to the original position. We need to find the original index.
             is_jump = true;
         } else if (info.format == FMT_AsBx) {
-            if (op == OP_TESTJMP ||
+            if (op == OP_TESTJMP || op == OP_TRY_BEGIN ||
                 op == OP_IFORPREP || op == OP_IFORLOOP) {
                 is_jump = true;
             }
@@ -4054,6 +4168,7 @@ void Compiler::compileForInStmt(ForInStmt* stmt) {
     LoopContext loop;
     loop.start_pc = (int)current_->proto->code.size();
     loop.scope_depth = current_->scope_depth;
+    loop.open_trys_at_entry = current_->open_trys;
     current_->loops.push_back(loop);
 
     emitABC(OP_TFORLOOP, (uint8_t)iter_reg, 0, num_vars);
@@ -4089,11 +4204,13 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
 
     int try_begin_pc = emitAsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, 0);
 
+    current_->open_trys++;
     unreachable_ = false;
     compileBlock(stmt->try_body, stmt->try_body_count);
     bool try_unreachable = unreachable_;
 
     emitABC(OP_TRY_END, 0, 0, 0);
+    current_->open_trys--;   // handler is popped before the catch body runs
     int jmp_past_catch = emitJump();
 
     int catch_target = (int)current_->proto->code.size();
@@ -4164,7 +4281,11 @@ int Compiler::compileSpawn(SpawnExpr* expr, int dest) {
 // OP_AWAIT A B -- await future in R[B], result into R[A]
 int Compiler::compileAwait(AwaitExpr* expr, int dest) {
     int operand_reg = compileExpr(expr->operand);
-    int result_reg = (dest >= 0) ? dest : operand_reg;
+    // Never write the result over the operand register: when the operand is a
+    // plain local, compileExpr returns the local's own register, and reusing it
+    // would overwrite the user's variable with the awaited result
+    // (`var x = 1 + await f` used to leave `f` holding 42, not the future).
+    int result_reg = (dest >= 0) ? dest : allocReg();
     emitABC(OP_AWAIT, (uint8_t)result_reg, (uint8_t)operand_reg, 0);
     return result_reg;
 }

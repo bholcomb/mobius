@@ -10,6 +10,7 @@
 #include "data/function.h"
 #include "frontend/ast.h"
 #include "state/mobius_state.h"
+#include "vm/vm.h"      // Upvalue definition, for the closure release below
 #include "util/utility.h"
 
 #include <charconv>
@@ -44,7 +45,13 @@ void Value::releaseRefSlow() {
                         }
                         delete[] func->body;
                     }
-                    delete[] func->upvalues;
+                    if (func->upvalues) {
+                        // Release the closure's references; sibling closures
+                        // or still-live frames may share these Upvalues.
+                        for (int u = 0; u < func->upvalue_count; u++)
+                            if (func->upvalues[u]) func->upvalues[u]->release();
+                        delete[] func->upvalues;
+                    }
                     delete func;
                 }
             }
@@ -178,17 +185,51 @@ Value make_userdata_value(MobiusState* state, void* ptr, UserdataDestructor dest
 // Value utility functions
 // ============================================================================
 
+// Exact int64/float64 equality. Widening the integer to double is wrong for
+// |i| > 2^53 (2^53 and 2^53+1 both round to the same double), so compare in
+// the integer domain: the float must be integral, in int64 range, and equal.
+static bool int64_eq_float(int64_t i, double d) {
+    if (d != d) return false;                                   // NaN
+    // Bounds exact in double: -2^63 is representable; 2^63 is the first
+    // out-of-range value on the high side.
+    if (d < -9223372036854775808.0 || d >= 9223372036854775808.0) return false;
+    int64_t di = (int64_t)d;
+    return (double)di == d && di == i;
+}
+
+static bool uint64_eq_float(uint64_t u, double d) {
+    if (d != d) return false;
+    if (d < 0.0 || d >= 18446744073709551616.0) return false;   // 2^64
+    uint64_t du = (uint64_t)d;
+    return (double)du == d && du == u;
+}
+
 bool Value::operator==(const Value& other) const {
-    // Numeric cross-type equality: int64 == uint64 == float64
+    // Numeric equality: same-type compares are exact; mixed int/float compares
+    // are done in the integer domain (not by widening to double, which loses
+    // precision above 2^53).
     bool a_numeric = (type == VAL_INT64 || type == VAL_UINT64 || type == VAL_FLOAT64);
     bool b_numeric = (other.type == VAL_INT64 || other.type == VAL_UINT64 || other.type == VAL_FLOAT64);
     if (a_numeric && b_numeric) {
-        auto to_double = [](const Value& v) -> double {
-            if (v.type == VAL_FLOAT64)  return v.as.double_val;
-            if (v.type == VAL_UINT64)   return (double)v.as.u64;
-            return (double)v.as.i64;
-        };
-        return to_double(*this) == to_double(other);
+        if (type == other.type) {
+            switch (type) {
+                case VAL_INT64:   return as.i64 == other.as.i64;
+                case VAL_UINT64:  return as.u64 == other.as.u64;
+                default:          return as.double_val == other.as.double_val;
+            }
+        }
+        // int64 vs uint64: equal iff the int is non-negative and matches.
+        if (type == VAL_INT64 && other.type == VAL_UINT64)
+            return as.i64 >= 0 && (uint64_t)as.i64 == other.as.u64;
+        if (type == VAL_UINT64 && other.type == VAL_INT64)
+            return other.as.i64 >= 0 && (uint64_t)other.as.i64 == as.u64;
+        // int vs float
+        if (type == VAL_FLOAT64) {
+            if (other.type == VAL_INT64)  return int64_eq_float(other.as.i64, as.double_val);
+            return uint64_eq_float(other.as.u64, as.double_val);
+        }
+        if (type == VAL_INT64)  return int64_eq_float(as.i64, other.as.double_val);
+        return uint64_eq_float(as.u64, other.as.double_val);
     }
 
     if (type != other.type) return false;
@@ -434,7 +475,11 @@ char* value_to_string(const Value& value) {
                 const char* str_data = value.as.string->data;
                 size_t str_len = value.as.string->length;
                 result = (char*)malloc(str_len + 1);
-                if (result) strcpy(result, str_data);
+                if (result) {
+                    // length-tracked copy: strings may contain embedded NULs
+                    memcpy(result, str_data, str_len);
+                    result[str_len] = '\0';
+                }
             } else {
                 result = (char*)malloc(7);
                 if (result) strcpy(result, "(null)");

@@ -146,6 +146,7 @@ Token make_string_token(const char* start, int length, int line, int column, con
     token.line = line;
     token.column = column;
     token.literal.string = string;
+    token.string_length = string ? strlen(string) : 0;
     return token;
 }
 
@@ -187,7 +188,12 @@ Token copy_token(const Token* token) {
     }
     
     if (token->type == TOKEN_STRING && token->literal.string) {
-        copy.literal.string = mobius_strdup(token->literal.string);
+        size_t n = token->string_length ? token->string_length
+                                        : strlen(token->literal.string);
+        char* dup = (char*)malloc(n + 1);
+        if (dup) { memcpy(dup, token->literal.string, n); dup[n] = '\0'; }
+        copy.literal.string = dup;
+        copy.string_length = n;
     }
     
     return copy;

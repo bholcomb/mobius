@@ -210,8 +210,10 @@ static Token make_decoded_string_token(Scanner* scanner, const char* raw, size_t
         size_t decoded_len = process_escapes(raw, raw_len, string_content);
         string_content[decoded_len] = '\0';
         token.literal.string = string_content;
+        token.string_length = decoded_len;
     } else {
         token.literal.string = NULL;
+        token.string_length = 0;
     }
 
     return token;
@@ -574,8 +576,10 @@ Token scan_token(Scanner* scanner) {
                 size_t decoded_len = process_escapes(raw, raw_len, content);
                 content[decoded_len] = '\0';
                 token.literal.string = content;
+                token.string_length = decoded_len;
             } else {
                 token.literal.string = NULL;
+                token.string_length = 0;
             }
             return token;
         }

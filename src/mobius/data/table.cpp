@@ -79,20 +79,25 @@ static size_t hash_float(double value) {
 size_t hash_value_raw(const Value& value) {
     size_t hash = 0;
 
+    // Everything funnels through the hash_integer mixer: Table derives both
+    // the bucket index (low bits) and the 7-bit tag byte (bits 57..63) from
+    // this hash, so raw values — bools, chars, aligned pointers, float bit
+    // patterns — cluster the buckets AND make the tag filter useless (e.g.
+    // every bool/char key had tag 0x80).
     switch (value.type) {
-        case VAL_NIL:    hash = 0; break;
-        case VAL_BOOL:   hash = value.as.boolean ? 1 : 0; break;
+        case VAL_NIL:    hash = hash_integer(0x9E3779B9); break;
+        case VAL_BOOL:   hash = hash_integer(value.as.boolean ? 1 : 2); break;
         case VAL_INT64: hash = hash_integer(value.as.i64); break;
         case VAL_UINT64:  hash = hash_integer((int64_t)value.as.u64); break;
-        case VAL_FLOAT64: hash = hash_float(value.as.double_val); break;
+        case VAL_FLOAT64: hash = hash_integer((int64_t)hash_float(value.as.double_val)); break;
         case VAL_STRING:
             hash = value.as.string ? value.as.string->hash : 0;
             break;
-        case VAL_CHAR:   hash = (size_t)value.as.character; break;
-        case VAL_ARRAY:  hash = (size_t)(uintptr_t)value.as.array; break;
-        case VAL_FUNCTION: hash = (size_t)(uintptr_t)value.as.function; break;
-        case VAL_NATIVE_FUNCTION: hash = (size_t)(uintptr_t)value.as.native_function; break;
-        case VAL_TABLE:  hash = (size_t)(uintptr_t)value.as.table; break;
+        case VAL_CHAR:   hash = hash_integer((int64_t)(unsigned char)value.as.character); break;
+        case VAL_ARRAY:  hash = hash_integer((int64_t)(uintptr_t)value.as.array); break;
+        case VAL_FUNCTION: hash = hash_integer((int64_t)(uintptr_t)value.as.function); break;
+        case VAL_NATIVE_FUNCTION: hash = hash_integer((int64_t)(uintptr_t)value.as.native_function); break;
+        case VAL_TABLE:  hash = hash_integer((int64_t)(uintptr_t)value.as.table); break;
         case VAL_USERDATA:
             if (value.as.userdata) {
                 hash = (size_t)(uintptr_t)value.as.userdata->ptr;
@@ -441,7 +446,13 @@ bool Table::removeUnlocked(const Value& key) {
         Value v = std::move(entries_[index].value);
         tags_[index] = TAG_EMPTY;
         size_--;
-        setUnlocked(k, v);
+        // Raw re-insert: this is probe-cluster repair, not a user-level set.
+        // Going through setUnlocked() would treat each displaced neighbor as a
+        // brand-new insert and divert it into a `__newindex` metamethod —
+        // silently teleporting unrelated entries out of the table on remove().
+        // No resize can be needed here (occupancy only decreased).
+        insertEntry(k, v, hash_value_raw(k));
+        size_++;
     }
 
     return true;
