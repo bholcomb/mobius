@@ -70,6 +70,7 @@ static const PluginFunction library_registry[] = {
     {"array_create", lib_array_create, SIZE_MAX, MOBIUS_VAL_ARRAY, "Create a new array with required capacity and optional fill value"},
     {"__gc_objects", lib_gc_objects, 0, MOBIUS_VAL_INT64, "Count of GC-tracked heap objects (internal)"},
     {"__gc_verify", lib_gc_verify, 0, MOBIUS_VAL_INT64, "Force a shadow-GC verification pass (internal)"},
+    {"__gc_collect", lib_gc_collect, 0, MOBIUS_VAL_INT64, "Force a garbage collection; returns objects freed (internal)"},
     {"buffer_create", lib_buffer_create, SIZE_MAX, MOBIUS_VAL_BUFFER, "Create a new byte buffer with optional fill byte"},
     {"buffer_from_string", lib_buffer_from_string, 1, MOBIUS_VAL_BUFFER, "Create a new byte buffer from a string's raw bytes"},
     {"__define_struct", lib_define_struct, 2, MOBIUS_VAL_USERDATA, "Define a buffer-backed struct layout"},

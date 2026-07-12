@@ -25,6 +25,24 @@
 // Value refcount slow path — release (called only for heap-allocated types)
 // ============================================================================
 
+void mobius_function_teardown(MobiusFunction* func) {
+    delete[] func->param_names;
+    if (func->body) {
+        for (size_t i = 0; i < func->body_count; i++) {
+            if (func->body[i]) ast_release_stmt(func->body[i]);
+        }
+        delete[] func->body;
+    }
+    if (func->upvalues) {
+        // Release the closure's references; sibling closures or still-live
+        // frames may share these Upvalues.
+        for (int u = 0; u < func->upvalue_count; u++)
+            if (func->upvalues[u]) func->upvalues[u]->release();
+        delete[] func->upvalues;
+        func->upvalues = nullptr;
+    }
+}
+
 void Value::releaseRefSlow() {
     switch (type) {
         case VAL_STRING:
@@ -37,21 +55,11 @@ void Value::releaseRefSlow() {
         case VAL_FUNCTION:
             if (as.function) {
                 MobiusFunction* func = as.function;
-                if (func->ref_count.fetch_sub(1, std::memory_order_acq_rel) <= 1) {
-                    delete[] func->param_names;
-                    if (func->body) {
-                        for (size_t i = 0; i < func->body_count; i++) {
-                            if (func->body[i]) ast_release_stmt(func->body[i]);
-                        }
-                        delete[] func->body;
-                    }
-                    if (func->upvalues) {
-                        // Release the closure's references; sibling closures
-                        // or still-live frames may share these Upvalues.
-                        for (int u = 0; u < func->upvalue_count; u++)
-                            if (func->upvalues[u]) func->upvalues[u]->release();
-                        delete[] func->upvalues;
-                    }
+                if (func->ref_count.fetch_sub(1, std::memory_order_acq_rel) <= 1 &&
+                    !gc_is_sweeping()) {
+                    // Acyclic zero: free now. During a sweep the collector
+                    // owns any function whose count hits zero.
+                    mobius_function_teardown(func);
                     delete func;
                 }
             }

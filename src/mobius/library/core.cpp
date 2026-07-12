@@ -230,3 +230,19 @@ int lib_gc_verify(MobiusState* state, int arg_count) {
     state->npush(make_int64_value(0));
     return 1;
 }
+
+// Force a full collection; returns objects freed (test hook).
+int lib_gc_collect(MobiusState* state, int arg_count) {
+    (void)arg_count;
+    MobiusVM* vm = state->activeVM();
+    int64_t freed = 0;
+    if (vm) {
+        // Same native-frame dance as lib_gc_verify: this call itself is the
+        // one in-flight native, and its stack holds no unrooted values.
+        vm->native_depth_--;
+        freed = (int64_t)gc_collect(vm);
+        vm->native_depth_++;
+    }
+    state->npush(make_int64_value(freed));
+    return 1;
+}

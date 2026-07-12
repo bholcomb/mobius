@@ -402,6 +402,13 @@ MobiusState::~MobiusState() {
     for (int i = 0; i < root_globals_.count.load(std::memory_order_relaxed); i++)
         root_globals_.slots[i] = make_nil_value();
 
+    // GC-managed objects (tables, arrays, closures, upvalues) are freed only
+    // by the collector; every root above has been dropped, so sweep the lot.
+    // Must precede string-pool deletion — destructors release string refs.
+    // (The registry is process-global; with multiple concurrent states this
+    // would need per-state partitioning — see the stage-5 plan.)
+    gc_collect_all_for_teardown();
+
     delete string_pool_;
 
     if (fallback_last_error_) {

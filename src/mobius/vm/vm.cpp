@@ -981,6 +981,9 @@ MOBIUS_FORCEINLINE static int vm_op_setupval(MobiusVM* vm, VMFrame& f, uint32_t 
 // ---- Tables and arrays ----
 
 MOBIUS_FORCEINLINE static int vm_op_newtable(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    // Allocation ops are the collection safepoints: pressure builds exactly
+    // here, and a call-free allocating loop has no other safe boundary.
+    if (MOBIUS_UNLIKELY(g_gc_pending)) gc_safepoint(vm);
     Table* tbl = new (std::nothrow) Table(vm->state_, DECODE_C(inst));
     if (!tbl) { VM_ERROR(vm, f, "Failed to allocate table"); return -1; }
     RA(inst) = make_table_value(tbl);
@@ -988,6 +991,7 @@ MOBIUS_FORCEINLINE static int vm_op_newtable(MobiusVM* vm, VMFrame& f, uint32_t 
 }
 
 MOBIUS_FORCEINLINE static int vm_op_newarray(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    if (MOBIUS_UNLIKELY(g_gc_pending)) gc_safepoint(vm);
     ArrayValue* arr = new (std::nothrow) ArrayValue(DECODE_B(inst));
     if (!arr) { VM_ERROR(vm, f, "Failed to allocate array"); return -1; }
     RA(inst) = make_array_value(arr);
@@ -2545,7 +2549,7 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
 
 MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t inst,
                                               bool prepare_params) {
-    if (MOBIUS_UNLIKELY(g_gc_shadow_mode)) gc_shadow_maybe_verify(vm);
+    if (MOBIUS_UNLIKELY(g_gc_shadow_mode | (int)g_gc_pending)) gc_safepoint(vm);
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
     int c = DECODE_C(inst);
@@ -2796,6 +2800,7 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
 
 // ---- Closure ----
 MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    if (MOBIUS_UNLIKELY(g_gc_pending)) gc_safepoint(vm);
     uint16_t bx = DECODE_Bx(inst);
     if (bx >= f.proto->protos.size()) {
         VM_ERROR(vm, f, "Invalid prototype index %d", bx);
@@ -3510,7 +3515,7 @@ MOBIUS_FORCEINLINE static int vm_op_yield(MobiusVM* vm, VMFrame& f, uint32_t ins
 // OP_CANCEL_CHECK -- if current fiber has been cancelled, throw CancellationError
 MOBIUS_FORCEINLINE static int vm_op_cancel_check(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)f; (void)inst;
-    if (MOBIUS_UNLIKELY(g_gc_shadow_mode)) gc_shadow_maybe_verify(vm);
+    if (MOBIUS_UNLIKELY(g_gc_shadow_mode | (int)g_gc_pending)) gc_safepoint(vm);
     if (vm->future_ && vm->future_->isCancelled()) {
         VM_ERROR(vm, f, "CancellationError: fiber was cancelled");
         return -1;

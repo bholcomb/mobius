@@ -12,6 +12,8 @@
 #include "state/mobius_state.h"
 #include "plugin/module_registry.h"
 #include "fiber/job_system.h"
+#include "frontend/ast.h"
+#include <chrono>
 
 #include <cstdio>
 #include <cstdlib>
@@ -32,6 +34,8 @@ namespace {
 struct GcRegistry {
     GcHeader sentinel;
     size_t count = 0;
+    size_t allocs_since_gc = 0;
+    size_t budget = SIZE_MAX;   // finalized on first gc_track
     std::mutex mutex;
     GcRegistry() {
         sentinel.prev = &sentinel;
@@ -46,6 +50,29 @@ GcRegistry& registry() {
 // track() time (obj field), avoiding offsetof on non-standard-layout types.
 } // namespace
 
+// Set when allocations since the last collection exceed the threshold;
+// checked (cheaply) at VM safepoints. Benign race: worst case a collection
+// happens one safepoint later. Starts armed under MOBIUS_GC_STRESS so the
+// first safepoint already collects.
+volatile bool g_gc_pending = []() {
+    const char* e = getenv("MOBIUS_GC_STRESS");
+    return e && atoi(e) != 0;
+}();
+
+// Base allocation budget between collections. The effective budget is
+// max(base, live objects after the last collection): allocation-churn
+// programs collect while the garbage is still cache-hot, while programs
+// with big stable heaps don't pay an O(live) mark every few thousand
+// allocations.
+static size_t gc_threshold_base() {
+    static size_t t = []() {
+        const char* e = getenv("MOBIUS_GC_THRESHOLD");
+        long v = e ? atol(e) : 0;
+        return (size_t)(v > 0 ? v : 2000);
+    }();
+    return t;
+}
+
 void gc_track(GcHeader* h, GcObjectType type, void* obj) {
     h->flags = (uint32_t)type;
     h->obj = obj;
@@ -56,11 +83,14 @@ void gc_track(GcHeader* h, GcObjectType type, void* obj) {
     r.sentinel.prev->next = h;
     r.sentinel.prev = h;
     r.count++;
+    if (r.budget == SIZE_MAX) r.budget = gc_threshold_base();
+    if (++r.allocs_since_gc >= r.budget) g_gc_pending = true;
 }
 
 void gc_untrack(GcHeader* h) {
     GcRegistry& r = registry();
     std::lock_guard<std::mutex> lock(r.mutex);
+    if (!h->prev) return;   // already unlinked by the sweep
     h->prev->next = h->next;
     h->next->prev = h->prev;
     h->prev = h->next = nullptr;
@@ -209,6 +239,14 @@ int g_gc_shadow_mode = []() {
     return e ? atoi(e) : 0;
 }();
 
+// MOBIUS_GC_STRESS=1: collect at every eligible safepoint. With ASan on top,
+// any object the collector frees while still in use turns into a hard fault
+// at the exact use site — the post-flip root-coverage test.
+static int g_gc_stress = []() {
+    const char* e = getenv("MOBIUS_GC_STRESS");
+    return e ? atoi(e) : 0;
+}();
+
 void gc_shadow_init_from_env() { /* initialized at load; kept for API symmetry */ }
 
 namespace {
@@ -236,16 +274,6 @@ void clear_mark_cb(GcHeader* h, void* ud) {
     h->setMarked(false);
 }
 
-static int header_refcount(GcHeader* h) {
-    switch (h->type()) {
-        case GC_TABLE: return ((Table*)h->obj)->refCount();
-        case GC_ARRAY: return ((ArrayValue*)h->obj)->refCount();
-        case GC_FUNCTION: return ((MobiusFunction*)h->obj)->ref_count.load();
-        case GC_UPVALUE: return ((Upvalue*)h->obj)->refcount.load();
-    }
-    return -1;
-}
-
 struct CheckCtx {
     std::vector<GcHeader*> unmarked;
 };
@@ -254,22 +282,16 @@ void collect_unmarked_cb(GcHeader* h, void* ud) {
     if (!h->marked()) ((CheckCtx*)ud)->unmarked.push_back(h);
 }
 
-struct IndegreeCtx {
-    const std::unordered_set<GcHeader*>* unmarked_set;
-    std::unordered_map<GcHeader*, int>* indegree;
-};
-
-void indegree_cb(GcHeader* child, void* ud) {
-    IndegreeCtx* c = (IndegreeCtx*)ud;
-    if (c->unmarked_set->count(child)) (*c->indegree)[child]++;
-}
-
 } // namespace
 
-void gc_shadow_verify_now(MobiusVM* vm) {
+// Shared mark phase: clear marks, then mark everything reachable from the
+// enumerated roots. Verified against refcount liveness by the whole test
+// suite under MOBIUS_GC_SHADOW=2 before the collector was allowed to free.
+// Invariant: every tracked object has its mark bit CLEAR between passes —
+// gc_track() starts objects clear, the sweep clears survivors, and the
+// shadow verifier clears after itself. So no O(heap) clear pass here.
+static void gc_mark_from_roots(MobiusVM* vm) {
     MobiusState* state = vm->state_;
-
-    gc_for_each_tracked(clear_mark_cb, nullptr);
 
     MarkCtx ctx;
     // 1. The VM's full register file. Deliberately not limited to the live
@@ -295,52 +317,187 @@ void gc_shadow_verify_now(MobiusVM* vm) {
         ctx.worklist.pop_back();
         gc_traverse_children(h, mark_header, &ctx);
     }
+}
+
+void gc_shadow_verify_now(MobiusVM* vm) {
+    // Pre-flip this compared reachability against refcount liveness and
+    // aborted on any refcount-live object the roots missed; that proof gated
+    // enabling the collector. Post-flip the traced types no longer tick their
+    // counts, so the rc oracle is gone — this is now a reachability report.
+    // The load-bearing successor is MOBIUS_GC_STRESS=1 (collect at every
+    // safepoint) run under ASan: a missed root becomes a use-after-free there.
+    gc_mark_from_roots(vm);
 
     CheckCtx check;
     gc_for_each_tracked(collect_unmarked_cb, &check);
-    if (!check.unmarked.empty()) {
-        // An unmarked-but-refcount-live object is one of two things:
-        //  * a LEAKED CYCLE — its refcount is fully explained by references
-        //    from other unmarked objects. Expected under refcounting (this is
-        //    what the collector will reclaim after the flip); informational.
-        //  * a MISSED ROOT — some external holder the enumeration didn't
-        //    visit. That is the bug shadow mode exists to catch; fatal.
-        std::unordered_set<GcHeader*> unmarked_set(check.unmarked.begin(), check.unmarked.end());
-        std::unordered_map<GcHeader*, int> indegree;
-        IndegreeCtx ic{&unmarked_set, &indegree};
-        for (GcHeader* h : check.unmarked)
-            gc_traverse_children(h, indegree_cb, &ic);
+    if (!check.unmarked.empty() && g_gc_shadow_mode >= 1)
+        fprintf(stderr, "[gc-shadow] %zu unreachable object(s) pending collection\n",
+                check.unmarked.size());
+    gc_for_each_tracked(clear_mark_cb, nullptr);   // restore the all-clear invariant
+}
 
-        size_t missed_roots = 0, cycle_garbage = 0;
-        static const char* names[] = {"table", "array", "function", "upvalue"};
-        for (GcHeader* h : check.unmarked) {
-            int rc = header_refcount(h);
-            int in = indegree.count(h) ? indegree[h] : 0;
-            if (rc > in) {
-                missed_roots++;
-                fprintf(stderr, "[gc-shadow] MISSED ROOT: %s %p rc=%d internal-refs=%d\n",
-                        names[h->type() & 0x3], h->obj, rc, in);
-            } else {
-                cycle_garbage++;
-            }
+
+// ============================================================================
+// The collector (stage 4)
+//
+// Synchronous mark-sweep at a quiescent bytecode boundary: no script is
+// executing anywhere else (outstanding-jobs == 0), no native call is in
+// flight on this VM, so the enumerated roots are complete — the property the
+// shadow verifier proved across the test suite. Sweep first UNLINKS every
+// unmarked object from the registry, then destroys: destructors run
+// arbitrary Value releases and must not touch freed neighbors' list links.
+// ============================================================================
+
+namespace {
+
+struct SweepCtx {
+    std::vector<GcHeader*> dead;
+};
+
+} // namespace
+
+// Destruction is two-pass. A dead object's destructor releases its child
+// Values, which ticks refcounts on sibling dead objects (a cycle dies
+// together by definition). Pass 1 runs every destructor while all dead
+// memory is still allocated, so those ticks land in live allocations;
+// pass 2 frees the raw memory.
+static void gc_destruct(GcHeader* h) {
+    switch (h->type()) {
+        case GC_TABLE:
+            ((Table*)h->obj)->~Table();
+            break;
+        case GC_ARRAY:
+            ((ArrayValue*)h->obj)->~ArrayValue();
+            break;
+        case GC_FUNCTION: {
+            MobiusFunction* fn = (MobiusFunction*)h->obj;
+            mobius_function_teardown(fn);
+            fn->~MobiusFunction();
+            break;
         }
-        if (cycle_garbage && g_gc_shadow_mode >= 1)
-            fprintf(stderr, "[gc-shadow] %zu object(s) in leaked reference cycles (collector will reclaim)\n",
-                    cycle_garbage);
-        if (missed_roots) {
-            fprintf(stderr, "[gc-shadow] %zu missed root(s) — root enumeration is incomplete\n",
-                    missed_roots);
-            if (g_gc_shadow_mode >= 2) abort();
-        }
+        case GC_UPVALUE:
+            ((Upvalue*)h->obj)->~Upvalue();
+            break;
     }
 }
 
-void gc_shadow_maybe_verify(MobiusVM* vm) {
+static volatile bool g_gc_in_sweep = false;
+
+bool gc_is_sweeping() { return g_gc_in_sweep; }
+
+// Out-of-line cold path of RefCounted::release() (see ref_counted.h): the
+// count hit zero. Defined here so the sweep flag never appears in inline
+// code compiled into plugins.
+void RefCounted::releaseAtZero() {
+    if (gc_managed_ && g_gc_in_sweep) return;   // the sweep owns freeing it
+    delete this;
+}
+
+static void gc_free_dead(std::vector<GcHeader*>& dead) {
+    g_gc_in_sweep = true;
+    for (GcHeader* h : dead) gc_destruct(h);
+    g_gc_in_sweep = false;
+    for (GcHeader* h : dead) ::operator delete(h->obj);
+}
+
+// MOBIUS_GC_LOG=1: cumulative collection stats printed at teardown.
+static int g_gc_log = []() {
+    const char* e = getenv("MOBIUS_GC_LOG");
+    return e ? atoi(e) : 0;
+}();
+static std::atomic<uint64_t> g_gc_collections{0}, g_gc_freed{0}, g_gc_mark_ns{0}, g_gc_sweep_ns{0};
+
+size_t gc_collect(MobiusVM* vm) {
+    auto t0 = std::chrono::steady_clock::now();
+    gc_mark_from_roots(vm);
+    auto t1 = std::chrono::steady_clock::now();
+
+    SweepCtx sweep;
+    {
+        GcRegistry& r = registry();
+        std::lock_guard<std::mutex> lock(r.mutex);
+        GcHeader* h = r.sentinel.next;
+        while (h != &r.sentinel) {
+            GcHeader* next = h->next;
+            if (h->marked()) {
+                h->setMarked(false);   // keep the all-clear invariant
+            } else {
+                // Unlink now; destructors then find prev == nullptr and skip.
+                h->prev->next = h->next;
+                h->next->prev = h->prev;
+                h->prev = h->next = nullptr;
+                r.count--;
+                sweep.dead.push_back(h);
+            }
+            h = next;
+        }
+        size_t allocs = r.allocs_since_gc;
+        r.allocs_since_gc = 0;
+        size_t base = gc_threshold_base();
+        size_t floor_ = r.count > base ? r.count : base;
+        if (sweep.dead.size() * 8 < allocs) {
+            // Mostly acyclic churn already reclaimed by refcounting: this
+            // collection was wasted work, so wait longer next time.
+            size_t doubled = r.budget * 2;
+            r.budget = doubled > floor_ ? doubled : floor_;
+        } else {
+            r.budget = floor_;
+        }
+    }
+    g_gc_pending = (bool)g_gc_stress;   // stress mode keeps the hooks hot
+
+    gc_free_dead(sweep.dead);
+    if (g_gc_log) {
+        auto t2 = std::chrono::steady_clock::now();
+        g_gc_collections++;
+        g_gc_freed += sweep.dead.size();
+        g_gc_mark_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+        g_gc_sweep_ns += std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
+    }
+    return sweep.dead.size();
+}
+
+// Free every remaining tracked object regardless of reachability — state
+// teardown, after roots have been cleared and before the string pool dies
+// (destructors release string references).
+size_t gc_collect_all_for_teardown() {
+    if (g_gc_log && g_gc_collections.load())
+        fprintf(stderr, "[gc] %llu collections, %llu freed, mark %.1fms, sweep %.1fms\n",
+                (unsigned long long)g_gc_collections.load(),
+                (unsigned long long)g_gc_freed.load(),
+                g_gc_mark_ns.load() / 1e6, g_gc_sweep_ns.load() / 1e6);
+    SweepCtx sweep;
+    {
+        GcRegistry& r = registry();
+        std::lock_guard<std::mutex> lock(r.mutex);
+        GcHeader* h = r.sentinel.next;
+        while (h != &r.sentinel) {
+            GcHeader* next = h->next;
+            h->prev->next = h->next;
+            h->next->prev = h->prev;
+            h->prev = h->next = nullptr;
+            r.count--;
+            sweep.dead.push_back(h);
+            h = next;
+        }
+        r.allocs_since_gc = 0;
+    }
+    gc_free_dead(sweep.dead);
+    return sweep.dead.size();
+}
+
+// The VM safepoint: called from loop back-edges and call entry when either
+// shadow mode is active or allocation pressure requests a collection.
+void gc_safepoint(MobiusVM* vm) {
     if (!vm || !vm->state_) return;
-    if (vm->native_depth_ > 0) return;              // C++ locals may hold values
+    if (vm->native_depth_ > 0) return;
     JobSystem* js = vm->state_->jobSystem();
-    if (js && js->outstandingJobs() != 0) return;   // other fibers may be mutating
-    static thread_local uint32_t countdown = 0;
-    if (countdown++ % 64 != 0) return;              // amortize the O(heap) pass
-    gc_shadow_verify_now(vm);
+    if (js && js->outstandingJobs() != 0) return;
+
+    if (g_gc_pending | g_gc_stress) gc_collect(vm);
+
+    if (g_gc_shadow_mode) {
+        static thread_local uint32_t countdown = 0;
+        if (countdown++ % 64 == 0) gc_shadow_verify_now(vm);
+    }
 }

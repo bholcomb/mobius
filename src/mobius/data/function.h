@@ -26,4 +26,10 @@ typedef struct MobiusFunction {
     ~MobiusFunction() { gc_untrack(&gc_); }
 } MobiusFunction;
 
+// Free a closure's owned resources (param names array, AST body, upvalue
+// references + array) without freeing the MobiusFunction itself. Shared by
+// the refcount zero path (which then deletes) and the GC sweep (which
+// destructs in place and frees the memory separately).
+void mobius_function_teardown(MobiusFunction* func);
+
 #endif // MOBIUS_FUNCTION_H
