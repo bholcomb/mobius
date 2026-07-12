@@ -1,5 +1,6 @@
 #include "library/core.h"
 #include "internal/gc.h"
+#include "vm/vm.h"
 #include "data/value.h"
 #include "data/table.h"
 #include "data/metamethods.h"
@@ -212,5 +213,20 @@ int lib_str(MobiusState* state, int arg_count) {
 int lib_gc_objects(MobiusState* state, int arg_count) {
     (void)arg_count;
     state->npush(make_int64_value((int64_t)gc_tracked_count()));
+    return 1;
+}
+
+// Force a shadow-GC verification pass (test hook; requires MOBIUS_GC_SHADOW).
+int lib_gc_verify(MobiusState* state, int arg_count) {
+    (void)arg_count;
+    MobiusVM* vm = state->activeVM();
+    // Called from a native, so the caller's native frame is in flight; the
+    // verifier's own gate would refuse. Drop below it for the forced pass.
+    if (vm && g_gc_shadow_mode) {
+        vm->native_depth_--;
+        gc_shadow_verify_now(vm);
+        vm->native_depth_++;
+    }
+    state->npush(make_int64_value(0));
     return 1;
 }

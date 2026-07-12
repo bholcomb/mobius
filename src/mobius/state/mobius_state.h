@@ -293,6 +293,12 @@ public:
     void setUserdataTypeMetatable(MobiusString* type_tag, Table* mt);
 
     MobiusValueRef createValueRef(const Value& value);
+    // Visit Values pinned by the C API's ref registry (GC roots).
+    void forEachValueRef(void (*cb)(const Value&, void*), void* ud);
+    // Visit every state-held GC root: root globals, C-API value refs, and the
+    // builtin/userdata type metatables.
+    void gcVisitRoots(void (*value_cb)(const Value&, void*),
+                      void (*table_cb)(class Table*, void*), void* ud);
     bool releaseValueRef(MobiusValueRef ref);
     bool copyValueRef(MobiusValueRef ref, Value* out) const;
     int callValue(const Value& function, const Value* args, int nargs,

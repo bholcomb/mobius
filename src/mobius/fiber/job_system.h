@@ -46,6 +46,11 @@ public:
     void ensureInitialized();
 
     void submit(JobDecl job);
+
+    // Spawned jobs that are queued or still running (excludes the main
+    // fiber). Zero means no other thread can be mutating the script heap —
+    // the GC's quiescence signal.
+    int outstandingJobs() const { return outstanding_jobs_.load(std::memory_order_acquire); }
     void submitJobs(JobDecl* jobs, uint32_t count, AtomicCounter* counter);
 
     void submitFiber(MobiusFiber* fiber);
@@ -89,6 +94,7 @@ private:
     std::vector<std::thread> workers_;
     std::mutex worker_mutex_;
     std::atomic<int> active_worker_count_;
+    std::atomic<int> outstanding_jobs_{0};
     int max_workers_;
 
     std::atomic<bool> shutdown_requested_;

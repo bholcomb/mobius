@@ -56,6 +56,9 @@ public:
     const std::vector<uint8_t>& tags() const { return tags_; }
 
     GcHeader* gcHeader() { return &gc_; }
+    // GC traversal must see the metamethod cache: it holds a counted
+    // reference that invalidation does not clear.
+    const Value& mmCacheValue() const { return mm_cache_value_; }
 
 private:
     static inline uint8_t tagFromHash(size_t h) { return 0x80 | (uint8_t)(h >> 57); }

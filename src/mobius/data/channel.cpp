@@ -10,7 +10,10 @@
 static Value channel_transfer_copy(const Value& val) {
     if ((val.type == VAL_ARRAY && val.as.array) ||
         (val.type == VAL_TABLE && val.as.table) ||
-        (val.type == VAL_BUFFER && val.as.buffer)) {
+        (val.type == VAL_BUFFER && val.as.buffer) ||
+        (val.type == VAL_FUNCTION && val.as.function)) {
+        // Closures snapshot their captured upvalues in the copy; a function
+        // with no captures is passed through by the deep copy unchanged.
         if ((val.flags & VAL_FLAG_SHARED) == 0)
             return deep_copy_value_for_spawn(val);
     }

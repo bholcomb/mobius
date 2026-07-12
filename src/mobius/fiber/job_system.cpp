@@ -14,16 +14,27 @@ thread_local FiberContext JobSystem::t_scheduler_ctx_ = {};
 struct FiberStartData {
     JobSystem* system;
     JobDecl job;
+    bool counts_outstanding;   // spawned jobs yes; the main fiber no
 };
 
 void JobSystem::fiberEntryTrampoline(void* arg) {
     FiberStartData* data = static_cast<FiberStartData*>(arg);
-    JobDecl job = std::move(data->job);
-    delete data;
+    JobSystem* system = data->system;
+    bool counts = data->counts_outstanding;
+    {
+        JobDecl job = std::move(data->job);
+        delete data;
 
-    if (job.entry) {
-        job.entry();
+        if (job.entry) {
+            job.entry();
+        }
+        // `job` (and the args its closure captured — deep copies pinned only
+        // by this C++ stack) is destroyed at this brace. The outstanding-jobs
+        // decrement must come AFTER: it is the GC's quiescence signal, and
+        // values held by a worker's stack are invisible to root enumeration.
     }
+    if (system && counts)
+        system->outstanding_jobs_.fetch_sub(1, std::memory_order_acq_rel);
 
     MobiusFiber* self = t_current_fiber_;
     self->state = FiberState::Dead;
@@ -65,6 +76,7 @@ void JobSystem::ensureInitialized() {
 void JobSystem::submit(JobDecl job) {
     ensureInitialized();
 
+    outstanding_jobs_.fetch_add(1, std::memory_order_acq_rel);
     {
         std::lock_guard<std::mutex> lock(job_mutex_);
         pending_jobs_.push_back(std::move(job));
@@ -84,6 +96,7 @@ void JobSystem::submitJobs(JobDecl* jobs, uint32_t count, AtomicCounter* counter
         }
     }
 
+    outstanding_jobs_.fetch_add((int)count, std::memory_order_acq_rel);
     {
         std::lock_guard<std::mutex> lock(job_mutex_);
         for (uint32_t i = 0; i < count; i++) {
@@ -154,7 +167,7 @@ MobiusFiber* JobSystem::dequeueReadyFiber() {
 
                 size_t page_size = 4096;
                 void* stack_top = static_cast<char*>(f->stack_memory) + page_size;
-                FiberStartData* data = new FiberStartData{this, std::move(job)};
+                FiberStartData* data = new FiberStartData{this, std::move(job), true};
                 fiber_context_init(&f->context, stack_top, f->stack_size,
                                    fiberEntryTrampoline, data);
                 f->state = FiberState::Running;
@@ -315,7 +328,7 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
 
     size_t page_size = 4096;
     void* stack_top = static_cast<char*>(fiber->stack_memory) + page_size;
-    FiberStartData* data = new FiberStartData{this, std::move(job)};
+    FiberStartData* data = new FiberStartData{this, std::move(job), false};
     fiber_context_init(&fiber->context, stack_top, fiber->stack_size,
                        fiberEntryTrampoline, data);
     fiber->state = FiberState::Suspended;

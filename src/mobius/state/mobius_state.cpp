@@ -445,6 +445,31 @@ void MobiusState::setUserdataTypeMetatable(MobiusString* type_tag, Table* mt) {
     }
 }
 
+void MobiusState::forEachValueRef(void (*cb)(const Value&, void*), void* ud) {
+    std::lock_guard<std::mutex> lock(value_refs_mutex_);
+    for (auto& kv : value_refs_) cb(kv.second, ud);
+}
+
+void MobiusState::gcVisitRoots(void (*value_cb)(const Value&, void*),
+                               void (*table_cb)(Table*, void*), void* ud) {
+    {
+        int n = root_globals_.count.load(std::memory_order_relaxed);
+        for (int i = 0; i < n && i < (int)root_globals_.slots.size(); i++)
+            value_cb(root_globals_.slots[i], ud);
+    }
+    forEachValueRef(value_cb, ud);
+    {
+        std::lock_guard<std::mutex> lock(type_metatables_mutex_);
+        for (int i = 0; i < VALUE_TYPE_COUNT; i++)
+            if (type_metatables_[i]) table_cb(type_metatables_[i], ud);
+    }
+    {
+        std::lock_guard<std::mutex> lock(userdata_type_metatables_mutex_);
+        for (auto& kv : userdata_type_metatables_)
+            if (kv.second) table_cb(kv.second, ud);
+    }
+}
+
 MobiusValueRef MobiusState::createValueRef(const Value& value) {
     std::lock_guard<std::mutex> lock(value_refs_mutex_);
     MobiusValueRef ref = next_value_ref_++;

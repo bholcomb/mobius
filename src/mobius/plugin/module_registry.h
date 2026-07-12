@@ -60,6 +60,10 @@ public:
     // the atexit teardown dereferences freed strings. Safe to call repeatedly.
     void releaseModuleValues();
 
+    // Visit every Value held by cached module environments (global slots and
+    // module tables) — GC roots that live outside any MobiusState.
+    void forEachGlobalValue(void (*cb)(const Value&, void*), void* ud);
+
     bool debugMode() const { return debug_mode_; }
     void setDebugMode(bool mode) { debug_mode_ = mode; }
     const std::string& lastError() const { return last_error_; }
