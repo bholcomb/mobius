@@ -1,0 +1,54 @@
+// Values crossing a fiber boundary are isolated copies unless `shared`:
+// spawn arguments (long-standing), channel sends, FUTURE RESULTS, and
+// CLOSURES (including their captured upvalues).
+
+func check(cond, msg) {
+    if (!cond) { print("FAIL:", msg); exit(1) }
+}
+
+// 1. future result is a copy owned by the awaiting fiber
+func build() { return { n: 1, inner: [1, 2, 3] } }
+var got = await spawn build()
+got.n = 99
+got.inner:push(4)
+check(got.n == 99 && size(got.inner) == 4, "returned table is owned by parent")
+
+// 2. cyclic result survives the resolve copy with its shape intact
+func build_cycle() {
+    var t = {}
+    t.self = t
+    return t
+}
+var cyc = await spawn build_cycle()
+check(cyc.self == cyc, "cycle preserved through future-result copy")
+
+// 3. closure through a channel: captured state is snapshotted, not aliased
+var counter_calls = 0
+func make_counter() {
+    var count = 100
+    return func() { count = count + 1; return count }
+}
+var ch = fiber.channel(1)
+func closure_worker(c) {
+    var f = c:recv()
+    var a = f()          // operates on the receiver's snapshot
+    var b = f()
+    return a * 1000 + b
+}
+var counter = make_counter()
+counter()                 // sender's counter -> 101
+var fut = spawn closure_worker(ch)
+ch:send(counter)
+var worker_result = await fut
+check(worker_result == 102103, "receiver counter starts from snapshot (101->102,103), got " + str(worker_result))
+check(counter() == 102, "sender's counter unaffected by receiver calls, got 102?")
+
+// 4. closure returned from a fiber: parent gets its own copy
+func make_in_fiber() {
+    var n = 7
+    return func() { n = n + 1; return n }
+}
+var fn = await spawn make_in_fiber()
+check(fn() == 8 && fn() == 9, "closure escaping via future result works standalone")
+
+print("All fiber isolation tests passed")

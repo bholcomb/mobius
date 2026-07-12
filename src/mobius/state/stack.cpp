@@ -1177,7 +1177,9 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
         }
         if (args != inline_args) delete[] args;
         size_t keepalive_mark = vm->native_keepalive_.size();
+        vm->native_depth_++;
         rc = func_val.as.native_function(state, nargs);
+        vm->native_depth_--;
         vm->trimNativeKeepalive(keepalive_mark);
         if (rc < 0) return -1;
         return rc;

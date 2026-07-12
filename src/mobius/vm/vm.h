@@ -239,6 +239,11 @@ public:
     // native call returns (callNative trims to its entry size, handling
     // nesting).
     std::vector<MobiusString*> native_keepalive_;
+
+    // Depth of in-flight native (C) calls on this VM. Nonzero means C++
+    // locals may hold heap values invisible to precise root enumeration, so
+    // the shadow verifier (and later the collector) must not run.
+    int native_depth_ = 0;
     void pinForNative(MobiusString* s) {
         if (s && !s->isImmortal()) { s->retain(); native_keepalive_.push_back(s); }
     }

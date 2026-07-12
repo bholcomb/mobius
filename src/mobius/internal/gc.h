@@ -73,4 +73,17 @@ void gc_visit_value_children(const Value& v, GcVisitFn cb, void* ud);
 // Walk every tracked object under the registry lock (shadow verification).
 void gc_for_each_tracked(GcVisitFn cb, void* ud);
 
+// ---------------------------------------------------------------------------
+// Shadow verification (stage 2). Enabled with MOBIUS_GC_SHADOW=1 (report) or
+// =2 (report + abort). At quiescent bytecode boundaries, enumerate all roots,
+// mark, and check that every refcount-live tracked object was reached: any
+// violation is a missed GC root, found while refcounting still guarantees
+// correctness.
+// ---------------------------------------------------------------------------
+class MobiusVM;
+extern int g_gc_shadow_mode;   // 0 off, 1 report, 2 report+abort
+void gc_shadow_init_from_env();
+void gc_shadow_maybe_verify(MobiusVM* vm);   // cheap gate; full verify inside
+void gc_shadow_verify_now(MobiusVM* vm);     // unconditional (test hook)
+
 #endif // MOBIUS_GC_H

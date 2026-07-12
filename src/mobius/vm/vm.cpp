@@ -11,6 +11,7 @@
 #include "data/metamethods.h"
 #include "plugin/module_registry.h"
 #include "internal/string_intern.h"
+#include "internal/gc.h"
 #include "fiber/job_system.h"
 
 #include <cstdio>
@@ -419,7 +420,9 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
     native_ctx_.capacity  = (int)registers_.size();
 
     size_t keepalive_mark = native_keepalive_.size();
+    native_depth_++;
     int rc = func(state_, nargs);
+    native_depth_--;
     trimNativeKeepalive(keepalive_mark);   // release strings pinned for this call
 
     int result_top = native_ctx_.top;
@@ -573,7 +576,9 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         native_ctx_.capacity  = (int)registers_.size();
 
         size_t keepalive_mark = native_keepalive_.size();
+        native_depth_++;
         int rc = method.as.native_function(state_, 2);
+        native_depth_--;
         trimNativeKeepalive(keepalive_mark);
 
         int result_top = native_ctx_.top;
@@ -815,7 +820,9 @@ int MobiusVM::callTernaryMetamethod(const Value& table_val, MobiusString* mm_nam
     native_ctx_.capacity = (int)registers_.size();
 
     size_t keepalive_mark = native_keepalive_.size();
+    native_depth_++;
     int rc = method.as.native_function(state_, 3);
+    native_depth_--;
     trimNativeKeepalive(keepalive_mark);
 
     native_ctx_.base = saved_base;
@@ -2538,6 +2545,7 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
 
 MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t inst,
                                               bool prepare_params) {
+    if (MOBIUS_UNLIKELY(g_gc_shadow_mode)) gc_shadow_maybe_verify(vm);
     int a = DECODE_A(inst);
     int b = DECODE_B(inst);
     int c = DECODE_C(inst);
@@ -2745,6 +2753,7 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
     if (MOBIUS_UNLIKELY(f.ci->upvalue_count > 0)) vm->closeUpvalues(*f.ci, 0);
     int ret_base = f.ci->base;
     int ret_nresults = f.ci->nresults;
+    int ret_regs = f.ci->proto ? f.ci->proto->num_registers : 0;
     vm->callStackPop();
     // Discard try handlers registered by the frame being returned from
     // (i.e. `return` inside `try`). A stale handler would catch a later,
@@ -2769,6 +2778,18 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
         }
     }
     if (vm->callStackSize() <= base_depth) return 1;
+
+    // Release the dead frame's register window. Registers hold owning
+    // references, so without this a returned frame keeps pinning its dead
+    // locals until some later call happens to overwrite the slots — in
+    // practice unbounded (a wide frame could pin its whole working set for
+    // the rest of the program). Results were already copied below ret_base.
+    // Only slots holding refcounted values do any work; the releases are
+    // merely moved earlier, not added.
+    Value* dead = vm->registers_.data() + ret_base;
+    for (int i = 0; i < ret_regs; i++) {
+        if (dead[i].type >= VAL_FIRST_REFCOUNTED) dead[i] = Value();
+    }
     vm->refreshFrame(f);
     return 0;
 }
@@ -3395,7 +3416,11 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             fiber_vm.metrics_->total_execution_time_ns += get_time_ns_vm() - t0;
 
             if (rc == 0) {
-                future->resolve(fiber_vm.registers_[0]);
+                // The result crosses a fiber boundary: deep-copy non-shared
+                // containers, like spawn arguments and channel sends. Without
+                // this, `return {...}` handed the parent a pointer into the
+                // dead fiber's heap — the last aliasing escape route.
+                future->resolve(deep_copy_value_for_spawn(fiber_vm.registers_[0]));
             } else {
                 Value err;
                 if (fiber_vm.last_error_ && fiber_vm.last_error_->message) {
@@ -3485,6 +3510,7 @@ MOBIUS_FORCEINLINE static int vm_op_yield(MobiusVM* vm, VMFrame& f, uint32_t ins
 // OP_CANCEL_CHECK -- if current fiber has been cancelled, throw CancellationError
 MOBIUS_FORCEINLINE static int vm_op_cancel_check(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)f; (void)inst;
+    if (MOBIUS_UNLIKELY(g_gc_shadow_mode)) gc_shadow_maybe_verify(vm);
     if (vm->future_ && vm->future_->isCancelled()) {
         VM_ERROR(vm, f, "CancellationError: fiber was cancelled");
         return -1;

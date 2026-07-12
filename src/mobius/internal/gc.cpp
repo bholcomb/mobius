@@ -9,6 +9,15 @@
 #include "data/shared_cell.h"
 #include "data/function.h"
 #include "vm/vm.h"     // Upvalue
+#include "state/mobius_state.h"
+#include "plugin/module_registry.h"
+#include "fiber/job_system.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <vector>
+#include <unordered_map>
+#include <unordered_set>
 
 #include <mutex>
 
@@ -158,6 +167,8 @@ void gc_traverse_children(GcHeader* h, GcVisitFn cb, void* ud) {
                 }
             }
             if (t->getMetatable()) cb(t->getMetatable()->gcHeader(), ud);
+            // The metamethod cache holds a counted reference of its own.
+            visit_value(t->mmCacheValue(), &ctx);
             break;
         }
         case GC_ARRAY: {
@@ -182,4 +193,154 @@ void gc_traverse_children(GcHeader* h, GcVisitFn cb, void* ud) {
             break;
         }
     }
+}
+
+// ============================================================================
+// Shadow verification (stage 2)
+//
+// At a quiescent bytecode boundary: enumerate every root, mark transitively,
+// then check that each refcount-live tracked object was reached. A violation
+// means the root enumeration missed something — found while refcounting still
+// guarantees correctness. MOBIUS_GC_SHADOW=1 reports, =2 reports and aborts.
+// ============================================================================
+
+int g_gc_shadow_mode = []() {
+    const char* e = getenv("MOBIUS_GC_SHADOW");
+    return e ? atoi(e) : 0;
+}();
+
+void gc_shadow_init_from_env() { /* initialized at load; kept for API symmetry */ }
+
+namespace {
+
+struct MarkCtx {
+    std::vector<GcHeader*> worklist;
+};
+
+void mark_header(GcHeader* h, void* ud) {
+    if (!h || h->marked()) return;
+    h->setMarked(true);
+    ((MarkCtx*)ud)->worklist.push_back(h);
+}
+
+void mark_value(const Value& v, void* ud) {
+    gc_visit_value_children(v, mark_header, ud);
+}
+
+void mark_table(Table* t, void* ud) {
+    if (t) mark_header(t->gcHeader(), ud);
+}
+
+void clear_mark_cb(GcHeader* h, void* ud) {
+    (void)ud;
+    h->setMarked(false);
+}
+
+static int header_refcount(GcHeader* h) {
+    switch (h->type()) {
+        case GC_TABLE: return ((Table*)h->obj)->refCount();
+        case GC_ARRAY: return ((ArrayValue*)h->obj)->refCount();
+        case GC_FUNCTION: return ((MobiusFunction*)h->obj)->ref_count.load();
+        case GC_UPVALUE: return ((Upvalue*)h->obj)->refcount.load();
+    }
+    return -1;
+}
+
+struct CheckCtx {
+    std::vector<GcHeader*> unmarked;
+};
+
+void collect_unmarked_cb(GcHeader* h, void* ud) {
+    if (!h->marked()) ((CheckCtx*)ud)->unmarked.push_back(h);
+}
+
+struct IndegreeCtx {
+    const std::unordered_set<GcHeader*>* unmarked_set;
+    std::unordered_map<GcHeader*, int>* indegree;
+};
+
+void indegree_cb(GcHeader* child, void* ud) {
+    IndegreeCtx* c = (IndegreeCtx*)ud;
+    if (c->unmarked_set->count(child)) (*c->indegree)[child]++;
+}
+
+} // namespace
+
+void gc_shadow_verify_now(MobiusVM* vm) {
+    MobiusState* state = vm->state_;
+
+    gc_for_each_tracked(clear_mark_cb, nullptr);
+
+    MarkCtx ctx;
+    // 1. The VM's full register file. Deliberately not limited to the live
+    //    frame range: under refcounting, stale registers above the frame top
+    //    legitimately pin objects, and this pass verifies against refcount
+    //    liveness. (The eventual collector scans only the live range — that
+    //    is a policy improvement, not a soundness requirement.)
+    for (const Value& v : vm->registers_) mark_value(v, &ctx);
+    // 2. Upvalues tracked by live frames.
+    for (size_t d = 0; d <= vm->call_depth_; d++) {
+        CallInfo& ci = vm->call_stack_[d];
+        for (int i = 0; i < ci.upvalue_count; i++)
+            if (ci.upvalues[i]) mark_header(&ci.upvalues[i]->gc_, &ctx);
+    }
+    // 3. State-held roots: globals, C-API refs, type/userdata metatables.
+    state->gcVisitRoots(mark_value, mark_table, &ctx);
+    // 4. Module environments in the global registry.
+    getGlobalRegistry()->forEachGlobalValue(mark_value, &ctx);
+
+    // Drain.
+    while (!ctx.worklist.empty()) {
+        GcHeader* h = ctx.worklist.back();
+        ctx.worklist.pop_back();
+        gc_traverse_children(h, mark_header, &ctx);
+    }
+
+    CheckCtx check;
+    gc_for_each_tracked(collect_unmarked_cb, &check);
+    if (!check.unmarked.empty()) {
+        // An unmarked-but-refcount-live object is one of two things:
+        //  * a LEAKED CYCLE — its refcount is fully explained by references
+        //    from other unmarked objects. Expected under refcounting (this is
+        //    what the collector will reclaim after the flip); informational.
+        //  * a MISSED ROOT — some external holder the enumeration didn't
+        //    visit. That is the bug shadow mode exists to catch; fatal.
+        std::unordered_set<GcHeader*> unmarked_set(check.unmarked.begin(), check.unmarked.end());
+        std::unordered_map<GcHeader*, int> indegree;
+        IndegreeCtx ic{&unmarked_set, &indegree};
+        for (GcHeader* h : check.unmarked)
+            gc_traverse_children(h, indegree_cb, &ic);
+
+        size_t missed_roots = 0, cycle_garbage = 0;
+        static const char* names[] = {"table", "array", "function", "upvalue"};
+        for (GcHeader* h : check.unmarked) {
+            int rc = header_refcount(h);
+            int in = indegree.count(h) ? indegree[h] : 0;
+            if (rc > in) {
+                missed_roots++;
+                fprintf(stderr, "[gc-shadow] MISSED ROOT: %s %p rc=%d internal-refs=%d\n",
+                        names[h->type() & 0x3], h->obj, rc, in);
+            } else {
+                cycle_garbage++;
+            }
+        }
+        if (cycle_garbage && g_gc_shadow_mode >= 1)
+            fprintf(stderr, "[gc-shadow] %zu object(s) in leaked reference cycles (collector will reclaim)\n",
+                    cycle_garbage);
+        if (missed_roots) {
+            fprintf(stderr, "[gc-shadow] %zu missed root(s) — root enumeration is incomplete\n",
+                    missed_roots);
+            if (g_gc_shadow_mode >= 2) abort();
+        }
+    }
+}
+
+void gc_shadow_maybe_verify(MobiusVM* vm) {
+    if (!vm || !vm->state_) return;
+    if (vm->native_depth_ > 0) return;              // C++ locals may hold values
+    JobSystem* js = vm->state_->jobSystem();
+    if (js && js->outstandingJobs() != 0) return;   // other fibers may be mutating
+    static thread_local uint32_t countdown = 0;
+    if (countdown++ % 64 != 0) return;              // amortize the O(heap) pass
+    gc_shadow_verify_now(vm);
 }

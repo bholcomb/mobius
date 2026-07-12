@@ -308,6 +308,59 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
             }
             return copy;
         }
+        case VAL_FUNCTION: {
+            // A closure crossing a fiber boundary must not drag its upvalues
+            // by pointer: snapshot them (same semantics spawn applies to its
+            // captured upvalues). A function with no captures has no mutable
+            // state, so sharing the object is safe and cheap. Memoized so a
+            // closure that references itself through an upvalue keeps its
+            // shape in the copy.
+            MobiusFunction* src = value.as.function;
+            if (!src) return make_nil_value();
+            if (!src->upvalues || src->upvalue_count == 0) {
+                Value copy = value;   // retains; immutable payload
+                copy.flags = (int8_t)(value.flags & ~VAL_FLAG_SHARED);
+                return copy;
+            }
+            auto it = memo.find(src);
+            if (it != memo.end()) return it->second;
+
+            MobiusFunction* clone = new (std::nothrow) MobiusFunction();
+            if (!clone) return make_nil_value();
+            clone->name = src->name;
+            clone->param_count = src->param_count;
+            clone->body = nullptr;
+            clone->body_count = 0;
+            clone->ref_count.store(1, std::memory_order_relaxed);
+            clone->proto = src->proto;
+            clone->param_names = nullptr;
+            if (src->param_names && src->param_count > 0) {
+                clone->param_names = new (std::nothrow) MobiusString*[src->param_count]();
+                if (clone->param_names)
+                    for (size_t i = 0; i < src->param_count; i++)
+                        clone->param_names[i] = src->param_names[i];   // interned
+            }
+            clone->upvalue_count = src->upvalue_count;
+            clone->upvalues = new (std::nothrow) Upvalue*[src->upvalue_count]();
+            Value copy = make_function_value(clone);   // adopts
+            copy.flags = (int8_t)(value.flags & ~VAL_FLAG_SHARED);
+            memo.emplace(src, copy);
+            if (clone->upvalues) {
+                for (int i = 0; i < src->upvalue_count; i++) {
+                    Upvalue* suv = src->upvalues[i];
+                    Upvalue* duv = new (std::nothrow) Upvalue();
+                    if (!duv) break;
+                    duv->is_open = false;
+                    const Value& cur = (suv && suv->is_open && suv->location)
+                                         ? *suv->location
+                                         : (suv ? suv->closed : Value());
+                    duv->closed = deep_copy_value_impl(cur, memo);
+                    duv->location = &duv->closed;
+                    clone->upvalues[i] = duv;   // clone owns the creation ref
+                }
+            }
+            return copy;
+        }
         case VAL_BUFFER: {
             if (!value.as.buffer) return make_nil_value();
             BufferValue* clone = value.as.buffer->clone();

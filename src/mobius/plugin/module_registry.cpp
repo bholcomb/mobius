@@ -457,6 +457,30 @@ static void run_plugin_post_init(Plugin* plugin, Table* mod_table, MobiusState* 
 // ModuleRegistry implementation
 // ============================================================================
 
+void ModuleRegistry::forEachGlobalValue(void (*cb)(const Value&, void*), void* ud) {
+    std::shared_lock<std::shared_mutex> lock(registry_mutex_);
+    for (auto& entry : module_records_) {
+        ModuleRecord& rec = entry.second;
+        if (rec.globals) {
+            int n = rec.globals->count.load(std::memory_order_relaxed);
+            for (int i = 0; i < n && i < (int)rec.globals->slots.size(); i++)
+                cb(rec.globals->slots[i], ud);
+            if (rec.globals->backing_table) {
+                // retain + adopting constructor: the temporary releases on
+                // destruction, net refcount unchanged.
+                Value tv = make_table_value(rec.globals->backing_table->retain());
+                cb(tv, ud);
+            }
+        }
+        // Builtin (native-plugin) modules register a table with no module
+        // environment — visit it directly or its contents are unrooted.
+        if (rec.table) {
+            Value tv = make_table_value(rec.table->retain());
+            cb(tv, ud);
+        }
+    }
+}
+
 void ModuleRegistry::releaseModuleValues() {
     std::unique_lock<std::shared_mutex> lock(registry_mutex_);
     for (auto& entry : module_records_) {
