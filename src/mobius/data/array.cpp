@@ -15,6 +15,7 @@ static Value& invalid_array_value() {
 ArrayValue::ArrayValue(size_t initial_capacity)
 {
     elements.reserve(initial_capacity > 0 ? initial_capacity : 8);
+    setGcManaged();
     gc_track(&gc_, GC_ARRAY, this);
 }
 

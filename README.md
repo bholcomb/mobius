@@ -136,26 +136,35 @@ better**:
 
 | Benchmark | Mobius | Lua | CPython | Mobius/Lua |
 |-----------|-------:|----:|--------:|-----------:|
-| Arithmetic (integer)           |  113.9 |  119.8 |   844.8 | **0.95×** |
-| Recursive calls (fib 30)       |   65.4 |   33.2 |    69.8 | 1.97× |
-| Array ops (dense numeric)      |   21.3 |    9.7 |    54.9 | 2.19× |
-| Table ops (string-key map)     |   20.1 |   11.8 |    27.7 | 1.70× |
-| String ops                     |   74.0 |   66.4 |    27.3 | 1.11× |
-| Nested loops                   |   44.0 |   36.9 |   280.1 | 1.19× |
-| Object create / destroy        |  130.8 |   79.6 |    53.5 | 1.64× |
-| Mixed workload                 |   78.9 |   40.4 |    31.1 | 1.95× |
-| **Total**                      | **575.3** | **421.4** | **1410.3** | **1.37×** |
+| Arithmetic (integer)           |  109.6 |  126.1 |   864.2 | **0.87×** |
+| Recursive calls (fib 30)       |   55.9 |   32.6 |    70.9 | 1.71× |
+| Array ops (dense numeric)      |   14.9 |   10.5 |    56.9 | 1.42× |
+| Table ops (string-key map)     |   17.2 |   12.2 |    28.7 | 1.42× |
+| String ops                     |   72.5 |   73.7 |    27.6 | **0.98×** |
+| Nested loops                   |   41.1 |   52.0 |   284.0 | **0.79×** |
+| Object create / destroy        |  130.7 |   78.7 |    55.3 | 1.66× |
+| Mixed workload                 |   80.3 |   43.8 |    31.4 | 1.83× |
+| **Total**                      | **548.2** | **454.2** | **1436.6** | **1.21×** |
 
 Takeaways:
 
-- **~2.5× faster than CPython** overall, and within **1.4× of Lua**.
+- **~2.6× faster than CPython** overall, and within **1.25× of Lua**.
 - Type locking pays off most on **arithmetic and tight numeric loops** — Mobius
-  is *faster than Lua* on integer arithmetic, and 7× faster than CPython on it.
-- Strings are near parity with Lua (**1.1×**): computed strings are refcounted
-  rather than interned, so they are reclaimed instead of accumulating.
+  is *faster than Lua* on integer arithmetic, nested loops, and string ops, and
+  8× faster than CPython on integer arithmetic.
 - Lua still leads on **recursion** (parameters are the values the compiler cannot
   type from an initializer) and on **object creation**. CPython, with its heavily
   tuned string and dict machinery, stays ahead on string-heavy code.
+
+Memory is managed by **reference counting plus a tracing cycle collector**:
+acyclic garbage is reclaimed immediately (cache-hot, deterministic), while a
+mark-sweep collector runs at VM safepoints to reclaim reference cycles that
+refcounting cannot see. The collector's budget adapts — it backs off
+geometrically when collections find nothing (pure-churn workloads pay almost
+nothing) and tightens when cycles are actually accumulating.
+`MOBIUS_GC_STRESS=1` forces a collection at every safepoint (the test suite
+passes under it with AddressSanitizer), and `MOBIUS_GC_THRESHOLD` overrides
+the base budget.
 
 Every benchmark reports an integer checksum, and the runner refuses to print
 timings unless all three languages agree on every one — the three

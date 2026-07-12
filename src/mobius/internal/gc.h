@@ -28,6 +28,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <mobius/mobius.h>   // MOBIUS_API
 
 class Value;
 
@@ -83,7 +84,23 @@ void gc_for_each_tracked(GcVisitFn cb, void* ud);
 class MobiusVM;
 extern int g_gc_shadow_mode;   // 0 off, 1 report, 2 report+abort
 void gc_shadow_init_from_env();
-void gc_shadow_maybe_verify(MobiusVM* vm);   // cheap gate; full verify inside
 void gc_shadow_verify_now(MobiusVM* vm);     // unconditional (test hook)
+
+// The collector. gc_safepoint() is the cheap per-hook entry (gates on
+// quiescence and native depth, collects under allocation pressure, runs
+// shadow verification when enabled). gc_collect() marks from roots and
+// frees everything unreachable; returns the number of objects freed.
+extern volatile bool g_gc_pending;
+
+// True while the collector's sweep is destroying dead objects. Refcount
+// paths that would delete a GC-tracked object at count zero must stand down
+// during the sweep: every object that can reach zero then is already in the
+// sweep's dead list (unreachable ⇒ unmarked), and the sweep owns freeing it.
+// Exported as a function so the flag itself stays private to the collector
+// and out of the plugin ABI (only cold count-hit-zero paths call it).
+MOBIUS_API bool gc_is_sweeping();
+void gc_safepoint(MobiusVM* vm);
+size_t gc_collect(MobiusVM* vm);
+size_t gc_collect_all_for_teardown();
 
 #endif // MOBIUS_GC_H

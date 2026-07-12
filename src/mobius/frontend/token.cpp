@@ -209,8 +209,10 @@ void free_token(Token* token) {
     token->identifier = nullptr;
     token->interned = nullptr;
     
-    // Free the copied string literal
-    if (token->type == TOKEN_STRING && token->literal.string) {
+    // Free the copied string literal. Interpolated-string tokens also own a
+    // malloc'd decoded literal (the parser copies segments out of it).
+    if ((token->type == TOKEN_STRING || token->type == TOKEN_INTERP_STRING) &&
+        token->literal.string) {
         free((void*)token->literal.string);
         token->literal.string = nullptr;
     }

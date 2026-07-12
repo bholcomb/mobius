@@ -41,7 +41,11 @@ struct Upvalue {
 
     void retain() { refcount.fetch_add(1, std::memory_order_relaxed); }
     void release() {
-        if (refcount.fetch_sub(1, std::memory_order_acq_rel) == 1) delete this;
+        if (refcount.fetch_sub(1, std::memory_order_acq_rel) <= 1) {
+            // Acyclic zero: free now. During a sweep the collector owns any
+            // tracked object whose count hits zero (it is in the dead list).
+            if (!gc_is_sweeping()) delete this;
+        }
     }
 };
 

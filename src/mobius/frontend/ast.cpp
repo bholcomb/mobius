@@ -941,10 +941,15 @@ void ast_release_stmt(Stmt* stmt) {
                     stmt->as.import_stmt.module_name.literal.string) {
                     free((void*)stmt->as.import_stmt.module_name.literal.string);
                 }
-                if (stmt->as.import_stmt.has_alias && 
-                    stmt->as.import_stmt.alias.type == TOKEN_STRING && 
+                if (stmt->as.import_stmt.has_alias &&
+                    stmt->as.import_stmt.alias.type == TOKEN_STRING &&
                     stmt->as.import_stmt.alias.literal.string) {
                     free((void*)stmt->as.import_stmt.alias.literal.string);
+                }
+                // The alias identifier is also strdup'd by make_import_stmt.
+                if (stmt->as.import_stmt.has_alias &&
+                    stmt->as.import_stmt.alias.identifier) {
+                    free((void*)stmt->as.import_stmt.alias.identifier);
                 }
                 break;
         case STMT_PRAGMA:

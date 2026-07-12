@@ -1,0 +1,81 @@
+// Cycle collection (GC stage 4): reference cycles are unreachable garbage
+// that refcounting alone can never reclaim. The tracing collector must free
+// them — at safepoints under allocation pressure, and on demand via
+// __gc_collect(). __gc_objects() counts live tracked objects (tables,
+// arrays, closures, upvalues).
+
+var failures = 0;
+
+func check(name, ok) {
+    if (ok) {
+        print("PASS: " + name);
+    } else {
+        print("FAIL: " + name);
+        failures = failures + 1;
+    }
+}
+
+// --- table cycles are collected ---
+var baseline = __gc_collect();   // settle, then measure
+baseline = __gc_objects();
+
+for (var i = 0; i < 1000; i++) {
+    var a = {};
+    var b = {};
+    a.peer = b;
+    b.peer = a;
+}
+__gc_collect();
+check("table cycles collected", __gc_objects() <= baseline + 4);
+
+// --- self-referencing table ---
+for (var i = 0; i < 1000; i++) {
+    var t = {};
+    t.self = t;
+}
+__gc_collect();
+check("self-referencing tables collected", __gc_objects() <= baseline + 4);
+
+// --- cycles through arrays ---
+for (var i = 0; i < 1000; i++) {
+    var arr = [nil];
+    var t = { holder: arr };
+    arr[0] = t;
+}
+__gc_collect();
+check("array/table cycles collected", __gc_objects() <= baseline + 4);
+
+// --- closure capturing itself through an upvalue ---
+func make_self_ref() {
+    var self = nil;
+    func f() { return self; }
+    self = f;
+    return f;
+}
+for (var i = 0; i < 1000; i++) {
+    var g = make_self_ref();
+}
+__gc_collect();
+check("self-referencing closures collected", __gc_objects() <= baseline + 8);
+
+// --- live objects survive collection ---
+var keep = {};
+keep.self = keep;   // cyclic but reachable
+var keep_arr = [1, 2, 3];
+__gc_collect();
+keep.tag = 42;
+check("reachable cycle survives", keep.self.tag == 42);
+check("reachable array survives", keep_arr[2] == 3);
+
+// --- acyclic garbage is reclaimed immediately by refcounting (no GC needed) ---
+var before = __gc_objects();
+for (var i = 0; i < 1000; i++) {
+    var t = { x: i };
+}
+check("acyclic garbage needs no collection", __gc_objects() <= before + 4);
+
+if (failures > 0) {
+    print("gc cycle tests FAILED: " + str(failures));
+    exit(1);
+}
+print("All GC cycle tests passed");

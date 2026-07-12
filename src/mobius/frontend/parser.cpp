@@ -1685,7 +1685,13 @@ Stmt* parse_function_declaration(Parser* parser) {
     
     consume(parser, TOKEN_RIGHT_BRACE, "Expected '}' after function body");
     
-    return make_function_stmt(name, params, param_types, param_count, return_type, body, body_count);
+    // make_function_stmt deep-copies params/param_types (unlike
+    // make_function_expr, which takes ownership); free the parser's buffers.
+    Stmt* fn_stmt = make_function_stmt(name, params, param_types, param_count,
+                                       return_type, body, body_count);
+    free(params);
+    free(param_types);
+    return fn_stmt;
 }
 
 // Return statement parsing: return [expression];
@@ -1736,6 +1742,7 @@ Stmt* parse_import_statement(Parser* parser) {
     Token alias = {};
     bool has_alias = false;
     
+    char* dotted_alias_path = NULL;   // parser-owned temp for dotted aliases
     if (parser_match(parser, TOKEN_IDENTIFIER) && 
         parser_previous(parser).identifier && 
         strcmp(parser_previous(parser).identifier, "as") == 0) {
@@ -1762,9 +1769,10 @@ Stmt* parse_import_statement(Parser* parser) {
                              ".%s", part.identifier);
                 }
                 
-                // Store the dotted path as a string literal in alias
-                // We need to allocate and store this string
-                alias.literal.string = mobius_strdup(path_buffer);
+                // Store the dotted path as a string literal in alias.
+                // make_import_stmt copies it, so this temp is freed below.
+                dotted_alias_path = mobius_strdup(path_buffer);
+                alias.literal.string = dotted_alias_path;
                 alias.type = TOKEN_STRING;  // Mark it as a string type for later processing
             }
         } else if (parser_check(parser, TOKEN_STRING)) {
@@ -1777,10 +1785,13 @@ Stmt* parse_import_statement(Parser* parser) {
     }
     
     if (!consume_statement_terminator(parser, "Expect ';' or newline after import statement")) {
+        free(dotted_alias_path);
         return NULL;
     }
     
-    return make_import_stmt(keyword, module_name, alias, has_alias);
+    Stmt* stmt = make_import_stmt(keyword, module_name, alias, has_alias);
+    free(dotted_alias_path);
+    return stmt;
 }
 
 Stmt* parse_pragma_statement(Parser* parser) {
