@@ -1214,8 +1214,8 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     nctx->registers = vm->registers_.data();
     nctx->capacity = (int)vm->registers_.size();
 
-    CallInfo& child_ci = vm->callStackPush(child_proto, child_proto->code.data(),
-                                            child_base, nresults + 1);
+    CallInfo& child_ci = vm->callStackPush(child_proto, child_base, nresults + 1);
+    child_ci.ip = child_proto->code.data();   // entry push: no caller saved an ip
     if (mf->upvalues && mf->upvalue_count > 0) {
         if (!child_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
             state->setError(MOBIUS_ERROR_MEMORY,

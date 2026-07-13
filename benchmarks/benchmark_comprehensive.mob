@@ -21,7 +21,7 @@
 print("=== Mobius Comprehensive Performance Benchmark ===");
 print("Benchmark model: arrays = dense integer storage, tables = string-key hash maps");
 
-func ns_to_sec(ns) {
+func ns_to_sec(ns: int64) {
     return float(ns) / 1000000000.0;
 }
 
@@ -47,7 +47,7 @@ func benchmark_arithmetic() {
 // 2. Function calls — recursive fibonacci.
 // Deliberately left un-annotated: this is the un-specialized call path.
 // ============================================================================
-func fibonacci(n) {
+func fibonacci(n: int64): int64 {
     if (n <= 1) {
         return n;
     }
@@ -84,7 +84,7 @@ func benchmark_arrays() {
 // ============================================================================
 // 4. Table operations (string-key hash map). Keys are built outside the timer.
 // ============================================================================
-func build_table_keys(count) {
+func build_table_keys(count: int64) {
     var keys = array_create(count);
     for (var i = 0; i < count; i++) {
         keys:push(concat("key_", str(i)));

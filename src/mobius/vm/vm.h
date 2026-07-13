@@ -99,8 +99,11 @@ struct CallInfo {
         upvalue_capacity = CALLINFO_INLINE_UPVALS;
     }
 
-    void reset(Prototype* p, uint32_t* i, int b, int nr) {
-        proto = p; ip = i; base = b; nresults = nr;
+    // ip is deliberately NOT initialized here: every reader (the return
+    // path's refreshFrame, error backtraces) consumes ci->ip only after a
+    // call site (f.ci->ip = f.ip) or VM_ERROR stored it.
+    void reset(Prototype* p, int b, int nr) {
+        proto = p; base = b; nresults = nr;
         if (MOBIUS_UNLIKELY(upvalue_count > 0)) initUpvalues();
     }
 
@@ -226,11 +229,11 @@ public:
     const CallInfo& callStackTop() const { return call_stack_[call_depth_]; }
     size_t callStackSize() const { return call_depth_ + 1; }
 
-    MOBIUS_FORCEINLINE CallInfo& callStackPush(Prototype* proto, uint32_t* ip, int base, int nresults) {
+    MOBIUS_FORCEINLINE CallInfo& callStackPush(Prototype* proto, int base, int nresults) {
         call_depth_++;
         if (MOBIUS_UNLIKELY(call_depth_ >= call_stack_capacity_)) growCallStack();
         CallInfo& ci = call_stack_[call_depth_];
-        ci.reset(proto, ip, base, nresults);
+        ci.reset(proto, base, nresults);
         return ci;
     }
 

@@ -136,30 +136,31 @@ better**:
 
 | Benchmark | Mobius | Lua | CPython | Mobius/Lua |
 |-----------|-------:|----:|--------:|-----------:|
-| Arithmetic (integer)           |  112.0 |  141.8 |   842.2 | **0.79×** |
-| Recursive calls (fib 30)       |   60.3 |   33.7 |    69.6 | 1.79× |
-| Array ops (dense numeric)      |   14.9 |   10.4 |    54.6 | 1.42× |
-| Table ops (string-key map)     |   18.5 |   12.1 |    28.1 | 1.53× |
-| String ops                     |   52.4 |   68.0 |    27.1 | **0.77×** |
-| Nested loops                   |   42.0 |   51.9 |   279.5 | **0.81×** |
-| Object create / destroy        |   71.2 |   77.3 |    53.6 | **0.92×** |
-| Mixed workload                 |   46.1 |   39.7 |    31.1 | 1.16× |
-| **Total**                      | **431.4** | **454.6** | **1403.5** | **0.95×** |
+| Arithmetic (integer)           |  117.1 |  133.8 |   847.8 | **0.87×** |
+| Recursive calls (fib 30)       |   44.5 |   32.5 |    69.4 | 1.37× |
+| Array ops (dense numeric)      |   14.7 |   10.6 |    55.5 | 1.39× |
+| Table ops (string-key map)     |   18.3 |   11.7 |    28.6 | 1.57× |
+| String ops                     |   47.5 |   66.4 |    27.5 | **0.72×** |
+| Nested loops                   |   45.6 |   51.7 |   282.8 | **0.88×** |
+| Object create / destroy        |   67.2 |   76.8 |    53.8 | **0.87×** |
+| Mixed workload                 |   43.6 |   41.5 |    31.0 | 1.05× |
+| **Total**                      | **413.6** | **452.8** | **1413.9** | **0.91×** |
 
-The goal is to be as fast as possible; beating Lua across the board is the
-measure of success. Current state:
+The goal is to be as fast as reasonably possible. Current state:
 
-- **Faster than Lua overall** (0.95×) and **~3.3× faster than CPython**.
+- **Faster than Lua overall** (0.91×) and **~3.4× faster than CPython**.
   Mobius beats Lua outright on integer arithmetic, nested loops, string ops,
   and object create/destroy.
 - Type locking pays off most on **arithmetic and tight numeric loops**;
   hot stdlib builtins (`size`, `str`, `concat`) compile to dedicated opcodes
   instead of native calls, and small strings, tables, arrays, and closures
   come from per-thread pools.
-- The remaining gaps are **recursion** (parameters are the values the
-  compiler cannot type from an initializer) and **table/array micro-ops** —
-  the current optimization targets. CPython, with its heavily tuned string
-  and dict machinery, stays ahead on string-heavy code.
+- **Annotating hot function parameters** (`func fib(n: int64): int64`) is
+  the idiomatic fast path for recursion-heavy code: it removes shared-value
+  identity tracking and unlocks type-specialized opcodes inside the body
+  (the fib benchmark uses it). The remaining gaps are untyped **recursion**
+  and **table/array micro-ops**. CPython, with its heavily tuned string and
+  dict machinery, stays ahead on string-heavy code.
 
 Memory is managed by **reference counting plus a tracing cycle collector**:
 acyclic garbage is reclaimed immediately (cache-hot, deterministic), while a

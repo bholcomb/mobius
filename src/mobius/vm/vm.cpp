@@ -403,7 +403,7 @@ int MobiusVM::executeDirect(Prototype* proto) {
     int saved_native_base = native_ctx_.base;
     int saved_native_top = native_ctx_.top;
 
-    callStackPush(proto, proto->code.data(), 0, 0);
+    callStackPush(proto, 0, 0).ip = proto->code.data();
 
     ScopedCurrentVM bind_vm(this);
 
@@ -543,7 +543,8 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
     }
 
-    CallInfo& new_ci = callStackPush(child, child->code.data(), child_base, nresults);
+    CallInfo& new_ci = callStackPush(child, child_base, nresults);
+    new_ci.ip = child->code.data();
     if (mf->upvalues && mf->upvalue_count > 0) {
         if (!new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
             runtimeError("Failed to allocate closure upvalues");
@@ -672,7 +673,7 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
             memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
         }
         size_t stop_depth = callStackSize();
-        callStackPush(child, child->code.data(), child_base, 2);
+        callStackPush(child, child_base, 2).ip = child->code.data();
 
         int rc = run(stop_depth);
 
@@ -2670,7 +2671,7 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
     }
 
     f.ci->ip = f.ip;
-    CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
+    CallInfo& new_ci = vm->callStackPush(child, child_base, c);
     enter_child_frame(vm, f, &new_ci, child, child_base);
     return 0;
 }
@@ -2718,9 +2719,13 @@ MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t
             memset(&vm->type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
         }
 
-        CallInfo& new_ci = vm->callStackPush(child, child->code.data(), child_base, c);
+        CallInfo& new_ci = vm->callStackPush(child, child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
             if (!new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
+                // The pushed frame is the backtrace top but has no ip yet
+                // (reset() no longer initializes it); give it one before
+                // reporting so currentLine() reads defined memory.
+                new_ci.ip = child->code.data();
                 VM_ERROR(vm, f, "Failed to allocate closure upvalues");
                 return -1;
             }
@@ -3529,7 +3534,7 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             }
 
             size_t depth_before = fiber_vm.callStackSize();
-            fiber_vm.callStackPush(proto, proto->code.data(), base, 2);
+            fiber_vm.callStackPush(proto, base, 2).ip = proto->code.data();
 
             // Recreate the captured upvalues as closed cells owned by this
             // fiber, and attach them to the running frame so OP_GETUPVAL /
