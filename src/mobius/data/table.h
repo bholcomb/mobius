@@ -6,6 +6,7 @@
 #include "internal/gc.h"
 
 #include <cstddef>
+#include <cstring>
 #include <new>
 #include "internal/small_vec.h"
 #include <functional>
@@ -74,6 +75,49 @@ public:
     // GC traversal must see the metamethod cache: it holds a counted
     // reference that invalidation does not clear.
     const Value& mmCacheValue() const { return mm_cache_value_; }
+
+    // ------------------------------------------------------------------
+    // Inline string-key probe, for the VM's field-access fast paths. The
+    // out-of-line getByString/setByString remain the complete semantics
+    // (metatable __index/__newindex, load-factor growth); these helpers
+    // handle only the existing-slot hit, which is the hot case in loops.
+    // A miss (or an empty table) returns nullptr and the caller falls
+    // back to the full path. `stringEquals` mirrors table.cpp's
+    // string_key_equals: tag match already filtered on 7 hash bits, so a
+    // pointer compare nearly always decides.
+    // ------------------------------------------------------------------
+    MOBIUS_FORCEINLINE const Value* findString(const MobiusString* key) const {
+        if (MOBIUS_UNLIKELY(size_ == 0)) return nullptr;
+        size_t h = (size_t)key->hash;
+        size_t mask = entries_.size() - 1;
+        size_t index = h & mask;
+        uint8_t tag = tagFromHash(h);
+        size_t start = index;
+        do {
+            uint8_t t = tags_[index];
+            if (t == TAG_EMPTY) return nullptr;
+            if (t == tag) {
+                const Value& stored = entries_[index].key;
+                if (stored.type == VAL_STRING &&
+                    (stored.as.string == key ||
+                     (stored.as.string && stored.as.string->hash == key->hash &&
+                      stored.as.string->length == key->length &&
+                      memcmp(stored.as.string->data, key->data, key->length) == 0)))
+                    return &entries_[index].value;
+            }
+            index = (index + 1) & mask;
+        } while (index != start);
+        return nullptr;
+    }
+
+    // Mutable variant for the SETFIELD overwrite fast path. Every mutation
+    // must invalidate the metamethod cache (this table may be someone's
+    // metatable), exactly as setByStringUnlocked does.
+    MOBIUS_FORCEINLINE Value* findStringSlot(const MobiusString* key) {
+        const Value* v = findString(key);
+        if (v) mm_cache_name_ = nullptr;
+        return const_cast<Value*>(v);
+    }
 
 private:
     static inline uint8_t tagFromHash(size_t h) { return 0x80 | (uint8_t)(h >> 57); }

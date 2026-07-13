@@ -1885,7 +1885,12 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             int ki = stringConstant(expr->target->as.table_dot.key.identifier);
             uint8_t rk_key = makeRK(ki);
             int value_reg = compileExpr(expr->value);
-            emitABC(OP_INDEX_SET, (uint8_t)table_reg, rk_key, (uint8_t)value_reg);
+            // Existing-key overwrites take the inline SETFIELD probe; new
+            // keys and every non-plain-table shape fall back to INDEX_SET
+            // inside the handler. Register-spilled keys (>127 constants)
+            // must use the generic op — SETFIELD reads B as a constant.
+            emitABC(IS_CONSTANT(rk_key) ? OP_SETFIELD : OP_INDEX_SET,
+                    (uint8_t)table_reg, rk_key, (uint8_t)value_reg);
             return finish_assignment(save_reg, value_reg);
         }
 
@@ -2188,6 +2193,13 @@ int Compiler::compileTableDot(TableDotExpr* expr, int dest) {
 
     if (is_enum) {
         emitABC(OP_GETENUM, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
+    } else if (IS_CONSTANT(rk_key)) {
+        // Constant-string field read: the GETFIELD fast path probes the
+        // table inline and falls back to the generic INDEX_GET handler for
+        // every other shape (shared cell, metatable miss, non-table).
+        // Only sound when the key operand really is an RK constant —
+        // makeRK spills to a register past 127 constants.
+        emitABC(OP_GETFIELD, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
     } else {
         emitABC(OP_INDEX_GET, (uint8_t)reg, (uint8_t)tbl_reg, rk_key);
     }
@@ -4020,10 +4032,12 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             }
         }
 
-        // Pattern 2: GETGLOBAL A,Bx + INDEX_GET A,A,RK(C)  =>  GETGLOBAL_INDEX_GET
+        // Pattern 2: GETGLOBAL A,Bx + INDEX_GET/GETFIELD A,A,RK(C)
+        //   =>  GETGLOBAL_INDEX_GET (the data word keeps its own opcode, so
+        //       the fused handler replays whichever access op was fused).
         if (op == OP_GETGLOBAL && i + 1 < n && !is_target[i + 1]) {
             OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
-            if (op2 == OP_INDEX_GET) {
+            if (op2 == OP_INDEX_GET || op2 == OP_GETFIELD) {
                 uint8_t gg_a = DECODE_A(code[i]);
                 uint16_t gg_bx = DECODE_Bx(code[i]);
                 uint8_t gt_a = DECODE_A(code[i + 1]);
