@@ -691,18 +691,9 @@ const Value& MobiusState::globalSlot(int idx, GlobalEnvironment* env) const {
     return globals->slots[idx];
 }
 
-bool MobiusState::copyGlobalValue(int idx, Value* out, GlobalEnvironment* env) const {
-    const GlobalEnvironment* globals = env_or_root(this, env);
-    int count = globals->count.load(std::memory_order_acquire);
-    if (!global_slot_in_bounds(globals, idx, count)) {
-        return false;
-    }
-    if (!globals->shared.load(std::memory_order_acquire)) {
-        if (out) *out = globals->slots[idx];
-        return true;
-    }
+bool MobiusState::copyGlobalValueShared(int idx, Value* out, const GlobalEnvironment* globals) const {
     std::lock_guard<std::mutex> lock(globals->mutex);
-    count = globals->count.load(std::memory_order_acquire);
+    int count = globals->count.load(std::memory_order_acquire);
     if (!global_slot_in_bounds(globals, idx, count)) return false;
     if (out) *out = globals->slots[idx];
     return true;
