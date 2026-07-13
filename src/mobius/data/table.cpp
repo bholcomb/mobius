@@ -9,6 +9,34 @@
 #include <cstdio>
 #include <cctype>
 
+
+// ----------------------------------------------------------------------------
+// Pool-backed operator new/delete. Exact-size allocations use the per-thread
+// GC pools; any other size (a subclass) uses the global heap. The unsized /
+// nothrow deletes assume the class size — a larger (glibc-origin) chunk that
+// reaches the pool is absorbed safely: chunks never return to the global
+// heap, so the size routing can never mismatch an actual glibc free.
+// ----------------------------------------------------------------------------
+void* Table::operator new(size_t sz) {
+    if (sz == sizeof(Table))
+        if (void* p = gc_object_alloc(GC_TABLE, sz)) return p;
+    return ::operator new(sz);
+}
+void* Table::operator new(size_t sz, const std::nothrow_t&) noexcept {
+    if (sz == sizeof(Table))
+        if (void* p = gc_object_alloc(GC_TABLE, sz)) return p;
+    return ::operator new(sz, std::nothrow);
+}
+void Table::operator delete(void* p, size_t sz) noexcept {
+    (void)sz;
+    if (p) gc_object_free(GC_TABLE, p);
+}
+void Table::operator delete(void* p) noexcept {
+    if (p) gc_object_free(GC_TABLE, p);
+}
+void Table::operator delete(void* p, const std::nothrow_t&) noexcept {
+    if (p) gc_object_free(GC_TABLE, p);
+}
 static const Value kNilValue;
 
 // Compare a stored table key against the string being looked up.
@@ -217,8 +245,8 @@ void Table::resize(size_t new_capacity) {
     if (new_capacity <= entries_.size()) return;
     new_capacity = next_power_of_2(new_capacity);
 
-    std::vector<TableEntry> old_entries = std::move(entries_);
-    std::vector<uint8_t> old_tags = std::move(tags_);
+    EntryStorage old_entries = std::move(entries_);
+    TagStorage old_tags = std::move(tags_);
     entries_.clear();
     entries_.resize(new_capacity);
     tags_.assign(new_capacity, TAG_EMPTY);

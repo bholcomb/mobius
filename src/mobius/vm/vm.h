@@ -39,6 +39,13 @@ struct Upvalue {
     }
     ~Upvalue() { gc_untrack(&gc_); }
 
+    // Pool-backed allocation; definitions in vm.cpp (core).
+    static void* operator new(size_t sz);
+    static void* operator new(size_t sz, const std::nothrow_t&) noexcept;
+    static void  operator delete(void* p, size_t sz) noexcept;
+    static void  operator delete(void* p) noexcept;
+    static void  operator delete(void* p, const std::nothrow_t&) noexcept;
+
     void retain() { refcount.fetch_add(1, std::memory_order_relaxed); }
     void release() {
         if (refcount.fetch_sub(1, std::memory_order_acq_rel) <= 1) {

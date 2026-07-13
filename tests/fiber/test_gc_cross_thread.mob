@@ -1,0 +1,28 @@
+// Cross-thread frees: fibers build cyclic tables, results deep-copied back;
+// main releases them, exercising the owner-handoff path repeatedly.
+func build(n) {
+    var t = { data: [n, n * 2, n * 3], name: "obj" + str(n) };
+    t.self = t;
+    return t.data[1];
+}
+var total = 0;
+for (var round = 0; round < 100; round++) {
+    var futs = [];
+    for (var i = 0; i < 16; i++) {
+        futs:push(spawn build(i));
+    }
+    for (var i = 0; i < 16; i++) {
+        total = total + await futs:get(i);
+    }
+}
+if (total != 24000) {
+    print("FAIL: wrong total " + str(total));
+    exit(1);
+}
+__gc_collect();
+var tracked = __gc_objects();
+if (tracked > 32) {
+    print("FAIL: " + str(tracked) + " objects still tracked after collect");
+    exit(1);
+}
+print("cross-thread GC test passed");

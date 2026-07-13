@@ -6,7 +6,8 @@
 #include "internal/gc.h"
 
 #include <cstddef>
-#include <vector>
+#include <new>
+#include "internal/small_vec.h"
 #include <functional>
 
 #define INITIAL_TABLE_CAPACITY 8
@@ -52,10 +53,24 @@ public:
 
     static constexpr uint8_t TAG_EMPTY = 0x00;
 
-    const std::vector<TableEntry>& entries() const { return entries_; }
-    const std::vector<uint8_t>& tags() const { return tags_; }
+    // Inline-capacity storage: a table at the default capacity (8 slots)
+    // performs no heap allocation beyond the pooled Table object itself.
+    using EntryStorage = SmallVec<TableEntry, INITIAL_TABLE_CAPACITY>;
+    using TagStorage   = SmallVec<uint8_t, INITIAL_TABLE_CAPACITY>;
+    const EntryStorage& entries() const { return entries_; }
+    const TagStorage& tags() const { return tags_; }
 
     GcHeader* gcHeader() { return &gc_; }
+
+    // Pool-backed allocation (fixed-size chunks, per-thread free lists).
+    // Size-routed: a hypothetical subclass falls back to the global heap in
+    // both directions. Definitions live in table.cpp (core), so plugins bind
+    // exported functions rather than inlining pool internals.
+    static void* operator new(size_t sz);
+    static void* operator new(size_t sz, const std::nothrow_t&) noexcept;
+    static void  operator delete(void* p, size_t sz) noexcept;
+    static void  operator delete(void* p) noexcept;
+    static void  operator delete(void* p, const std::nothrow_t&) noexcept;
     // GC traversal must see the metamethod cache: it holds a counted
     // reference that invalidation does not clear.
     const Value& mmCacheValue() const { return mm_cache_value_; }
@@ -83,8 +98,8 @@ private:
 
     GcHeader gc_;   // tracing-GC registry link (see internal/gc.h)
 
-    std::vector<TableEntry> entries_;
-    std::vector<uint8_t> tags_;
+    EntryStorage entries_;
+    TagStorage tags_;
     size_t size_;
     Table* metatable_;
     MobiusState* state_;

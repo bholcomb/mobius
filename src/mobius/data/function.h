@@ -2,6 +2,8 @@
 #define MOBIUS_FUNCTION_H
 
 #include <atomic>
+#include <new>
+#include <cstddef>
 
 #include "internal/gc.h"
 
@@ -24,6 +26,13 @@ typedef struct MobiusFunction {
 
     MobiusFunction() { gc_track(&gc_, GC_FUNCTION, this); }
     ~MobiusFunction() { gc_untrack(&gc_); }
+
+    // Pool-backed allocation; definitions in value.cpp (core).
+    static void* operator new(size_t sz);
+    static void* operator new(size_t sz, const std::nothrow_t&) noexcept;
+    static void  operator delete(void* p, size_t sz) noexcept;
+    static void  operator delete(void* p) noexcept;
+    static void  operator delete(void* p, const std::nothrow_t&) noexcept;
 } MobiusFunction;
 
 // Free a closure's owned resources (param names array, AST body, upvalue

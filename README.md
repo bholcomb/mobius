@@ -136,25 +136,29 @@ better**:
 
 | Benchmark | Mobius | Lua | CPython | Mobius/Lua |
 |-----------|-------:|----:|--------:|-----------:|
-| Arithmetic (integer)           |  109.6 |  126.1 |   864.2 | **0.87×** |
-| Recursive calls (fib 30)       |   55.9 |   32.6 |    70.9 | 1.71× |
-| Array ops (dense numeric)      |   14.9 |   10.5 |    56.9 | 1.42× |
-| Table ops (string-key map)     |   17.2 |   12.2 |    28.7 | 1.42× |
-| String ops                     |   72.5 |   73.7 |    27.6 | **0.98×** |
-| Nested loops                   |   41.1 |   52.0 |   284.0 | **0.79×** |
-| Object create / destroy        |  130.7 |   78.7 |    55.3 | 1.66× |
-| Mixed workload                 |   80.3 |   43.8 |    31.4 | 1.83× |
-| **Total**                      | **548.2** | **454.2** | **1436.6** | **1.21×** |
+| Arithmetic (integer)           |  112.7 |  133.5 |   852.3 | **0.84×** |
+| Recursive calls (fib 30)       |   55.6 |   32.9 |    69.5 | 1.69× |
+| Array ops (dense numeric)      |   15.1 |   10.9 |    55.7 | 1.38× |
+| Table ops (string-key map)     |   17.6 |   12.0 |    28.6 | 1.47× |
+| String ops                     |   77.9 |   67.1 |    27.6 | 1.16× |
+| Nested loops                   |   40.4 |   47.2 |   282.7 | **0.85×** |
+| Object create / destroy        |  117.0 |   79.8 |    55.6 | 1.47× |
+| Mixed workload                 |   63.3 |   41.0 |    31.1 | 1.54× |
+| **Total**                      | **529.0** | **449.0** | **1422.7** | **1.18×** |
 
-Takeaways:
+The goal is to be as fast as possible; beating Lua across the board is the
+measure of success. Current state:
 
-- **~2.6× faster than CPython** overall, and within **1.25× of Lua**.
-- Type locking pays off most on **arithmetic and tight numeric loops** — Mobius
-  is *faster than Lua* on integer arithmetic, nested loops, and string ops, and
-  8× faster than CPython on integer arithmetic.
-- Lua still leads on **recursion** (parameters are the values the compiler cannot
-  type from an initializer) and on **object creation**. CPython, with its heavily
-  tuned string and dict machinery, stays ahead on string-heavy code.
+- **~2.7× faster than CPython** overall; **already faster than Lua** on integer
+  arithmetic and nested loops, with the overall gap down to 1.18× and shrinking
+  release over release.
+- Type locking pays off most on **arithmetic and tight numeric loops**, where
+  Mobius beats Lua today and is 8× faster than CPython.
+- The remaining gap is concentrated in **recursion** (parameters are the values
+  the compiler cannot type from an initializer) and **object creation** — both
+  targets of ongoing allocator/GC work (per-thread pools landed; generational
+  arenas next). CPython, with its heavily tuned string and dict machinery,
+  stays ahead on string-heavy code.
 
 Memory is managed by **reference counting plus a tracing cycle collector**:
 acyclic garbage is reclaimed immediately (cache-hot, deterministic), while a

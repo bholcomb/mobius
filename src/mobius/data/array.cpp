@@ -2,6 +2,34 @@
 #include "data/table.h"
 #include "data/value.h"
 
+
+// ----------------------------------------------------------------------------
+// Pool-backed operator new/delete. Exact-size allocations use the per-thread
+// GC pools; any other size (a subclass) uses the global heap. The unsized /
+// nothrow deletes assume the class size — a larger (glibc-origin) chunk that
+// reaches the pool is absorbed safely: chunks never return to the global
+// heap, so the size routing can never mismatch an actual glibc free.
+// ----------------------------------------------------------------------------
+void* ArrayValue::operator new(size_t sz) {
+    if (sz == sizeof(ArrayValue))
+        if (void* p = gc_object_alloc(GC_ARRAY, sz)) return p;
+    return ::operator new(sz);
+}
+void* ArrayValue::operator new(size_t sz, const std::nothrow_t&) noexcept {
+    if (sz == sizeof(ArrayValue))
+        if (void* p = gc_object_alloc(GC_ARRAY, sz)) return p;
+    return ::operator new(sz, std::nothrow);
+}
+void ArrayValue::operator delete(void* p, size_t sz) noexcept {
+    (void)sz;
+    if (p) gc_object_free(GC_ARRAY, p);
+}
+void ArrayValue::operator delete(void* p) noexcept {
+    if (p) gc_object_free(GC_ARRAY, p);
+}
+void ArrayValue::operator delete(void* p, const std::nothrow_t&) noexcept {
+    if (p) gc_object_free(GC_ARRAY, p);
+}
 static Value& invalid_array_value() {
     // Handed out for out-of-bounds access through the non-const operator[],
     // so a caller CAN write through it. thread_local + reset-to-nil on every
