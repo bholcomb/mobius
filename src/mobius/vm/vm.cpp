@@ -1504,6 +1504,60 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
 
 // ---- Array fast-path ----
 
+// ---- Intrinsified builtins (compiler-proven calls to size/str/concat) ----
+
+MOBIUS_FORCEINLINE static int vm_op_size(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    Value arg = RB(inst);
+    if (arg.type == VAL_SHARED_CELL && arg.as.shared_cell)
+        arg = arg.as.shared_cell->load();
+    int64_t n;
+    switch (arg.type) {
+        case VAL_STRING:      n = arg.as.string ? (int64_t)arg.as.string->length : 0; break;
+        case VAL_ARRAY:       n = arg.as.array ? (int64_t)arg.as.array->length() : 0; break;
+        case VAL_ARRAY_SLICE: n = arg.as.array_slice ? (int64_t)arg.as.array_slice->length() : 0; break;
+        case VAL_BUFFER:      n = arg.as.buffer ? (int64_t)arg.as.buffer->size() : 0; break;
+        case VAL_TABLE:       n = arg.as.table ? (int64_t)arg.as.table->size() : 0; break;
+        default:
+            VM_ERROR(vm, f, "size expects a string, array, table, or buffer argument");
+            return -1;
+    }
+    RA(inst) = make_int64_value(n);
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_tostr(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    // The compiler never emits this for values that may be tables (the
+    // __tostring metamethod path stays on the native call).
+    RA(inst) = value_to_string_value(vm->state_, RB(inst));
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_concat2(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    const Value& a = RB(inst);
+    const Value& b = RKC(inst);
+    if (MOBIUS_UNLIKELY(a.type != VAL_STRING || !a.as.string ||
+                        b.type != VAL_STRING || !b.as.string)) {
+        VM_ERROR(vm, f, "concat expects all arguments to be strings");
+        return -1;
+    }
+    MobiusString* sa = a.as.string;
+    MobiusString* sb = b.as.string;
+    if (sa->length == 0) { RA(inst) = make_string_value(sb); return 0; }
+    if (sb->length == 0) { RA(inst) = make_string_value(sa); return 0; }
+    size_t total = (size_t)sa->length + (size_t)sb->length;
+    MobiusString* out = StringInternPool::allocHeap(total);
+    if (MOBIUS_UNLIKELY(!out)) {
+        VM_ERROR(vm, f, "concat: out of memory");
+        return -1;
+    }
+    char* buf = out->mutableData();
+    memcpy(buf, sa->data, sa->length);
+    memcpy(buf + sa->length, sb->data, sb->length);
+    StringInternPool::finishHeap(out, total);
+    RA(inst) = make_string_value_adopt(out);
+    return 0;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_array_push(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& arr_val = RA(inst);
     const Value& val = RB(inst);
@@ -3678,6 +3732,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
         &&L_OP_GETGLOBAL_CALL_PLAIN, &&L_OP_CALL_DIRECT, &&L_OP_CALL_DIRECT_PLAIN,
         &&L_OP_ARRAY_PUSH,
+        &&L_OP_SIZE, &&L_OP_TOSTR, &&L_OP_CONCAT2,
         &&L_OP_LEN,
         &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
         &&L_OP_SPAWN, &&L_OP_AWAIT, &&L_OP_YIELD,
@@ -3833,6 +3888,9 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_CALL_DIRECT_PLAIN, vm_op_call_direct_plain)
 
     VM_HANDLER(OP_ARRAY_PUSH, vm_op_array_push)
+    VM_HANDLER(OP_SIZE, vm_op_size)
+    VM_HANDLER(OP_TOSTR, vm_op_tostr)
+    VM_HANDLER(OP_CONCAT2, vm_op_concat2)
 
     VM_HANDLER(OP_CALL, vm_op_call)
     VM_HANDLER(OP_CALL_PLAIN, vm_op_call_plain)

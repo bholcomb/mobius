@@ -131,25 +131,128 @@ MobiusString* StringInternPool::Shard::find(const char* data, size_t len, uint64
     return nullptr;
 }
 
+// ---------------------------------------------------------------------------
+// Small-string block pools. Computed (heap) strings churn hard — every
+// concat/str() in a loop is a malloc+free — so blocks up to
+// STRING_POOL_MAX_CAPACITY chars come from size-class free lists carved out
+// of 64KB slabs. Same-thread free/alloc touches only a thread-local list (no
+// locks, no atomics — the common case: strings usually die where they were
+// made). A string freed on a foreign thread is pushed onto the class's
+// global lock-free overflow stack, which allocating threads drain when their
+// local list is empty. Slabs are never returned to the OS.
+//
+// The size class is stashed in the header's `next` field (unused by heap
+// strings; interned strings never reach these pools — IMMORTAL_RC means
+// destroy() is never called on them).
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// Block sizes 64/128/256 cover header (32B) + capacity+1 chars.
+constexpr size_t STRING_CLASS_SIZES[3] = {64, 128, 256};
+constexpr int    STRING_CLASS_COUNT = 3;
+constexpr size_t STRING_POOL_MAX_BLOCK = 256;
+constexpr size_t STRING_SLAB_SIZE = 64 * 1024;
+
+struct StringPoolClass {
+    void* free_head = nullptr;
+    char* cursor = nullptr;
+    char* end = nullptr;
+};
+thread_local StringPoolClass tl_string_pools[STRING_CLASS_COUNT];
+
+// Foreign frees land here; allocators drain opportunistically.
+std::atomic<void*> g_string_overflow[STRING_CLASS_COUNT] = {};
+thread_local bool tl_string_pool_owner[STRING_CLASS_COUNT] = {};
+
+inline int string_class_for_block(size_t block) {
+    if (block <= 64) return 0;
+    if (block <= 128) return 1;
+    if (block <= 256) return 2;
+    return -1;
+}
+
+void* string_pool_alloc(int cls) {
+    StringPoolClass& p = tl_string_pools[cls];
+    if (void* c = p.free_head) {
+        p.free_head = *(void**)c;
+        return c;
+    }
+    // Local list empty: adopt the whole global overflow stack, if any.
+    if (g_string_overflow[cls].load(std::memory_order_relaxed)) {
+        void* chain = g_string_overflow[cls].exchange(nullptr, std::memory_order_acquire);
+        if (chain) {
+            p.free_head = *(void**)chain;
+            return chain;
+        }
+    }
+    size_t bs = STRING_CLASS_SIZES[cls];
+    if ((size_t)(p.end - p.cursor) < bs) {
+        char* slab = (char*)malloc(STRING_SLAB_SIZE);
+        if (!slab) return nullptr;
+        p.cursor = slab;
+        p.end = slab + STRING_SLAB_SIZE;
+        tl_string_pool_owner[cls] = true;
+    }
+    void* c = p.cursor;
+    p.cursor += bs;
+    return c;
+}
+
+void string_pool_free(int cls, void* block) {
+    // Same-thread if this thread has ever allocated this class (the usual
+    // case); otherwise push onto the class's global overflow stack.
+    if (tl_string_pool_owner[cls]) {
+        StringPoolClass& p = tl_string_pools[cls];
+        *(void**)block = p.free_head;
+        p.free_head = block;
+        return;
+    }
+    void* head = g_string_overflow[cls].load(std::memory_order_relaxed);
+    do {
+        *(void**)block = head;
+    } while (!g_string_overflow[cls].compare_exchange_weak(
+        head, block, std::memory_order_release, std::memory_order_relaxed));
+}
+
+} // namespace
+
 // Allocate one block holding the header followed by `capacity + 1` characters.
 // Returns a string whose `data` points at its own inline storage. `rc` selects
-// immortal (interned) or a live refcount (heap).
+// immortal (interned) or a live refcount (heap). Heap strings small enough
+// for a size class remember it in `next` (as class+1) for destroy().
 static MobiusString* alloc_string_block(size_t capacity, uint32_t rc) {
     if (capacity > MobiusString::MAX_LENGTH) return nullptr;
-    void* mem = ::operator new(sizeof(MobiusString) + capacity + 1, std::nothrow);
-    if (!mem) return nullptr;
+    size_t block = sizeof(MobiusString) + capacity + 1;
+    void* mem = nullptr;
+    int cls = -1;
+    if (rc != MobiusString::IMMORTAL_RC && block <= STRING_POOL_MAX_BLOCK) {
+        cls = string_class_for_block(block);
+        mem = string_pool_alloc(cls);
+    }
+    if (!mem) {
+        cls = -1;
+        mem = ::operator new(block, std::nothrow);
+        if (!mem) return nullptr;
+    }
     MobiusString* str = static_cast<MobiusString*>(mem);
     str->data = reinterpret_cast<const char*>(str) + sizeof(MobiusString);
     str->length = 0;
     new (&str->refcount) std::atomic<uint32_t>(rc);
     str->hash = 0;
-    str->next = nullptr;
+    str->next = reinterpret_cast<MobiusString*>((uintptr_t)(cls + 1));
     return str;
 }
 
 void MobiusString::destroy() {
     // Header and characters are one block. Heap strings are never linked into
-    // a pool bucket, so there is nothing to unlink.
+    // a pool bucket, so there is nothing to unlink. `next` carries the pool
+    // size class + 1 (0 = plain heap block).
+    uintptr_t cls_plus_1 = (uintptr_t)next;
+    if (cls_plus_1) {
+        string_pool_free((int)cls_plus_1 - 1, this);
+        return;
+    }
     ::operator delete(this);
 }
 

@@ -1902,17 +1902,58 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
 int Compiler::compileCall(CallExpr* expr, int dest) {
     currentLine_ = expr->paren.line;
 
-    if (expr->callee->type == EXPR_VARIABLE && expr->arg_count == 2) {
+    // Intrinsified builtins: lower calls to specific stdlib natives into
+    // dedicated opcodes, skipping the whole native call frame (~60ns/call).
+    // Sound because overriding a builtin global is a language error; a LOCAL
+    // of the same name still shadows, checked below.
+    if (expr->callee->type == EXPR_VARIABLE) {
         const char* fn_name = expr->callee->as.variable.name.identifier;
-        if (fn_name && strcmp(fn_name, "array_push") == 0) {
-            int save = current_->free_reg;
-            int arr_reg = compileExpr(expr->arguments[0]);
-            int val_reg = compileExpr(expr->arguments[1]);
-            emitABC(OP_ARRAY_PUSH, (uint8_t)arr_reg, (uint8_t)val_reg, 0);
-            setFreeReg(save);
-            int result_reg = (dest >= 0) ? dest : allocReg();
-            emitABC(OP_LOADNIL, (uint8_t)result_reg, 0, 0);
-            return result_reg;
+        bool local_shadow = false;
+        if (fn_name) {
+            for (FunctionState* fs = current_; fs && !local_shadow; fs = fs->enclosing)
+                for (int i = (int)fs->locals.size() - 1; i >= 0; i--)
+                    if (fs->locals[i].name == fn_name) { local_shadow = true; break; }
+        }
+        if (fn_name && !local_shadow) {
+            if (expr->arg_count == 2 && strcmp(fn_name, "array_push") == 0) {
+                int save = current_->free_reg;
+                int arr_reg = compileExpr(expr->arguments[0]);
+                int val_reg = compileExpr(expr->arguments[1]);
+                emitABC(OP_ARRAY_PUSH, (uint8_t)arr_reg, (uint8_t)val_reg, 0);
+                setFreeReg(save);
+                int result_reg = (dest >= 0) ? dest : allocReg();
+                emitABC(OP_LOADNIL, (uint8_t)result_reg, 0, 0);
+                return result_reg;
+            }
+            if (expr->arg_count == 1 && strcmp(fn_name, "size") == 0) {
+                int save = current_->free_reg;
+                int arg_reg = compileExpr(expr->arguments[0]);
+                setFreeReg(save);
+                int result_reg = (dest >= 0) ? dest : allocReg();
+                emitABC(OP_SIZE, (uint8_t)result_reg, (uint8_t)arg_reg, 0);
+                return result_reg;
+            }
+            if (expr->arg_count == 1 && strcmp(fn_name, "str") == 0) {
+                // Tables keep the native path (__tostring metamethod).
+                ValueType at = inferExprType(expr->arguments[0]);
+                if (at != VAL_UNKNOWN && at != VAL_TABLE && at != VAL_SHARED_CELL) {
+                    int save = current_->free_reg;
+                    int arg_reg = compileExpr(expr->arguments[0]);
+                    setFreeReg(save);
+                    int result_reg = (dest >= 0) ? dest : allocReg();
+                    emitABC(OP_TOSTR, (uint8_t)result_reg, (uint8_t)arg_reg, 0);
+                    return result_reg;
+                }
+            }
+            if (expr->arg_count == 2 && strcmp(fn_name, "concat") == 0) {
+                int save = current_->free_reg;
+                int a_reg = compileExpr(expr->arguments[0]);
+                int b_reg = compileExpr(expr->arguments[1]);
+                setFreeReg(save);
+                int result_reg = (dest >= 0) ? dest : allocReg();
+                emitABC(OP_CONCAT2, (uint8_t)result_reg, (uint8_t)a_reg, (uint8_t)b_reg);
+                return result_reg;
+            }
         }
     }
 
