@@ -260,6 +260,8 @@ MobiusVM::MobiusVM(MobiusState* state)
     registers_.resize(VM_INITIAL_REGISTERS);
     type_tags_.resize(VM_INITIAL_REGISTERS, VAL_UNKNOWN);
     register_capacity_ = (int)registers_.size();
+    regs_data_ = registers_.data();
+    tags_data_ = type_tags_.data();
     call_stack_ = new CallInfo[VM_INITIAL_CALL_STACK];
     call_stack_[0].initUpvalues();
 
@@ -303,7 +305,9 @@ void MobiusVM::growRegisters(int needed) {
     }
 
     register_capacity_ = (int)registers_.size();
-    native_ctx_.registers = registers_.data();
+    regs_data_ = registers_.data();
+    tags_data_ = type_tags_.data();
+    native_ctx_.registers = regs_data_;
     native_ctx_.capacity  = register_capacity_;
     if ((size_t)register_capacity_ > metrics_->peak_registers)
         metrics_->peak_registers = register_capacity_;
@@ -708,8 +712,8 @@ static MOBIUS_FORCEINLINE void enter_child_frame(MobiusVM* vm, VMFrame& f, CallI
     f.ci    = ci;
     f.proto = child;
     f.base  = child_base;
-    f.regs  = vm->registers_.data() + child_base;
-    f.tags  = vm->type_tags_.data() + child_base;
+    f.regs  = vm->regs_data_ + child_base;
+    f.tags  = vm->tags_data_ + child_base;
     f.ip    = child->code.data();
 }
 
@@ -717,8 +721,8 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
     f.ci = &callStackTop();
     f.proto = f.ci->proto;
     f.base = f.ci->base;
-    f.regs = registers_.data() + f.base;
-    f.tags = type_tags_.data() + f.base;
+    f.regs = regs_data_ + f.base;
+    f.tags = tags_data_ + f.base;
     f.ip = f.ci->ip;
 }
 
@@ -2854,7 +2858,13 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
         }
     }
     int func_reg_abs = ret_base - 1;
-    if (ret_nresults != 0) {
+    if (MOBIUS_LIKELY(ret_nresults == 2)) {
+        // One expected result — every plain `x = f(...)` call site.
+        if (MOBIUS_LIKELY(nresults_available >= 1))
+            vm->regs_data_[func_reg_abs] = vm->regs_data_[ret_base + a];
+        else
+            vm->regs_data_[func_reg_abs] = Value();
+    } else if (ret_nresults != 0) {
         int to_copy = ret_nresults - 1;
         for (int i = 0; i < to_copy; i++) {
             if (i < nresults_available)
@@ -2872,7 +2882,7 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
     // the rest of the program). Results were already copied below ret_base.
     // Only slots holding refcounted values do any work; the releases are
     // merely moved earlier, not added.
-    Value* dead = vm->registers_.data() + ret_base;
+    Value* dead = vm->regs_data_ + ret_base;
     for (int i = 0; i < ret_regs; i++) {
         if (dead[i].type >= VAL_FIRST_REFCOUNTED) dead[i] = Value();
     }
