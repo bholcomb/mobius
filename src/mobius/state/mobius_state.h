@@ -220,7 +220,22 @@ public:
     int assignGlobalSlot(const char* name, GlobalEnvironment* env = nullptr);
     Value& globalSlot(int idx, GlobalEnvironment* env = nullptr);
     const Value& globalSlot(int idx, GlobalEnvironment* env = nullptr) const;
-    bool copyGlobalValue(int idx, Value* out, GlobalEnvironment* env = nullptr) const;
+    // Hot path inline (the VM reads a global on every OP_GETGLOBAL): an
+    // unshared environment needs no lock — one acquire load of count, a
+    // bounds check, and the copy. Shared environments take the mutex in the
+    // out-of-line slow path.
+    MOBIUS_FORCEINLINE bool copyGlobalValue(int idx, Value* out, GlobalEnvironment* env = nullptr) const {
+        const GlobalEnvironment* g = env ? env : &root_globals_;
+        int count = g->count.load(std::memory_order_acquire);
+        if (MOBIUS_UNLIKELY(idx < 0 || idx >= count ||
+                            (size_t)idx >= g->slots.size())) return false;
+        if (MOBIUS_LIKELY(!g->shared.load(std::memory_order_acquire))) {
+            if (out) *out = g->slots[idx];
+            return true;
+        }
+        return copyGlobalValueShared(idx, out, g);
+    }
+    bool copyGlobalValueShared(int idx, Value* out, const GlobalEnvironment* g) const;
     Value getGlobalValue(int idx, GlobalEnvironment* env = nullptr) const;
     int globalSlotCount(GlobalEnvironment* env = nullptr) const;
     int findGlobalSlot(const char* name, GlobalEnvironment* env = nullptr) const;

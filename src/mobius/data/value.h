@@ -209,7 +209,7 @@ public:
     static Value makeEnum(EnumDefinition* definition, int64_t value);
 
 private:
-    inline void retain() const {
+    MOBIUS_FORCEINLINE void retain() const {
         if (type < VAL_FIRST_REFCOUNTED) return;
         // Strings are the most-copied heap value by a wide margin, so they get
         // their own branch ahead of the switch. Interned strings are immortal:
@@ -232,7 +232,7 @@ private:
             default: break;
         }
     }
-    inline void releaseRef() {
+    MOBIUS_FORCEINLINE void releaseRef() {
         if (type < VAL_FIRST_REFCOUNTED) return;
         // Inlined for the same reason retain() special-cases strings, and to
         // keep them out of releaseRefSlow(), which is an exported (non-inlined)
