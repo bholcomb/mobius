@@ -44,6 +44,7 @@ struct GcHeader {
     GcHeader* prev = nullptr;
     GcHeader* next = nullptr;
     void*     obj = nullptr;   // owning object (avoids offsetof on vptr types)
+    void*     owner = nullptr; // registry segment that links this header
     uint32_t  flags = 0;
 
     GcObjectType type() const { return (GcObjectType)(flags & 0x3); }
@@ -51,10 +52,18 @@ struct GcHeader {
     void setMarked(bool m) { if (m) flags |= 0x4; else flags &= ~0x4u; }
 };
 
-// Link/unlink an object into the global registry. Thread-safe; called from
-// the tracked types' constructors/destructors.
+// Link/unlink an object into its thread's registry segment. Lock-free on the
+// owning thread; a free from a foreign thread defers the unlink to the owner
+// via a pending queue. Called from the tracked types' ctors/dtors.
 void gc_track(GcHeader* h, GcObjectType type, void* obj);
 void gc_untrack(GcHeader* h);
+
+// Pool-backed allocation for the traced types (fixed-size chunks, per-thread
+// free lists, slab-backed). The types' class operator new/delete route
+// through these; sz must be the class size (subclasses fall back to the
+// global allocator in the class operators). Returns nullptr on OOM.
+void* gc_object_alloc(GcObjectType type, size_t sz);
+void  gc_object_free(GcObjectType type, void* p);
 
 // Number of currently tracked objects (all types).
 size_t gc_tracked_count();

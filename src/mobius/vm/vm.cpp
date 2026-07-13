@@ -24,6 +24,34 @@
 #include <thread>
 #include <time.h>
 
+
+// ----------------------------------------------------------------------------
+// Pool-backed operator new/delete. Exact-size allocations use the per-thread
+// GC pools; any other size (a subclass) uses the global heap. The unsized /
+// nothrow deletes assume the class size — a larger (glibc-origin) chunk that
+// reaches the pool is absorbed safely: chunks never return to the global
+// heap, so the size routing can never mismatch an actual glibc free.
+// ----------------------------------------------------------------------------
+void* Upvalue::operator new(size_t sz) {
+    if (sz == sizeof(Upvalue))
+        if (void* p = gc_object_alloc(GC_UPVALUE, sz)) return p;
+    return ::operator new(sz);
+}
+void* Upvalue::operator new(size_t sz, const std::nothrow_t&) noexcept {
+    if (sz == sizeof(Upvalue))
+        if (void* p = gc_object_alloc(GC_UPVALUE, sz)) return p;
+    return ::operator new(sz, std::nothrow);
+}
+void Upvalue::operator delete(void* p, size_t sz) noexcept {
+    (void)sz;
+    if (p) gc_object_free(GC_UPVALUE, p);
+}
+void Upvalue::operator delete(void* p) noexcept {
+    if (p) gc_object_free(GC_UPVALUE, p);
+}
+void Upvalue::operator delete(void* p, const std::nothrow_t&) noexcept {
+    if (p) gc_object_free(GC_UPVALUE, p);
+}
 static uint64_t get_time_ns_vm() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
