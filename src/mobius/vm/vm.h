@@ -211,6 +211,12 @@ public:
     std::vector<Value> registers_;
     std::vector<ValueType> type_tags_;
     int        register_capacity_;
+    // Raw base pointers of the two vectors above, refreshed on grow. Frame
+    // transitions (call/return) recompute regs/tags windows; going through
+    // vector::data() re-loads the control block every time because handlers
+    // may reallocate, while these members are plain loads.
+    Value*     regs_data_ = nullptr;
+    ValueType* tags_data_ = nullptr;
 
     CallInfo*  call_stack_;
     size_t     call_depth_;
