@@ -247,6 +247,8 @@ enum OpCode : uint8_t {
     OP_ARRAY_PUSH,  // A B       R[A].array.push(R[B])     (array-only append)
 
     // -- Intrinsified stdlib builtins (compiler lowers proven calls) --
+    OP_GETFIELD,    // A B C     R[A] = R[B][K[C]]; K[C] a string constant, R[B] expected table
+    OP_SETFIELD,    // A B C     R[A][K[B]] = RK(C); K[B] a string constant, R[A] expected table
     OP_SIZE,        // A B       R[A] = size(R[B])  (string/array/slice/buffer/table)
     OP_TOSTR,       // A B       R[A] = str(R[B])   (never emitted for tables)
     OP_CONCAT2,     // A B C     R[A] = concat(R[B], R[C])  (both strings)
@@ -430,6 +432,8 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"CALL_DIRECT_PLAIN", FMT_FUSED2},
 
         {"ARRAY_PUSH",FMT_ABC},
+        {"GETFIELD",  FMT_ABC},
+        {"SETFIELD",  FMT_ABC},
         {"SIZE",      FMT_ABC},
         {"TOSTR",     FMT_ABC},
         {"CONCAT2",   FMT_ABC},

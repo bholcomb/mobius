@@ -1030,6 +1030,43 @@ MOBIUS_FORCEINLINE static int vm_op_newarray(MobiusVM* vm, VMFrame& f, uint32_t 
     return 0;
 }
 
+MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t inst);
+MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t inst);
+
+// ---- Constant-string field access (compiler-proven table-dot sites) ----
+// Same operand encoding as INDEX_GET/INDEX_SET, so the generic handlers are
+// the fallback for every shape the fast path doesn't cover (shared cells,
+// non-tables, metatable-driven lookups, new-key inserts).
+
+MOBIUS_FORCEINLINE static int vm_op_getfield(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    const Value& obj = RB(inst);
+    if (MOBIUS_LIKELY(obj.type == VAL_TABLE && obj.as.table &&
+                      IS_CONSTANT(DECODE_C(inst)))) {
+        const Value& key = f.ci->proto->constants[RK_AS_CONSTANT(DECODE_C(inst))];
+        const Value* hit = obj.as.table->findString(key.as.string);
+        if (MOBIUS_LIKELY(hit != nullptr)) {
+            RA(inst) = *hit;
+            return 0;
+        }
+    }
+    return vm_op_index_get(vm, f, inst);
+}
+
+MOBIUS_FORCEINLINE static int vm_op_setfield(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    Value& obj = RA(inst);
+    if (MOBIUS_LIKELY(obj.type == VAL_TABLE && obj.as.table &&
+                      IS_CONSTANT(DECODE_B(inst)))) {
+        const Value& key = f.ci->proto->constants[RK_AS_CONSTANT(DECODE_B(inst))];
+        Value* slot = obj.as.table->findStringSlot(key.as.string);
+        if (MOBIUS_LIKELY(slot != nullptr)) {
+            // Existing-key overwrite: __newindex only fires on new keys.
+            *slot = RKC(inst);
+            return 0;
+        }
+    }
+    return vm_op_index_set(vm, f, inst);
+}
+
 MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& obj = RB(inst);
     const Value& key = RKC(inst);
@@ -1102,10 +1139,12 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
         }
     } else if (obj.type == VAL_TABLE && obj.as.table) {
         Table* tbl = obj.as.table;
-        if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            RA(inst) = tbl->getByString(key.as.string);
-        else
+        if (MOBIUS_LIKELY(key.type == VAL_STRING)) {
+            const Value* hit = tbl->findString(key.as.string);
+            RA(inst) = hit ? *hit : tbl->getByString(key.as.string);
+        } else {
             RA(inst) = tbl->get(key);
+        }
         // On a miss, follow a *function* __index up the metatable chain (a
         // *table* __index was already handled by getByString/get above).
         if (MOBIUS_UNLIKELY(RA(inst).type == VAL_NIL && tbl->getMetatable())) {
@@ -2562,13 +2601,16 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
-    // The second fused word is the original INDEX_GET instruction. Delegate to
-    // the generic handler rather than re-implementing indexing: an earlier
-    // inline copy here silently diverged from INDEX_GET (no function-__index
-    // fallback, no enum access, no slice indexing), so whether those features
-    // worked depended on whether the peephole had fused the pair. The fusion's
-    // win — one dispatch saved and the fused global load — is preserved.
+    // The second fused word is the original access instruction (INDEX_GET
+    // or GETFIELD — the peephole fuses both). Delegate by ITS opcode rather
+    // than re-implementing indexing: an earlier inline copy here silently
+    // diverged from INDEX_GET (no function-__index fallback, no enum access,
+    // no slice indexing), so whether those features worked depended on
+    // whether the peephole had fused the pair. The fusion's win — one
+    // dispatch saved and the fused global load — is preserved.
     uint32_t inst2 = *f.ip++;
+    if (DECODE_OP(inst2) == OP_GETFIELD)
+        return vm_op_getfield(vm, f, inst2);
     return vm_op_index_get(vm, f, inst2);
 }
 
@@ -3742,6 +3784,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
         &&L_OP_GETGLOBAL_CALL_PLAIN, &&L_OP_CALL_DIRECT, &&L_OP_CALL_DIRECT_PLAIN,
         &&L_OP_ARRAY_PUSH,
+        &&L_OP_GETFIELD, &&L_OP_SETFIELD,
         &&L_OP_SIZE, &&L_OP_TOSTR, &&L_OP_CONCAT2,
         &&L_OP_LEN,
         &&L_OP_TRY_BEGIN, &&L_OP_TRY_END, &&L_OP_THROW,
@@ -3898,6 +3941,8 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_CALL_DIRECT_PLAIN, vm_op_call_direct_plain)
 
     VM_HANDLER(OP_ARRAY_PUSH, vm_op_array_push)
+    VM_HANDLER(OP_GETFIELD, vm_op_getfield)
+    VM_HANDLER(OP_SETFIELD, vm_op_setfield)
     VM_HANDLER(OP_SIZE, vm_op_size)
     VM_HANDLER(OP_TOSTR, vm_op_tostr)
     VM_HANDLER(OP_CONCAT2, vm_op_concat2)
