@@ -124,12 +124,12 @@ public:
 
     ~Value() { releaseRef(); }
 
-    Value(const Value& other) : type(other.type), flags(other.flags), aux(other.aux) {
+    MOBIUS_FORCEINLINE Value(const Value& other) : type(other.type), flags(other.flags), aux(other.aux) {
         as.i64 = other.as.i64;
         retain();
     }
 
-    Value& operator=(const Value& other) {
+    MOBIUS_FORCEINLINE Value& operator=(const Value& other) {
         if (this != &other) {
             if (MOBIUS_LIKELY(type < VAL_FIRST_REFCOUNTED && other.type < VAL_FIRST_REFCOUNTED)) {
                 type = other.type; flags = other.flags;

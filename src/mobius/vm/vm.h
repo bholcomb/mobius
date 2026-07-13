@@ -226,7 +226,7 @@ public:
     const CallInfo& callStackTop() const { return call_stack_[call_depth_]; }
     size_t callStackSize() const { return call_depth_ + 1; }
 
-    CallInfo& callStackPush(Prototype* proto, uint32_t* ip, int base, int nresults) {
+    MOBIUS_FORCEINLINE CallInfo& callStackPush(Prototype* proto, uint32_t* ip, int base, int nresults) {
         call_depth_++;
         if (MOBIUS_UNLIKELY(call_depth_ >= call_stack_capacity_)) growCallStack();
         CallInfo& ci = call_stack_[call_depth_];
@@ -234,7 +234,7 @@ public:
         return ci;
     }
 
-    void callStackPop() {
+    MOBIUS_FORCEINLINE void callStackPop() {
         CallInfo& ci = call_stack_[call_depth_];
         if (MOBIUS_UNLIKELY(ci.upvalue_count > 0)) ci.clearUpvalues();
         call_depth_--;
