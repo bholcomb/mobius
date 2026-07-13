@@ -246,6 +246,11 @@ enum OpCode : uint8_t {
     // -- Array fast-path --
     OP_ARRAY_PUSH,  // A B       R[A].array.push(R[B])     (array-only append)
 
+    // -- Intrinsified stdlib builtins (compiler lowers proven calls) --
+    OP_SIZE,        // A B       R[A] = size(R[B])  (string/array/slice/buffer/table)
+    OP_TOSTR,       // A B       R[A] = str(R[B])   (never emitted for tables)
+    OP_CONCAT2,     // A B C     R[A] = concat(R[B], R[C])  (both strings)
+
     // -- Miscellaneous --
     OP_LEN,         // A B       R[A] = length(R[B])  (array length or table size)
 
@@ -425,6 +430,9 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"CALL_DIRECT_PLAIN", FMT_FUSED2},
 
         {"ARRAY_PUSH",FMT_ABC},
+        {"SIZE",      FMT_ABC},
+        {"TOSTR",     FMT_ABC},
+        {"CONCAT2",   FMT_ABC},
 
         {"LEN",       FMT_ABC},
 
