@@ -3086,6 +3086,10 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     // Finalize child prototype
     Prototype* child_proto = child_fs.proto;
     child_proto->num_registers = child_fs.max_reg;
+    // Function bodies get the same superinstruction fusions as the top-level
+    // chunk (only endCompiler ran the peephole before, so no function body
+    // was ever optimized — the hottest code in any program).
+    peepholeOptimize(child_proto);
 
     // Restore enclosing state
     current_ = enclosing;
@@ -4246,6 +4250,7 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
 
     Prototype* child_proto = child_fs.proto;
     child_proto->num_registers = child_fs.max_reg;
+    peepholeOptimize(child_proto);   // see compileFunctionStmt
 
     current_ = enclosing;
     unreachable_ = saved_unreachable;

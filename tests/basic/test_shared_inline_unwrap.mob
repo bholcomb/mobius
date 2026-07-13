@@ -1,0 +1,25 @@
+// Shared cells flowing through the ops that now unwrap inline.
+var failures = 0;
+func check(name, ok) {
+    if (ok) { print("PASS: " + name); } else { print("FAIL: " + name); failures = failures + 1; }
+}
+func through(n) {
+    if (n < 2) { return n; }        // LTI on a possibly-shared param
+    return through(n - 1);           // SUBI/MOVE_ADDI on a copy
+}
+shared var c = 10;
+check("recursion through shared", through(c) == 1);
+shared var d = 7;
+check("cell + K-op", (d + 100) == 107);
+check("cell compare imm", d < 8);
+check("cell eq imm", d == 7);
+check("cell != imm", d != 8);
+check("cell mod", (d % 3) == 1);
+check("cell mul", (d * 2) == 14);
+var identity = func(n) { return n; };
+shared var e = 42;
+var back = identity(e);
+back += 1;
+check("identity preserves cell", e == 43);
+if (failures > 0) { exit(1); }
+print("shared ops OK");
