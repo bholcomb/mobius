@@ -11,7 +11,7 @@ HTTP, SQLite, and more out of the box.
 ```mobius
 enum Suit { CLUBS, DIAMONDS, HEARTS, SPADES }
 
-func describe(rank: int64): string {
+func describe(rank) {
     switch (rank) {
         case 1:                       return "Ace"
         case 11..13:                  return "Face card"
@@ -28,7 +28,7 @@ fibers, await the results, and let the runtime schedule them across worker
 threads:
 
 ```mobius
-func fetch_size(name: string): int64 {
+func fetch_size(name) {
     // stand-in for real work — each call runs on its own fiber
     return size(name) * 100
 }
@@ -49,10 +49,9 @@ print("processed", total, "bytes")
 
 - **Familiar on day one.** C-style braces and operators, Lua-style tables and
   methods. If you've written C, JavaScript, or Lua, you can read Mobius already.
-- **Fast by default, faster when you ask.** Mobius runs the standard benchmark
-  suite [faster than Lua 5.4](#performance) and several times faster than
-  CPython. Type annotations on hot functions are optional — but when you add
-  them, the compiler uses them.
+- **Fast.** Mobius runs the standard benchmark suite
+  [faster than Lua 5.4](#performance) and several times faster than CPython —
+  with plain, untyped code.
 - **Concurrency that scales.** `spawn` / `await` fibers, channels, and `shared`
   data run across real worker threads. Data crossing between fibers is copied
   unless you explicitly share it — no accidental data races.
