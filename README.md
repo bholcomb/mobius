@@ -56,8 +56,7 @@ print("processed", total, "bytes")
   data run across real worker threads. Data crossing between fibers is copied
   unless you explicitly share it — no accidental data races.
 - **Fast.** Mobius runs the standard benchmark suite
-  [faster than Lua 5.4](#performance) and several times faster than CPython —
-  with plain, untyped code.
+  [faster than Lua 5.4](#performance) and several times faster than CPython.
 - **Type locking: readable code that performs.** A variable's type is inferred
   from its first value and then locked, so your code stays clean and
   annotation-free while the VM runs type-specialized instructions. Optional
