@@ -162,11 +162,12 @@ def main():
         print("\nChecksums agree across all implementations.")
 
     names = [n for n, _ in impls]
-    baseline = "lua" if "lua" in all_medians else None
+    # Ratio columns: mobius against every other implementation present.
+    ratio_bases = [n for n in ("lua", "python") if n in all_medians and "mobius" in all_medians]
 
     header = f"\n{'Benchmark':<28}" + "".join(f"{n:>12}" for n in names)
-    if baseline:
-        header += f"{'mobius/lua':>13}"
+    for base in ratio_bases:
+        header += f"{'vs ' + base:>12}"
     print(header)
     print("-" * len(header.strip("\n")))
 
@@ -177,9 +178,12 @@ def main():
         for n in names:
             v = all_medians[n].get(bench_id)
             row += f"{v * 1000:>11.2f}ms" if v is not None else f"{'-':>12}"
-        if baseline and bench_id in all_medians.get("mobius", {}) and bench_id in all_medians["lua"]:
-            ratio = all_medians["mobius"][bench_id] / all_medians["lua"][bench_id]
-            row += f"{ratio:>12.2f}x"
+        for base in ratio_bases:
+            if bench_id in all_medians.get("mobius", {}) and bench_id in all_medians[base]:
+                ratio = all_medians["mobius"][bench_id] / all_medians[base][bench_id]
+                row += f"{ratio:>11.2f}x"
+            else:
+                row += f"{'-':>12}"
         print(row)
 
     if args.json:
