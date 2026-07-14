@@ -2478,9 +2478,67 @@ MOBIUS_FORCEINLINE static int vm_op_typecheck_locked(MobiusVM* vm, VMFrame& f, u
 // function before its body poisons its inlining at every call site).
 MOBIUS_FORCEINLINE static int vm_op_add_check(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint32_t inst2 = *f.ip++;   // original TYPECHECK_LOCKED word
+    // Accumulator fast path: int64 += int64 into an int64-locked (or not-
+    // yet-locked) register — the shape of every `sum = sum + x` loop where
+    // x's type can't be proven at compile time. One branch tree, no generic
+    // dispatch, and the lock check collapses into the same test.
+    int b = DECODE_B(inst), c = DECODE_C(inst);
+    if (MOBIUS_LIKELY(!IS_CONSTANT(b) && !IS_CONSTANT(c))) {
+        const Value& lhs = f.regs[b];
+        const Value& rhs = f.regs[c];
+        if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
+            int a = DECODE_A(inst);
+            ValueType tag = f.tags[DECODE_A(inst2)];
+            if (MOBIUS_LIKELY(tag == VAL_INT64 || tag == VAL_UNKNOWN)) {
+                int64_t r = lhs.as.i64 + rhs.as.i64;
+                Value& dst = f.regs[a];
+                dst = Value();             // releases if dst held a ref type
+                dst.type = VAL_INT64;
+                dst.as.i64 = r;
+                if (tag == VAL_UNKNOWN) f.tags[DECODE_A(inst2)] = VAL_INT64;
+                return 0;
+            }
+        }
+    }
     int rc = vm_op_add(vm, f, inst);
     if (MOBIUS_UNLIKELY(rc != 0)) return rc;
     return vm_op_typecheck_locked(vm, f, inst2);
+}
+
+// Fused AGET + ADD + TYPECHECK_LOCKED: `sum = sum + arr[i]` in one dispatch.
+// Three words: this op (A = accumulator), the original AGET, the original
+// TYPECHECK. The fast path never materializes the element in a register.
+MOBIUS_FORCEINLINE static int vm_op_aget_add_check(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint32_t inst2 = *f.ip++;   // AGET word: A=scratch B=arr C=idx
+    uint32_t inst3 = *f.ip++;   // TYPECHECK word: A=lock reg
+    const Value& arr_v = f.regs[DECODE_B(inst2)];
+    int a = DECODE_A(inst);
+    Value& sum = f.regs[a];
+    if (MOBIUS_LIKELY(arr_v.type == VAL_ARRAY && arr_v.as.array &&
+                      !IS_CONSTANT(DECODE_C(inst2)) &&
+                      sum.type == VAL_INT64)) {
+        const Value& idx_v = f.regs[DECODE_C(inst2)];
+        ArrayValue* arr = arr_v.as.array;
+        if (MOBIUS_LIKELY(idx_v.type == VAL_INT64 &&
+                          idx_v.as.i64 >= 0 && idx_v.as.i64 < (int64_t)arr->length())) {
+            const Value& elem = arr->unsafeGet((size_t)idx_v.as.i64);
+            ValueType tag = f.tags[DECODE_A(inst3)];
+            if (MOBIUS_LIKELY(elem.type == VAL_INT64 &&
+                              (tag == VAL_INT64 || tag == VAL_UNKNOWN))) {
+                sum.as.i64 += elem.as.i64;
+                if (tag == VAL_UNKNOWN) f.tags[DECODE_A(inst3)] = VAL_INT64;
+                return 0;
+            }
+        }
+    }
+    // Generic replay: AGET into its scratch register, then the accumulator
+    // add (A = B = sum, C = the scratch), then the lock check.
+    int rc = vm_op_aget(vm, f, inst2);
+    if (MOBIUS_UNLIKELY(rc != 0)) return rc;
+    uint32_t synth_add = ENCODE_ABC(OP_ADD, (uint8_t)a, (uint8_t)a, DECODE_A(inst2));
+    rc = vm_op_add(vm, f, synth_add);
+    if (MOBIUS_UNLIKELY(rc != 0)) return rc;
+    return vm_op_typecheck_locked(vm, f, inst3);
 }
 
 // ---- Typed comparisons ----
@@ -2635,6 +2693,19 @@ MOBIUS_FORCEINLINE static int vm_op_move_addi(MobiusVM* vm, VMFrame& f, uint32_t
     else if (val.type == VAL_UINT64) val.as.u64 += (uint64_t)(int64_t)imm;
     else if (val.type == VAL_FLOAT64) val.as.double_val += imm;
     else { VM_ERROR(vm, f, "ADDI requires numeric operand"); return -1; }
+    return 0;
+}
+
+MOBIUS_FORCEINLINE static int vm_op_move_muli(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    RA(inst) = RB(inst);
+    uint32_t inst2 = *f.ip++;
+    int a2 = DECODE_A(inst2);
+    int imm = DECODE_sBx(inst2);
+    Value& val = f.regs[a2];
+    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 *= imm; }
+    else if (val.type == VAL_UINT64) val.as.u64 *= (uint64_t)(int64_t)imm;
+    else if (val.type == VAL_FLOAT64) val.as.double_val *= imm;
+    else { VM_ERROR(vm, f, "MULI requires numeric operand"); return -1; }
     return 0;
 }
 
@@ -3851,7 +3922,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_MUL_II, &&L_OP_MUL_FF, &&L_OP_MOD_II,
         &&L_OP_DIV_II, &&L_OP_DIV_FF, &&L_OP_MOD_FF,
         &&L_OP_ADDK, &&L_OP_SUBK, &&L_OP_MULK, &&L_OP_DIVK, &&L_OP_MODK,
-        &&L_OP_MOVE_ADDI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
+        &&L_OP_MOVE_ADDI, &&L_OP_MOVE_MULI, &&L_OP_GETGLOBAL_INDEX_GET, &&L_OP_GETGLOBAL_CALL,
         &&L_OP_GETGLOBAL_CALL_PLAIN, &&L_OP_CALL_DIRECT, &&L_OP_CALL_DIRECT_PLAIN,
         &&L_OP_ARRAY_PUSH,
         &&L_OP_GETFIELD, &&L_OP_SETFIELD,
@@ -3870,7 +3941,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_TYPELOCK,
         &&L_OP_TYPECHECK_LOCKED,
         &&L_OP_NOP,
-        &&L_OP_AGET, &&L_OP_AGET_INDEX_GET, &&L_OP_ADD_CHECK, &&L_OP_ASET,
+        &&L_OP_AGET, &&L_OP_AGET_INDEX_GET, &&L_OP_ADD_CHECK, &&L_OP_AGET_ADD_CHECK, &&L_OP_ASET,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
                   "dispatch_table must match OpCode enum");
@@ -3993,6 +4064,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_IFORLOOP, vm_op_iforloop)
 
     VM_HANDLER(OP_MOVE_ADDI, vm_op_move_addi)
+    VM_HANDLER(OP_MOVE_MULI, vm_op_move_muli)
     VM_HANDLER(OP_GETGLOBAL_INDEX_GET, vm_op_getglobal_index_get)
     VM_HANDLER(OP_GETGLOBAL_CALL, vm_op_getglobal_call)
     VM_HANDLER(OP_GETGLOBAL_CALL_PLAIN, vm_op_getglobal_call_plain)
@@ -4088,6 +4160,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_AGET, vm_op_aget)
     VM_HANDLER(OP_AGET_INDEX_GET, vm_op_aget_index_get)
     VM_HANDLER(OP_ADD_CHECK, vm_op_add_check)
+    VM_HANDLER(OP_AGET_ADD_CHECK, vm_op_aget_add_check)
     VM_HANDLER(OP_ASET, vm_op_aset)
 
     VM_DEFAULT()
