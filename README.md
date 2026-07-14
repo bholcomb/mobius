@@ -1,12 +1,13 @@
 # Mobius
 
-**A small, fast scripting language with C-style syntax — built to be embedded, built for concurrency.**
+**A lightweight scripting language for embedding — with real concurrency,
+real performance, and a large standard library built in.**
 
-Mobius keeps the lightweight feel of Lua — tables, `:` method calls, a tiny
-runtime you can drop into any C/C++ application — and pairs it with the syntax
-you already know from C, plus the things you always end up wanting: real
-concurrency, pattern matching, enums, and a standard library that covers JSON,
-HTTP, SQLite, and more out of the box.
+Mobius fills the same role as Lua — a small runtime you drop into a C/C++
+application — with C-style syntax, fibers and channels for concurrency, a VM
+that benchmarks faster than Lua 5.4, and batteries included: JSON, HTTP,
+SQLite, WebSockets, and more without leaving the box. It works just as well
+standalone for scripts and services.
 
 ```mobius
 enum Suit { CLUBS, DIAMONDS, HEARTS, SPADES }
@@ -47,23 +48,29 @@ print("processed", total, "bytes")
 
 ## Why Mobius?
 
-- **Familiar on day one.** C-style braces and operators, Lua-style tables and
-  methods. If you've written C, JavaScript, or Lua, you can read Mobius already.
-- **Fast.** Mobius runs the standard benchmark suite
-  [faster than Lua 5.4](#performance) and several times faster than CPython —
-  with plain, untyped code.
-- **Concurrency that scales.** `spawn` / `await` fibers, channels, and `shared`
-  data run across real worker threads. Data crossing between fibers is copied
-  unless you explicitly share it — no accidental data races.
 - **Made to be embedded.** A small, Lua-style C API: create a state, register
   functions, exchange values, expose your own types. One shared library, no
   exotic dependencies.
+- **Concurrency that scales.** `spawn` / `await` fibers, channels, and `shared`
+  data run across real worker threads. Data crossing between fibers is copied
+  unless you explicitly share it — no accidental data races.
+- **Fast.** Mobius runs the standard benchmark suite
+  [faster than Lua 5.4](#performance) and several times faster than CPython —
+  with plain, untyped code.
+- **Type locking: readable code that performs.** A variable's type is inferred
+  from its first value and then locked, so your code stays clean and
+  annotation-free while the VM runs type-specialized instructions. Optional
+  type annotations can help the compiler generate optimal bytecode where it
+  matters.
 - **Batteries included.** JSON, YAML, TOML, HTTP (client and a `web` server
   framework), WebSockets, sockets, SQLite, regex, crypto, compression,
   datetime, math, OS, and binary buffers with zero-copy struct views.
 - **Memory management you don't think about.** Automatic and low-pause:
   most garbage is reclaimed the instant it's unreachable, and a cycle
   collector quietly handles the rest.
+
+Familiar on day one, too: C-style braces and operators, Lua-style tables and
+methods. If you've written C, JavaScript, or Lua, you can already read Mobius.
 
 ## Quick start
 
@@ -152,13 +159,12 @@ language execution (arithmetic, loops, calls) runs 2–8× faster in Mobius.
 
 Two more things worth knowing:
 
-- You get this speed with plain, untyped code. Under the hood, a
-  register-based bytecode VM infers and locks variable types so it can run
-  type-specialized instructions.
-- When a function really matters, annotate it —
-  `func fib(n: int64): int64` — and the compiler drops another layer of
-  runtime checks. That one change took the recursion benchmark from 1.8× to
-  1.2× vs Lua.
+- You get this speed with plain, untyped code — type locking lets the
+  register-based bytecode VM infer each variable's type and run
+  type-specialized instructions without any annotations in your source.
+- In some situations, type annotations help the compiler generate optimal
+  bytecode. Recursive functions are one: annotating the benchmark's
+  `func fib(n: int64): int64` took it from 1.8× to 1.2× vs Lua.
 
 Every benchmark emits a checksum, and the runner refuses to report timings
 unless all three languages agree — so the implementations are provably doing
