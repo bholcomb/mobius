@@ -72,6 +72,9 @@ MobiusConfig mobius_default_config(void) {
     unsigned int hw = std::thread::hardware_concurrency();
     config.max_worker_threads      = static_cast<int>(std::max(1u, hw / 2));
 
+    config.string_pool_buckets   = kInitialStringBucketCount;
+    config.global_slot_capacity  = kGlobalSlotCapacity;
+
     return config;
 }
 
@@ -313,10 +316,14 @@ MobiusState::MobiusState(MobiusConfig* config)
 
     config_ = config ? *config : mobius_default_config();
 
-    root_globals_.slots.resize(kGlobalSlotCapacity);
-    root_globals_.slot_names.resize(kGlobalSlotCapacity);
+    size_t slot_cap = config_.global_slot_capacity ? config_.global_slot_capacity
+                                                    : kGlobalSlotCapacity;
+    size_t buckets = config_.string_pool_buckets ? config_.string_pool_buckets
+                                                 : kInitialStringBucketCount;
+    root_globals_.slots.resize(slot_cap);
+    root_globals_.slot_names.resize(slot_cap);
 
-    string_pool_ = new (std::nothrow) StringInternPool(kInitialStringBucketCount);
+    string_pool_ = new (std::nothrow) StringInternPool(buckets);
     if (!string_pool_) return;
 
     common_strings_.empty = string_pool_->intern("", 0);

@@ -49,8 +49,9 @@ print("processed", total, "bytes")
 ## Why Mobius?
 
 - **Made to be embedded.** A small, Lua-style C API: create a state, register
-  functions, exchange values, expose your own types. One shared library, no
-  exotic dependencies.
+  functions, exchange values, expose your own types. One shared library —
+  ~1 MB on disk, a few MB resident (tunable), sub-10ms startup — with no
+  exotic dependencies. Modules ship separately, only if you use them.
 - **Concurrency that scales.** `spawn` / `await` fibers, channels, and `shared`
   data run across real worker threads. Data crossing between fibers is copied
   unless you explicitly share it — no accidental data races.
