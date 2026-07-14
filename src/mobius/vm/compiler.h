@@ -228,6 +228,7 @@ private:
     Prototype* endCompiler();
     FunctionState* initCompiler(FunctionState* enclosing, const char* name);
     void peepholeOptimize(Prototype* proto);
+    void computeAllScalarRegisters(Prototype* proto);
 };
 
 #endif // MOBIUS_VM_COMPILER_H

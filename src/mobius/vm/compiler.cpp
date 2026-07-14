@@ -4216,6 +4216,70 @@ void Compiler::peepholeOptimize(Prototype* proto) {
 
     code = std::move(new_code);
     lines = std::move(new_lines);
+
+    computeAllScalarRegisters(proto);
+}
+
+// Conservative whitelist scan: the proto's registers can never hold a
+// refcounted Value iff every instruction's register writes are provably
+// scalar. Returns then skip the dead-register clear loop. Anything not on
+// the list — MOVE (copies anything), generic ADD (string concat), loads of
+// constants/globals/fields, closures, generic CALL — keeps the default
+// "must clear". Direct calls are scalar only when the target prototype's
+// declared return type is scalar.
+void Compiler::computeAllScalarRegisters(Prototype* proto) {
+    const auto& code = proto->code;
+    size_t n = code.size();
+    for (size_t i = 0; i < n; i++) {
+        OpCode op = (OpCode)DECODE_OP(code[i]);
+        const auto& info = opcode_info(op);
+        size_t skip = (info.format == FMT_ABC_D) ? 2
+                    : (info.format == FMT_FUSED2) ? 1 : 0;
+        switch (op) {
+            // No register write at all (jumps, compares, checks, stores).
+            case OP_JMP: case OP_RETURN: case OP_TYPECHECK_LOCKED:
+            case OP_TYPELOCK: case OP_CANCEL_CHECK:
+            case OP_LT: case OP_LE: case OP_EQ:
+            case OP_LT_II: case OP_LE_II:
+            case OP_LT_FF: case OP_LE_FF:
+            case OP_LTI: case OP_LEI: case OP_GTI: case OP_GEI:
+            case OP_EQI: case OP_NEI:
+            // Scalar-only writes (numeric arithmetic, bools, loop counters).
+            case OP_LOADINT: case OP_LOADBOOL: case OP_LOADNIL:
+            case OP_ADD_II: case OP_SUB_II: case OP_MUL_II:
+            case OP_ADD_FF: case OP_SUB_FF: case OP_MUL_FF:
+            case OP_ADDI: case OP_SUBI: case OP_MULI: case OP_DIVI: case OP_MODI:
+            case OP_ADDK: case OP_SUBK: case OP_MULK: case OP_DIVK: case OP_MODK:
+            case OP_MOVE_ADDI: case OP_MOVE_MULI:
+            case OP_IFORPREP: case OP_IFORLOOP:
+            case OP_SIZE:
+            case OP_NOT:
+                break;
+            case OP_CALL_DIRECT:
+            case OP_CALL_DIRECT_PLAIN: {
+                // Resolve the target's declared return type. BX_MASK = self.
+                uint16_t idx = DECODE_Bx(code[i]);
+                Prototype* target = nullptr;
+                if (idx == BX_MASK) target = proto;
+                else if (idx & 0x8000u) {
+                    uint16_t e = idx & 0x7FFFu;
+                    if (e < proto->extern_protos.size()) target = proto->extern_protos[e];
+                } else if (idx < proto->protos.size()) {
+                    target = proto->protos[idx];
+                }
+                ValueType rt = target ? target->return_type : VAL_UNKNOWN;
+                bool scalar = (rt == VAL_INT64 || rt == VAL_UINT64 ||
+                               rt == VAL_FLOAT64 || rt == VAL_BOOL || rt == VAL_CHAR);
+                if (!scalar) return;   // default false stands
+                skip = 1;              // the fused CALL word
+                break;
+            }
+            default:
+                return;                // unknown/ref-capable op: must clear
+        }
+        i += skip;
+    }
+    proto->all_scalar_registers = true;
 }
 
 // --- Pragma ---

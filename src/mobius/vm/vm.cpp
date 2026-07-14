@@ -316,7 +316,11 @@ void MobiusVM::growRegisters(int needed) {
 void MobiusVM::growCallStack() {
     size_t new_cap = call_stack_capacity_ * 2;
     CallInfo* new_stack = new CallInfo[new_cap];
-    for (size_t i = 0; i <= call_depth_; i++) {
+    // Strictly BELOW call_depth_: push increments the depth before checking
+    // capacity, so at grow time call_depth_ == old capacity — the slot at
+    // call_depth_ exists only in the new array (it is the frame being
+    // pushed, about to be reset). <= read one past the old array.
+    for (size_t i = 0; i < call_depth_; i++) {
         CallInfo& src = call_stack_[i];
         CallInfo& dst = new_stack[i];
         dst.proto = src.proto;
@@ -3007,6 +3011,7 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
     int ret_base = f.ci->base;
     int ret_nresults = f.ci->nresults;
     int ret_regs = f.ci->proto ? f.ci->proto->num_registers : 0;
+    bool all_scalar = f.ci->proto && f.ci->proto->all_scalar_registers;
     vm->callStackPop();
     // Discard try handlers registered by the frame being returned from
     // (i.e. `return` inside `try`). A stale handler would catch a later,
@@ -3045,9 +3050,13 @@ MOBIUS_FORCEINLINE static int vm_op_return(MobiusVM* vm, VMFrame& f, uint32_t in
     // the rest of the program). Results were already copied below ret_base.
     // Only slots holding refcounted values do any work; the releases are
     // merely moved earlier, not added.
-    Value* dead = vm->regs_data_ + ret_base;
-    for (int i = 0; i < ret_regs; i++) {
-        if (dead[i].type >= VAL_FIRST_REFCOUNTED) dead[i] = Value();
+    // All-scalar frames (computed at compile time) cannot pin anything —
+    // skip the clear loop entirely; ~3 instructions per register otherwise.
+    if (!all_scalar) {
+        Value* dead = vm->regs_data_ + ret_base;
+        for (int i = 0; i < ret_regs; i++) {
+            if (dead[i].type >= VAL_FIRST_REFCOUNTED) dead[i] = Value();
+        }
     }
     vm->refreshFrame(f);
     return 0;

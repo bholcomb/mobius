@@ -136,15 +136,15 @@ better**:
 
 | Benchmark | Mobius | Lua | CPython | Mobius/Lua |
 |-----------|-------:|----:|--------:|-----------:|
-| Arithmetic (integer)           |  107.3 |  131.0 |   845.8 | **0.82×** |
-| Recursive calls (fib 30)       |   44.3 |   32.9 |    69.7 | 1.35× |
-| Array ops (dense numeric)      |   11.5 |   11.1 |    55.6 | 1.04× |
-| Table ops (string-key map)     |   16.5 |   11.8 |    28.3 | 1.40× |
-| String ops                     |   46.8 |   68.4 |    27.4 | **0.68×** |
-| Nested loops                   |   47.4 |   51.7 |   282.2 | **0.92×** |
-| Object create / destroy        |   67.9 |   77.5 |    53.6 | **0.88×** |
-| Mixed workload                 |   43.4 |   41.8 |    31.2 | 1.04× |
-| **Total**                      | **398.6** | **450.3** | **1412.0** | **0.88×** |
+| Arithmetic (integer)           |  106.4 |  130.3 |   855.7 | **0.82×** |
+| Recursive calls (fib 30)       |   39.1 |   32.8 |    71.6 | 1.19× |
+| Array ops (dense numeric)      |   11.3 |   10.5 |    56.0 | 1.08× |
+| Table ops (string-key map)     |   16.4 |   11.8 |    28.6 | 1.39× |
+| String ops                     |   46.5 |   68.2 |    27.4 | **0.68×** |
+| Nested loops                   |   51.1 |   52.8 |   284.7 | **0.97×** |
+| Object create / destroy        |   66.0 |   78.0 |    55.7 | **0.85×** |
+| Mixed workload                 |   44.8 |   41.1 |    31.3 | 1.09× |
+| **Total**                      | **397.5** | **447.7** | **1434.3** | **0.89×** |
 
 The goal is to be as fast as reasonably possible. Current state:
 
