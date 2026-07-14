@@ -290,6 +290,12 @@ public:
     int run(size_t base_depth);
 
     void growCallStack();
+    // Cold path shared by every VM_HANDLER label: a handler reported an
+    // error. If an in-scope try handler exists, unwind the call stack to it
+    // and return 0 (the label then refreshes its frame mirror and dispatch
+    // continues at the catch ip); otherwise return -1. Takes no VMFrame& so
+    // the label's frame mirror never has its address escape into a call.
+    int handleHandlerError(size_t base_depth);
 
     void ensureRegisters(int needed) {
         if (MOBIUS_UNLIKELY(needed > register_capacity_)) growRegisters(needed);

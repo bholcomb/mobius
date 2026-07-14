@@ -8,6 +8,16 @@
 #include <vector>
 #include <mutex>
 
+#ifndef MOBIUS_FORCEINLINE
+#if defined(__GNUC__) || defined(__clang__)
+#  define MOBIUS_FORCEINLINE __attribute__((always_inline)) inline
+#elif defined(_MSC_VER)
+#  define MOBIUS_FORCEINLINE __forceinline
+#else
+#  define MOBIUS_FORCEINLINE inline
+#endif
+#endif
+
 class MobiusState;
 
 // Choose this process's string-hash seed (once). Called by the StringInternPool
@@ -48,16 +58,19 @@ struct MobiusString {
 
     bool operator==(const MobiusString& other) const;
 
-    bool isImmortal() const {
+    MOBIUS_FORCEINLINE bool isImmortal() const {
         return refcount.load(std::memory_order_relaxed) == IMMORTAL_RC;
     }
 
-    void retain() {
+    // Force-inlined: GCC leaves these out of line inside the interpreter
+    // loop otherwise, and every Value copy of a string ticks one of them
+    // (measured at 3.6% of a table-heavy workload as a call).
+    MOBIUS_FORCEINLINE void retain() {
         if (isImmortal()) return;
         refcount.fetch_add(1, std::memory_order_relaxed);
     }
 
-    void release() {
+    MOBIUS_FORCEINLINE void release() {
         if (isImmortal()) return;
         if (refcount.fetch_sub(1, std::memory_order_acq_rel) == 1) destroy();
     }
