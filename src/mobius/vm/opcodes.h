@@ -299,6 +299,11 @@ enum OpCode : uint8_t {
     // a container that turned out not to be an array) to the generic handler, so
     // their observable behaviour is identical.
     OP_AGET,        // A B C     R[A] = R[B].array[R[C]]     (fallback: INDEX_GET)
+    OP_AGET_INDEX_GET, // fused:  word1 A=dest B=tbl (C=scratch); word2 = AGET encoding.
+                    //           Fast path borrows the array element as the lookup key
+                    //           (no register copy / refcount ticks); fallback replays
+                    //           both original ops generically.
+    OP_ADD_CHECK,   // fused:    word1 = ADD A,B,C; word2 = TYPECHECK_LOCKED A.
     OP_ASET,        // A B C     R[A].array[RK(B)] = RK(C)   (fallback: INDEX_SET)
 
     OP_MAX_OPCODE
@@ -471,6 +476,8 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"NOP",       FMT_ABC},
 
         {"AGET",      FMT_ABC},
+        {"AGET_INDEX_GET", FMT_FUSED2},
+        {"ADD_CHECK", FMT_FUSED2},
         {"ASET",      FMT_ABC},
     };
     static_assert(sizeof(info) / sizeof(info[0]) == OP_MAX_OPCODE,

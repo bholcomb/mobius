@@ -4036,6 +4036,47 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             }
         }
 
+        // Pattern 1b: AGET k,arr,i + INDEX_GET d,tbl,k  =>  AGET_INDEX_GET
+        // (table lookup keyed by an array element — the fused handler borrows
+        // the element without the register round-trip). Key operand must be
+        // the AGET's dest register (not an RK constant).
+        if (op == OP_AGET && i + 1 < n && !is_target[i + 1]) {
+            OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
+            if (op2 == OP_INDEX_GET) {
+                uint8_t aget_a = DECODE_A(code[i]);
+                uint8_t ig_c = DECODE_C(code[i + 1]);
+                uint8_t ig_a = DECODE_A(code[i + 1]);
+                uint8_t ig_b = DECODE_B(code[i + 1]);
+                if (!IS_CONSTANT(ig_c) && ig_c == aget_a &&
+                    ig_a != aget_a && ig_b != aget_a) {
+                    new_code.push_back(ENCODE_ABC(OP_AGET_INDEX_GET, ig_a, ig_b, aget_a));
+                    new_lines.push_back(lines[i]);
+                    remap[i + 1] = (int)new_code.size();
+                    new_code.push_back(code[i]);   // original AGET as the data word
+                    new_lines.push_back(lines[i + 1]);
+                    i++;
+                    continue;
+                }
+            }
+        }
+
+        // Pattern 1c: ADD a,b,c + TYPECHECK_LOCKED a  =>  ADD_CHECK
+        // (the `locked = locked + x` accumulator pattern).
+        if (op == OP_ADD && i + 1 < n && !is_target[i + 1]) {
+            OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
+            if (op2 == OP_TYPECHECK_LOCKED &&
+                DECODE_A(code[i + 1]) == DECODE_A(code[i])) {
+                new_code.push_back(ENCODE_ABC(OP_ADD_CHECK, DECODE_A(code[i]),
+                                              DECODE_B(code[i]), DECODE_C(code[i])));
+                new_lines.push_back(lines[i]);
+                remap[i + 1] = (int)new_code.size();
+                new_code.push_back(code[i + 1]);   // TYPECHECK word
+                new_lines.push_back(lines[i + 1]);
+                i++;
+                continue;
+            }
+        }
+
         // Pattern 2: GETGLOBAL A,Bx + INDEX_GET/GETFIELD A,A,RK(C)
         //   =>  GETGLOBAL_INDEX_GET (the data word keeps its own opcode, so
         //       the fused handler replays whichever access op was fused).

@@ -1406,6 +1406,40 @@ MOBIUS_FORCEINLINE static int vm_op_aget(MobiusVM* vm, VMFrame& f, uint32_t inst
     return vm_op_index_get(vm, f, inst);
 }
 
+// Fused AGET + INDEX_GET: table lookup keyed by an array element. The fast
+// path reads the key straight out of the array — the element stays pinned by
+// the array for the whole op and the lookup only reads it, so the register
+// copy (and its refcount ticks on heap-string keys) is skipped entirely.
+// Any shape mismatch replays both original instructions generically, which
+// also materializes the scratch register exactly as unfused code would.
+MOBIUS_FORCEINLINE static int vm_op_aget_index_get(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint32_t inst2 = *f.ip++;   // original AGET word
+    const Value& tbl_v = RB(inst);
+    const Value& arr_v = f.regs[DECODE_B(inst2)];
+    if (MOBIUS_LIKELY(tbl_v.type == VAL_TABLE && tbl_v.as.table &&
+                      arr_v.type == VAL_ARRAY && arr_v.as.array &&
+                      !IS_CONSTANT(DECODE_C(inst2)))) {
+        const Value& idx_v = f.regs[DECODE_C(inst2)];
+        ArrayValue* arr = arr_v.as.array;
+        if (MOBIUS_LIKELY(idx_v.type == VAL_INT64 &&
+                          idx_v.as.i64 >= 0 && idx_v.as.i64 < (int64_t)arr->length())) {
+            const Value& key = arr->unsafeGet((size_t)idx_v.as.i64);
+            if (MOBIUS_LIKELY(key.type == VAL_STRING && key.as.string)) {
+                const Value* hit = tbl_v.as.table->findString(key.as.string);
+                if (MOBIUS_LIKELY(hit != nullptr)) {
+                    RA(inst) = *hit;
+                    return 0;
+                }
+            }
+        }
+    }
+    // Generic replay: run the AGET (fills the scratch register), then the
+    // INDEX_GET that reads it.
+    int rc = vm_op_aget(vm, f, inst2);
+    if (MOBIUS_UNLIKELY(rc != 0)) return rc;
+    return vm_op_index_get(vm, f, inst);
+}
+
 MOBIUS_FORCEINLINE static int vm_op_aset(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& obj = RA(inst);
     if (MOBIUS_LIKELY(obj.type == VAL_ARRAY && obj.as.array)) {
@@ -2436,6 +2470,17 @@ MOBIUS_FORCEINLINE static int vm_op_typecheck_locked(MobiusVM* vm, VMFrame& f, u
         return -1;
     }
     return 0;
+}
+
+// Fused ADD + TYPECHECK_LOCKED (the `locked_var = locked_var + x` loop
+// accumulator pattern): one dispatch instead of two. Defined after both
+// constituent handlers — no forward declarations (declaring an always_inline
+// function before its body poisons its inlining at every call site).
+MOBIUS_FORCEINLINE static int vm_op_add_check(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    uint32_t inst2 = *f.ip++;   // original TYPECHECK_LOCKED word
+    int rc = vm_op_add(vm, f, inst);
+    if (MOBIUS_UNLIKELY(rc != 0)) return rc;
+    return vm_op_typecheck_locked(vm, f, inst2);
 }
 
 // ---- Typed comparisons ----
@@ -3740,6 +3785,26 @@ MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // Main dispatch loop
 // ============================================================================
 
+MOBIUS_NOINLINE int MobiusVM::handleHandlerError(size_t base_depth) {
+    if (!try_stack_.empty() &&
+        try_stack_.back().call_stack_depth > base_depth) {
+        TryBlock& tb = try_stack_.back();
+        release_atomic_locks(this, tb.atomic_depth);
+        while (callStackSize() > tb.call_stack_depth) {
+            if (callStackTop().upvalue_count > 0)
+                closeUpvalues(callStackTop(), 0);
+            callStackPop();
+        }
+        InternalError* ie = state_->getLastError();
+        const char* err = ie ? ie->message : nullptr;
+        registers_[tb.base + tb.catch_reg] = make_error_string_value(err);
+        callStackTop().ip = tb.catch_ip;
+        try_stack_.pop_back();
+        return 0;
+    }
+    return -1;
+}
+
 int MobiusVM::run(size_t base_depth) {
     size_t saved_atomic_depth = atomic_locks_.size();
     struct AtomicLockCleanup {
@@ -3805,7 +3870,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_TYPELOCK,
         &&L_OP_TYPECHECK_LOCKED,
         &&L_OP_NOP,
-        &&L_OP_AGET, &&L_OP_ASET,
+        &&L_OP_AGET, &&L_OP_AGET_INDEX_GET, &&L_OP_ADD_CHECK, &&L_OP_ASET,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
                   "dispatch_table must match OpCode enum");
@@ -3834,30 +3899,19 @@ int MobiusVM::run(size_t base_depth) {
     // Handlers below base_depth belong to an outer dispatch loop; unwinding to
     // them from a nested run (metamethod / iterator call) would corrupt both
     // runs' frame state — instead return -1 so each run level unwinds itself.
-    #define VM_HANDLER(op, fn) VM_CASE(op) {                           \
+    // The try-unwind machinery is outlined into handleHandlerError: inlined
+    // into every one of ~120 labels it bloated run() past GCC's register-
+    // allocation comfort zone (adding any two labels regressed unrelated
+    // benchmarks ~20%). The frame mirror is refreshed HERE, inline, so its
+    // address never escapes into the call.
+    #define VM_HANDLER(op, fn) VM_CASE(op) {                            \
         int _rc = fn(this, f, inst);                                    \
         if (MOBIUS_UNLIKELY(_rc < 0)) {                                 \
-            if (!try_stack_.empty() &&                                   \
-                try_stack_.back().call_stack_depth > base_depth) {       \
-                TryBlock& _tb = try_stack_.back();                       \
-                release_atomic_locks(this, _tb.atomic_depth);            \
-                while (callStackSize() > _tb.call_stack_depth) {         \
-                    if (callStackTop().upvalue_count > 0)                 \
-                        closeUpvalues(callStackTop(), 0);                 \
-                    callStackPop();                                       \
-                }                                                        \
-                InternalError* _ie = state_->getLastError();              \
-                const char* err = _ie ? _ie->message : nullptr;          \
-                registers_[_tb.base + _tb.catch_reg] =                   \
-                    make_error_string_value(err);                        \
-                callStackTop().ip = _tb.catch_ip;                        \
-                try_stack_.pop_back();                                    \
-                refreshFrame(f);                                         \
-                VM_NEXT();                                               \
-            }                                                            \
-            return -1;                                                   \
-        }                                                                \
-        VM_NEXT();                                                       \
+            if (handleHandlerError(base_depth) < 0) return -1;          \
+            refreshFrame(f);                                            \
+            VM_NEXT();                                                  \
+        }                                                               \
+        VM_NEXT();                                                      \
     }
 
     VM_HANDLER(OP_MOVE, vm_op_move)
@@ -4032,6 +4086,8 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_TYPECHECK_LOCKED, vm_op_typecheck_locked)
     VM_HANDLER(OP_NOP, vm_op_nop)
     VM_HANDLER(OP_AGET, vm_op_aget)
+    VM_HANDLER(OP_AGET_INDEX_GET, vm_op_aget_index_get)
+    VM_HANDLER(OP_ADD_CHECK, vm_op_add_check)
     VM_HANDLER(OP_ASET, vm_op_aset)
 
     VM_DEFAULT()
