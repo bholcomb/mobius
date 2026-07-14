@@ -4012,15 +4012,17 @@ void Compiler::peepholeOptimize(Prototype* proto) {
             continue;
         }
 
-        // Pattern 1: MOVE A,B,_ + ADDI A,sBx  =>  MOVE_ADDI A,B,_ | AsBx(_,A,sBx)
+        // Pattern 1: MOVE A,B,_ + ADDI/SUBI/MULI A,sBx  =>  MOVE_ADDI/_MULI
         if (op == OP_MOVE && i + 1 < n && !is_target[i + 1]) {
             OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
-            if (op2 == OP_ADDI || op2 == OP_SUBI) {
+            if (op2 == OP_ADDI || op2 == OP_SUBI || op2 == OP_MULI) {
                 uint8_t move_a = DECODE_A(code[i]);
                 uint8_t move_b = DECODE_B(code[i]);
                 uint8_t addi_a = DECODE_A(code[i + 1]);
                 if (move_a == addi_a) {
-                    new_code.push_back(ENCODE_ABC(OP_MOVE_ADDI, move_a, move_b, 0));
+                    new_code.push_back(ENCODE_ABC(
+                        op2 == OP_MULI ? OP_MOVE_MULI : OP_MOVE_ADDI,
+                        move_a, move_b, 0));
                     new_lines.push_back(lines[i]);
                     remap[i + 1] = (int)new_code.size();
                     // SUBI is rewritten as ADDI with a negated immediate at
@@ -4031,6 +4033,32 @@ void Compiler::peepholeOptimize(Prototype* proto) {
                     new_code.push_back(data_word);
                     new_lines.push_back(lines[i + 1]);
                     i++;
+                    continue;
+                }
+            }
+        }
+
+        // Pattern 1a2: AGET x,arr,i + ADD s,s,x + TYPECHECK_LOCKED s
+        //   =>  AGET_ADD_CHECK (the `sum = sum + arr[i]` accumulator).
+        if (op == OP_AGET && i + 2 < n && !is_target[i + 1] && !is_target[i + 2]) {
+            OpCode op2 = (OpCode)DECODE_OP(code[i + 1]);
+            OpCode op3 = (OpCode)DECODE_OP(code[i + 2]);
+            if (op2 == OP_ADD && op3 == OP_TYPECHECK_LOCKED) {
+                uint8_t aget_a = DECODE_A(code[i]);
+                uint8_t add_a = DECODE_A(code[i + 1]);
+                uint8_t add_b = DECODE_B(code[i + 1]);
+                uint8_t add_c = DECODE_C(code[i + 1]);
+                if (add_a == add_b && add_c == aget_a && !IS_CONSTANT(add_c) &&
+                    add_a != aget_a && DECODE_A(code[i + 2]) == add_a) {
+                    new_code.push_back(ENCODE_ABC(OP_AGET_ADD_CHECK, add_a, 0, 0));
+                    new_lines.push_back(lines[i]);
+                    remap[i + 1] = (int)new_code.size();
+                    new_code.push_back(code[i]);       // AGET word
+                    new_lines.push_back(lines[i + 1]);
+                    remap[i + 2] = (int)new_code.size();
+                    new_code.push_back(code[i + 2]);   // TYPECHECK word
+                    new_lines.push_back(lines[i + 2]);
+                    i += 2;
                     continue;
                 }
             }

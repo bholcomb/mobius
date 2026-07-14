@@ -237,6 +237,7 @@ enum OpCode : uint8_t {
 
     // -- Superinstructions (fused multi-instruction patterns) --
     OP_MOVE_ADDI,   // A B + next word is AsBx(ADDI): R[A]=R[B]; R[A]+=sBx; ip+=1
+    OP_MOVE_MULI,   // fused:    word1 MOVE A,B; word2 = MULI A,sBx
     OP_GETGLOBAL_INDEX_GET, // consumes 2 words: GETGLOBAL(A,Bx) then INDEX_GET(A,A,RK(C))
     OP_GETGLOBAL_CALL, // consumes 2 words: GETGLOBAL(A,Bx) then CALL(A,B,C)
     OP_GETGLOBAL_CALL_PLAIN, // consumes 2 words: GETGLOBAL(A,Bx) then CALL_PLAIN(A,B,C)
@@ -304,6 +305,9 @@ enum OpCode : uint8_t {
                     //           (no register copy / refcount ticks); fallback replays
                     //           both original ops generically.
     OP_ADD_CHECK,   // fused:    word1 = ADD A,B,C; word2 = TYPECHECK_LOCKED A.
+    OP_AGET_ADD_CHECK, // fused:  sum = sum + arr[i]. word1 A=sum; word2 = AGET
+                    //           encoding (scratch, arr, idx); word3 = TYPECHECK
+                    //           word. Fallback replays all three generically.
     OP_ASET,        // A B C     R[A].array[RK(B)] = RK(C)   (fallback: INDEX_SET)
 
     OP_MAX_OPCODE
@@ -430,6 +434,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"MODK",      FMT_ABC_D},
 
         {"MOVE_ADDI", FMT_FUSED2},
+        {"MOVE_MULI", FMT_FUSED2},
         {"GETGLOBAL_INDEX_GET", FMT_FUSED2},
         {"GETGLOBAL_CALL", FMT_FUSED2},
         {"GETGLOBAL_CALL_PLAIN", FMT_FUSED2},
@@ -478,6 +483,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"AGET",      FMT_ABC},
         {"AGET_INDEX_GET", FMT_FUSED2},
         {"ADD_CHECK", FMT_FUSED2},
+        {"AGET_ADD_CHECK", FMT_ABC_D},
         {"ASET",      FMT_ABC},
     };
     static_assert(sizeof(info) / sizeof(info[0]) == OP_MAX_OPCODE,

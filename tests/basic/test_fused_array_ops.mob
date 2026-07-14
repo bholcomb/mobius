@@ -1,0 +1,63 @@
+// Fused superinstructions (AGET_ADD_CHECK, AGET_INDEX_GET, ADD_CHECK,
+// MOVE_MULI) must preserve generic semantics on every fallback shape.
+var failures = 0;
+func check(name, ok) {
+    if (ok) { print("PASS: " + name); } else { print("FAIL: " + name); failures = failures + 1; }
+}
+
+// int accumulator over int array (fast path)
+func sum_ints() {
+    var arr = [1, 2, 3, 4, 5];
+    var sum = 0;
+    for (var i = 0; i < 5; i++) { sum = sum + arr[i]; }
+    return sum;
+}
+check("int accumulate", sum_ints() == 15);
+
+// mixed-type array: fast path must fall back mid-loop without corruption
+func sum_mixed() {
+    var arr = [1, 2.5, 3, 4.5, 5];
+    var sum = 0.0;
+    for (var i = 0; i < 5; i++) { sum = sum + arr[i]; }
+    return sum;
+}
+check("mixed accumulate", sum_mixed() == 16.0);
+
+// string keys via array (AGET_INDEX_GET) with a metatable __index fallback
+func table_via_keys() {
+    var keys = ["a", "b", "missing"];
+    var base = { missing: 99 };
+    var t = { a: 1, b: 2 };
+    // give t a table __index so the miss goes through the metatable
+    setmetatable(t, { __index: base });
+    var total = 0;
+    for (var i = 0; i < 3; i++) { total = total + t[keys[i]]; }
+    return total;
+}
+check("keyed lookup with metatable fallback", table_via_keys() == 102);
+
+// out-of-bounds index inside the fused accumulate: nil + int must error;
+// verify via try/catch (the fused op's replay path raises it)
+func oob() {
+    var arr = [1, 2, 3];
+    var sum = 0;
+    try {
+        for (var i = 0; i < 5; i++) { sum = sum + arr[i]; }
+    } catch e {
+        return -1;
+    }
+    return sum;
+}
+check("oob falls back and errors", oob() == -1);
+
+// MOVE_MULI on floats
+func scale() {
+    var x = 2.5;
+    var y = x;
+    y *= 4;
+    return y;
+}
+check("move_muli float", scale() == 10.0);
+
+if (failures > 0) { exit(1); }
+print("fused array op tests passed");
