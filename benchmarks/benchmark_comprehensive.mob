@@ -186,7 +186,7 @@ func benchmark_mixed() {
 
     var total = 0;
     for (var i = 0; i < n; i++) {
-        var record = data:get(i);
+        var record = data[i];   // plain indexing, same as the Lua/Python versions
         total = total + record.value + size(record.name);
     }
 

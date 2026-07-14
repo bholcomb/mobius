@@ -127,23 +127,31 @@ methods, and call Mobius functions back from C — see the
 
 ## Performance
 
-Faster than Lua 5.4 on the overall benchmark suite, and ~3.7× faster than
-CPython — measured with checksum-verified, apples-to-apples benchmarks
-(medians of five runs, milliseconds, lower is better):
+Measured against both Lua 5.4 and CPython 3 with checksum-verified,
+apples-to-apples benchmarks (medians of five runs, milliseconds, lower is
+better; the ratio columns are Mobius ÷ that language — **below 1.0 means
+Mobius is faster**):
 
-| Benchmark | Mobius | Lua | CPython | Mobius/Lua |
-|-----------|-------:|----:|--------:|-----------:|
-| Arithmetic (integer)           |  106.4 |  130.3 |   855.7 | **0.82×** |
-| Recursive calls (fib 30)       |   39.1 |   32.8 |    71.6 | 1.19× |
-| Array ops (dense numeric)      |   11.3 |   10.5 |    56.0 | 1.08× |
-| Table ops (string-key map)     |   16.3 |   12.1 |    29.0 | 1.35× |
-| String ops                     |   46.5 |   68.2 |    27.4 | **0.68×** |
-| Nested loops                   |   51.1 |   52.8 |   284.7 | **0.97×** |
-| Object create / destroy        |   63.3 |   78.6 |    54.8 | **0.81×** |
-| Mixed workload                 |   41.1 |   41.0 |    30.8 | 1.00× |
-| **Total**                      | **383.4** | **450.2** | **1421.7** | **0.85×** |
+| Benchmark | Mobius | Lua | CPython | vs Lua | vs Python |
+|-----------|-------:|----:|--------:|-------:|----------:|
+| Arithmetic (integer)           |  106.0 |  134.8 |   847.0 | **0.79×** | **0.13×** |
+| Recursive calls (fib 30)       |   39.0 |   32.5 |    69.3 | 1.20× | **0.56×** |
+| Array ops (dense numeric)      |   11.3 |   10.4 |    56.3 | 1.09× | **0.20×** |
+| Table ops (string-key map)     |   15.1 |   11.7 |    28.5 | 1.29× | **0.53×** |
+| String ops                     |   45.5 |   63.3 |    28.0 | **0.72×** | 1.63× |
+| Nested loops                   |   45.4 |   52.0 |   281.1 | **0.87×** | **0.16×** |
+| Object create / destroy        |   62.4 |   77.9 |    53.6 | **0.80×** | 1.16× |
+| Mixed workload                 |   36.8 |   40.1 |    31.8 | **0.92×** | 1.16× |
+| **Total**                      | **378.3** | **442.3** | **1417.3** | **0.86×** | **0.27×** |
 
-Two things worth knowing:
+How to read it: the two comparisons measure different things. Lua is the
+benchmark for interpreter speed — beating it means the VM itself is fast.
+CPython is slow per-instruction but its dictionaries and strings are
+heavyweight, hand-tuned C — so it stays competitive exactly where a workload
+reduces to those primitives (string-building, object churn), while pure
+language execution (arithmetic, loops, calls) runs 2–8× faster in Mobius.
+
+Two more things worth knowing:
 
 - You get this speed with plain, untyped code. Under the hood, a
   register-based bytecode VM infers and locks variable types so it can run
@@ -151,7 +159,7 @@ Two things worth knowing:
 - When a function really matters, annotate it —
   `func fib(n: int64): int64` — and the compiler drops another layer of
   runtime checks. That one change took the recursion benchmark from 1.8× to
-  1.19× vs Lua.
+  1.2× vs Lua.
 
 Every benchmark emits a checksum, and the runner refuses to report timings
 unless all three languages agree — so the implementations are provably doing
