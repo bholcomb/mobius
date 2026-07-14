@@ -155,22 +155,8 @@ benchmark for interpreter speed — beating it means the VM itself is fast.
 CPython is slow per-instruction but its dictionaries and strings are
 heavyweight, hand-tuned C — so it stays competitive exactly where a workload
 reduces to those primitives (string-building, object churn), while pure
-language execution (arithmetic, loops, calls) runs 2–8× faster in Mobius.
-
-Two more things worth knowing:
-
-- You get this speed with plain, untyped code — type locking lets the
-  register-based bytecode VM infer each variable's type and run
-  type-specialized instructions without any annotations in your source.
-- In some situations, type annotations help the compiler generate optimal
-  bytecode. Recursive functions are one: annotating the benchmark's
-  `func fib(n: int64): int64` took it from 1.8× to 1.2× vs Lua.
-
-Every benchmark emits a checksum, and the runner refuses to report timings
-unless all three languages agree — so the implementations are provably doing
-the same work. Reproduce with
-`python3 benchmarks/run_benchmarks.py --runs 5`. As always, these are
-indicative micro-benchmarks, not a rigorous cross-language study.
+language execution (arithmetic, loops, calls) runs 2–8× faster in Mobius. As 
+always, these are indicative micro-benchmarks, not a rigorous cross-language study.
 
 ## Documentation
 
