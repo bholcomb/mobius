@@ -139,16 +139,16 @@ better**:
 | Arithmetic (integer)           |  106.4 |  130.3 |   855.7 | **0.82×** |
 | Recursive calls (fib 30)       |   39.1 |   32.8 |    71.6 | 1.19× |
 | Array ops (dense numeric)      |   11.3 |   10.5 |    56.0 | 1.08× |
-| Table ops (string-key map)     |   16.4 |   11.8 |    28.6 | 1.39× |
+| Table ops (string-key map)     |   16.3 |   12.1 |    29.0 | 1.35× |
 | String ops                     |   46.5 |   68.2 |    27.4 | **0.68×** |
 | Nested loops                   |   51.1 |   52.8 |   284.7 | **0.97×** |
-| Object create / destroy        |   66.0 |   78.0 |    55.7 | **0.85×** |
-| Mixed workload                 |   44.8 |   41.1 |    31.3 | 1.09× |
-| **Total**                      | **397.5** | **447.7** | **1434.3** | **0.89×** |
+| Object create / destroy        |   63.3 |   78.6 |    54.8 | **0.81×** |
+| Mixed workload                 |   41.1 |   41.0 |    30.8 | 1.00× |
+| **Total**                      | **383.4** | **450.2** | **1421.7** | **0.85×** |
 
 The goal is to be as fast as reasonably possible. Current state:
 
-- **Faster than Lua overall** (0.88×) and **~3.5× faster than CPython**.
+- **Faster than Lua overall** (0.85×) and **~3.7× faster than CPython**.
   Mobius beats Lua outright on integer arithmetic, nested loops, string ops,
   and object create/destroy.
 - Type locking pays off most on **arithmetic and tight numeric loops**;

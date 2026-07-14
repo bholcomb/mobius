@@ -338,10 +338,16 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
                 }
             }
 
-            for (const auto& entry : value.as.table->entries()) {
-                if (!entry.occupied()) continue;
-                clone->set(deep_copy_value_impl(entry.key, memo),
-                           deep_copy_value_impl(entry.value, memo));
+            {
+                // Iterate by TAG, not by inspecting entries: empty slots hold
+                // uninitialized memory (see Table's constructor).
+                const auto& entries = value.as.table->entries();
+                const auto& tags = value.as.table->tags();
+                for (size_t ei = 0; ei < entries.size(); ei++) {
+                    if (tags[ei] == Table::TAG_EMPTY) continue;
+                    clone->set(deep_copy_value_impl(entries[ei].key, memo),
+                               deep_copy_value_impl(entries[ei].value, memo));
+                }
             }
             return copy;
         }

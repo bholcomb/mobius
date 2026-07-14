@@ -47,7 +47,7 @@ public:
         other.size_ = 0;
         other.cap_ = InlineN;
     }
-    SmallVec& operator=(SmallVec&&) = delete;
+
 
     ~SmallVec() {
         destroy_range(0, size_);
@@ -105,6 +105,15 @@ public:
         size_ = n;
     }
 
+    // Set the size without constructing elements — the slots hold garbage
+    // until the caller initializes them (placement-new). Only valid for
+    // callers that track occupancy externally and never destroy or read an
+    // uninitialized slot (Table's tag bytes are the canonical example).
+    void resizeNoInit(size_t n) {
+        if (n > cap_) grow(n);
+        size_ = n;
+    }
+
     void assign(size_t n, const T& fill) {
         destroy_range(0, size_);
         size_ = 0;
@@ -114,6 +123,33 @@ public:
     void clear() {
         destroy_range(0, size_);
         size_ = 0;
+    }
+
+    // Forget the contents without running destructors — for callers that
+    // RELOCATED the elements elsewhere (memcpy) under the trivially-
+    // relocatable contract. The buffer is kept for reuse.
+    void clearNoDestroy() { size_ = 0; }
+
+    // Move-assign: destroys current contents, then steals per the move
+    // constructor's rules (spilled buffer taken outright, inline contents
+    // relocated).
+    SmallVec& operator=(SmallVec&& other) noexcept {
+        if (this == &other) return *this;
+        destroy_range(0, size_);
+        if (data_ != (T*)inline_) free(data_);
+        if (other.data_ != (T*)other.inline_) {
+            data_ = other.data_;
+            cap_ = other.cap_;
+        } else {
+            data_ = (T*)inline_;
+            cap_ = InlineN;
+            memcpy((void*)data_, (const void*)other.data_, other.size_ * sizeof(T));
+        }
+        size_ = other.size_;
+        other.data_ = (T*)other.inline_;
+        other.size_ = 0;
+        other.cap_ = InlineN;
+        return *this;
     }
 
     // Iterator-position insert/erase (relocation via memmove; see contract).

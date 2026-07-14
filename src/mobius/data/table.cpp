@@ -172,7 +172,10 @@ Table::Table(MobiusState* state, size_t initial_capacity)
     if (initial_capacity < INITIAL_TABLE_CAPACITY)
         initial_capacity = INITIAL_TABLE_CAPACITY;
     initial_capacity = next_power_of_2(initial_capacity);
-    entries_.resize(initial_capacity);
+    // Empty slots hold UNINITIALIZED memory; the tag byte is the single
+    // source of truth for occupancy. Every write into an empty slot is a
+    // placement-new; destruction walks the tags.
+    entries_.resizeNoInit(initial_capacity);
     tags_.resize(initial_capacity, TAG_EMPTY);
     setGcManaged();
     gc_track(&gc_, GC_TABLE, this);
@@ -180,6 +183,16 @@ Table::Table(MobiusState* state, size_t initial_capacity)
 
 Table::~Table() {
     gc_untrack(&gc_);
+    // Destroy only occupied entries — empty slots are uninitialized memory
+    // (see the constructor). The tag scan touches 1 byte per slot instead of
+    // letting the storage destructor walk 32.
+    for (size_t i = 0; i < entries_.size(); i++) {
+        if (tags_[i] != TAG_EMPTY) {
+            entries_[i].key.~Value();
+            entries_[i].value.~Value();
+        }
+    }
+    entries_.clearNoDestroy();
     if (metatable_) {
         metatable_->RefCounted::release();
     }
@@ -224,8 +237,8 @@ void Table::insertEntry(const Value& key, const Value& value, size_t hash) {
     do {
         uint8_t t = tags_[index];
         if (t == TAG_EMPTY) {
-            entries_[index].key = key;
-            entries_[index].value = value;
+            new (&entries_[index].key) Value(key);     // slot was uninitialized
+            new (&entries_[index].value) Value(value);
             tags_[index] = tag;
             return;
         }
@@ -245,20 +258,31 @@ void Table::resize(size_t new_capacity) {
     if (new_capacity <= entries_.size()) return;
     new_capacity = next_power_of_2(new_capacity);
 
-    EntryStorage old_entries = std::move(entries_);
-    TagStorage old_tags = std::move(tags_);
-    entries_.clear();
-    entries_.resize(new_capacity);
-    tags_.assign(new_capacity, TAG_EMPTY);
-    size_ = 0;
+    // Relocating rehash: every occupied entry is memcpy'd into its new slot
+    // (Value is trivially relocatable — the same contract SmallVec growth
+    // relies on), so no refcounts tick and no destructors run. The rehash
+    // probe only hunts for empty slots: keys are unique by construction, so
+    // the equality checks the insert path does are dead weight here.
+    EntryStorage new_entries;
+    TagStorage new_tags;
+    new_entries.resizeNoInit(new_capacity);   // slots init'd by relocation
+    new_tags.assign(new_capacity, TAG_EMPTY);
 
-    for (size_t i = 0; i < old_entries.size(); i++) {
-        if (old_tags[i] != TAG_EMPTY) {
-            size_t h = hash_value_raw(old_entries[i].key);
-            insertEntry(old_entries[i].key, old_entries[i].value, h);
-            size_++;
-        }
+    size_t mask = new_capacity - 1;
+    for (size_t i = 0; i < entries_.size(); i++) {
+        if (tags_[i] == TAG_EMPTY) continue;
+        size_t h = hash_value_raw(entries_[i].key);
+        size_t index = h & mask;
+        while (new_tags[index] != TAG_EMPTY) index = (index + 1) & mask;
+        memcpy((void*)&new_entries[index], (const void*)&entries_[i],
+               sizeof(TableEntry));
+        new_tags[index] = tags_[i];
     }
+
+    entries_.clearNoDestroy();          // contents live on in new_entries
+    entries_ = std::move(new_entries);
+    tags_ = std::move(new_tags);
+    // size_ unchanged: relocation neither adds nor drops entries.
 }
 
 const Value& Table::get(const Value& key) const {
@@ -357,9 +381,11 @@ bool Table::setUnlocked(const Value& key, const Value& value) {
             }
         }
 
-        entries_[index].key = key;
+        new (&entries_[index].key) Value(key);     // slot was uninitialized
+        new (&entries_[index].value) Value(value);
         tags_[index] = tagFromHash(h);
         size_++;
+        return true;
     }
 
     entries_[index].value = value;
@@ -396,8 +422,8 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
             }
 
             TableEntry& e = entries_[index];
-            e.key = make_string_value(key);   // retains: the table owns its key
-            e.value = value;
+            new (&e.key) Value(make_string_value(key));   // retains; slot was uninitialized
+            new (&e.value) Value(value);
             tags_[index] = tag;
             size_++;
             return true;
