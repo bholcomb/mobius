@@ -29,18 +29,19 @@ g++ -o my_app my_app.cpp -lmobius-core -ldl
 1. [Minimal example](#minimal-example)
 2. [State lifecycle](#state-lifecycle)
 3. [Configuration](#configuration)
-4. [Executing scripts](#executing-scripts)
-5. [The stack](#the-stack)
-6. [Exchanging values](#exchanging-values)
-7. [Registering native functions](#registering-native-functions)
-8. [Calling Mobius functions from C](#calling-mobius-functions-from-c)
-9. [Rooted value handles](#rooted-value-handles)
-10. [Error handling](#error-handling)
-11. [Loading plugins](#loading-plugins)
-12. [Type metatables](#type-metatables)
-13. [Multiple interpreters](#multiple-interpreters)
-14. [Concurrency and fibers](#concurrency-and-fibers)
-15. [Metrics](#metrics)
+4. [Footprint](#footprint)
+5. [Executing scripts](#executing-scripts)
+6. [The stack](#the-stack)
+7. [Exchanging values](#exchanging-values)
+8. [Registering native functions](#registering-native-functions)
+9. [Calling Mobius functions from C](#calling-mobius-functions-from-c)
+10. [Rooted value handles](#rooted-value-handles)
+11. [Error handling](#error-handling)
+12. [Loading plugins](#loading-plugins)
+13. [Type metatables](#type-metatables)
+14. [Multiple interpreters](#multiple-interpreters)
+15. [Concurrency and fibers](#concurrency-and-fibers)
+16. [Metrics](#metrics)
 
 ---
 
@@ -115,9 +116,63 @@ MobiusState* state = mobius_new_state(&config);
 | `initial_fiber_pool_size` | `size_t`                 | `16`                   | Fibers pre-allocated on first spawn |
 | `max_fiber_pool_size`     | `size_t`                 | `256`                  | Hard cap on pooled fibers |
 | `max_worker_threads`      | `int`                    | `hardware_concurrency() / 2` (≥ 1) | Extra worker threads; `0` = single-threaded cooperative. The calling thread always participates, so total workers = this value + 1. |
+| `string_pool_buckets`     | `size_t`                 | `65536`                | Initial string-intern hash buckets (rounded to a power of two; grows as needed). `0` = default. See [Footprint](#footprint). |
+| `global_slot_capacity`    | `size_t`                 | `16384`                | Preallocated global-variable slots. **Also the hard cap** — exceeding it is a runtime error, so include headroom for stdlib registrations. `0` = default. |
 
 `MobiusOverrideBehavior` is one of `MOBIUS_OVERRIDE_ERROR` (default),
 `MOBIUS_OVERRIDE_WARN`, or `MOBIUS_OVERRIDE_QUIET`.
+
+---
+
+## Footprint
+
+Numbers below are from a Linux x86-64 release build; exact figures vary by
+platform and compiler, but the shape holds.
+
+**Disk.** The core library — VM, compiler, fiber runtime, garbage collector,
+and the entire no-import standard library — is a single shared object of
+about **1.1 MB stripped**. The optional CLI adds ~100 KB. Bundled modules
+(`json`, `http`, `sqlite`, …) are separate shared objects loaded only on
+`import`; ship just the ones you use (`json` ≈ 55 KB, `crypto` ≈ 59 KB,
+`http` ≈ 151 KB stripped).
+
+**Memory.** A minimal host — create a state, register the stdlib, run a small
+script — peaks around **6.3 MB resident** with the default configuration.
+Decomposed:
+
+| Stage | Peak RSS |
+|-------|---------:|
+| Bare C process (libc/libstdc++ baseline)     | ~1.4 MB |
+| + `mobius_new_state` + `mobius_init_stdlib`  | ~5.7 MB |
+| + first script executed                      | ~6.3 MB |
+
+State creation dominates, and most of it is two deliberately speed-sized
+preallocations you can shrink through `MobiusConfig`:
+
+```c
+MobiusConfig cfg = mobius_default_config();
+cfg.string_pool_buckets   = 1024;  /* default 65536 — grows as needed  */
+cfg.global_slot_capacity  = 512;   /* default 16384 — hard cap, see below */
+cfg.initial_fiber_pool_size = 2;   /* default 16 */
+MobiusState* state = mobius_new_state(&cfg);
+```
+
+The tuned configuration above measures ~**5.4 MB** peak on the same host.
+The remainder is code pages and thread/fiber stacks; fiber stacks are
+virtual memory sized by `fiber_stack_size` / `main_fiber_stack_size`, of
+which only touched pages become resident.
+
+Two cautions:
+
+- `global_slot_capacity` is a **hard cap** as well as a preallocation. The
+  standard library registers ~60 globals; leave headroom for your own. An
+  undersized cap fails scripts with *"Global slot capacity exceeded"* rather
+  than crashing.
+- Shrinking `string_pool_buckets` trades interning speed for memory; the
+  pool grows automatically under load, so start small only when memory is
+  the constraint.
+
+Startup — state creation through first script execution — is under 10 ms.
 
 ---
 
