@@ -26,13 +26,24 @@ A variable's type locks at its **first non-nil assignment**, and the type is
 inferred — there is no type syntax required.
 
 ```mobius
-var x = 42          // x is locked to integer
+var x = 42          // x is locked to int64
 var s = "hello"     // s is locked to string
 var t = {}          // t is locked to table
 
 x = 99              // OK — integer to integer
 x = nil             // OK — nil is always valid
-// x = "oops"       // ERROR: cannot assign string to a variable of type integer
+```
+
+Violating a lock rejects the script at compile time:
+
+```mobius
+var x = 42
+x = "oops"
+```
+
+```text
+Compile error [script.mob:2]: cannot assign string to variable 'x' locked to int64
+Error: Bytecode compilation failed
 ```
 
 The rules:
@@ -49,10 +60,10 @@ The rules:
 
 ```mobius
 var v = nil
-v = 42              // v is now locked to integer
+v = 42              // v is now locked to int64
 v = 99              // OK
 v = nil             // OK
-// v = "hello"      // ERROR: variable is locked to integer
+v = "hello"         // ERROR — v is locked to int64
 
 func find(arr, target) {
     for (var i = 0; i < arr:size(); i++) {
@@ -61,6 +72,12 @@ func find(arr, target) {
     return nil                               // OK — nil is compatible
 }
 ```
+
+Enforcement happens as early as possible: when the compiler can prove both
+the variable's locked type and the assigned expression's type, a violation
+is a **compile error** and the script never runs. When a type can only be
+known at runtime (say, a value read from a table), the lock is enforced at
+the assignment with a runtime error instead — catchable with `try`/`catch`.
 
 Type locking is what lets `a + b` compile to a fast integer-only add when both
 operands are known integers, with no runtime type dispatch.

@@ -24,13 +24,25 @@ var y = 20;     // semicolons are optional
 non-nil value and cannot change afterward — but `nil` is always allowed.
 
 ```mobius
-var count = 0           // locked to integer
+var count = 0           // locked to int64
 count = 99              // OK
 count = nil             // OK — nil is valid for any variable
-// count = "oops"       // ERROR: cannot assign string to integer variable
 
 var name = "Alice"      // locked to string
 var ratio = 3.14        // locked to float
+```
+
+Violating a lock is a **compile error** — the script is rejected before it
+runs:
+
+```mobius
+var count = 0
+count = "oops"
+```
+
+```text
+Compile error [script.mob:2]: cannot assign string to variable 'count' locked to int64
+Error: Bytecode compilation failed
 ```
 
 Convert by storing the result in a **new** variable:

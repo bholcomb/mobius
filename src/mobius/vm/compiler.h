@@ -133,6 +133,7 @@ private:
     int emitLoadK(int reg, int const_idx);
     void emitGetGlobal(int reg, const char* name);
     void emitSetGlobal(int reg, const char* name);
+    bool checkLockedAssignment(ValueType target_t, Expr* rhs, const char* name);
     bool emitReadonlyGlobalConstant(int reg, const char* name);
 
     // --- Expression compilation ---

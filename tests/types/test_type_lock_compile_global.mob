@@ -1,0 +1,6 @@
+// Compile-time type-lock enforcement, GLOBAL variable: same contract as
+// locals. Registered in tests/expected_failures.txt.
+// Regression: globals were previously not checked at all.
+var count = 0
+count = "oops"
+print("should never execute")
