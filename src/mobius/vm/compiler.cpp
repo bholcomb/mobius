@@ -292,6 +292,22 @@ void Compiler::emitGetGlobal(int reg, const char* name) {
     }
 }
 
+// Enforce type locking on an assignment when both sides' types are known at
+// compile time. nil is always assignable. Sets had_error_ — a lock violation
+// is a compile error, not a diagnostic (it used to print and keep going,
+// which let the script run anyway and exit 0).
+bool Compiler::checkLockedAssignment(ValueType target_t, Expr* rhs, const char* name) {
+    if (target_t == VAL_UNKNOWN || !rhs) return true;
+    ValueType rhs_t = inferExprType(rhs);
+    if (rhs_t == VAL_UNKNOWN || rhs_t == VAL_NIL || rhs_t == target_t) return true;
+    fprintf(stderr, "Compile error [%s:%d]: cannot assign %s to variable '%s' "
+            "locked to %s\n",
+            current_->proto->source.c_str(), currentLine_,
+            value_type_name(rhs_t), name, value_type_name(target_t));
+    had_error_ = true;
+    return false;
+}
+
 void Compiler::emitSetGlobal(int reg, const char* name) {
     if (state_) {
         int slot = state_->assignGlobalSlot(name, globals_);
@@ -1779,12 +1795,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                                   rhs_maybe_shared &&
                                   type_prefers_plain_binding(target_t);
 
-                if (target_t != VAL_UNKNOWN && rhs_t != VAL_UNKNOWN && rhs_t != target_t) {
-                    fprintf(stderr, "Compile error [%s:%d]: cannot assign type %d to variable '%s' "
-                            "of type %d\n",
-                            current_->proto->source.c_str(), currentLine_,
-                            (int)rhs_t, name, (int)target_t);
-                }
+                checkLockedAssignment(target_t, expr->value, name);
 
                 int save_reg = current_->free_reg;
                 bool target_maybe_shared = keep_plain
@@ -1844,6 +1855,13 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             int lock_reg = allocReg();
             int reg = (dest >= 0) ? dest : allocReg();
             ValueType target_t = globalType(name);
+            checkLockedAssignment(target_t, expr->value, name);
+            if (target_t == VAL_UNKNOWN) {
+                // First typed assignment locks the global, same as a local.
+                ValueType rhs_t = inferExprType(expr->value);
+                if (rhs_t != VAL_UNKNOWN && rhs_t != VAL_NIL)
+                    global_types_[name] = rhs_t;
+            }
             bool keep_plain = !globalMayBeShared(name) &&
                               rhs_maybe_shared &&
                               type_prefers_plain_binding(target_t);

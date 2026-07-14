@@ -1,0 +1,10 @@
+// Compile-time type-lock enforcement, LOCAL variable: assigning a string to
+// an int64-locked local must FAIL COMPILATION (script must not run).
+// This whole file is registered in tests/expected_failures.txt.
+// Regression: this used to print a diagnostic but run anyway with exit 0.
+func f() {
+    var count = 0
+    count = "oops"
+    print("should never execute")
+}
+f()
