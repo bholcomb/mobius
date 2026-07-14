@@ -1,0 +1,28 @@
+// Call-stack growth: recursion deep enough to grow the CallInfo array
+// several times. Guards the growCallStack copy bounds (an off-by-one here
+// read past the old array on every growth — caught by ASan, 2026-07-14).
+func down(n: int64): int64 {
+    if (n <= 0) { return 0; }
+    return 1 + down(n - 1);
+}
+var got = down(5000);
+if (got != 5000) {
+    print("FAIL: deep recursion returned " + str(got));
+    exit(1);
+}
+// closures too: growth must transfer upvalue ownership without double-release
+func make_counter() {
+    var c = 0;
+    func bump() { c = c + 1; return c; }
+    return bump;
+}
+func down2(n, f) {
+    if (n <= 0) { return f(); }
+    return down2(n - 1, f);
+}
+var counter = make_counter();
+if (down2(3000, counter) != 1) {
+    print("FAIL: closure through deep recursion");
+    exit(1);
+}
+print("deep recursion tests passed");

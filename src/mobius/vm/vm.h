@@ -101,10 +101,12 @@ struct CallInfo {
 
     // ip is deliberately NOT initialized here: every reader (the return
     // path's refreshFrame, error backtraces) consumes ci->ip only after a
-    // call site (f.ci->ip = f.ip) or VM_ERROR stored it.
+    // call site (f.ci->ip = f.ip) or VM_ERROR stored it. Nor are upvalues
+    // touched: every slot above the live depth is clean — callStackPop
+    // clears on the way down, slots are born clean, and growCallStack
+    // copies only live frames (guarded by tests/basic/test_deep_recursion).
     void reset(Prototype* p, int b, int nr) {
         proto = p; base = b; nresults = nr;
-        if (MOBIUS_UNLIKELY(upvalue_count > 0)) initUpvalues();
     }
 
     bool setUpvaluesFrom(Upvalue** src, int count) {

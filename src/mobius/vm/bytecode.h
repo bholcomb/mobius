@@ -62,6 +62,11 @@ struct Prototype {
     int num_registers = 2;  // max registers needed (locals + temporaries)
     bool is_vararg   = false;
     bool has_type_locks = false;  // true if any OP_TYPELOCK/OP_TYPECHECK_LOCKED emitted
+    // True when every instruction's register writes are provably scalar
+    // (never a refcounted Value): returns then skip the dead-register clear
+    // loop — the frame cannot pin anything. Computed by the peephole pass
+    // from a conservative opcode whitelist; false means "must clear".
+    bool all_scalar_registers = false;
     ValueType return_type = VAL_UNKNOWN;  // inferred from return statements
     bool return_maybe_shared = false;     // true if any return path may produce a SharedCell
     std::vector<uint8_t> param_unwrap_on_entry;  // 1 when the call boundary should unwrap a shared argument
