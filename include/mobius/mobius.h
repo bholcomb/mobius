@@ -111,6 +111,20 @@ typedef struct {
                                        Set to 0 for single-threaded cooperative mode.
                                        The calling thread always participates as a
                                        worker, so total workers = this value + 1. */
+
+    /* -- Memory footprint tuning -- */
+
+    size_t string_pool_buckets;      /* Initial hash buckets in the string intern
+                                       pool. Rounded up to a power of two; the
+                                       pool grows as needed. Default: 65536
+                                       (sized for speed). Memory-tight embeddings
+                                       can start much smaller, e.g. 1024. */
+
+    size_t global_slot_capacity;     /* Preallocated global-variable slots.
+                                       Default: 16384. This is currently a hard
+                                       cap as well as a preallocation, so set it
+                                       to the most globals (including stdlib
+                                       registrations) the state may ever hold. */
 } MobiusConfig;
 
 /**
