@@ -16,7 +16,9 @@
 struct TableEntry {
     Value key;
     Value value;
-    bool occupied() const { return key.type != VAL_NIL; }
+    // NOTE: there is deliberately no occupied() helper — empty slots hold
+    // UNINITIALIZED memory; only the owning Table's tag bytes say whether a
+    // slot is live. Iterate with entries()+tags(), never by inspecting keys.
 };
 
 class MobiusState;
