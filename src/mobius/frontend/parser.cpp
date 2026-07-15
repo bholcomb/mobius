@@ -1940,7 +1940,13 @@ SwitchCase* parse_switch_case(Parser* parser) {
             continue;
         }
         Stmt* stmt = parse_statement(parser);
-        
+        if (!stmt) {
+            // Parse error inside the case body (parse_statement reported it).
+            // Bail out of the case instead of dereferencing NULL; the parser's
+            // panic-mode recovery resumes at the enclosing statement level.
+            break;
+        }
+
         if (stmt->type == STMT_BREAK) {
             has_break = true;
         }
