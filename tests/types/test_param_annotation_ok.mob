@@ -1,0 +1,13 @@
+// Annotated parameters: valid calls — exact types, nil, and unprovable
+// (dynamic) arguments — must all compile and run.
+func clamp(v: int64, lo: int64, hi: int64): int64 {
+    if (v < lo) { return lo }
+    if (v > hi) { return hi }
+    return v
+}
+if (clamp(300, 0, 255) != 255) { print("FAIL clamp"); exit(1) }
+func opt(n: int64) { return n }
+if (opt(nil) != nil) { print("FAIL nil arg"); exit(1) }
+var t = { v: 42 }
+if (clamp(t.v, 0, 255) != 42) { print("FAIL dynamic arg"); exit(1) }
+print("param annotation tests passed")
