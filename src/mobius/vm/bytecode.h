@@ -70,6 +70,10 @@ struct Prototype {
     ValueType return_type = VAL_UNKNOWN;  // inferred from return statements
     bool return_maybe_shared = false;     // true if any return path may produce a SharedCell
     std::vector<uint8_t> param_unwrap_on_entry;  // 1 when the call boundary should unwrap a shared argument
+    // Declared parameter annotations (ValueType; VAL_UNKNOWN = unannotated).
+    // Consumed by the compiler's direct-call argument check; empty when no
+    // parameter is annotated. Runtime never reads it.
+    std::vector<int8_t> param_type_hints;
 
     // -- Debug information --
     // One entry per instruction in `code`, recording the source line.

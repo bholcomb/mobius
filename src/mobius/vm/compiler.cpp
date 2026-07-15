@@ -2007,6 +2007,26 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
 
     if (use_direct_call) {
         // Arguments still live in the normal call frame layout: R[A+1..].
+        // Check provable argument types against the target's parameter
+        // annotations. The body TRUSTS annotations (it compiles them into
+        // type-specialized instructions), so a wrong-typed argument that
+        // slipped through would compute silent garbage — catch what we can
+        // prove here, at zero runtime cost. Dynamic calls (through function
+        // values) cannot be checked and are documented as unchecked.
+        const auto& hints = direct_target.proto->param_type_hints;
+        for (size_t i = 0; i < expr->arg_count && i < hints.size(); i++) {
+            ValueType want = (ValueType)hints[i];
+            if (want == VAL_UNKNOWN) continue;
+            ValueType got = inferExprType(expr->arguments[i]);
+            if (got == VAL_UNKNOWN || got == VAL_NIL || got == want) continue;
+            fprintf(stderr, "Compile error [%s:%d]: argument %zu of '%s' is %s, "
+                    "but the parameter is annotated %s\n",
+                    current_->proto->source.c_str(), currentLine_, i + 1,
+                    direct_target.proto->name.empty() ? "anonymous"
+                                                      : direct_target.proto->name.c_str(),
+                    value_type_name(got), value_type_name(want));
+            had_error_ = true;
+        }
     } else if (is_method) {
         TableDotExpr* dot = &expr->callee->as.table_dot;
         int tbl_reg = compileExpr(dot->table);
@@ -2536,7 +2556,15 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
         }
         if (stmt->is_annotated) {
             emitABC(OP_TYPECHECK, (uint8_t)reg, (uint8_t)stmt->type_hint, 0);
-            inferred = (ValueType)stmt->type_hint;
+            // stmt->type_hint is a NumberType, NOT a ValueType — the raw
+            // cast recorded e.g. NUM_INT64(1) as VAL_BOOL(1) in
+            // global_types_, which the assignment lock check then trips on.
+            switch ((NumberType)stmt->type_hint) {
+                case NUM_INT64:   inferred = VAL_INT64;   break;
+                case NUM_UINT64:  inferred = VAL_UINT64;  break;
+                case NUM_FLOAT64: inferred = VAL_FLOAT64; break;
+                default:          inferred = VAL_UNKNOWN; break;
+            }
         }
         emitSetGlobal(reg, name);
         if (inferred != VAL_UNKNOWN) {
@@ -3085,12 +3113,20 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
                                             stmt->param_types,
                                             stmt->body, stmt->body_count,
                                             child_fs.proto->return_type);
+    bool any_annotated_param = false;
     for (size_t i = 0; i < stmt->param_count; i++) {
         bool maybe_shared = param_needs_identity[i];
         addLocal(stmt->params[i].identifier, maybe_shared);
-        if (stmt->param_types && stmt->param_types[i] != VAL_UNKNOWN)
+        if (stmt->param_types && stmt->param_types[i] != VAL_UNKNOWN) {
             current_->locals.back().inferred_type = stmt->param_types[i];
+            any_annotated_param = true;
+        }
         child_fs.proto->param_unwrap_on_entry[i] = maybe_shared ? 0 : 1;
+    }
+    if (any_annotated_param) {
+        child_fs.proto->param_type_hints.assign(stmt->param_count, (int8_t)VAL_UNKNOWN);
+        for (size_t i = 0; i < stmt->param_count; i++)
+            child_fs.proto->param_type_hints[i] = (int8_t)stmt->param_types[i];
     }
 
     // Compile function body
@@ -3159,11 +3195,13 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
         if (ret_t != VAL_UNKNOWN) {
             if (current_->proto->return_type == VAL_UNKNOWN) {
                 current_->proto->return_type = ret_t;
-            } else if (current_->proto->return_type != ret_t) {
-                fprintf(stderr, "Compile error [%s:%d]: function has inconsistent return types: "
-                        "expected type %d, got type %d\n",
+            } else if (current_->proto->return_type != ret_t && ret_t != VAL_NIL) {
+                fprintf(stderr, "Compile error [%s:%d]: function has inconsistent return "
+                        "types: expected %s, got %s\n",
                         current_->proto->source.c_str(), currentLine_,
-                        (int)current_->proto->return_type, (int)ret_t);
+                        value_type_name(current_->proto->return_type),
+                        value_type_name(ret_t));
+                had_error_ = true;
             }
         }
 
@@ -4393,6 +4431,17 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
         if (expr->param_types && expr->param_types[i] != VAL_UNKNOWN)
             current_->locals.back().inferred_type = expr->param_types[i];
         child_fs.proto->param_unwrap_on_entry[i] = maybe_shared ? 0 : 1;
+    }
+    {
+        bool any_annotated_param = false;
+        for (size_t i = 0; i < expr->param_count; i++)
+            if (expr->param_types && expr->param_types[i] != VAL_UNKNOWN)
+                any_annotated_param = true;
+        if (any_annotated_param) {
+            child_fs.proto->param_type_hints.assign(expr->param_count, (int8_t)VAL_UNKNOWN);
+            for (size_t i = 0; i < expr->param_count; i++)
+                child_fs.proto->param_type_hints[i] = (int8_t)expr->param_types[i];
+        }
     }
 
     compileBlock(expr->body, expr->body_count);

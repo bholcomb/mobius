@@ -57,7 +57,7 @@ func double(n) {
 ```
 
 Accepted type names: `int64`, `uint64`, `float64`, `bool`, `boolean`,
-`string`, `array`, `table`, `function`, `nil`, `userdata`, `enum`.
+`string`, `array`, `table`, `buffer`, `function`, `nil`, `userdata`.
 
 A declared **return type** is especially useful for recursion. Without it, the
 compiler cannot know a function's return type while compiling its own body
@@ -73,8 +73,27 @@ func fibonacci(n: int64): int64 {
 print(fibonacci(10))    // 55
 ```
 
-Parameter annotations likewise set the inferred type of each parameter,
-improving specialization for operations on them inside the body.
+Parameter annotations set the inferred type of each parameter, so
+operations on them inside the body compile to type-specialized
+instructions. Because the body trusts the annotation, calls to a named
+function are checked against it at compile time — a provably wrong-typed
+argument is a compile error:
+
+```mobius
+func add(a: int64, b: int64): int64 {
+    return a + b
+}
+add("one", 2)
+```
+
+```text
+Compile error [script.mob:4]: argument 1 of 'add' is string, but the parameter is annotated int64
+```
+
+`nil` arguments are always allowed, and arguments whose type the compiler
+cannot prove (a table field, an untyped parameter passed along) compile
+normally. Calls through function *values* — callbacks, functions stored in
+tables — cannot be checked at compile time and are trusted as annotated.
 
 ## First-class functions
 

@@ -165,28 +165,53 @@ var nothing = nil
 
 ## Type annotations
 
-Variables may be annotated with a numeric type: **`int64`**, **`uint64`**, or
-**`float64`**. Annotated variables are type-locked to the annotated type:
+Annotations are optional everywhere. You can state a type explicitly on
+variables, function parameters, and return types:
 
 ```mobius
 var age: int64 = 25
-var count: uint64 = 0
 var pi: float64 = 3.14159
+
+func clamp(v: int64, lo: int64, hi: int64): int64 {
+    if (v < lo) { return lo }
+    if (v > hi) { return hi }
+    return v
+}
 ```
 
-Under `#pragma strict_types true`, the interpreter enforces these annotations at
-runtime (see [Pragmas](#pragmas)). Otherwise they document intent and aid type
-specialization.
+Each position behaves a little differently:
 
-Function parameters and return values accept a wider set of annotation names —
-see [Functions](functions.md#type-annotations).
+- **Variables** accept the numeric annotations and validate the value at the
+  declaration: a float assigned to an `int64` variable converts (`var x:
+  int64 = 3.5` stores `3`), a non-numeric value is a runtime error, and
+  `#pragma strict_types true` turns the conversions into errors too (see
+  [Pragmas](#pragmas)).
+- **Parameters** accept the full set of type names and type the parameter
+  throughout the body — the compiler trusts the annotation, so the body
+  compiles to type-specialized instructions. Calls to a named function are
+  checked at compile time: a provably wrong-typed argument is a compile
+  error. Calls through function *values* (callbacks, table fields) cannot
+  be checked and are trusted as annotated — pass the right type.
+- **Return types** declare what every `return` must produce. A mismatched
+  return is a compile error; returning `nil` is always allowed.
+
+```text
+Compile error [script.mob:2]: argument 1 of 'clamp' is string, but the parameter is annotated int64
+```
+
+Beyond documentation value, annotations help the compiler generate optimal
+bytecode where types can't be inferred — chiefly parameters, whose types
+depend on the caller. Annotating the standard benchmark's recursive `fib`
+took it from 1.8× to 1.2× of Lua's speed.
+
+See also [Functions](functions.md#type-annotations).
 
 ### Type names
 
 | Context                       | Accepted names |
 |-------------------------------|----------------|
 | Variable annotation (`var x:`)| `int64`, `uint64`, `float64` |
-| Function param/return         | `int64`, `uint64`, `float64`, `bool`, `boolean`, `string`, `array`, `table`, `function`, `nil`, `userdata`, `enum` |
+| Function param/return         | `int64`, `uint64`, `float64`, `bool`, `boolean`, `string`, `array`, `table`, `buffer`, `function`, `nil`, `userdata` |
 | `switch … case is <type>`     | `int64`, `uint64`, `float64`, `bool`, `boolean`, `nil`, `string`, `array`, `table`, `function` |
 
 The numeric type names are spelled the same everywhere — `int64`, `uint64`,

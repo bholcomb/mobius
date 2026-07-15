@@ -53,6 +53,43 @@ var s = str(n)          // "42"
 var f = float(n)        // 42.0
 ```
 
+### Type annotations
+
+Annotations are optional everywhere, but you can state a type explicitly —
+on variables, on function parameters, and on return types:
+
+```mobius
+var total: int64 = 0            // numeric variable annotations
+var ratio: float64 = 0.25
+
+func clamp(v: int64, lo: int64, hi: int64): int64 {
+    if (v < lo) { return lo }
+    if (v > hi) { return hi }
+    return v
+}
+
+total = clamp(300, 0, 255)      // 255
+```
+
+- **Variables** accept the numeric annotations (`int64`, `uint64`,
+  `float64`). The value is validated at the declaration — a float assigned
+  to an `int64` variable converts (or errors under `#pragma strict_types`),
+  and a non-numeric value is a runtime error.
+- **Parameters** accept any type name (`int64`, `uint64`, `float64`,
+  `bool`, `string`, `array`, `table`, `buffer`). The annotation types the
+  parameter throughout the function body, and calls to a named function
+  are checked against it at compile time.
+- **Return types** declare what every `return` must produce; a mismatched
+  return is a compile error (`nil` remains allowed, as always).
+
+Beyond documentation value, annotations help the compiler generate optimal
+bytecode in situations where types can't be inferred — chiefly function
+parameters, whose types depend on the caller. An annotated parameter
+compiles like any locked local: arithmetic uses type-specialized
+instructions and the shared-value bookkeeping untyped parameters need is
+dropped. For recursion-heavy code the difference is measurable — annotating
+the standard benchmark's `fib` took it from 1.8× to 1.2× of Lua's speed.
+
 See [Values and Types](values-and-types.md).
 
 ## Literals

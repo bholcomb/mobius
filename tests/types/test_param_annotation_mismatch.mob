@@ -1,0 +1,9 @@
+// Compile-time argument checking at direct-call sites: a provably
+// wrong-typed argument to an annotated parameter must FAIL COMPILATION.
+// (The body trusts annotations — before this check, f("hi") computed
+// silent garbage via string-pointer arithmetic.)
+// Registered in tests/expected_failures.txt.
+func f(n: int64): int64 {
+    return n + n
+}
+print(f("hi"))
