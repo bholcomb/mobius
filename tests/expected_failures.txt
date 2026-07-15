@@ -36,3 +36,5 @@ tests/errors/test_unterminated_multiline_string.mob
 tests/basic/test_exit_nonzero.mob
 tests/types/test_type_lock_compile_local.mob
 tests/types/test_type_lock_compile_global.mob
+tests/types/test_param_annotation_mismatch.mob
+tests/errors/test_switch_case_parse_error.mob
