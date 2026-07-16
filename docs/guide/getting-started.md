@@ -8,8 +8,9 @@ This page gets you from a clean checkout to running your own Mobius scripts.
 
 ## Building
 
-Mobius is built with [Buildy](https://github.com/). From the project root,
-build the release configuration with the bundled `buildy` binary:
+Mobius builds with `buildy`, a small build tool bundled in the repository —
+no system build tools to install. From the project root, build the release
+configuration:
 
 ```bash
 ./buildy -r
