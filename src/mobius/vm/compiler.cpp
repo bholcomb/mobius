@@ -33,6 +33,7 @@ Prototype* Compiler::compile(Stmt** statements, size_t count,
 
     had_error_ = false;
     unreachable_ = false;
+    override_mode_ = state_ ? state_->compileOverrideBehavior() : MOBIUS_OVERRIDE_ERROR;
     FunctionState fs;
     initCompiler(nullptr, source_name);
 
@@ -308,14 +309,35 @@ bool Compiler::checkLockedAssignment(ValueType target_t, Expr* rhs, const char* 
     return false;
 }
 
+// The four builtins the compiler rewrites into dedicated opcodes. Their
+// call sites never read the global slot, so overriding them could not take
+// effect — reject the attempt instead of silently half-working.
+bool Compiler::isIntrinsicBuiltin(const char* name) const {
+    return strcmp(name, "size") == 0 || strcmp(name, "str") == 0 ||
+           strcmp(name, "concat") == 0 || strcmp(name, "array_push") == 0;
+}
+
 void Compiler::emitSetGlobal(int reg, const char* name) {
+    if (override_mode_ != MOBIUS_OVERRIDE_ERROR && isIntrinsicBuiltin(name)) {
+        fprintf(stderr, "Compile error [%s:%d]: cannot override intrinsic builtin "
+                "'%s' (its call sites compile to dedicated instructions)\n",
+                current_->proto->source.c_str(), currentLine_, name);
+        had_error_ = true;
+        return;
+    }
     if (state_) {
         int slot = state_->assignGlobalSlot(name, globals_);
         if (slot < 0) {
             had_error_ = true;
             return;
         }
-        emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)slot);
+        if (override_mode_ != MOBIUS_OVERRIDE_ERROR) {
+            uint8_t a = (uint8_t)reg;
+            if (override_mode_ == MOBIUS_OVERRIDE_WARN) a |= 0x80u;  // warn bit
+            emitABx(OP_SETGLOBAL_FORCE, a, (uint16_t)slot);
+        } else {
+            emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)slot);
+        }
     } else {
         int ki = stringConstant(name);
         emitABx(OP_SETGLOBAL, (uint8_t)reg, (uint16_t)ki);
@@ -340,8 +362,12 @@ bool Compiler::emitReadonlyGlobalConstant(int reg, const char* name) {
         case VAL_UINT64:
         case VAL_FLOAT64:
         case VAL_STRING:
-        case VAL_NATIVE_FUNCTION:
             break;
+        // NOT native functions: folding a builtin like `print` into a
+        // constant binds every call site at compile time, making
+        // override_behavior overrides invisible. Calls to builtins go
+        // through the fused load-global-and-call path instead — one slot
+        // load — so the override always takes effect.
         default:
             return false;
     }
@@ -3162,7 +3188,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
         int reg = allocReg();
         emitABx(OP_CLOSURE, (uint8_t)reg, (uint16_t)proto_idx);
         emitSetGlobal(reg, name);
-        if (state_) {
+        if (state_ && override_mode_ == MOBIUS_OVERRIDE_ERROR) {
             int slot = state_->assignGlobalSlot(name, globals_);
             if (slot < 0) {
                 had_error_ = true;
@@ -3177,6 +3203,11 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
                     readonly_function_protos_[name] = child_proto;
             }
         }
+        // Permissive chunks (override_behavior warn/quiet) skip the read-only
+        // marking AND the direct-call binding: their functions stay
+        // overridable, and every call goes through the global slot so an
+        // override takes effect everywhere. The cost is confined to the
+        // chunk that opted in.
         global_types_[name] = VAL_FUNCTION;
         setFreeReg(save);
     }
@@ -4342,6 +4373,24 @@ void Compiler::computeAllScalarRegisters(Prototype* proto) {
 
 void Compiler::compilePragmaStmt(PragmaStmt* stmt) {
     currentLine_ = stmt->keyword.line;
+
+    // override_behavior is consumed at COMPILE time: it decides how this
+    // chunk's global writes are emitted (SETGLOBAL vs SETGLOBAL_FORCE) and
+    // whether its functions become read-only. The runtime op is still
+    // emitted below but its handler treats this pragma as a no-op.
+    if (stmt->name.identifier && strcmp(stmt->name.identifier, "override_behavior") == 0) {
+        const char* v = stmt->value.identifier ? stmt->value.identifier
+                                               : stmt->value.literal.string;
+        if (v && strcmp(v, "error") == 0)      override_mode_ = MOBIUS_OVERRIDE_ERROR;
+        else if (v && strcmp(v, "warn") == 0)  override_mode_ = MOBIUS_OVERRIDE_WARN;
+        else if (v && strcmp(v, "quiet") == 0) override_mode_ = MOBIUS_OVERRIDE_QUIET;
+        else {
+            fprintf(stderr, "Compile error [%s:%d]: override_behavior expects "
+                    "error, warn, or quiet\n",
+                    current_->proto->source.c_str(), currentLine_);
+            had_error_ = true;
+        }
+    }
 
     int save = current_->free_reg;
     int reg = allocReg();

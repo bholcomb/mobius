@@ -140,15 +140,15 @@ Mobius is faster**):
 
 | Benchmark | Mobius | Lua | CPython | vs Lua | vs Python |
 |-----------|-------:|----:|--------:|-------:|----------:|
-| Arithmetic (integer)           |  106.0 |  134.8 |   847.0 | **0.79×** | **0.13×** |
-| Recursive calls (fib 30)       |   39.0 |   32.5 |    69.3 | 1.20× | **0.56×** |
-| Array ops (dense numeric)      |   11.3 |   10.4 |    56.3 | 1.09× | **0.20×** |
-| Table ops (string-key map)     |   15.1 |   11.7 |    28.5 | 1.29× | **0.53×** |
-| String ops                     |   45.5 |   63.3 |    28.0 | **0.72×** | 1.63× |
-| Nested loops                   |   45.4 |   52.0 |   281.1 | **0.87×** | **0.16×** |
-| Object create / destroy        |   62.4 |   77.9 |    53.6 | **0.80×** | 1.16× |
-| Mixed workload                 |   36.8 |   40.1 |    31.8 | **0.92×** | 1.16× |
-| **Total**                      | **378.3** | **442.3** | **1417.3** | **0.86×** | **0.27×** |
+| Arithmetic (integer)           |  106.2 |  130.6 |   850.9 | **0.81×** | **0.12×** |
+| Recursive calls (fib 30)       |   40.2 |   32.7 |    69.8 | 1.23× | **0.58×** |
+| Array ops (dense numeric)      |   11.3 |   10.9 |    55.5 | 1.03× | **0.20×** |
+| Table ops (string-key map)     |   14.5 |   11.9 |    28.1 | 1.22× | **0.52×** |
+| String ops                     |   45.9 |   64.0 |    27.3 | **0.72×** | 1.69× |
+| Nested loops                   |   43.8 |   52.1 |   285.9 | **0.84×** | **0.15×** |
+| Object create / destroy        |   61.4 |   78.4 |    54.0 | **0.78×** | 1.14× |
+| Mixed workload                 |   35.7 |   39.7 |    31.1 | **0.90×** | 1.15× |
+| **Total**                      | **373.9** | **443.3** | **1424.8** | **0.84×** | **0.26×** |
 
 How to read it: the two comparisons measure different things. Lua is the
 benchmark for interpreter speed — beating it means the VM itself is fast.

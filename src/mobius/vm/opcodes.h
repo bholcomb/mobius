@@ -121,6 +121,10 @@ enum OpCode : uint8_t {
     OP_SETUPVAL,    // A B       UpValue[B] = R[A]
     OP_GETGLOBAL,   // A Bx      R[A] = globals[K[Bx]]
     OP_SETGLOBAL,   // A Bx      globals[K[Bx]] = R[A]
+    OP_SETGLOBAL_FORCE, // A Bx    globals[Bx] = R[A], bypassing the read-only
+                    //          flag (permissive override_behavior chunks).
+                    //          B... A carries the value reg; C=1 emits a
+                    //          warning when an actual override happens.
     OP_GLOBAL_READONLY, // A Bx  set readonly flag on global slot Bx when A!=0
 
     // -- Table and array operations --
@@ -343,6 +347,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"SETUPVAL",  FMT_ABC},
         {"GETGLOBAL", FMT_ABx},
         {"SETGLOBAL", FMT_ABx},
+        {"SETGLOBAL_FORCE", FMT_ABx},
         {"GLOBAL_READONLY", FMT_ABx},
 
         {"NEWTABLE",  FMT_ABC},

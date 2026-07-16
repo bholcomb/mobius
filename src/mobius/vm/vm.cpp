@@ -251,7 +251,6 @@ MobiusVM::MobiusVM(MobiusState* state)
     : state_(state), metrics_(&state->metrics()),
       strict_mode_(state->config().strict_mode),
       warn_on_conversion_(state->config().warn_on_conversion),
-      override_behavior_(state->config().override_behavior),
       native_ctx_{}, last_error_(nullptr),
       source_code_(nullptr), exec_context_(nullptr),
       register_capacity_(0),
@@ -977,6 +976,38 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
     gv.flags |= VAL_FLAG_DEFINED;
     if (gv.type == VAL_ENUM && gv.aux == -1) {
         gv.flags |= VAL_FLAG_READONLY;
+    }
+    vm->state_->setGlobalValue(slot, gv, globals, false);
+    return 0;
+}
+
+// Permissive-chunk global write (override_behavior = warn/quiet): bypasses
+// the read-only flag but KEEPS the slot read-only afterward, so strict
+// chunks still cannot assign to it. Registers are capped at 127, so the top
+// bit of A carries the warn flag: warn-mode chunks report each actual
+// override of a read-only global to stderr.
+MOBIUS_FORCEINLINE static int vm_op_setglobal_force(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    int slot = DECODE_Bx(inst);
+    GlobalEnvironment* globals = frame_globals(vm, f);
+    Value gv = vm->state_->getGlobalValue(slot, globals);
+    bool was_readonly = (gv.flags & VAL_FLAG_READONLY) != 0;
+    uint8_t a = DECODE_A(inst);
+    bool warn = (a & 0x80u) != 0;         // top bit of A = warn flag
+    Value& src = f.regs[a & 0x7Fu];
+    if (!shared_store(gv, src)) {
+        Value nv = src;
+        nv.flags |= VAL_FLAG_DEFINED;
+        if (was_readonly) nv.flags |= VAL_FLAG_READONLY;
+        gv = nv;
+    } else {
+        gv.flags |= VAL_FLAG_DEFINED;
+        if (was_readonly) gv.flags |= VAL_FLAG_READONLY;
+    }
+    if (MOBIUS_UNLIKELY(warn && was_readonly)) {
+        f.ci->ip = f.ip;   // sync so currentLine() reads this instruction
+        fprintf(stderr, "Warning [%s:%d]: overriding read-only global '%s'\n",
+                f.proto && !f.proto->source.empty() ? f.proto->source.c_str() : "?",
+                vm->currentLine(), vm->state_->globalSlotName(slot, globals));
     }
     vm->state_->setGlobalValue(slot, gv, globals, false);
     return 0;
@@ -3481,24 +3512,8 @@ MOBIUS_FORCEINLINE static int vm_op_pragma(MobiusVM* vm, VMFrame& f, uint32_t in
     } else if (strcmp(pragma_name, "type_warnings") == 0) {
         vm->warn_on_conversion_ = is_truthy(pval);
     } else if (strcmp(pragma_name, "override_behavior") == 0) {
-        if (pval.type == VAL_STRING && pval.as.string) {
-            const char* v = pval.as.string->data;
-            if (strcmp(v, "error") == 0)
-                vm->override_behavior_ = MOBIUS_OVERRIDE_ERROR;
-            else if (strcmp(v, "warn") == 0)
-                vm->override_behavior_ = MOBIUS_OVERRIDE_WARN;
-            else if (strcmp(v, "quiet") == 0)
-                vm->override_behavior_ = MOBIUS_OVERRIDE_QUIET;
-            else {
-                VM_ERROR(vm, f, "Invalid value for pragma override_behavior: '%s' "
-                                 "(expected 'error', 'warn', or 'quiet')", v);
-                return -1;
-            }
-        } else {
-            VM_ERROR(vm, f, "Invalid value for pragma override_behavior "
-                             "(expected 'error', 'warn', or 'quiet')");
-            return -1;
-        }
+        // Consumed at COMPILE time (it changes how the chunk's global writes
+        // are emitted); the runtime op is a no-op kept for compatibility.
     } else {
         VM_ERROR(vm, f, "Unknown pragma: '%s'", pragma_name);
         return -1;
@@ -3908,7 +3923,7 @@ int MobiusVM::run(size_t base_depth) {
 #if defined(__GNUC__) || defined(__clang__)
     static const void* dispatch_table[] = {
         &&L_OP_MOVE, &&L_OP_LOADK, &&L_OP_LOADNIL, &&L_OP_LOADBOOL, &&L_OP_LOADINT,
-        &&L_OP_GETUPVAL, &&L_OP_SETUPVAL, &&L_OP_GETGLOBAL, &&L_OP_SETGLOBAL, &&L_OP_GLOBAL_READONLY,
+        &&L_OP_GETUPVAL, &&L_OP_SETUPVAL, &&L_OP_GETGLOBAL, &&L_OP_SETGLOBAL, &&L_OP_SETGLOBAL_FORCE, &&L_OP_GLOBAL_READONLY,
         &&L_OP_NEWTABLE, &&L_OP_NEWARRAY, &&L_OP_INDEX_GET, &&L_OP_INDEX_SET,
         &&L_OP_ADD, &&L_OP_SUB, &&L_OP_MUL, &&L_OP_DIV, &&L_OP_MOD,
         &&L_OP_UNM, &&L_OP_NOT,
@@ -4003,6 +4018,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_SETUPVAL, vm_op_setupval)
     VM_HANDLER(OP_GETGLOBAL, vm_op_getglobal)
     VM_HANDLER(OP_SETGLOBAL, vm_op_setglobal)
+    VM_HANDLER(OP_SETGLOBAL_FORCE, vm_op_setglobal_force)
     VM_HANDLER(OP_GLOBAL_READONLY, vm_op_global_readonly)
     VM_HANDLER(OP_NEWTABLE, vm_op_newtable)
     VM_HANDLER(OP_NEWARRAY, vm_op_newarray)

@@ -63,7 +63,6 @@ var v = nil
 v = 42              // v is now locked to int64
 v = 99              // OK
 v = nil             // OK
-v = "hello"         // ERROR — v is locked to int64
 
 func find(arr, target) {
     for (var i = 0; i < arr:size(); i++) {
@@ -72,6 +71,9 @@ func find(arr, target) {
     return nil                               // OK — nil is compatible
 }
 ```
+
+(After `v = 42` above, a later `v = "hello"` would be the same compile error
+shown earlier — deferred locking is still locking.)
 
 Enforcement happens as early as possible: when the compiler can prove both
 the variable's locked type and the assigned expression's type, a violation
@@ -233,9 +235,9 @@ parse time and apply to the rest of the file (or until changed).
 #pragma type_warnings true       // warn on implicit conversions
 #pragma type_warnings false
 
-#pragma override_behavior error  // error on function/global redefinition (default)
-#pragma override_behavior warn   // warn but allow
-#pragma override_behavior quiet  // silently allow
+#pragma override_behavior error  // reject overriding read-only globals (default)
+#pragma override_behavior warn   // allow, but print a warning per override
+#pragma override_behavior quiet  // allow silently
 ```
 
 ### `strict_types`
@@ -244,17 +246,44 @@ parse time and apply to the rest of the file (or until changed).
 #pragma strict_types true
 
 var x: int64 = 42        // ok
-var y: int64 = "hello"   // runtime error: type mismatch
+var y: int64 = "hello"   // runtime error: Cannot convert string to int64
 ```
 
 ### `override_behavior`
 
-```mobius
-#pragma override_behavior warn
+Function names — your own and the builtins — are **read-only** once
+defined. By default, redefining one is an error, which catches accidents
+like a top-level `var size = ...` clobbering the builtin `size`:
 
-func greet() { print("hello") }
-func greet() { print("hi") }     // warning printed, but allowed
+```text
+Error [script.mob:2:0]: Cannot assign to read-only variable 'print'
 ```
+
+A chunk that *means* to override declares it up front. The pragma is
+consumed at compile time and applies to the chunk it appears in:
+
+```mobius
+#pragma override_behavior quiet   // or warn, to log each override
+
+func print(msg) {
+    // intercept all print output — every caller sees this version,
+    // including code defined before the override ran
+}
+```
+
+In a permissive chunk, function definitions also stay overridable (they
+skip the read-only marking), and the chunk's calls dispatch through the
+global slot — slightly slower, confined to the chunk that opted in. The
+REPL compiles every line in `quiet` mode, so redefining a function
+mid-session just works.
+
+Two limits: an override must keep the variable's locked type (`print` must
+stay a function), and the four intrinsified builtins — `size`, `str`,
+`concat`, `array_push` — cannot be overridden at all (their call sites
+compile to dedicated instructions); attempting it is a compile error.
+
+Embedders can set the default mode for all chunks with
+`MobiusConfig.override_behavior`.
 
 The current configuration can be inspected at runtime with
 [`get_type_config()`](../reference/standard-library.md#get_type_config---table).

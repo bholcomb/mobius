@@ -11,6 +11,10 @@ Repl::Repl(MobiusState* state)
     : state_(state), running_(true), command_count_(1) {}
 
 void Repl::run() {
+    // REPL sessions redefine functions while iterating — compile every line
+    // in quiet override mode so that just works. Scripts keep the strict
+    // default.
+    state_->setCompileOverrideBehavior(MOBIUS_OVERRIDE_QUIET);
     printWelcome();
     loop();
 }

@@ -1,0 +1,5 @@
+// Intrinsified builtins (size/str/concat/array_push) never dispatch through
+// the global slot, so overriding them cannot take effect — compile error
+// even in permissive chunks. Expected failure.
+#pragma override_behavior quiet
+func size(x) { return 42 }

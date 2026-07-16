@@ -208,6 +208,12 @@ public:
     StringInternPool* stringPool() const { return string_pool_; }
     const CommonInternedStrings& commonStrings() const { return common_strings_; }
     const MobiusConfig& config() const { return config_; }
+
+    // The compile-time default for override_behavior (per-chunk pragma can
+    // change it within a chunk). Seeded from config; the REPL sets QUIET so
+    // redefining a function mid-session just works.
+    MobiusOverrideBehavior compileOverrideBehavior() const { return compile_override_behavior_; }
+    void setCompileOverrideBehavior(MobiusOverrideBehavior b) { compile_override_behavior_ = b; }
     bool isInitialized() const { return initialized_; }
     InternalError* lastError() const;
     Metamethods* metamethods() const { return metamethods_; }
@@ -334,6 +340,7 @@ private:
     void* error_handler_userdata_;
 
     MobiusConfig config_;
+    MobiusOverrideBehavior compile_override_behavior_ = MOBIUS_OVERRIDE_ERROR;
     MobiusMetrics metrics_;
     bool initialized_;
 
