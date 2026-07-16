@@ -133,6 +133,11 @@ private:
     int emitLoadK(int reg, int const_idx);
     void emitGetGlobal(int reg, const char* name);
     void emitSetGlobal(int reg, const char* name);
+    bool isIntrinsicBuiltin(const char* name) const;
+    // Per-chunk override mode: MOBIUS_OVERRIDE_ERROR (default) keeps globals
+    // read-only and enables direct-call binding; warn/quiet compile global
+    // writes as SETGLOBAL_FORCE and skip the read-only machinery.
+    MobiusOverrideBehavior override_mode_ = MOBIUS_OVERRIDE_ERROR;
     bool checkLockedAssignment(ValueType target_t, Expr* rhs, const char* name);
     bool emitReadonlyGlobalConstant(int reg, const char* name);
 

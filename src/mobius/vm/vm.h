@@ -205,7 +205,6 @@ public:
 
     bool strict_mode_;
     bool warn_on_conversion_;
-    MobiusOverrideBehavior override_behavior_;
 
     NativeCallContext native_ctx_;
     InternalError* last_error_;

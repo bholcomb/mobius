@@ -1,0 +1,3 @@
+// Default mode: overriding a read-only builtin is an error (this used to
+// silently replace print). Expected failure.
+func print(x) { return x }

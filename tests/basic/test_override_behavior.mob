@@ -1,0 +1,23 @@
+// override_behavior: warn/quiet chunks may override read-only globals
+// (builtins and script functions); overrides take effect at every call
+// site because permissive chunks dispatch through the global slot.
+#pragma override_behavior quiet
+
+var captured = []
+func print(a) { captured:push(a) }
+
+print("swallowed")                 // goes to the override
+func restore_check() { return captured:size() }
+if (restore_check() != 1) { exit(1) }
+
+// redefinition mid-chunk: earlier-defined callers see the new definition
+func double(n) { return n * 2 }
+func use() { return double(21) }
+func double(n) { return n * 3 }
+if (use() != 63) { exit(2) }
+
+// nil-arg / normal flow unaffected
+var x = 5
+x = 7
+if (x != 7) { exit(3) }
+exit(0)

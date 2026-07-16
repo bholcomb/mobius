@@ -29,7 +29,10 @@ enum Size {
     LARGE
 }
 
-var size = Size.MEDIUM;
-print("Size MEDIUM:", size);
+// (named chosen_size: a top-level `var size` would collide with the
+// read-only builtin `size` function — exactly the inadvertent-override
+// error override_behavior exists to catch.)
+var chosen_size = Size.MEDIUM;
+print("Size MEDIUM:", chosen_size);
 
 print("✓ Enum expressions test passed");

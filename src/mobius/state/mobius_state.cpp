@@ -58,7 +58,6 @@ MobiusConfig mobius_default_config(void) {
     config.strict_mode = false;
     config.warn_on_conversion = false;
     config.debug_mode = false;
-    config.enable_hot_reload = false;
     config.override_behavior = MOBIUS_OVERRIDE_ERROR;
 
     config.fiber_stack_size        = 512 * 1024;  // 512 KiB — deep native calls
@@ -315,6 +314,7 @@ MobiusState::MobiusState(MobiusConfig* config)
       fallback_last_error_(nullptr), fallback_source_code_(nullptr) {
 
     config_ = config ? *config : mobius_default_config();
+    compile_override_behavior_ = config_.override_behavior;
 
     size_t slot_cap = config_.global_slot_capacity ? config_.global_slot_capacity
                                                     : kGlobalSlotCapacity;

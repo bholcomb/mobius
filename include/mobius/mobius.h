@@ -81,7 +81,6 @@ typedef struct {
     bool   strict_mode;
     bool   warn_on_conversion;
     bool   debug_mode;
-    bool   enable_hot_reload;
     MobiusOverrideBehavior override_behavior;
 
     /* -- Fiber configuration -- */

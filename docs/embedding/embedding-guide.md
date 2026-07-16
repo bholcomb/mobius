@@ -109,7 +109,6 @@ MobiusState* state = mobius_new_state(&config);
 | `strict_mode`             | `bool`                   | `false`                | Enforce type annotations at runtime |
 | `warn_on_conversion`      | `bool`                   | `false`                | Warn on implicit conversions |
 | `debug_mode`              | `bool`                   | `false`                | Extra debug output |
-| `enable_hot_reload`       | `bool`                   | `false`                | Hot-reload support |
 | `override_behavior`       | `MobiusOverrideBehavior` | `MOBIUS_OVERRIDE_ERROR`| Global/function name-conflict policy |
 | `fiber_stack_size`        | `size_t`                 | `524288` (512 KiB)     | C stack size for pooled worker fibers (spawned work) |
 | `main_fiber_stack_size`   | `size_t`                 | `8388608` (8 MiB)      | C stack size for the top-level script fiber, which hosts the whole script and its deep native calls; `0` falls back to `fiber_stack_size` |

@@ -110,6 +110,10 @@ void register_stdlib_functions(MobiusState* state) {
         const PluginFunction* func = &library_registry[i];
         
         Value func_value = make_native_function_value(func->function);
+        // Builtins are read-only: an inadvertent same-type override used to
+        // silently replace them. Chunks compiled with
+        // `#pragma override_behavior warn|quiet` may still override.
+        func_value.flags |= VAL_FLAG_READONLY;
 
         int slot = state->assignGlobalSlot(func->name);
         if (slot < 0) return;
