@@ -17,8 +17,8 @@ the module:
 import "math"
 import "json"
 
-print(math.sqrt(2))
-print(json.stringify({ ok: true }))
+print(math.hypot(3, 4))             // 5.0
+print(json.stringify({ ok: true })) // {"ok":true}
 ```
 
 ### Import with an alias
@@ -26,7 +26,7 @@ print(json.stringify({ ok: true }))
 ```mobius
 import "math" as m
 
-print(m.cos(0))      // 1
+print(m.cos(0))      // 1.0
 print(m.sign(-16))   // -1
 ```
 

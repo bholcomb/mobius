@@ -112,7 +112,7 @@ var doc = """multi-line
 ```mobius
 15 / 4        // 3.75   (division produces a float)
 15 % 4        // 3
-pow(2, 8)     // 256    (exponent is the builtin pow, not an operator)
+pow(2, 8)     // 256.0  (exponent is the builtin pow, not an operator)
 0xF0 | 0x0F   // bitwise: & | ^ ~ << >>
 a and b       // also: a && b
 not a         // also: !a
@@ -227,8 +227,9 @@ print(c == Color.GREEN)   // true
 
 ## Binary data
 
-Buffers are fixed byte sequences; `struct` declarations describe layouts over
-them:
+Buffers are growable byte sequences; `struct` declarations describe typed
+layouts you overlay on their bytes — reads and writes go straight to the
+buffer, no copying:
 
 ```mobius
 struct Vec2 packed { x: float32; y: float32 }
@@ -265,9 +266,12 @@ Use `shared var`, `atomic(...)`, and channels for safe data sharing. See
 import "math"
 import "json" as j
 
-print(math.sqrt(2))
-print(j.stringify([1, 2, 3]))
+print(math.hypot(3, 4))       // 5.0
+print(j.stringify([1, 2, 3])) // [1,2,3]
 ```
+
+(Common math like `sqrt`, `abs`, `pow`, and `floor` is built in and needs no
+import; the `math` module adds trigonometry, logs, and friends.)
 
 See [Modules and Packages](modules-and-packages.md) and the
 [Module Reference](../modules/index.md).
