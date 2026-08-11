@@ -3,11 +3,14 @@
 **A lightweight scripting language for embedding — with real concurrency,
 real performance, and a large standard library built in.**
 
-Mobius fills the same role as Lua — a small runtime you drop into a C/C++
-application — with C-style syntax, fibers and channels for concurrency, a VM
-that benchmarks faster than Lua 5.4, and batteries included: JSON, HTTP,
-SQLite, WebSockets, and more without leaving the box. It works just as well
-standalone for scripts and services.
+Mobius is a lightweight, embeddable scripting language designed for C and 
+C++ applications, with familiar C-style syntax and built-in support for fibers
+and channels. Its compact bytecode VM delivers performance competitive with 
+Lua 5.4 in our benchmarks, while providing a much richer standard environment
+out of the box, including JSON, HTTP, SQLite, WebSockets, and more.
+
+Mobius is equally at home embedded inside an application or running 
+standalone for scripts, tools, and services.
 
 ```mobius
 enum Suit { CLUBS, DIAMONDS, HEARTS, SPADES }
@@ -24,8 +27,8 @@ func describe(rank) {
 print(describe(12))    // "Face card"
 ```
 
-Concurrency is part of the language, not a library bolted on. Spawn work onto
-fibers, await the results, and let the runtime schedule them across worker
+Concurrency is part of the language, not a library bolted on. Spawn work as
+fibers, await the results, and let the runtime schedule them across real worker
 threads:
 
 ```mobius
@@ -48,29 +51,37 @@ print("processed", total, "bytes")
 
 ## Why Mobius?
 
-- **Made to be embedded.** A small, Lua-style C API: create a state, register
-  functions, exchange values, expose your own types. One shared library —
-  ~1 MB on disk, a few MB resident (tunable), sub-10ms startup — with no
-  exotic dependencies. Modules ship separately, only if you use them.
-- **Concurrency that scales.** `spawn` / `await` fibers, channels, and `shared`
-  data run across real worker threads. Data crossing between fibers is copied
-  unless you explicitly share it — no accidental data races.
-- **Fast.** Mobius runs the standard benchmark suite
-  [faster than Lua 5.4](#performance) and several times faster than CPython.
-- **Type locking: readable code that performs.** A variable's type is inferred
-  from its first value and then locked, so your code stays clean and
-  annotation-free while the VM runs type-specialized instructions. Optional
-  type annotations can help the compiler generate optimal bytecode where it
-  matters.
-- **Batteries included.** JSON, YAML, TOML, HTTP (client and a `web` server
-  framework), WebSockets, sockets, SQLite, regex, crypto, compression,
-  datetime, math, OS, and binary buffers with zero-copy struct views.
-- **Memory management you don't think about.** Automatic and low-pause:
-  most garbage is reclaimed the instant it's unreachable, and a cycle
-  collector quietly handles the rest.
+* **Built to embed.** Mobius has a small, straightforward C API for creating a VM,
+  registering native functions, exchanging values, and exposing application-defined types. 
+  The core runtime ships as a single shared library—about 1 MB on disk, a few MB resident,
+  and typically starts in under 10 ms—with no unusual dependencies. Optional
+  modules stay separate, so you only ship what you use.
 
-Familiar on day one, too: C-style braces and operators, Lua-style tables and
-methods. If you've written C, JavaScript, or Lua, you can already read Mobius.
+* **Real concurrency, without accidental races.** `spawn` and `await` fibers, channels,
+  and `shared` data run across actual worker threads. Values passed between
+  fibers are copied by default; memory is shared only when you explicitly ask for it.
+
+* **Fast by design.** On the standard benchmark suite, Mobius delivers performance
+  competitive with Lua 5.4 and several times faster than CPython.
+
+* **Type locking for clean, efficient code.** Variables may be explicitly typed or
+  inferred from their first use, then retain that type. This keeps ordinary Mobius
+  code concise and annotation-light while allowing the VM to execute type-specialized
+  instructions. Explicit types are optional, but can give the compiler more
+  information to optimize performance-critical code.
+
+* **Batteries included.** JSON, YAML, TOML, HTTP clients and a `web` server framework,
+  WebSockets, sockets, SQLite, regex, cryptography, compression, datetime, math,
+  OS integration, and binary buffers with zero-copy struct views are available out of the box.
+
+* **Automatic, low-pause memory management.** Most objects are reclaimed immediately
+  when they become unreachable, while a cycle collector handles the uncommon cases
+  that reference counting alone cannot resolve.
+
+Mobius is also deliberately familiar: C-style syntax and operators, 
+flexible table-like data structures, and lightweight method syntax. 
+If you've worked in C, JavaScript, Lua, or similar languages, Mobius should 
+be readable from the start.
 
 ## Quick start
 
@@ -121,8 +132,7 @@ methods, and call Mobius functions back from C — see the
 
 ## What people build with it
 
-- **A scripting layer** inside game engines, editors, and tools — the classic
-  Lua role, with C-style syntax your users already know.
+- **A scripting layer** inside game engines, editors, and tools, with C-style syntax your users already know.
 - **Standalone scripts and CLI tools** that need real libraries without a
   package-manager scavenger hunt.
 - **Web services** with the bundled `web` framework, JSON, and SQLite.
@@ -150,13 +160,6 @@ Mobius is faster**):
 | Mixed workload                 |   35.7 |   39.7 |    31.1 | **0.90×** | 1.15× |
 | **Total**                      | **373.9** | **443.3** | **1424.8** | **0.84×** | **0.26×** |
 
-How to read it: the two comparisons measure different things. Lua is the
-benchmark for interpreter speed — beating it means the VM itself is fast.
-CPython is slow per-instruction but its dictionaries and strings are
-heavyweight, hand-tuned C — so it stays competitive exactly where a workload
-reduces to those primitives (string-building, object churn), while pure
-language execution (arithmetic, loops, calls) runs 2–8× faster in Mobius. As 
-always, these are indicative micro-benchmarks, not a rigorous cross-language study.
 
 ## Documentation
 
@@ -182,7 +185,7 @@ scripts. Run the test suite with `./test_simple.sh`.
 Mobius is version **0.1.0**. The language, VM, standard library, fiber
 runtime, embedding API, and bundled modules are usable today. The package
 system and the `http` / `socket` / `websocket` modules are plain-transport
-only for now — TLS is not yet included.
+only for now — TLS is not yet supported.
 
 ## License
 
