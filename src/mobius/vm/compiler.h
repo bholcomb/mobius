@@ -41,6 +41,7 @@ private:
         bool is_captured;  // true if an inner function closes over this local
         ValueType inferred_type;  // VAL_UNKNOWN = type not yet determined
         bool maybe_shared; // true if the binding may hold a SharedCell at runtime
+        bool is_const = false;  // declared with `const`: never reassigned
     };
 
     // --- Loop jump targets for break/continue ---
@@ -231,6 +232,11 @@ private:
     // Top-level vars and funcs of the chunk being compiled, for the
     // compile-time fiber check at `spawn f(...)` (see fiber_check.h).
     TopLevelDecls top_level_decls_;
+
+    // Top-level `const` names, and the check that rejects assigning to a
+    // const binding (local, captured, or top-level) at compile time.
+    std::unordered_set<std::string> const_globals_;
+    bool rejectConstAssignment(const char* name, int line);
     void checkSpawnedFunction(Expr* callee);
     // Prototypes of readonly global functions, by name, for resolving direct
     // calls to a global function from inside another function. Only functions

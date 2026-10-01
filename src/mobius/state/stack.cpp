@@ -865,6 +865,11 @@ void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* k
                         nullptr, 0, 0, nullptr);
         return;
     }
+    if (table_val->as.table->isFrozen()) {
+        state->setError(MOBIUS_ERROR_TYPE, "mobius_stack_setTableField() - cannot modify a const table",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
 
     Value key_val   = make_string_value_from_cstr(state, key);
     Value field_val = nctx->registers[--nctx->top];
@@ -940,6 +945,11 @@ void mobius_stack_setArrayElement(MobiusState* state, int array_idx, size_t elem
                         nullptr, 0, 0, nullptr);
         return;
     }
+    if (array_val->as.array->isFrozen()) {
+        state->setError(MOBIUS_ERROR_TYPE, "mobius_stack_setArrayElement() - cannot modify a const array",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
 
     Value element_val = nctx->registers[--nctx->top];
     array_val->as.array->set(element_idx, element_val);
@@ -982,6 +992,11 @@ void mobius_stack_arrayPush(MobiusState* state, int array_idx) {
                         nullptr, 0, 0, nullptr);
         return;
     }
+    if (array_val->as.array->isFrozen()) {
+        state->setError(MOBIUS_ERROR_TYPE, "mobius_stack_arrayPush() - cannot modify a const array",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
 
     Value element_val = nctx->registers[--nctx->top];
     array_val->as.array->push(element_val);
@@ -997,6 +1012,11 @@ void mobius_stack_arrayPop(MobiusState* state, int array_idx) {
         return;
     }
 
+    if (array_val->as.array->isFrozen()) {
+        state->setError(MOBIUS_ERROR_TYPE, "mobius_stack_arrayPop() - cannot modify a const array",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
     stack_push(state, array_val->as.array->pop());
 }
 
@@ -1020,6 +1040,11 @@ void mobius_stack_arrayInsert(MobiusState* state, int array_idx, size_t element_
     }
 
     Value element_val = nctx->registers[--nctx->top];
+    if (array_val->as.array->isFrozen()) {
+        state->setError(MOBIUS_ERROR_TYPE, "mobius_stack_arrayInsert() - cannot modify a const array",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
     array_val->as.array->insert(element_idx, element_val);
 }
 
@@ -1033,6 +1058,11 @@ void mobius_stack_arrayRemove(MobiusState* state, int array_idx, size_t element_
         return;
     }
 
+    if (array_val->as.array->isFrozen()) {
+        state->setError(MOBIUS_ERROR_TYPE, "mobius_stack_arrayRemove() - cannot modify a const array",
+                        nullptr, 0, 0, nullptr);
+        return;
+    }
     stack_push(state, array_val->as.array->remove(element_idx));
 }
 

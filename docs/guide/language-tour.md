@@ -22,6 +22,8 @@ var y = 20;     // semicolons are optional
 
 `var` declares a variable. Its type is **locked** to the type of its first
 non-nil value and cannot change afterward — but `nil` is always allowed.
+`const` declares a deeply immutable value instead (`const LIMIT = 100`; see
+[Constants](values-and-types.md#constants)).
 
 ```mobius
 var count = 0           // locked to int64

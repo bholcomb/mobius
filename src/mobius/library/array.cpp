@@ -56,6 +56,15 @@ static ArrayValue* extract_array_self(MobiusState* state, const char* err_msg, A
     return nullptr;
 }
 
+// Methods that modify an array refuse one that is part of a const value.
+static bool reject_frozen(MobiusState* state, ArrayValue* arr, const char* method) {
+    if (!arr->isFrozen()) return false;
+    char msg[96];
+    snprintf(msg, sizeof(msg), "%s: cannot modify a const array", method);
+    state->error(msg);
+    return true;
+}
+
 // =============================================================================
 // GLOBAL: array_create(capacity [, fill_value])
 // =============================================================================
@@ -115,6 +124,7 @@ int array_method_push(MobiusState* state, int arg_count) {
     ArraySelfAccess access;
     ArrayValue* arr = extract_array_self(state, "arr:push: self is not an array", &access);
     if (!arr) return -1;
+    if (reject_frozen(state, arr, "arr:push")) return -1;
 
     Value val = state->npop();
     state->npop();
@@ -132,6 +142,7 @@ int array_method_pop(MobiusState* state, int arg_count) {
     ArraySelfAccess access;
     ArrayValue* arr = extract_array_self(state, "arr:pop: self is not an array", &access);
     if (!arr) return -1;
+    if (reject_frozen(state, arr, "arr:pop")) return -1;
 
     state->npop();
 
@@ -175,6 +186,7 @@ int array_method_set(MobiusState* state, int arg_count) {
     ArraySelfAccess access;
     ArrayValue* arr = extract_array_self(state, "arr:set: self is not an array", &access);
     if (!arr) return -1;
+    if (reject_frozen(state, arr, "arr:set")) return -1;
 
     Value value = state->npop();
     Value index_val = state->npop();
@@ -250,6 +262,7 @@ int array_method_span(MobiusState* state, int arg_count) {
     ArraySelfAccess access;
     ArrayValue* arr = extract_array_self(state, "arr:span: self is not an array", &access);
     if (!arr) return -1;
+    if (reject_frozen(state, arr, "arr:span")) return -1;
 
     Value end_val = state->npop();
     Value start_val = state->npop();
@@ -319,6 +332,7 @@ int array_method_reverse(MobiusState* state, int arg_count) {
     ArraySelfAccess access;
     ArrayValue* arr = extract_array_self(state, "arr:reverse: self is not an array", &access);
     if (!arr) return -1;
+    if (reject_frozen(state, arr, "arr:reverse")) return -1;
 
     Value self_val = state->npeek_self();
     arr->reverse();
@@ -394,6 +408,7 @@ int array_method_sort(MobiusState* state, int arg_count) {
     ArraySelfAccess access;
     ArrayValue* arr = extract_array_self(state, "arr:sort: self is not an array", &access);
     if (!arr) return -1;
+    if (reject_frozen(state, arr, "arr:sort")) return -1;
     Value self_val = state->npeek_self();
     size_t len = arr->length();
 

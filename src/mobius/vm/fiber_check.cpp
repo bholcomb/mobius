@@ -199,7 +199,9 @@ void collect_top_level_decls(Stmt** statements, size_t count, TopLevelDecls& out
         if (!s) continue;
         if (s->type == STMT_VAR && s->as.var.name.identifier) {
             Expr* init = s->as.var.initializer;
-            out.vars[s->as.var.name.identifier] = init && init->type == EXPR_SHARED;
+            // A const is immutable, so fibers may use it like a shared var.
+            out.vars[s->as.var.name.identifier] =
+                s->as.var.is_const || (init && init->type == EXPR_SHARED);
         } else if (s->type == STMT_FUNCTION && s->as.function.name.identifier) {
             out.funcs[s->as.function.name.identifier] = &s->as.function;
         }

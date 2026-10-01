@@ -1170,9 +1170,9 @@ MOBIUS_FORCEINLINE static int vm_op_getfield(MobiusVM* vm, VMFrame& f, uint32_t 
 MOBIUS_FORCEINLINE static int vm_op_setfield(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& obj = RA(inst);
     if (MOBIUS_LIKELY(obj.type == VAL_TABLE && obj.as.table &&
-                      IS_CONSTANT(DECODE_B(inst)) && !obj.as.table->ownerCell())) {
-        // (A table inside a shared value takes the full path, which shares
-        // stored containers.)
+                      IS_CONSTANT(DECODE_B(inst)) && obj.as.table->allowsFastWrite())) {
+        // (A table inside a shared value, or part of a const, takes the full
+        // path, which shares stored containers or reports the error.)
         const Value& key = f.ci->proto->constants[RK_AS_CONSTANT(DECODE_B(inst))];
         Value* slot = obj.as.table->findStringSlot(key.as.string);
         if (MOBIUS_LIKELY(slot != nullptr)) {
@@ -1333,10 +1333,22 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
     return 0;
 }
 
+// Writing into part of a const value. Out of line, and without a VMFrame&
+// (see fiber_global_error); the caller syncs the ip.
+MOBIUS_NOINLINE static int frozen_write_error(MobiusVM* vm, const Value& obj) {
+    vm->runtimeError("cannot modify a const %s", obj.type == VAL_ARRAY ? "array" : "table");
+    return -1;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& obj = RA(inst);
     const Value& key = RKB(inst);
     const Value& val = RKC(inst);
+    if (MOBIUS_UNLIKELY((obj.type == VAL_ARRAY && obj.as.array && obj.as.array->isFrozen()) ||
+                        (obj.type == VAL_TABLE && obj.as.table && obj.as.table->isFrozen()))) {
+        f.ci->ip = f.ip;
+        return frozen_write_error(vm, obj);
+    }
     if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
         std::lock_guard<FiberMutex> lock(obj.as.shared_cell->mutex());
         Value& inner = obj.as.shared_cell->unsafeValue();
@@ -1574,7 +1586,7 @@ MOBIUS_FORCEINLINE static int vm_op_aset(MobiusVM* vm, VMFrame& f, uint32_t inst
             // In-bounds store into a plain array is the whole fast path.
             // Negative indices, growth, and live-slice checks stay in the
             // generic handler.
-            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length())) {
+            if (MOBIUS_LIKELY(idx >= 0 && idx < (int64_t)arr->length() && !arr->isFrozen())) {
                 arr->set((size_t)idx, RKC(inst));
                 return 0;
             }
@@ -1776,6 +1788,10 @@ MOBIUS_FORCEINLINE static int vm_op_array_push(MobiusVM* vm, VMFrame& f, uint32_
         }
         inner.as.array->push(val);
     } else if (MOBIUS_LIKELY(arr_val.type == VAL_ARRAY && arr_val.as.array)) {
+        if (MOBIUS_UNLIKELY(arr_val.as.array->isFrozen())) {
+            f.ci->ip = f.ip;
+            return frozen_write_error(vm, arr_val);
+        }
         if (arr_val.as.array->hasActiveSlices()) {
             VM_ERROR(vm, f, "cannot resize array while slices are alive");
             return -1;
@@ -3958,6 +3974,19 @@ MOBIUS_FORCEINLINE static int vm_op_cancel_check(MobiusVM* vm, VMFrame& f, uint3
     return 0;
 }
 
+// OP_FREEZE A -- R[A] = deep-frozen copy of R[A], for a `const` binding.
+MOBIUS_FORCEINLINE static int vm_op_freeze(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    Value& val = f.regs[DECODE_A(inst)];
+    Value frozen;
+    const char* error = nullptr;
+    if (!freeze_for_const(val, &frozen, &error)) {
+        VM_ERROR(vm, f, "const: %s", error ? error : "value cannot be const");
+        return -1;
+    }
+    val = frozen;
+    return 0;
+}
+
 // OP_SHARE A -- wrap R[A] in a SharedCell
 MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t a = DECODE_A(inst);
@@ -4139,6 +4168,7 @@ int MobiusVM::run(size_t base_depth) {
         &&L_OP_TYPECHECK_LOCKED,
         &&L_OP_NOP,
         &&L_OP_AGET, &&L_OP_AGET_INDEX_GET, &&L_OP_ADD_CHECK, &&L_OP_AGET_ADD_CHECK, &&L_OP_ASET,
+        &&L_OP_FREEZE,
     };
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
                   "dispatch_table must match OpCode enum");
@@ -4360,6 +4390,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_ADD_CHECK, vm_op_add_check)
     VM_HANDLER(OP_AGET_ADD_CHECK, vm_op_aget_add_check)
     VM_HANDLER(OP_ASET, vm_op_aset)
+    VM_HANDLER(OP_FREEZE, vm_op_freeze)
 
     VM_DEFAULT()
         f.ci->ip = f.ip;

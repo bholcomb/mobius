@@ -90,6 +90,7 @@ typedef enum {
     TOKEN_CATCH,            // catch
     TOKEN_IN,               // in
     TOKEN_VAR,              // var (mutable variable)
+    TOKEN_CONST,            // const (immutable binding, deep-frozen value)
     TOKEN_WHEN,             // when (guard clause in switch)
     TOKEN_WHILE,            // while
     TOKEN_FINALLY,          // finally

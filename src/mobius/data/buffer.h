@@ -27,6 +27,7 @@ public:
     size_t capacity() const { return capacity_; }
     bool isFixed() const { return fixed_; }
     bool isReadonly() const { return readonly_; }
+    void setReadonly(bool readonly) { readonly_ = readonly; }
     bool isExternal() const { return external_; }
     bool ok() const { return ok_; }
 

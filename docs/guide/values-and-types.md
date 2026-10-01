@@ -20,6 +20,34 @@ var name = "Alice"
 var pending             // nil until first assigned
 ```
 
+## Constants
+
+`const` declares a value that never changes. It must be given its value where
+it is declared, and the value is **deeply immutable**: arrays, tables and
+buffers inside it are frozen, so changing them is an error, not just
+reassigning the name.
+
+```mobius
+const LIMIT = 100
+const COLORS = ["red", "green"]
+const CONFIG = { retries: 3, hosts: ["a", "b"] }
+
+LIMIT = 5                 // compile error: cannot assign to const 'LIMIT'
+COLORS:push("blue")       // error: arr:push: cannot modify a const array
+CONFIG.hosts[0] = "c"     // error: cannot modify a const array
+```
+
+- `const` freezes a **copy** of its initializer, so a `var` that referred to the
+  same array is unaffected and still mutable.
+- To get a mutable version of a constant, copy it: `COLORS:slice(0, size(COLORS))`.
+- A constant may hold numbers, strings, booleans, chars, `nil`, enums,
+  functions, and arrays/tables/buffers of those. A closure that captures
+  variables, a `shared` value, a channel, a future, or userdata cannot be
+  `const`, since each of those can change.
+- `const` works anywhere `var` does, at the top level or inside functions.
+  Top-level constants can be used from spawned fibers (see
+  [Concurrency](concurrency.md#top-level-variables)).
+
 ## Type locking
 
 A variable's type locks at its **first non-nil assignment**, and the type is

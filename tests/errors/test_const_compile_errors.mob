@@ -1,0 +1,33 @@
+// Reassigning a const is rejected at compile time, as is a const without
+// an initializer. Each snippet runs in a separate interpreter.
+import "os"
+
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+var workspace = os.join(os.tmpdir(), "mobius_const_errors_" + str(os.getpid()))
+os.mkdirp(workspace)
+var failures = 0
+var counter = 0
+
+func expect_error(name, source, needle) {
+    counter = counter + 1
+    var path = os.join(workspace, "case" + str(counter) + ".mob")
+    writefile(path, source)
+    var out = os.exec("\"" + mobius_bin + "\" \"" + path + "\" 2>&1")
+    if (!contains(out, needle)) {
+        failures = failures + 1
+        print("FAIL: " + name + ": expected '" + needle + "', got: " + out)
+    }
+}
+
+expect_error("reassign top-level", "const X = 1\nX = 2\n", "cannot assign to const 'X'")
+expect_error("compound assign", "const X = 1\nX += 2\n", "cannot assign to const 'X'")
+expect_error("increment", "const X = 1\nX++\n", "cannot assign to const 'X'")
+expect_error("reassign local", "func f() {\n  const y = 1\n  y = 2\n}\n", "cannot assign to const 'y'")
+expect_error("assign captured const", "func f() {\n  const y = 1\n  var g = func() { y = 3 }\n}\n", "cannot assign to const 'y'")
+expect_error("no initializer", "const X\n", "must be given its value where it is declared")
+
+os.system("rm -rf \"" + workspace + "\"")
+if (failures > 0) {
+    exit(1)
+}
+print("const compile errors: PASS")

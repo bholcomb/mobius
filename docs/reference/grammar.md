@@ -37,6 +37,7 @@ program             ::= { NEWLINE | declaration } EOF
 declaration         ::= function_decl
                       | var_decl
                       | shared_var_decl
+                      | const_decl
                       | enum_decl
                       | struct_decl
                       | statement
@@ -50,6 +51,8 @@ param               ::= IDENTIFIER [ ":" func_type_name ]
 var_decl            ::= "var" IDENTIFIER [ type_annotation ] [ "=" expression ] terminator
 
 shared_var_decl     ::= "shared" var_decl
+
+const_decl          ::= "const" IDENTIFIER [ type_annotation ] "=" expression terminator
 
 type_annotation     ::= ":" type_name
 
@@ -327,7 +330,7 @@ ESCAPE_CHAR         ::= "n" | "t" | "r" | "\" | '"' | "'" | "0"
 ## Keywords
 
 ```
-and     at      atomic   await    break    case     catch     continue
+and     at      atomic   await    break    case     catch     const    continue
 default elif    else     enum     false    finally  for       func
 if      import  in       is       nil      not      or        return
 shared  spawn   struct   switch   throw    true     try       union

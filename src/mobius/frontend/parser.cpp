@@ -218,6 +218,7 @@ void synchronize(Parser* parser) {
             case TOKEN_VAR:
             case TOKEN_STRUCT:
             case TOKEN_SHARED:
+            case TOKEN_CONST:
             case TOKEN_FOR:
             case TOKEN_IF:
             case TOKEN_WHILE:
@@ -1616,6 +1617,20 @@ Stmt* parse_declaration(Parser* parser) {
         Stmt* stmt = parse_var_declaration(parser);
         if (stmt && stmt->as.var.initializer) {
             stmt->as.var.initializer = make_shared_expr(stmt->as.var.initializer);
+        }
+        return stmt;
+    }
+
+    if (parser_match(parser, TOKEN_CONST)) {
+        Token keyword = parser_previous(parser);
+        Stmt* stmt = parse_var_declaration(parser);
+        if (stmt) {
+            stmt->as.var.is_const = true;
+            if (!stmt->as.var.initializer) {
+                parser_error(parser, keyword, "A const must be given its value where it is declared");
+                ast_release_stmt(stmt);
+                return NULL;
+            }
         }
         return stmt;
     }
