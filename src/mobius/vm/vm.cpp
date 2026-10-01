@@ -270,6 +270,30 @@ MobiusVM::MobiusVM(MobiusState* state)
     native_ctx_.capacity  = register_capacity_;
 
     exec_context_ = new ExecutionContext(state, state->config().max_call_depth);
+    max_call_depth_ = state->config().max_call_depth ? state->config().max_call_depth
+                                                     : (size_t)-1;
+}
+
+// Keep this much of a fiber's C stack free: room for one more nested
+// run(), the natives it calls, and building the overflow error itself.
+static const size_t C_STACK_RESERVE = 128 * 1024;
+// Fallback nesting cap when not running on a known fiber stack.
+static const int MAX_NATIVE_NESTING = 200;
+
+bool MobiusVM::cStackExhausted() const {
+    char probe;
+    JobSystem* js = state_->jobSystem();
+    MobiusFiber* fiber = js ? js->currentFiber() : nullptr;
+    if (fiber && fiber->stack_memory) {
+        // Stacks grow down toward stack_memory (guard page first, then the
+        // usable stack), so the distance from it is the space left.
+        char* low = (char*)fiber->stack_memory;
+        char* here = &probe;
+        if (here > low && (size_t)(here - low) <= fiber->stack_size + 2 * 65536) {
+            return (size_t)(here - low) < C_STACK_RESERVE;
+        }
+    }
+    return native_depth_ > MAX_NATIVE_NESTING;
 }
 
 MobiusVM::~MobiusVM() {
@@ -546,6 +570,10 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
     }
 
+    if (MOBIUS_UNLIKELY(callDepthExceeded())) {
+        runtimeError("Stack overflow: more than %zu nested calls", max_call_depth_);
+        return -1;
+    }
     CallInfo& new_ci = callStackPush(child, child_base, nresults);
     new_ci.ip = child->code.data();
     if (mf->upvalues && mf->upvalue_count > 0) {
@@ -2839,6 +2867,10 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
     }
 
     f.ci->ip = f.ip;
+    if (MOBIUS_UNLIKELY(vm->callDepthExceeded())) {
+        vm->runtimeError("Stack overflow: more than %zu nested calls", vm->max_call_depth_);
+        return -1;
+    }
     CallInfo& new_ci = vm->callStackPush(child, child_base, c);
     enter_child_frame(vm, f, &new_ci, child, child_base);
     return 0;
@@ -2887,6 +2919,10 @@ MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t
             memset(&vm->type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
         }
 
+        if (MOBIUS_UNLIKELY(vm->callDepthExceeded())) {
+            VM_ERROR(vm, f, "Stack overflow: more than %zu nested calls", vm->max_call_depth_);
+            return -1;
+        }
         CallInfo& new_ci = vm->callStackPush(child, child_base, c);
         if (mf->upvalues && mf->upvalue_count > 0) {
             if (!new_ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
@@ -3918,6 +3954,10 @@ MOBIUS_NOINLINE int MobiusVM::handleHandlerError(size_t base_depth) {
 }
 
 int MobiusVM::run(size_t base_depth) {
+    if (MOBIUS_UNLIKELY(cStackExhausted())) {
+        runtimeError("Stack overflow: calls through metamethods or callbacks nested too deeply");
+        return -1;
+    }
     size_t saved_atomic_depth = atomic_locks_.size();
     struct AtomicLockCleanup {
         MobiusVM* vm;

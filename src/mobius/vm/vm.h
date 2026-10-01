@@ -265,6 +265,18 @@ public:
     // locals may hold heap values invisible to precise root enumeration, so
     // the shadow verifier (and later the collector) must not run.
     int native_depth_ = 0;
+
+    // Script call nesting limit (MobiusConfig::max_call_depth; 0 = none).
+    // Frames live on the heap, so without it unbounded recursion ran until
+    // the process ran out of memory.
+    size_t max_call_depth_ = 0;
+    bool callDepthExceeded() const { return call_depth_ >= max_call_depth_; }
+
+    // True when the C stack of the running fiber is nearly used up. Native
+    // code that calls back into script (metamethods, map/sort callbacks,
+    // __tostring) nests run() on the C stack, so recursion through it used
+    // to overflow the stack and segfault.
+    bool cStackExhausted() const;
     void pinForNative(MobiusString* s) {
         if (s && !s->isImmortal()) { s->retain(); native_keepalive_.push_back(s); }
     }
