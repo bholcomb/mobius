@@ -1,0 +1,36 @@
+// Method calls are written without spaces around ':' (obj:method()). A
+// spaced ':' belongs to the surrounding construct: a ternary, a table key,
+// or a case guard.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func f(x) { return "f" + str(x) }
+var b = "bee"
+var arr = [3, 1, 2]
+
+check("tight method call", arr:size(), 3)
+check("chained method calls", arr:slice(0, 2):size(), 2)
+check("ternary false branch is a call", false ? b : f(1), "f1")
+check("ternary true branch is a call", true ? f(2) : b, "f2")
+check("method call in ternary branch", true ? arr:size() : f(1), 3)
+check("method call in both branches", false ? arr:size() : arr:find(1), 1)
+check("nested ternary", false ? b : true ? f(3) : b, "f3")
+
+var keyed = { size: f(4) }
+check("spaced table key with call value", keyed.size, "f4")
+var tight_key = {size: f(5)}
+check("key with tight colon, spaced value", tight_key.size, "f5")
+var value_only = { arr:size() }
+check("tight method call as table value", value_only[0], 3)
+
+var n = 5
+var hit = false
+switch (n) {
+    case 5 when arr:size() == 3 : hit = true
+}
+check("method call in case guard", hit, true)
+print("method colon spacing: PASS")

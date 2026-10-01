@@ -40,3 +40,4 @@ tests/types/test_param_annotation_mismatch.mob
 tests/errors/test_switch_case_parse_error.mob
 tests/errors/test_override_default_error.mob
 tests/errors/test_override_intrinsic_error.mob
+tests/errors/test_method_call_spaces.mob

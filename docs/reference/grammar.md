@@ -248,6 +248,13 @@ call_tail           ::= "(" [ arg_list ] ")"
 arg_list            ::= expression { "," expression }
 ```
 
+> A method call is written without whitespace on either side of the `:`
+> (`obj:method()`). A spaced `:` is never a method call. In a ternary's true
+> branch or a case guard it ends the expression, so `ok ? a : f(x)` is a
+> ternary. In a table literal it separates a key from its value, so
+> `{ key: f(x) }` is a key and `{ obj:method() }` is a value. Anywhere else
+> `obj : method()` is a syntax error.
+
 ## Primary Expressions
 
 ```

@@ -19,6 +19,11 @@ typedef struct {
                                 // (used for switch comparison-case operands so
                                 // `case >= 100: body` doesn't read `100:body`
                                 // as a method call).
+    int colon_ends_expr;        // > 0 while parsing an expression that a ':'
+                                // may legitimately end (a ternary's true
+                                // branch, a case guard). There a spaced ':'
+                                // stops the expression instead of being a
+                                // malformed method call.
 } Parser;
 
 // Parser result structure
