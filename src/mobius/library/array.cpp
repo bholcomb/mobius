@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <vector>
 
 // =============================================================================
 // HELPER: extract ArrayValue* from self (first argument via : syntax)
@@ -347,6 +348,33 @@ static bool value_less_than(const Value& a, const Value& b) {
     return false;
 }
 
+// Stable bottom-up merge sort. Unlike std::sort it never indexes outside
+// [0, n) whatever the comparator returns, so an inconsistent user
+// comparator (e.g. one that always returns true) can only produce an
+// arbitrary order, not a buffer overrun. `less` returns false once an
+// error has been recorded, which just finishes the passes quickly.
+template <typename Less>
+static void merge_sort_values(std::vector<Value>& items, Less less) {
+    size_t n = items.size();
+    if (n < 2) return;
+    std::vector<Value> tmp(n);
+    for (size_t width = 1; width < n; width *= 2) {
+        for (size_t lo = 0; lo < n; lo += 2 * width) {
+            size_t mid = std::min(lo + width, n);
+            size_t hi = std::min(lo + 2 * width, n);
+            size_t i = lo, j = mid, k = lo;
+            while (i < mid && j < hi) {
+                // Take from the right only when strictly less: stable.
+                if (less(items[j], items[i])) tmp[k++] = items[j++];
+                else tmp[k++] = items[i++];
+            }
+            while (i < mid) tmp[k++] = items[i++];
+            while (j < hi) tmp[k++] = items[j++];
+        }
+        items.swap(tmp);
+    }
+}
+
 int array_method_sort(MobiusState* state, int arg_count) {
     if (arg_count < 1 || arg_count > 2)
         return state->error("arr:sort expects 0 or 1 arguments ([comparator])");
@@ -364,14 +392,18 @@ int array_method_sort(MobiusState* state, int arg_count) {
     }
     state->npop();
 
+    // Sort a private copy: a comparator that runs script code may push to,
+    // pop from, or replace the array, so its storage can't be sorted in
+    // place (std::sort on it read freed memory).
+    std::vector<Value> items(arr->data(), arr->data() + len);
     if (!has_comp) {
-        std::sort(arr->data(), arr->data() + len, value_less_than);
+        merge_sort_values(items, value_less_than);
     } else {
         if (comp_val.type != VAL_FUNCTION && comp_val.type != VAL_NATIVE_FUNCTION) {
             return state->error("arr:sort comparator must be a function");
         }
         bool sort_error = false;
-        std::sort(arr->data(), arr->data() + len, [&](const Value& a, const Value& b) -> bool {
+        merge_sort_values(items, [&](const Value& a, const Value& b) -> bool {
             if (sort_error) return false;
             mobius_stack_pushNil(state);
             state->npeek(0) = comp_val;
@@ -383,6 +415,13 @@ int array_method_sort(MobiusState* state, int arg_count) {
             return is_truthy(result);
         });
         if (sort_error) return -1;
+    }
+
+    if (arr->length() != len) {
+        return state->error("arr:sort: the array was resized during sorting");
+    }
+    for (size_t i = 0; i < len; i++) {
+        (*arr)[i] = items[i];
     }
 
     state->npush(self_val);
