@@ -104,6 +104,7 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
 
     ArrayValue* results = new ArrayValue(count);
     JobSystem* js = state->jobSystem();
+    BlockingWait wait(js);
 
     for (size_t i = 0; i < count; i++) {
         FutureValue* future = held[i].as.future;
@@ -111,6 +112,10 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
             if (current_fiber_cancelled()) {
                 results->release();
                 return state->error(kCancelledMessage);
+            }
+            if (wait.deadlocked()) {
+                results->release();
+                return state->error(js->fiberLimitDeadlockMessage().c_str());
             }
             if (js) js->yieldFiber();
             else std::this_thread::yield();
@@ -145,6 +150,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
     }
 
     JobSystem* js = state->jobSystem();
+    BlockingWait wait(js);
     while (true) {
         size_t failed = 0;
         for (size_t i = 0; i < count; i++) {
@@ -163,6 +169,9 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
         }
         if (current_fiber_cancelled()) {
             return state->error(kCancelledMessage);
+        }
+        if (wait.deadlocked()) {
+            return state->error(js->fiberLimitDeadlockMessage().c_str());
         }
         if (js) js->yieldFiber();
         else std::this_thread::yield();
@@ -279,6 +288,7 @@ int channel_method_send(MobiusState* state, int arg_count) {
 
     // Yield the fiber instead of blocking the OS thread when the channel is full
     JobSystem* js = state->jobSystem();
+    BlockingWait wait(js);
     while (!ch->trySend(val)) {
         if (ch->isClosed()) {
             state->npush(make_bool_value(false));
@@ -286,6 +296,9 @@ int channel_method_send(MobiusState* state, int arg_count) {
         }
         if (current_fiber_cancelled()) {
             return state->error(kCancelledMessage);
+        }
+        if (wait.deadlocked()) {
+            return state->error(js->fiberLimitDeadlockMessage().c_str());
         }
         if (js) js->yieldFiber();
         else std::this_thread::yield();
@@ -305,12 +318,16 @@ int channel_method_recv(MobiusState* state, int arg_count) {
     // Yield the fiber instead of blocking the OS thread when the channel is empty
     JobSystem* js = state->jobSystem();
     Value result;
+    BlockingWait wait(js);
     while (!ch->tryRecv(result)) {
         if (ch->isClosed()) {
             return state->error("ChannelClosedError: recv on closed and empty channel");
         }
         if (current_fiber_cancelled()) {
             return state->error(kCancelledMessage);
+        }
+        if (wait.deadlocked()) {
+            return state->error(js->fiberLimitDeadlockMessage().c_str());
         }
         if (js) js->yieldFiber();
         else std::this_thread::yield();

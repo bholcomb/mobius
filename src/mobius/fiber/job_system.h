@@ -13,6 +13,8 @@
 #include <thread>
 #include <functional>
 #include <cstdint>
+#include <chrono>
+#include <string>
 
 struct JobDecl {
     std::function<void()> entry;
@@ -66,6 +68,19 @@ public:
     FiberPool* fiberPool() { return fiber_pool_; }
     MobiusFiber* currentFiber() const;
 
+    // Fibers blocked waiting on other fibers (await, fiber.all/any, channel
+    // send/recv); see BlockingWait.
+    void enterBlockingWait() { blocked_fibers_.fetch_add(1, std::memory_order_acq_rel); }
+    void leaveBlockingWait() { blocked_fibers_.fetch_sub(1, std::memory_order_acq_rel); }
+
+    // True when spawned work can never start: jobs are queued, the fiber
+    // pool is at max_fiber_pool_size with no free fiber, and every live
+    // fiber is blocked waiting. Nothing can then free a fiber, so the
+    // waiters would spin forever (e.g. more than 256 nested awaits).
+    bool fiberLimitDeadlock();
+    // The error to raise in a waiter when fiberLimitDeadlock() holds.
+    std::string fiberLimitDeadlockMessage();
+
     MobiusMetrics& metrics() { return *metrics_; }
 
 private:
@@ -95,6 +110,7 @@ private:
     std::mutex worker_mutex_;
     std::atomic<int> active_worker_count_;
     std::atomic<int> outstanding_jobs_{0};
+    std::atomic<int> blocked_fibers_{0};
     int max_workers_;
 
     std::atomic<bool> shutdown_requested_;
@@ -112,6 +128,42 @@ private:
 
     static thread_local MobiusFiber* t_current_fiber_;
     static thread_local FiberContext t_scheduler_ctx_;
+};
+
+// Scope guard for a fiber's wait loop. Registers the fiber as blocked for
+// the deadlock check, and reports a deadlock only once the condition has
+// held for 500 ms: a waiter whose value has just arrived still counts as
+// blocked until it polls again, while a real deadlock lasts forever.
+class BlockingWait {
+public:
+    explicit BlockingWait(JobSystem* js) : js_(js) {
+        if (js_) js_->enterBlockingWait();
+    }
+    ~BlockingWait() {
+        if (js_) js_->leaveBlockingWait();
+    }
+    BlockingWait(const BlockingWait&) = delete;
+    BlockingWait& operator=(const BlockingWait&) = delete;
+
+    // Call once per iteration of the wait loop.
+    bool deadlocked() {
+        if (!js_ || !js_->fiberLimitDeadlock()) {
+            suspect_ = false;
+            return false;
+        }
+        auto now = std::chrono::steady_clock::now();
+        if (!suspect_) {
+            suspect_ = true;
+            since_ = now;
+            return false;
+        }
+        return now - since_ >= std::chrono::milliseconds(500);
+    }
+
+private:
+    JobSystem* js_;
+    bool suspect_ = false;
+    std::chrono::steady_clock::time_point since_;
 };
 
 #endif // MOBIUS_JOB_SYSTEM_H

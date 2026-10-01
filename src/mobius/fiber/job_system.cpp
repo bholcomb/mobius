@@ -141,6 +141,24 @@ void JobSystem::yieldFiber() {
     fiber_context_swap(&self->context, &t_scheduler_ctx_);
 }
 
+bool JobSystem::fiberLimitDeadlock() {
+    {
+        std::lock_guard<std::mutex> lock(job_mutex_);
+        if (pending_jobs_.empty()) return false;
+    }
+    if (!fiber_pool_ || !fiber_pool_->exhausted()) return false;
+    int live = (int)fiber_pool_->activeCount();
+    if (main_fiber_ && main_fiber_ == dedicated_main_fiber_) live++;   // not a pool fiber
+    return blocked_fibers_.load(std::memory_order_acquire) >= live;
+}
+
+std::string JobSystem::fiberLimitDeadlockMessage() {
+    size_t max = fiber_pool_ ? fiber_pool_->maxCount() : 0;
+    return "Deadlock: every fiber is waiting on spawned work that cannot start, "
+           "because the fiber limit was reached (max_fiber_pool_size = " +
+           std::to_string(max) + ")";
+}
+
 MobiusFiber* JobSystem::currentFiber() const {
     return t_current_fiber_;
 }
