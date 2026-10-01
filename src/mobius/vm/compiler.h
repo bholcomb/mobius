@@ -46,6 +46,8 @@ private:
     struct LoopContext {
         int start_pc;                      // instruction index of loop condition
         bool is_for_loop = false;          // true if this is a for loop (continue needs patching)
+        bool is_switch = false;            // a switch's pseudo-loop: a target for
+                                           // `break`, but `continue` skips past it
         std::vector<int> break_jumps;      // JMP instructions to patch on loop exit
         std::vector<int> continue_jumps;   // JMP instructions to patch to increment (for loops)
         int scope_depth;                   // scope depth at loop entry

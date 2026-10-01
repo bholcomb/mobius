@@ -3302,6 +3302,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
     LoopContext switch_loop;
     switch_loop.start_pc = current_->proto->currentPC();
     switch_loop.is_for_loop = false;
+    switch_loop.is_switch = true;
     switch_loop.scope_depth = current_->scope_depth;
     switch_loop.open_trys_at_entry = current_->open_trys;
     current_->loops.push_back(switch_loop);
@@ -3647,14 +3648,21 @@ void Compiler::compileBreakStmt() {
 // --- Continue ---
 
 void Compiler::compileContinueStmt() {
-    if (current_->loops.empty()) {
+    // `continue` belongs to the nearest real loop. A switch pushes a
+    // pseudo-loop so `break` can leave it, and continuing that pseudo-loop
+    // jumped back to the switch's own pattern tests: an infinite loop.
+    LoopContext* target = nullptr;
+    for (auto it = current_->loops.rbegin(); it != current_->loops.rend(); ++it) {
+        if (!it->is_switch) { target = &*it; break; }
+    }
+    if (!target) {
         fprintf(stderr, "Compile error [%s:%d]: 'continue' outside of loop\n",
                 current_->proto->source.c_str(), currentLine_);
         had_error_ = true;
         return;
     }
 
-    LoopContext& loop = current_->loops.back();
+    LoopContext& loop = *target;
 
     // Pop handlers for try regions entered inside the loop body; the next
     // iteration re-arms them via its own TRY_BEGIN.
