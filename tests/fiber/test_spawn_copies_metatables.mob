@@ -31,10 +31,14 @@ func same_mt(p) { return getmetatable(p.x) == getmetatable(p.y) }
 check("shared metatable preserved", await spawn same_mt(pair), true)
 
 // Captured upvalue and returned value paths.
-var captured = setmetatable({ v: 7 }, mt)
-func from_upvalue() { return captured.v + size(captured.greet) }
+func make_reader() {
+    var captured = setmetatable({ v: 7 }, mt)
+    func from_upvalue() { return captured.v + size(captured.greet) }
+    return from_upvalue
+}
+var from_upvalue = make_reader()
 check("captured upvalue", await spawn from_upvalue(), 9)
-func make() { return setmetatable({ v: 3 }, mt) }
-var made = await spawn make()
+func make(m) { return setmetatable({ v: 3 }, m) }
+var made = await spawn make(mt)
 check("returned value keeps metatable", made.greet, "hi")
 print("spawn copies metatables: PASS")

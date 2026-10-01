@@ -896,7 +896,10 @@ int MobiusState::initStdlib() {
     int fiber_slot = assignGlobalSlot("fiber");
     if (fiber_slot >= 0) {
         fiber_mod->retain();
-        setGlobalValue(fiber_slot, make_table_value(fiber_mod));
+        // Read-only like the other builtins, so spawned fibers may use it.
+        Value fv = make_table_value(fiber_mod);
+        fv.flags |= VAL_FLAG_DEFINED | VAL_FLAG_READONLY;
+        setGlobalValue(fiber_slot, fv);
     }
 
     Table* channel_mt = create_channel_type_metatable(this);

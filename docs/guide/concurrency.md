@@ -53,8 +53,9 @@ Both **arguments** and a spawned closure's **captured upvalues** follow the same
 Mobius value semantics as they cross the fiber boundary:
 
 - Scalars are copied by value.
-- Non-shared arrays and tables are **deep-copied** — each spawn gets its own
-  independent copy.
+- Non-shared arrays, tables, buffers and closures are **deep-copied**: each
+  spawn gets its own independent copy. A container passed in more than one
+  argument stays one container in the copy.
 - `shared` values are passed by reference to the same synchronized cell.
 - Array spans (`arr:span(...)`) stay aliased to their parent array, even across
   `spawn`.
@@ -92,6 +93,27 @@ spawn add(0, 10)                   // totals shared by reference (captured)
 func add_arg(t, i, v) { atomic(t[i] = t[i] + v) }
 spawn add_arg(totals, 1, 5)        // also shared by reference
 ```
+
+### Top-level variables
+
+A spawned fiber can use only top-level values that are safe to share:
+
+- `shared var` variables;
+- things that cannot change: functions, enums, structs, imported modules, and
+  builtins such as `print` and `fiber`.
+
+A plain top-level `var` is unsynchronized, so using it from a spawned fiber is
+an error, even just reading it:
+
+```mobius
+var items = []
+func work() { items:push(1) }   // error when run in a fiber:
+spawn work()                    // "top-level variable 'items' is not shared"
+```
+
+Declare it `shared var items = []`, or pass the value to the fiber as an
+argument (which copies it). The main script itself uses top-level variables
+freely.
 
 ### Restrictions
 

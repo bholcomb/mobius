@@ -997,6 +997,30 @@ MOBIUS_FORCEINLINE static int vm_op_unlock_shared(MobiusVM* vm, VMFrame& f, uint
 
 // ---- Globals ----
 
+// Fibers may share only what is safe to share: `shared var`s and things
+// that cannot change (functions, enums, structs, modules, builtins, all
+// read-only). A plain top-level `var` is unsynchronized, so spawned fibers
+// reading or writing one raced with every other fiber (concurrent pushes
+// to a global array corrupted the heap). In a spawned fiber (a VM with a
+// future_) such an access is an error. The main fiber is unaffected.
+MOBIUS_FORCEINLINE static bool fiber_may_use_global(const Value& gv) {
+    return (gv.flags & (VAL_FLAG_READONLY | VAL_FLAG_SHARED)) != 0 ||
+           gv.type == VAL_SHARED_CELL;
+}
+
+MOBIUS_NOINLINE static int fiber_global_error(MobiusVM* vm, VMFrame& f, int slot,
+                                              GlobalEnvironment* globals) {
+    const char* name = vm->state_->globalSlotName(slot, globals);
+    VM_ERROR(vm, f, "top-level variable '%s' is not shared, so a spawned fiber cannot use it; "
+                    "declare it `shared var %s`, or pass the value to the fiber as an argument",
+             name, name);
+    return -1;
+}
+
+#define CHECK_FIBER_GLOBAL(vm, f, value, slot, globals) \
+    if (MOBIUS_UNLIKELY((vm)->future_ != nullptr) && !fiber_may_use_global(value)) \
+        return fiber_global_error(vm, f, slot, globals)
+
 MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int slot = DECODE_Bx(inst);
     GlobalEnvironment* globals = frame_globals(vm, f);
@@ -1006,6 +1030,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
+    CHECK_FIBER_GLOBAL(vm, f, dst, slot, globals);
     return 0;
 }
 
@@ -1017,6 +1042,7 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal(MobiusVM* vm, VMFrame& f, uint32_t
         VM_ERROR(vm, f, "Cannot assign to read-only variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
+    CHECK_FIBER_GLOBAL(vm, f, gv, slot, globals);
     if (!shared_store(gv, RA(inst))) {
         gv = RA(inst);
     }
@@ -1037,6 +1063,7 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal_force(MobiusVM* vm, VMFrame& f, ui
     int slot = DECODE_Bx(inst);
     GlobalEnvironment* globals = frame_globals(vm, f);
     Value gv = vm->state_->getGlobalValue(slot, globals);
+    CHECK_FIBER_GLOBAL(vm, f, gv, slot, globals);
     bool was_readonly = (gv.flags & VAL_FLAG_READONLY) != 0;
     uint8_t a = DECODE_A(inst);
     bool warn = (a & 0x80u) != 0;         // top bit of A = warn flag
@@ -2827,6 +2854,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_index_get(MobiusVM* vm, VMFrame& f
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
+    CHECK_FIBER_GLOBAL(vm, f, f.regs[a], slot, globals);
     // The second fused word is the original access instruction (INDEX_GET
     // or GETFIELD — the peephole fuses both). Delegate by ITS opcode rather
     // than re-implementing indexing: an earlier inline copy here silently
@@ -2996,6 +3024,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call(MobiusVM* vm, VMFrame& f, uin
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
+    CHECK_FIBER_GLOBAL(vm, f, f.regs[a], slot, globals);
     uint32_t inst2 = *f.ip++;
     return vm_op_call(vm, f, inst2);
 }
@@ -3009,6 +3038,7 @@ MOBIUS_FORCEINLINE static int vm_op_getglobal_call_plain(MobiusVM* vm, VMFrame& 
         VM_ERROR(vm, f, "Undefined variable '%s'", vm->state_->globalSlotName(slot, globals));
         return -1;
     }
+    CHECK_FIBER_GLOBAL(vm, f, f.regs[a], slot, globals);
     uint32_t inst2 = *f.ip++;
     return vm_op_call_plain(vm, f, inst2);
 }
@@ -3484,7 +3514,9 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             const Value& key = entries[i].key;
             if (key.type != VAL_STRING || !key.as.string) continue;
             Value val = entries[i].value;
-            val.flags |= VAL_FLAG_DEFINED;
+            // Import bindings are read-only: they name a module (or its
+            // members), which spawned fibers may then use like builtins.
+            val.flags |= VAL_FLAG_DEFINED | VAL_FLAG_READONLY;
             int slot = vm->state_->assignGlobalSlot(key.as.string->data, globals);
             if (slot < 0) {
                 VM_ERROR(vm, f, "Global slot capacity exceeded while importing '%s'", module_name);
@@ -3536,7 +3568,7 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
             cur_table = new (std::nothrow) Table(vm->state_, 16);
             if (!cur_table) { VM_ERROR(vm, f, "Failed to create namespace table"); return -1; }
             Value tval = make_table_value(cur_table);
-            tval.flags |= VAL_FLAG_DEFINED;
+            tval.flags |= VAL_FLAG_DEFINED | VAL_FLAG_READONLY;
             int s = vm->state_->assignGlobalSlot(components[0].c_str(), globals);
             if (s < 0) {
                 VM_ERROR(vm, f, "Global slot capacity exceeded while importing '%s'", module_name);
@@ -3568,7 +3600,7 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         GlobalEnvironment* globals = frame_globals(vm, f);
         // Simple alias: bind module table to a single global
         Value tval = make_retained_table_value(mod_table);
-        tval.flags |= VAL_FLAG_DEFINED;
+        tval.flags |= VAL_FLAG_DEFINED | VAL_FLAG_READONLY;
         int s = vm->state_->assignGlobalSlot(alias_name, globals);
         if (s < 0) {
             VM_ERROR(vm, f, "Global slot capacity exceeded while importing '%s'", module_name);
