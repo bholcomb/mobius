@@ -640,6 +640,9 @@ Expr* finish_call(Parser* parser, Expr* callee) {
 
 Expr* parse_call(Parser* parser) {
     Expr* expr = parse_primary(parser);
+    // parse_primary already reported the error; postfix operators must not
+    // wrap a NULL operand (`spawn ++x` used to crash here).
+    if (!expr) return NULL;
     
     while (true) {
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {
@@ -941,10 +944,17 @@ Expr* parse_ternary(Parser* parser) {
 
 Expr* parse_assignment(Parser* parser) {
     Expr* expr = parse_ternary(parser);
+    // The left side failed to parse (e.g. `= 5`); the error is already
+    // reported. Don't build an assignment around a NULL target.
+    if (!expr) return NULL;
     
     if (parser_match(parser, TOKEN_EQUAL)) {
         Token equals = parser_previous(parser);
         Expr* value = parse_assignment(parser);
+        if (!value) {
+            ast_release_expr(expr);
+            return NULL;
+        }
         
         if (expr->type == EXPR_VARIABLE ||
             expr->type == EXPR_ARRAY_INDEX ||
@@ -980,6 +990,10 @@ Expr* parse_assignment(Parser* parser) {
         }
 
         Expr* rhs = parse_assignment(parser);
+        if (!rhs) {
+            ast_release_expr(expr);
+            return NULL;
+        }
         Expr* target_copy = ast_retain_expr(expr);
         Expr* binary = make_binary_expr(target_copy, bin_op, rhs);
         return make_assignment_expr(expr, binary);

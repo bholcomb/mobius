@@ -1,0 +1,37 @@
+// Malformed programs must fail with a clean parse error (exit 1): no crash,
+// no hang, and no running of a program that failed to parse. Each snippet
+// is written to a temp file and run in a separate interpreter.
+import "os"
+
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+var workspace = os.join(os.tmpdir(), "mobius_parse_recovery_" + str(os.getpid()))
+os.mkdirp(workspace)
+var failures = 0
+var counter = 0
+
+func expect_parse_error(name, source) {
+    counter = counter + 1
+    var path = os.join(workspace, "case" + str(counter) + ".mob")
+    writefile(path, source)
+    var code = os.system("timeout 10 \"" + mobius_bin + "\" \"" + path + "\" > /dev/null 2>&1")
+    if (code != 1) {
+        failures = failures + 1
+        print("FAIL: " + name + ": exit code " + str(code) + " (expected 1)")
+    }
+}
+
+// Assignment or compound assignment with a missing or broken side.
+expect_parse_error("assignment without target", "= 5\n")
+expect_parse_error("compound assignment without target", "+= 1\n")
+expect_parse_error("nested assignment without target", "x = (= 3)\n")
+expect_parse_error("assignment without value", "var y = 1\ny = \n")
+expect_parse_error("compound assignment without value", "var a = [1]\na[0] += \n")
+
+// A postfix operator must not wrap an operand that failed to parse.
+expect_parse_error("spawn of prefix increment", "spawn ++x\n")
+
+os.system("rm -rf \"" + workspace + "\"")
+if (failures > 0) {
+    exit(1)
+}
+print("parse error recovery: PASS")
