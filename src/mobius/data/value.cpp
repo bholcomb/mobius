@@ -332,7 +332,10 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
             memo.emplace(value.as.table, copy);
 
             if (Table* mt = value.as.table->getMetatable()) {
-                Value mt_copy = deep_copy_value_impl(make_table_value(mt), memo);
+                // make_table_value adopts a reference, so take one first;
+                // otherwise this temporary would release the source
+                // metatable's reference when it goes out of scope.
+                Value mt_copy = deep_copy_value_impl(make_table_value(mt->retain()), memo);
                 if (mt_copy.type == VAL_TABLE && mt_copy.as.table) {
                     clone->setMetatable(mt_copy.as.table);
                 }

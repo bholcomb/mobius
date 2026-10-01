@@ -1,0 +1,40 @@
+// Regression: copying a table whose metatable is reachable into a fiber
+// (spawn arguments, captured upvalues, results) must not free the source
+// metatable.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+var mt = { __index: { greet: "hi" } }
+var payload = { inner: setmetatable({ a: 1 }, mt) }
+
+func work(p) { return p.inner.a + 1 }
+check("spawn argument", await spawn work(payload), 2)
+
+// The copy keeps its metatable behavior.
+func lookup(p) { return p.inner.greet }
+check("metatable survives copy", await spawn lookup(payload), "hi")
+
+// The original is still intact after several copies.
+for (var i = 0; i < 50; i++) {
+    await spawn work(payload)
+}
+check("original metatable intact", payload.inner.greet, "hi")
+check("original metatable identity", getmetatable(payload.inner) == mt, true)
+
+// Shared metatables stay shared within one copy.
+var pair = { x: setmetatable({}, mt), y: setmetatable({}, mt) }
+func same_mt(p) { return getmetatable(p.x) == getmetatable(p.y) }
+check("shared metatable preserved", await spawn same_mt(pair), true)
+
+// Captured upvalue and returned value paths.
+var captured = setmetatable({ v: 7 }, mt)
+func from_upvalue() { return captured.v + size(captured.greet) }
+check("captured upvalue", await spawn from_upvalue(), 9)
+func make() { return setmetatable({ v: 3 }, mt) }
+var made = await spawn make()
+check("returned value keeps metatable", made.greet, "hi")
+print("spawn copies metatables: PASS")

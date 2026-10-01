@@ -1047,7 +1047,7 @@ void mobius_push_type_metatable(MobiusState* state, MobiusValueType type) {
     ValueType vt = public_to_internal_type(type);
     Table* mt = state->typeMetatable(vt);
     if (mt) {
-        stack_push(state, make_table_value(mt));
+        stack_push(state, make_table_value(mt->retain()));
     } else {
         stack_push(state, make_nil_value());
     }
@@ -1085,7 +1085,7 @@ void mobius_push_userdata_type_metatable(MobiusState* state, const char* type_na
     MobiusString* type_tag = state->stringPool()->intern(type_name);
     Table* mt = state->userdataTypeMetatable(type_tag);
     if (mt) {
-        stack_push(state, make_table_value(mt));
+        stack_push(state, make_table_value(mt->retain()));
     } else {
         stack_push(state, make_nil_value());
     }
