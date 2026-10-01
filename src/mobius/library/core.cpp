@@ -221,8 +221,11 @@ int lib_gc_verify(MobiusState* state, int arg_count) {
     (void)arg_count;
     MobiusVM* vm = state->activeVM();
     // Called from a native, so the caller's native frame is in flight; the
-    // verifier's own gate would refuse. Drop below it for the forced pass.
-    if (vm && g_gc_shadow_mode) {
+    // verifier's own gate would refuse. Drop below it for the forced pass,
+    // but only when this call is the sole native in flight: from inside a
+    // callback (e.g. under arr:map) the outer native holds values only on
+    // the C++ stack, invisible to root enumeration.
+    if (vm && g_gc_shadow_mode && vm->native_depth_ == 1) {
         vm->native_depth_--;
         gc_shadow_verify_now(vm);
         vm->native_depth_++;
@@ -236,9 +239,11 @@ int lib_gc_collect(MobiusState* state, int arg_count) {
     (void)arg_count;
     MobiusVM* vm = state->activeVM();
     int64_t freed = 0;
-    if (vm) {
-        // Same native-frame dance as lib_gc_verify: this call itself is the
-        // one in-flight native, and its stack holds no unrooted values.
+    // Same native-frame dance as lib_gc_verify, and only when this call is
+    // the sole in-flight native. Collecting from inside a callback freed the
+    // outer native's unrooted temporaries (e.g. arr:map's result array);
+    // there the request is skipped and 0 is returned.
+    if (vm && vm->native_depth_ == 1) {
         vm->native_depth_--;
         freed = (int64_t)gc_collect(vm);
         vm->native_depth_++;
