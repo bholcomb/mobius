@@ -53,6 +53,21 @@ expect_parse_error("incomplete expression in interpolation", "var x = 1\nprint(`
 expect_parse_error("extra tokens in interpolation", "var x = 1\nprint(`${x 2}`)\n")
 expect_parse_error("empty interpolation", "print(`${}`)\n")
 
+// Very deep nesting is a parse error, not a C stack overflow.
+expect_parse_error("100000 nested parentheses", "print(" + repeat("(", 100000) + "1" + repeat(")", 100000) + ")\n")
+expect_parse_error("100000 nested arrays", "var a = " + repeat("[", 100000) + "1" + repeat("]", 100000) + "\n")
+expect_parse_error("50000 nested blocks", repeat("if (true) {\n", 50000) + "print(1)\n" + repeat("}\n", 50000))
+expect_parse_error("5000 nested function literals", "var f = " + repeat("func() { return ", 5000) + "1" + repeat(" }", 5000) + "\n")
+
+// Ordinary deep code still parses.
+var deep_path = os.join(workspace, "deep_ok.mob")
+writefile(deep_path, "print(" + repeat("(", 60) + "1" + repeat(")", 60) + ")\n" +
+    repeat("if (true) {\n", 40) + "print(2)\n" + repeat("}\n", 40))
+if (os.system("timeout 10 \"" + mobius_bin + "\" \"" + deep_path + "\" > /dev/null 2>&1") != 0) {
+    failures = failures + 1
+    print("FAIL: 60 nested parentheses and 40 nested blocks should run")
+}
+
 os.system("rm -rf \"" + workspace + "\"")
 if (failures > 0) {
     exit(1)
