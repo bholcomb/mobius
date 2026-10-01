@@ -1,0 +1,15 @@
+// Array and table destructuring patterns may span several lines.
+func f(v) {
+    switch (v) {
+        case [a,
+              b]: return a + b
+        case {x,
+              y: why}: return x + why
+        default: return 0
+    }
+}
+
+if (f([1, 2]) != 3) { print("FAIL: multi-line array pattern"); exit(1) }
+if (f({x: 3, y: 4}) != 7) { print("FAIL: multi-line table pattern"); exit(1) }
+if (f(5) != 0) { print("FAIL: default"); exit(1) }
+print("multi-line switch patterns: PASS")
