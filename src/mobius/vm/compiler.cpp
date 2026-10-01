@@ -978,7 +978,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 case TOKEN_PERCENT: {
                     if (l_int && r_int) {
                         int64_t b = rv.as.i64;
-                        if (b != 0) {
+                        // As with '/', leave INT64_MIN % -1 to the runtime.
+                        if (b != 0 && b != -1) {
                             result = make_int64_value(lv.as.i64 % b);
                             folded = true;
                         }
