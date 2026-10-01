@@ -46,6 +46,13 @@ expect_parse_error("literal in table pattern", "switch ({}) {\n case {1}: print(
 expect_parse_error("truncated array pattern", "switch ([1]) {\n case [a,")
 expect_parse_error("truncated table pattern", "switch ({}) {\n case {a: ")
 
+// A parse error inside `${...}` is an error in the file: the program must
+// not run (it used to run, or crash in the compiler).
+expect_parse_error("bad token in interpolation", "print(`a${)}b`)\n")
+expect_parse_error("incomplete expression in interpolation", "var x = 1\nprint(`a${x +}b`)\n")
+expect_parse_error("extra tokens in interpolation", "var x = 1\nprint(`${x 2}`)\n")
+expect_parse_error("empty interpolation", "print(`${}`)\n")
+
 os.system("rm -rf \"" + workspace + "\"")
 if (failures > 0) {
     exit(1)
