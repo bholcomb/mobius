@@ -1,0 +1,43 @@
+// A callback passed to a method of a `shared` array may reassign that
+// shared variable. The method held only the shared cell, not the array,
+// so the reassignment freed the array while it was being iterated
+// (use-after-free, found under AddressSanitizer).
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+shared var a = []
+for (var i = 0; i < 64; i++) { a:push({v: i}) }
+var mapped = a:map(func(x, i) { a = [1]; return x.v })
+check("map sees the original elements", mapped:size() == 64 and mapped[63] == 63)
+check("map's reassignment took effect", a:size() == 1)
+
+shared var b = []
+for (var i = 0; i < 64; i++) { b:push(i) }
+var kept = b:filter(func(x, i) { b = [1]; return x % 2 == 0 })
+check("filter", kept:size() == 32)
+
+shared var c = []
+for (var i = 0; i < 64; i++) { c:push(i) }
+var total = c:reduce(func(acc, x) { c = [1]; return acc + x }, 0)
+check("reduce", total == 2016)
+
+shared var d = []
+for (var i = 0; i < 64; i++) { d:push({v: i}) }
+var found = d:any(func(x) { d = [2]; return x.v == 63 })
+check("any", found)
+
+shared var e = []
+for (var i = 0; i < 64; i++) { e:push({v: 64 - i}) }
+var e_sorted = false
+try {
+    e:sort(func(x, y) { e = [1]; return x.v < y.v })
+    e_sorted = true
+} catch err {
+    e_sorted = true
+}
+check("sort", e_sorted)
+print("shared array callback reassign: PASS")
