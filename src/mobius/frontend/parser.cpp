@@ -322,19 +322,39 @@ Expr* parse_primary(Parser* parser) {
             TokenArray sub_tokens = scan_source(expr_src, parser->state->stringPool());
             free(expr_src);
 
+            // The ${...} text is scanned and parsed on its own. Shift its line
+            // numbers so errors point at the real line, and treat an error or
+            // leftover tokens (`${x 2}`) as an error in this file; otherwise
+            // the program would run with a broken or missing expression.
+            for (size_t i = 0; i < sub_tokens.count; i++) {
+                sub_tokens.tokens[i].line += token.line - 1;
+            }
+            Expr* expr_node = NULL;
+            bool sub_ok = false;
             if (sub_tokens.count > 0) {
                 Parser sub_parser;
                 init_parser(&sub_parser, parser->state, sub_tokens.tokens, sub_tokens.count);
-                Expr* expr_node = parse_expression(&sub_parser);
-                if (expr_node) {
-                    result = result ? make_binary_expr(result, plus_op, expr_node) : expr_node;
+                sub_parser.source_name = parser->source_name;
+                expr_node = parse_expression(&sub_parser);
+                while (parser_match(&sub_parser, TOKEN_NEWLINE)) {}
+                if (expr_node && !sub_parser.had_error && !parser_at_end(&sub_parser)) {
+                    parser_error_at_current(&sub_parser, "Unexpected token after expression in ${...}");
                 }
+                sub_ok = expr_node && !sub_parser.had_error;
             }
 
             if (sub_tokens.tokens) {
                 for (size_t i = 0; i < sub_tokens.count; i++) free_token(&sub_tokens.tokens[i]);
                 free(sub_tokens.tokens);
             }
+
+            if (!sub_ok) {
+                parser->had_error = true;
+                ast_release_expr(expr_node);
+                if (result) ast_release_expr(result);
+                return NULL;
+            }
+            result = result ? make_binary_expr(result, plus_op, expr_node) : expr_node;
 
             p = ds + 1;
         }
