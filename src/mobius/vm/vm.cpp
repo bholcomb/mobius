@@ -2756,7 +2756,9 @@ MOBIUS_FORCEINLINE static int vm_op_iforprep(MobiusVM* vm, VMFrame& f, uint32_t 
                  value_type_name(f.regs[a].type), value_type_name(f.regs[a + 1].type));
         return -1;
     }
-    f.regs[a].as.i64 -= f.regs[a + 2].as.i64;
+    // Unsigned arithmetic: integer overflow wraps in Mobius, and signed
+    // overflow is undefined behavior in C++.
+    f.regs[a].as.i64 = (int64_t)((uint64_t)f.regs[a].as.i64 - (uint64_t)f.regs[a + 2].as.i64);
     f.ip += DECODE_sBx(inst);
     return 0;
 }
@@ -2765,7 +2767,7 @@ MOBIUS_FORCEINLINE static int vm_op_iforloop(MobiusVM* vm, VMFrame& f, uint32_t 
     (void)vm;
     int a = DECODE_A(inst);
     int64_t sv = f.regs[a + 2].as.i64;
-    int64_t iv = f.regs[a].as.i64 + sv;
+    int64_t iv = (int64_t)((uint64_t)f.regs[a].as.i64 + (uint64_t)sv);   // wraps
     f.regs[a].as.i64 = iv;
     if ((sv > 0) ? (iv <= f.regs[a + 1].as.i64) : (iv >= f.regs[a + 1].as.i64)) {
         f.ip += DECODE_sBx(inst);

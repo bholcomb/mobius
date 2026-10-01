@@ -3004,11 +3004,20 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         compileExpr(limit_expr, limit_reg);
 
         // For <= comparisons, FORLOOP uses <=, which is what we want.
-        // For < comparisons, adjust limit: limit = limit - 1 (integer only)
+        // For < comparisons, adjust limit: limit = limit - 1 (integer only).
+        // First test the real condition once: if `start < limit` fails the
+        // loop runs zero times, and when it holds, limit - 1 cannot wrap.
+        // Without this guard `i < INT64_MIN` became `i <= INT64_MAX`, which
+        // looped (practically) forever.
         BinaryExpr* cond = &stmt->condition->as.binary;
+        int skip_loop_jump = -1;
         if (count_up && cond->op.type == TOKEN_LESS) {
+            emitABC(OP_LT, 0, (uint8_t)idx_reg, (uint8_t)limit_reg);
+            skip_loop_jump = emitJump();
             emitAsBx(OP_SUBI, (uint8_t)limit_reg, 1);
         } else if (!count_up && cond->op.type == TOKEN_GREATER) {
+            emitABC(OP_LT, 0, (uint8_t)limit_reg, (uint8_t)idx_reg);
+            skip_loop_jump = emitJump();
             emitAsBx(OP_ADDI, (uint8_t)limit_reg, 1);
         }
 
@@ -3053,6 +3062,7 @@ void Compiler::compileForStmt(ForStmt* stmt) {
         for (int jmp : current_->loops.back().break_jumps) {
             patchJump(jmp);
         }
+        if (skip_loop_jump >= 0) patchJump(skip_loop_jump);
         current_->loops.pop_back();
         if (hoisted > 0) hoisted_globals_stack_.pop_back();
         endScope();

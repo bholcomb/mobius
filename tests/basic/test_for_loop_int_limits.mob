@@ -1,0 +1,37 @@
+// The integer for-loop fast path rewrites `i < limit` as `i <= limit - 1`.
+// With limit = INT64_MIN that wrapped to INT64_MAX, so a loop that should
+// run zero times ran (practically) forever.
+func count_up_below(limit) {
+    var n = 0
+    for (var i = 0; i < limit; i++) { n++ }
+    return n
+}
+
+func count_down_above(limit) {
+    var n = 0
+    for (var i = 0; i > limit; i--) { n++ }
+    return n
+}
+
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+var int_min = -9223372036854775807 - 1
+var int_max = 9223372036854775807
+check("i < INT64_MIN runs zero times", count_up_below(int_min), 0)
+check("i > INT64_MAX runs zero times", count_down_above(int_max), 0)
+check("i < 5", count_up_below(5), 5)
+check("i < 0", count_up_below(0), 0)
+check("i > -5", count_down_above(-5), 5)
+
+var near_max = 0
+for (var i = int_max - 2; i < int_max; i++) { near_max++ }
+check("up to just below INT64_MAX", near_max, 2)
+var near_min = 0
+for (var i = int_min + 2; i > int_min; i--) { near_min++ }
+check("down to just above INT64_MIN", near_min, 2)
+print("for loop integer limits: PASS")
