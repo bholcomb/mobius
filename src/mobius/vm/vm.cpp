@@ -1008,18 +1008,23 @@ MOBIUS_FORCEINLINE static bool fiber_may_use_global(const Value& gv) {
            gv.type == VAL_SHARED_CELL;
 }
 
-MOBIUS_NOINLINE static int fiber_global_error(MobiusVM* vm, VMFrame& f, int slot,
-                                              GlobalEnvironment* globals) {
+// Out of line and deliberately without a VMFrame&: passing the frame's
+// address to a non-inlined call makes it escape, which forces the whole
+// dispatch loop to keep the frame in memory (a 20% slowdown on arithmetic
+// and call benchmarks). The caller syncs the ip first.
+MOBIUS_NOINLINE static int fiber_global_error(MobiusVM* vm, int slot, GlobalEnvironment* globals) {
     const char* name = vm->state_->globalSlotName(slot, globals);
-    VM_ERROR(vm, f, "top-level variable '%s' is not shared, so a spawned fiber cannot use it; "
-                    "declare it `shared var %s`, or pass the value to the fiber as an argument",
-             name, name);
+    vm->runtimeError("top-level variable '%s' is not shared, so a spawned fiber cannot use it; "
+                     "declare it `shared var %s`, or pass the value to the fiber as an argument",
+                     name, name);
     return -1;
 }
 
 #define CHECK_FIBER_GLOBAL(vm, f, value, slot, globals) \
-    if (MOBIUS_UNLIKELY((vm)->future_ != nullptr) && !fiber_may_use_global(value)) \
-        return fiber_global_error(vm, f, slot, globals)
+    if (MOBIUS_UNLIKELY((vm)->future_ != nullptr) && !fiber_may_use_global(value)) { \
+        (f).ci->ip = (f).ip; \
+        return fiber_global_error(vm, slot, globals); \
+    }
 
 MOBIUS_FORCEINLINE static int vm_op_getglobal(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int slot = DECODE_Bx(inst);
