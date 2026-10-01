@@ -171,6 +171,10 @@ bool consume_statement_terminator(Parser* parser, const char* message) {
     return true;
 }
 
+static void skip_newlines(Parser* parser) {
+    while (parser_match(parser, TOKEN_NEWLINE)) {}
+}
+
 // After error recovery, make sure the parse loop moved forward. A statement
 // can fail on its very first token, and synchronize() returns at once when
 // the previous token is ';' (e.g. `var x = 1; )`), so without this the loop
@@ -1949,6 +1953,12 @@ Stmt* parse_switch_statement(Parser* parser) {
                     continue;
                 }
                 Stmt* stmt = parse_statement(parser);
+                if (!stmt) {
+                    // Parse error in the default body (already reported).
+                    // Stop here, as case bodies do; storing NULL and looping
+                    // without consuming anything hung the parser.
+                    break;
+                }
                 if (body_count >= body_capacity) {
                     body_capacity = body_capacity == 0 ? 4 : body_capacity * 2;
                     body = (Stmt**)realloc(body, sizeof(Stmt*) * body_capacity);
@@ -2124,9 +2134,14 @@ CasePattern* parse_case_pattern(Parser* parser) {
         bool has_rest = false;
         char* rest_name = NULL;
 
-        while (!parser_check(parser, TOKEN_RIGHT_BRACKET) && !parser_at_end(parser)) {
+        // Patterns may span lines; a parse error ends the pattern (nothing
+        // would be consumed, so continuing looped forever).
+        while (skip_newlines(parser), !parser_check(parser, TOKEN_RIGHT_BRACKET) &&
+               !parser_at_end(parser) && !parser->panic_mode) {
             if (count > 0) {
                 consume(parser, TOKEN_COMMA, "Expect ',' between array pattern elements");
+                skip_newlines(parser);
+                if (parser->panic_mode) break;
             }
             if (parser_check(parser, TOKEN_DOT_DOT_DOT)) {
                 parser_advance(parser);
@@ -2162,22 +2177,26 @@ CasePattern* parse_case_pattern(Parser* parser) {
         TablePattern* fields = (TablePattern*)malloc(sizeof(TablePattern) * capacity);
         size_t count = 0;
 
-        while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_at_end(parser)) {
+        while (skip_newlines(parser), !parser_check(parser, TOKEN_RIGHT_BRACE) &&
+               !parser_at_end(parser) && !parser->panic_mode) {
             if (count > 0) {
                 consume(parser, TOKEN_COMMA, "Expect ',' between table pattern fields");
+                skip_newlines(parser);
+                if (parser->panic_mode) break;
             }
             if (count >= capacity) {
                 capacity *= 2;
                 fields = (TablePattern*)realloc(fields, sizeof(TablePattern) * capacity);
             }
             Token key_tok = consume(parser, TOKEN_IDENTIFIER, "Expect field name in table pattern");
+            if (parser->panic_mode) break;
             fields[count].key = mobius_strdup(key_tok.identifier);
             fields[count].pattern = NULL;
             fields[count].is_optional = false;
 
             if (parser_match(parser, TOKEN_COLON)) {
                 Token bind_tok = consume(parser, TOKEN_IDENTIFIER, "Expect binding name after ':'");
-                fields[count].bind_name = mobius_strdup(bind_tok.identifier);
+                fields[count].bind_name = parser->panic_mode ? NULL : mobius_strdup(bind_tok.identifier);
             } else {
                 fields[count].bind_name = NULL;
             }

@@ -37,6 +37,15 @@ expect_parse_error("stray } after ;", "var x = 1; }\n")
 expect_parse_error("stray ) after ; in block", "if (true) { print(1); ) }\n")
 expect_parse_error("stray ] after ; in function", "func f() {\n  var a = 1; ]\n}\n")
 
+// Errors inside switch default bodies and destructuring patterns must not
+// loop (these hung while allocating without bound).
+expect_parse_error("bad statement in default body", "switch (1) {\n default: )\n}\n")
+expect_parse_error("bad return in default body", "func f(v) {\n switch (v) {\n  default:\n   return , \"none\"\n }\n}\n")
+expect_parse_error("literal in array pattern", "switch ([1]) {\n case [1]: print(1)\n}\n")
+expect_parse_error("literal in table pattern", "switch ({}) {\n case {1}: print(1)\n}\n")
+expect_parse_error("truncated array pattern", "switch ([1]) {\n case [a,")
+expect_parse_error("truncated table pattern", "switch ({}) {\n case {a: ")
+
 os.system("rm -rf \"" + workspace + "\"")
 if (failures > 0) {
     exit(1)
