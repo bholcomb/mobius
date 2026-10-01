@@ -123,7 +123,7 @@ Useful context fields:
 
 `ctx:render(name, data)` calls `renderer:render(name, data)` on the object
 passed to `app:templates(...)` and sends the result with `ctx:html`. Any
-object with that method works. The [`stencil`](packages.md) package's
+object with that method works. The [`stencil`](stencil.md) package's
 environment is one:
 
 ```mobius
