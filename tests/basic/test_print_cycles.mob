@@ -1,0 +1,28 @@
+// Printing containers that contain themselves must terminate. Arrays had
+// no cycle guard and tables only tracked tables, so `a:push(a); print(a)`
+// or an array and table holding each other recursed until the stack
+// overflowed (segfault).
+var a = [1]
+a:push(a)
+print(a)
+
+var arr = [1]
+var tbl = {arr: arr}
+arr:push(tbl)
+print(arr)
+print(tbl)
+
+var t = {a: 1}
+t.self = t
+print(t)
+
+// The same container appearing twice without a cycle prints normally.
+var child = [9]
+print([child, child])
+
+// Deep but finite nesting is cut off at the depth limit, not a crash.
+var root = []
+var cur = root
+for (var i = 0; i < 150; i++) { var n = []; cur:push(n); cur = n }
+print(root)
+print("print cycles: PASS")

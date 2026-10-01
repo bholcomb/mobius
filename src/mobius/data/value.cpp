@@ -429,6 +429,28 @@ Value deep_copy_value_for_spawn(const Value& value) {
 }
 
 
+static const size_t MAX_PRINT_DEPTH = 100;
+static thread_local std::vector<const void*> t_print_path;
+
+bool print_container_enter(const void* container, bool is_table) {
+    for (const void* p : t_print_path) {
+        if (p == container) {
+            printf(is_table ? "{...circular...}" : "[...circular...]");
+            return false;
+        }
+    }
+    if (t_print_path.size() >= MAX_PRINT_DEPTH) {
+        printf(is_table ? "{...depth limit...}" : "[...depth limit...]");
+        return false;
+    }
+    t_print_path.push_back(container);
+    return true;
+}
+
+void print_container_leave() {
+    if (!t_print_path.empty()) t_print_path.pop_back();
+}
+
 void print_value(const Value& value) {
     switch (value.type) {
         case VAL_NIL:
@@ -458,12 +480,14 @@ void print_value(const Value& value) {
             break;
         case VAL_ARRAY:
             if (value.as.array) {
+                if (!print_container_enter(value.as.array, false)) break;
                 printf("[");
                 for (size_t i = 0; i < value.as.array->length(); i++) {
                     if (i > 0) printf(", ");
                     print_value((*value.as.array)[i]);
                 }
                 printf("]");
+                print_container_leave();
             } else {
                 printf("<array (null)>");
             }

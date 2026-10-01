@@ -535,27 +535,7 @@ const Value& Table::getMetamethod(MobiusString* method_name) const {
 // Print
 // ============================================================================
 
-static void print_table_safe_impl(const Table* table, const Table** visited, int* visited_count, int max_depth) {
-    if (!table) {
-        printf("(null table)");
-        return;
-    }
-
-    for (int i = 0; i < *visited_count; i++) {
-        if (visited[i] == table) {
-            printf("{...circular...}");
-            return;
-        }
-    }
-
-    if (*visited_count >= max_depth) {
-        printf("{...depth limit...}");
-        return;
-    }
-
-    visited[*visited_count] = table;
-    (*visited_count)++;
-
+static void print_table_contents(const Table* table) {
     printf("{");
     bool first = true;
 
@@ -575,28 +555,24 @@ static void print_table_safe_impl(const Table* table, const Table** visited, int
             else printf("[%s]", key_str);
         } else {
             printf("[");
-            if (key.type == VAL_TABLE)
-                print_table_safe_impl(key.as.table, visited, visited_count, max_depth);
-            else
-                print_value(key);
+            print_value(key);
             printf("]");
         }
 
         printf(": ");
-        if (val.type == VAL_TABLE)
-            print_table_safe_impl(val.as.table, visited, visited_count, max_depth);
-        else
-            print_value(val);
+        print_value(val);
     });
 
     printf("}");
-    (*visited_count)--;
 }
 
+// Nested tables and arrays go through print_value, which shares one cycle
+// guard (print_container_enter) between both container kinds. The old
+// guard tracked only tables, so a cycle through an array never ended.
 void Table::print() const {
-    const Table* visited[100];
-    int visited_count = 0;
-    print_table_safe_impl(this, visited, &visited_count, 100);
+    if (!print_container_enter(this, true)) return;
+    print_table_contents(this);
+    print_container_leave();
 }
 
 void Table::printDebug() const {
