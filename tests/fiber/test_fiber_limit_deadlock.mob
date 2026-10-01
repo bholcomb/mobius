@@ -1,0 +1,33 @@
+// When every live fiber is waiting on spawned work that cannot start
+// because the fiber pool is at max_fiber_pool_size (default 256), the
+// waiters get a Deadlock error. They used to spin forever, so a chain of
+// more than 256 nested awaits hung silently.
+func rec(n) {
+    if (n == 0) { return 0 }
+    return 1 + await spawn rec(n - 1)
+}
+
+var message = ""
+try {
+    rec(300)
+} catch e {
+    message = str(e)
+}
+if (!contains(message, "Deadlock") or !contains(message, "max_fiber_pool_size")) {
+    print("FAIL: expected a deadlock error, got: " + message)
+    exit(1)
+}
+
+// Work that queues behind the limit but can finish is unaffected.
+if (rec(200) != 200) { print("FAIL: 200 nested awaits"); exit(1) }
+func task(i) { return i }
+var fs = []
+for (var i = 0; i < 3000; i++) { fs:push(spawn task(i)) }
+if (fiber.all(fs):size() != 3000) { print("FAIL: 3000 queued tasks"); exit(1) }
+func receive(ch) { return ch:recv() }
+var ch = fiber.channel(1)
+var receivers = []
+for (var i = 0; i < 300; i++) { receivers:push(spawn receive(ch)) }
+for (var i = 0; i < 300; i++) { ch:send(i) }
+if (fiber.all(receivers):size() != 300) { print("FAIL: 300 receivers"); exit(1) }
+print("fiber limit deadlock: PASS")

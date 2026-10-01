@@ -3835,6 +3835,8 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
 
     FutureValue* future = future_val.as.future;
 
+    JobSystem* js = vm->state_->jobSystem();
+    BlockingWait wait(future->isDone() ? nullptr : js);
     while (!future->isDone()) {
         // A fiber blocked here must still honor fiber.cancel(); without the
         // check, cancelling a fiber waiting on a slow future had no effect.
@@ -3842,7 +3844,10 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
             VM_ERROR(vm, f, "CancellationError: fiber was cancelled");
             return -1;
         }
-        JobSystem* js = vm->state_->jobSystem();
+        if (MOBIUS_UNLIKELY(wait.deadlocked())) {
+            VM_ERROR(vm, f, "%s", js->fiberLimitDeadlockMessage().c_str());
+            return -1;
+        }
         if (js) js->yieldFiber();
         else std::this_thread::yield();
     }

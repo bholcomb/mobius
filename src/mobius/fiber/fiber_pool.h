@@ -28,6 +28,9 @@ public:
     void destroyDetachedFiber(MobiusFiber* fiber);
 
     size_t activeCount() const;
+    // No free fiber and already at the configured maximum.
+    bool exhausted() const;
+    size_t maxCount() const { return max_count_; }
     size_t totalCount() const;
 
 private:

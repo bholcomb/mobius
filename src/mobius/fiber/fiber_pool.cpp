@@ -150,6 +150,11 @@ void FiberPool::destroyDetachedFiber(MobiusFiber* fiber) {
     deallocateFiber(fiber);
 }
 
+bool FiberPool::exhausted() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return free_list_.empty() && all_fibers_.size() >= max_count_;
+}
+
 size_t FiberPool::activeCount() const {
     std::lock_guard<std::mutex> lock(mutex_);
     // active = total - free
