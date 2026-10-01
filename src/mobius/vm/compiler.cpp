@@ -4681,12 +4681,21 @@ int Compiler::compileSpawn(SpawnExpr* expr, int dest) {
 
 // OP_AWAIT A B -- await future in R[B], result into R[A]
 int Compiler::compileAwait(AwaitExpr* expr, int dest) {
+    int save = current_->free_reg;
     int operand_reg = compileExpr(expr->operand);
     // Never write the result over the operand register: when the operand is a
     // plain local, compileExpr returns the local's own register, and reusing it
     // would overwrite the user's variable with the awaited result
     // (`var x = 1 + await f` used to leave `f` holding 42, not the future).
-    int result_reg = (dest >= 0) ? dest : allocReg();
+    if (dest >= 0) {
+        emitABC(OP_AWAIT, (uint8_t)dest, (uint8_t)operand_reg, 0);
+        // Release the operand's temporaries. Otherwise, in a call such as
+        // f(await spawn g(), x), the spawn's register stays allocated and
+        // every following argument lands one register too high.
+        setFreeReg(save);
+        return dest;
+    }
+    int result_reg = allocReg();
     emitABC(OP_AWAIT, (uint8_t)result_reg, (uint8_t)operand_reg, 0);
     return result_reg;
 }
