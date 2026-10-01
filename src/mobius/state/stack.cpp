@@ -50,6 +50,32 @@ static int normalize_index(NativeCallContext* nctx, int idx, bool* out_ok) {
     return nctx->base + idx;
 }
 
+// Plugins see a shared value as a snapshot of what it holds: a shallow
+// copy taken under its lock. They read it like any array or table, nested
+// shared values resolve the same way when read, and reads cannot race with
+// fibers changing the original. (Plugins saw an opaque "shared cell" and
+// rejected it: json/yaml/toml could not serialize shared data, and shared
+// tables could not be passed as options.) A plugin that modifies a shared
+// argument in place modifies the snapshot. Core natives use the internal
+// stack directly and handle shared values themselves.
+static Value shared_snapshot(const Value& cell_value) {
+    SharedCell* cell = cell_value.as.shared_cell;
+    std::lock_guard<FiberMutex> lock(cell->mutex());
+    const Value& inner = cell->unsafeValue();
+    if (inner.type == VAL_ARRAY && inner.as.array) {
+        ArrayValue* arr = inner.as.array;
+        ArrayValue* copy = new (std::nothrow) ArrayValue(arr->length());
+        if (!copy) return inner;
+        for (size_t i = 0; i < arr->length(); i++) copy->push(arr->get(i));
+        return make_array_value(copy);
+    }
+    if (inner.type == VAL_TABLE && inner.as.table) {
+        Table* copy = inner.as.table->copy();
+        return copy ? make_table_value(copy) : inner;
+    }
+    return inner;
+}
+
 static Value* get_value_at(MobiusState* state, int idx) {
     NativeCallContext* nctx = get_nctx(state);
     if (!nctx) return nullptr;
@@ -63,7 +89,11 @@ static Value* get_value_at(MobiusState* state, int idx) {
         state->setError(MOBIUS_ERROR_ARGUMENT, buf, nullptr, 0, 0, nullptr);
         return nullptr;
     }
-    return &nctx->registers[abs];
+    Value* v = &nctx->registers[abs];
+    if (MOBIUS_UNLIKELY(v->type == VAL_SHARED_CELL && v->as.shared_cell)) {
+        *v = shared_snapshot(*v);
+    }
+    return v;
 }
 
 static bool check_strict_conversion(MobiusState* state, ValueType from, ValueType to) {
@@ -128,7 +158,10 @@ static ValueType stack_get_internal_type(MobiusState* state, int idx) {
     if (idx < 0) idx = size + idx;
     if (idx < 0 || idx >= size) return VAL_NIL;
 
-    return nctx->registers[nctx->base + idx].type;
+    // Report a shared value as what it holds, consistent with the snapshot
+    // the accessors hand out (get_value_at).
+    Value* v = get_value_at(state, idx);
+    return v ? v->type : VAL_NIL;
 }
 
 static MobiusValueType internal_to_public_type(ValueType t) {

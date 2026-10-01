@@ -1,0 +1,29 @@
+// Plugin functions accept shared values. They saw an opaque shared cell:
+// json/yaml/toml could not serialize shared data, and a shared table could
+// not be passed where a table was expected. Plugins now read a snapshot
+// taken under the value's lock.
+import "json"
+import "toml"
+import "url"
+import "yaml"
+
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+shared var config = {name: "x", list: [1, 2]}
+shared var items = [1, {b: 2}]
+
+var parsed = json.parse(json.stringify(config))
+check("json of a shared table", parsed.name == "x" and parsed.list[1] == 2)
+check("json of a shared array", json.stringify(items) == "[1,{\"b\":2}]")
+check("json of a shared value nested in a table",
+      json.parse(json.stringify({wrapped: config})).wrapped.name == "x")
+check("yaml", contains(yaml.stringify(config), "name: x"))
+check("toml", contains(toml.stringify(config), "name = \"x\""))
+shared var query = {a: "1"}
+check("shared table as a plugin argument", url.build_query(query) == "a=1")
+print("shared values in modules: PASS")
