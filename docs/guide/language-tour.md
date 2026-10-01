@@ -117,6 +117,7 @@ pow(2, 8)     // 256.0  (exponent is the builtin pow, not an operator)
 0xF0 | 0x0F   // bitwise: & | ^ ~ << >>
 a and b       // also: a && b
 not a         // also: !a
+x > 0 ? "pos" : "neg"   // ternary
 "Count: " + 42   // "Count: 42"  (+ concatenates if either side is a string)
 ```
 
