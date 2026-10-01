@@ -1,4 +1,5 @@
 #include "data/array.h"
+#include "data/shared_cell.h"
 #include "data/table.h"
 #include "data/value.h"
 
@@ -58,6 +59,10 @@ ArrayValue* ArrayValue::retain() {
 }
 
 void ArrayValue::push(const Value& value) {
+    if (MOBIUS_UNLIKELY(owner_cell_ != nullptr)) {
+        elements.push_back(share_for_cell(value));   // shared all the way down
+        return;
+    }
     elements.push_back(value);
 }
 
@@ -75,10 +80,15 @@ const Value& ArrayValue::get(size_t index) const {
 
 void ArrayValue::set(size_t index, const Value& value) {
     if (index >= elements.size()) return;
+    if (MOBIUS_UNLIKELY(owner_cell_ != nullptr)) {
+        elements[index] = share_for_cell(value);
+        return;
+    }
     elements[index] = value;
 }
 
 void ArrayValue::insert(size_t index, Value value) {
+    if (MOBIUS_UNLIKELY(owner_cell_ != nullptr)) value = share_for_cell(value);
     if (index > elements.size()) index = elements.size();
     elements.insert(elements.begin() + (ptrdiff_t)index, std::move(value));
 }

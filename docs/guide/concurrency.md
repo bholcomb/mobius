@@ -157,9 +157,18 @@ shared var config = { debug: false }
 ```
 
 Reads and writes *through* the shared variable are synchronized — for scalars,
-arrays, and tables. Sharing attaches to the **binding**, not recursively to
-every nested mutable value reachable through it; to share a nested value
-independently, give it its own `shared` binding.
+arrays, and tables. Sharing goes **all the way down**: arrays, tables and
+buffers nested inside a shared value, or stored into it later, are shared
+too, each with its own lock. So this is safe from any number of fibers:
+
+```mobius
+shared var state = { log: [] }
+func record(msg) { state.log:push(msg) }   // locks `state.log` for the push
+```
+
+A nested value still behaves like an ordinary one: `typeof(state.log)` is
+`"array"`, and iterating it with `for`-in walks a snapshot taken under its
+lock. A container reachable through two paths stays one shared value.
 
 Individual reads and writes are safe. Shared scalar `++`, `--`, `+=`, and `-=`
 are atomic. Compound updates to array/table *elements* still need `atomic()`.

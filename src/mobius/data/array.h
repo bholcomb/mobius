@@ -12,6 +12,8 @@
 #include "internal/gc.h"
 #include "internal/small_vec.h"
 
+class SharedCell;
+
 class ArrayValue : public RefCounted {
 public:
     ArrayValue(size_t initial_capacity = 8);
@@ -36,6 +38,12 @@ public:
     bool tryReserve(size_t new_capacity);
     void reverse();
 
+    // The SharedCell this container belongs to, if it is part of a shared
+    // value (non-owning; the cell clears it when it lets go). Containers
+    // stored into an owned container are shared too (share_for_cell).
+    SharedCell* ownerCell() const { return owner_cell_; }
+    void setOwnerCell(SharedCell* cell) { owner_cell_ = cell; }
+
     const Value& operator[](size_t index) const;
     Value& operator[](size_t index);
 
@@ -56,6 +64,7 @@ public:
     bool hasActiveSlices() const { return active_slice_count_.load(std::memory_order_acquire) > 0; }
 
 private:
+    SharedCell* owner_cell_ = nullptr;
     SmallVec<Value, 8> elements;   // literals up to 8 need no heap
     std::atomic<size_t> active_slice_count_{0};
     GcHeader gc_;   // tracing-GC registry link (see internal/gc.h)
