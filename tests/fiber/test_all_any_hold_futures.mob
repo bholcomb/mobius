@@ -1,0 +1,36 @@
+// fiber.all / fiber.any wait by yielding. Another fiber may empty the
+// array of futures meanwhile; the waits read futures through raw pointers,
+// so popping them freed futures still being polled (use-after-free under
+// AddressSanitizer, a hang in release builds).
+shared var futs = []
+
+func slow(n) {
+    var i = 0
+    while (i < 20) { yield; i = i + 1 }
+    return n
+}
+
+func drain() {
+    yield
+    while (futs:size() > 0) { futs:pop() }
+    return 0
+}
+
+for (var i = 0; i < 20; i++) { futs:push(spawn slow(i)) }
+var d = spawn drain()
+var results = fiber.all(futs)
+await d
+if (results:size() != 20 or results[19] != 19) {
+    print("FAIL: fiber.all results", results)
+    exit(1)
+}
+
+for (var i = 0; i < 20; i++) { futs:push(spawn slow(i)) }
+var d2 = spawn drain()
+var first = fiber.any(futs)
+await d2
+if (typeof(first) != "int64") {
+    print("FAIL: fiber.any result", first)
+    exit(1)
+}
+print("fiber.all/any hold futures: PASS")

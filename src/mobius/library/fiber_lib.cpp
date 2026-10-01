@@ -9,6 +9,7 @@
 #include "internal/string_intern.h"
 #include "state/mobius_state.h"
 #include "fiber/job_system.h"
+#include <vector>
 #include "vm/vm.h"
 
 #include <thread>
@@ -50,31 +51,52 @@ int lib_fiber_cancel(MobiusState* state, int arg_count) {
     return 1;
 }
 
+// Copy the futures out of the argument (a plain or `shared` array) and
+// check them. Waiting yields, and other fibers may pop or overwrite the
+// array meanwhile, releasing futures, so the waits work on these held
+// references, never on the array. A shared array is copied under its lock.
+static bool snapshot_futures(MobiusState* state, const char* fn, std::vector<Value>& held) {
+    Value arg = state->npeek(0);
+    state->npop();
+    char msg[96];
+    if (arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+        std::lock_guard<std::recursive_mutex> lock(arg.as.shared_cell->mutex());
+        const Value& inner = arg.as.shared_cell->unsafeValue();
+        if (inner.type == VAL_ARRAY && inner.as.array) {
+            held.assign(inner.as.array->data(), inner.as.array->data() + inner.as.array->length());
+            arg = Value();
+        }
+    } else if (arg.type == VAL_ARRAY && arg.as.array) {
+        held.assign(arg.as.array->data(), arg.as.array->data() + arg.as.array->length());
+        arg = Value();
+    }
+    if (arg.type != VAL_NIL) {
+        snprintf(msg, sizeof(msg), "%s: argument must be an array of futures", fn);
+        state->error(msg);
+        return false;
+    }
+    for (const Value& fv : held) {
+        if (fv.type != VAL_FUTURE || !fv.as.future) {
+            snprintf(msg, sizeof(msg), "%s: all elements must be futures", fn);
+            state->error(msg);
+            return false;
+        }
+    }
+    return true;
+}
+
 int lib_fiber_all(MobiusState* state, int arg_count) {
     if (arg_count != 1) return state->error("fiber.all expects 1 argument (array of futures)");
 
-    Value arr_val = state->npeek(0);
-    state->npop();
-
-    if (arr_val.type != VAL_ARRAY || !arr_val.as.array) {
-        return state->error("fiber.all: argument must be an array of futures");
-    }
-
-    ArrayValue* futures = arr_val.as.array;
-    size_t count = futures->length();
-
-    for (size_t i = 0; i < count; i++) {
-        const Value& fv = futures->get(i);
-        if (fv.type != VAL_FUTURE || !fv.as.future) {
-            return state->error("fiber.all: all elements must be futures");
-        }
-    }
+    std::vector<Value> held;
+    if (!snapshot_futures(state, "fiber.all", held)) return -1;
+    size_t count = held.size();
 
     ArrayValue* results = new ArrayValue(count);
     JobSystem* js = state->jobSystem();
 
     for (size_t i = 0; i < count; i++) {
-        FutureValue* future = futures->get(i).as.future;
+        FutureValue* future = held[i].as.future;
         while (!future->isDone()) {
             if (js) js->yieldFiber();
             else std::this_thread::yield();
@@ -93,31 +115,18 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
 int lib_fiber_any(MobiusState* state, int arg_count) {
     if (arg_count != 1) return state->error("fiber.any expects 1 argument (array of futures)");
 
-    Value arr_val = state->npeek(0);
-    state->npop();
-
-    if (arr_val.type != VAL_ARRAY || !arr_val.as.array) {
-        return state->error("fiber.any: argument must be an array of futures");
-    }
-
-    ArrayValue* futures = arr_val.as.array;
-    size_t count = futures->length();
+    std::vector<Value> held;
+    if (!snapshot_futures(state, "fiber.any", held)) return -1;
+    size_t count = held.size();
     if (count == 0) {
         state->npush(make_nil_value());
         return 1;
     }
 
-    for (size_t i = 0; i < count; i++) {
-        const Value& fv = futures->get(i);
-        if (fv.type != VAL_FUTURE || !fv.as.future) {
-            return state->error("fiber.any: all elements must be futures");
-        }
-    }
-
     JobSystem* js = state->jobSystem();
     while (true) {
         for (size_t i = 0; i < count; i++) {
-            FutureValue* future = futures->get(i).as.future;
+            FutureValue* future = held[i].as.future;
             if (future->isDone()) {
                 if (future->isResolved()) {
                     state->npush(future->result());
