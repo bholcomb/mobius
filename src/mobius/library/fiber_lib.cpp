@@ -125,6 +125,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
 
     JobSystem* js = state->jobSystem();
     while (true) {
+        size_t failed = 0;
         for (size_t i = 0; i < count; i++) {
             FutureValue* future = held[i].as.future;
             if (future->isDone()) {
@@ -132,7 +133,12 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
                     state->npush(future->result());
                     return 1;
                 }
+                failed++;
             }
+        }
+        // Every future failed: there will never be a result to return.
+        if (failed == count) {
+            return state->error("fiber.any: all fibers failed");
         }
         if (js) js->yieldFiber();
         else std::this_thread::yield();

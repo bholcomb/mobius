@@ -1,0 +1,23 @@
+// fiber.any raises an error when every future fails. It skipped rejected
+// futures without noticing they were all done, so it looped forever.
+func bad() { throw "x" }
+func good(n) { fiber.sleep(20); return n }
+
+var message = ""
+try {
+    var r = fiber.any([spawn bad(), spawn bad()])
+} catch e {
+    message = str(e)
+}
+if (!contains(message, "all fibers failed")) {
+    print("FAIL: expected 'all fibers failed', got: " + message)
+    exit(1)
+}
+
+// One success among failures still wins.
+var winner = fiber.any([spawn bad(), spawn good(7), spawn bad()])
+if (winner != 7) {
+    print("FAIL: expected 7, got", winner)
+    exit(1)
+}
+print("fiber.any all failed: PASS")
