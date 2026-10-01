@@ -1,0 +1,44 @@
+// for-in over a shared array or table iterates a snapshot taken under the
+// lock. It used to fail with "Attempt to call a non-function value (type:
+// shared)", because a shared value fell through to the function-iterator
+// path.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+shared var s = [1, 2, 3]
+var sum = 0
+for (var v in s) { sum += v }
+check("values", sum == 6)
+var isum = 0
+for (var i, v in s) { isum += i }
+check("index, value", isum == 3)
+
+shared var t = {a: 1, b: 2}
+var tsum = 0
+for (var k, v in t) { tsum += v }
+check("table key, value", tsum == 3)
+
+// Changing the shared value during the loop does not affect the snapshot.
+for (var v in s) { s:push(9) }
+check("snapshot is bounded", s:size() == 6)
+
+// Iterating while other fibers keep pushing is safe.
+shared var live = []
+for (var i = 0; i < 100; i++) { live:push(i) }
+func pusher() {
+    for (var i = 0; i < 3000; i++) { live:push(i) }
+    return 0
+}
+var fs = []
+for (var i = 0; i < 4; i++) { fs:push(spawn pusher()) }
+var seen = 0
+for (var round = 0; round < 20; round++) {
+    for (var v in live) { seen++ }
+}
+fiber.all(fs)
+check("concurrent iteration", seen >= 2000 and live:size() == 12100)
+print("for-in over shared values: PASS")
