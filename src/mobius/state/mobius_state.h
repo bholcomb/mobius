@@ -51,7 +51,7 @@ typedef struct InternalError {
 
 #define INITIAL_STACK_CAPACITY 256
 #define MAX_STACK_CAPACITY 65536
-#define MAX_CALL_DEPTH 1000
+#define MAX_CALL_DEPTH 200000
 
 // ============================================================================
 // NATIVE CALL CONTEXT

@@ -1,0 +1,50 @@
+// Runaway recursion is a catchable "Stack overflow" error. Recursion
+// through native code (metamethods, callbacks) used to overflow the C
+// stack and segfault; plain script recursion ran until out of memory.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func caught(f) {
+    var message = ""
+    try { f() } catch e { message = str(e) }
+    return message
+}
+
+// Plain script recursion hits max_call_depth.
+func forever(n) { return 1 + forever(n + 1) }
+check("script recursion", contains(caught(func() { forever(0) }), "Stack overflow"))
+
+// Recursion through an __index function.
+var looping = {}
+setmetatable(looping, { ["__index"] = func(self, k) { return self[k] } })
+check("__index recursion", contains(caught(func() { var v = looping.missing }), "Stack overflow"))
+
+// Recursion through map callbacks.
+func through_map(n) { return [1]:map(func(x, i) { return through_map(n + 1) })[0] }
+check("map callback recursion", contains(caught(func() { through_map(0) }), "Stack overflow"))
+
+// Recursion through __tostring.
+var mt = {}
+mt.__tostring = func(self) { return str(self) }
+var obj = setmetatable({}, mt)
+check("__tostring recursion", contains(caught(func() { var s = str(obj) }), "Stack overflow"))
+
+// The same inside a spawned fiber, whose C stack is much smaller.
+func in_fiber() {
+    var r = "none"
+    try { through_map(0) } catch e { r = str(e) }
+    return r
+}
+check("callback recursion in a fiber", contains(await spawn in_fiber(), "Stack overflow"))
+
+// The interpreter is still usable afterwards, and legitimate depth works.
+func depth(n) { if (n == 0) { return 0 } return 1 + depth(n - 1) }
+check("deep script recursion", depth(100000) == 100000)
+func nested_map(n) { if (n == 0) { return 0 } return [1]:map(func(x, i) { return nested_map(n - 1) })[0] }
+check("nested callbacks", nested_map(300) == 0)
+check("nested callbacks in a fiber", await spawn nested_map(30) == 0)
+print("stack overflow: PASS")

@@ -105,7 +105,7 @@ MobiusState* state = mobius_new_state(&config);
 |---------------------------|--------------------------|------------------------|-------------|
 | `initial_stack_size`      | `size_t`                 | `256`                  | Initial value-stack capacity |
 | `max_stack_size`          | `size_t`                 | `65536`                | Max stack depth before overflow |
-| `max_call_depth`          | `size_t`                 | `1000`                 | Max function-call nesting |
+| `max_call_depth`          | `size_t`                 | `200000`               | Max nesting of script function calls; deeper recursion raises a catchable "Stack overflow" error (`0` = no limit) |
 | `strict_mode`             | `bool`                   | `false`                | Enforce type annotations at runtime |
 | `warn_on_conversion`      | `bool`                   | `false`                | Warn on implicit conversions |
 | `debug_mode`              | `bool`                   | `false`                | Extra debug output |
