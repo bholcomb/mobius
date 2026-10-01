@@ -205,7 +205,9 @@ Listed from lowest to highest precedence.
 ```
 expression          ::= assignment
 
-assignment          ::= or_expr [ assign_op assignment ]
+assignment          ::= ternary [ assign_op assignment ]
+
+ternary             ::= or_expr [ "?" expression ":" ternary ]
 
 assign_op           ::= "=" | "+=" | "-=" | "*=" | "/="
 
@@ -330,15 +332,16 @@ var     when    while    yield
 | Precedence | Operators                                | Associativity |
 |------------|------------------------------------------|---------------|
 | 1          | `=` `+=` `-=` `*=` `/=`                  | right         |
-| 2          | `or` `\|\|`                              | left          |
-| 3          | `and` `&&`                               | left          |
-| 4          | `\|` (bitwise or)                        | left          |
-| 5          | `^` (bitwise xor)                        | left          |
-| 6          | `&` (bitwise and)                        | left          |
-| 7          | `==` `!=`                                | left          |
-| 8          | `<` `<=` `>` `>=`                        | left          |
-| 9          | `<<` `>>` (shift)                        | left          |
-| 10         | `+` `-`                                  | left          |
-| 11         | `*` `/` `%`                              | left          |
-| 12         | `!` `-` `not` `+` `~` (unary)            | right         |
-| 13         | `()` `[]` `.` `:` `++` `--` (postfix)    | left          |
+| 2          | `? :` (ternary)                          | right         |
+| 3          | `or` `\|\|`                              | left          |
+| 4          | `and` `&&`                               | left          |
+| 5          | `\|` (bitwise or)                        | left          |
+| 6          | `^` (bitwise xor)                        | left          |
+| 7          | `&` (bitwise and)                        | left          |
+| 8          | `==` `!=`                                | left          |
+| 9          | `<` `<=` `>` `>=`                        | left          |
+| 10         | `<<` `>>` (shift)                        | left          |
+| 11         | `+` `-`                                  | left          |
+| 12         | `*` `/` `%`                              | left          |
+| 13         | `!` `-` `not` `+` `~` (unary)            | right         |
+| 14         | `()` `[]` `.` `:` `++` `--` (postfix)    | left          |
