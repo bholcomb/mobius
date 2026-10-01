@@ -1,0 +1,29 @@
+// int / int is integer division (truncating toward zero) whether the
+// operands are constants, locals, or values only known at runtime.
+func check(name, got, want) {
+    if (got != want or typeof(got) != typeof(want)) {
+        print("FAIL: " + name + ": expected " + str(want) + " (" + typeof(want) + "), got " + str(got) + " (" + typeof(got) + ")")
+        exit(1)
+    }
+}
+
+func div(a, b) { return a / b }
+
+check("folded int / int", 7 / 2, 3)
+check("folded exact", 6 / 2, 3)
+check("folded negative truncates toward zero", -7 / 2, -3)
+check("runtime int / int", div(7, 2), 3)
+check("runtime negative", div(-7, 2), -3)
+var x = 7
+var y = 2
+check("locals", x / y, 3)
+check("folded float / int", 7.0 / 2, 3.5)
+check("folded int / float", 7 / 2.0, 3.5)
+check("runtime float / int", div(7.0, 2), 3.5)
+check("runtime int / float", div(7, 2.0), 3.5)
+check("folded and runtime agree", 15 / 4 == div(15, 4), true)
+
+var caught = false
+try { var z = div(1, 0) } catch e { caught = true }
+check("runtime division by zero throws", caught, true)
+print("division semantics: PASS")
