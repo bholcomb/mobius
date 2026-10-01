@@ -1,0 +1,84 @@
+// arr:sort must stay memory-safe whatever the comparator does. It used to
+// run std::sort on the live array: an inconsistent comparator read past
+// the buffer (segfault) and a comparator that resized the array read
+// freed memory.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func numbers(n) {
+    var out = []
+    for (var i = 0; i < n; i++) { out:push((i * 37) % n) }
+    return out
+}
+
+func same_elements(a, b) {
+    if (a:size() != b:size()) { return false }
+    var x = a:slice(0, a:size())
+    var y = b:slice(0, b:size())
+    x:sort()
+    y:sort()
+    for (var i = 0; i < x:size(); i++) {
+        if (x[i] != y[i]) { return false }
+    }
+    return true
+}
+
+// Inconsistent comparators finish and keep every element.
+var r = numbers(200)
+var original = r:slice(0, r:size())
+r:sort(func(x, y) { return true })
+check("always-true comparator keeps elements", same_elements(r, original))
+r:sort(func(x, y) { return random() < 0.5 })
+check("random comparator keeps elements", same_elements(r, original))
+
+// Resizing the array from the comparator is a catchable error.
+var grow = numbers(50)
+var grew_error = false
+try {
+    grow:sort(func(x, y) { grow:push(0); return x < y })
+} catch e {
+    grew_error = contains(str(e), "resized during sorting")
+}
+check("push during sort is reported", grew_error)
+
+var shrink = numbers(50)
+var shrink_error = false
+try {
+    shrink:sort(func(x, y) { if (shrink:size() > 0) { shrink:pop() } return x < y })
+} catch e {
+    shrink_error = true
+}
+check("pop during sort is reported", shrink_error)
+
+// A comparator that throws propagates its error.
+var thrown = ""
+try {
+    numbers(10):sort(func(x, y) { throw "boom" })
+} catch e {
+    thrown = str(e)
+}
+check("comparator error propagates", contains(thrown, "boom"))
+
+// Normal sorts are correct and stable.
+var asc = numbers(100)
+asc:sort()
+for (var i = 0; i < 100; i++) { check("default sort ascending", asc[i] == i) }
+var desc = numbers(100)
+desc:sort(func(x, y) { return x > y })
+for (var i = 0; i < 100; i++) { check("comparator sort descending", desc[i] == 99 - i) }
+var pairs = [[2, "a"], [1, "b"], [2, "c"], [1, "d"], [2, "e"]]
+pairs:sort(func(x, y) { return x[0] < y[0] })
+var order = ""
+for (var p in pairs) { order = order + p[1] }
+check("stable", order == "bdace")
+
+// The default sort on mixed types (no consistent order) stays safe.
+var mixed = [3, "b", 1.5, nil, "a", true, 2, [1]]
+var mixed_copy = mixed:slice(0, mixed:size())
+mixed:sort()
+check("mixed default sort keeps size", mixed:size() == mixed_copy:size())
+print("sort robustness: PASS")
