@@ -1,7 +1,7 @@
 // Test: interaction between cancel and channel operations
-// Note: fiber.cancel sets a flag that fiber.sleep checks periodically.
-// Channel send/recv block on condition variables and are NOT interrupted
-// by cancel alone — you must close the channel to unblock them.
+// Note: fiber.cancel sets a flag that every wait checks (sleep, await,
+// fiber.all/any, channel send/recv), so a fiber blocked on a channel ends
+// with a CancellationError. These tests also cover closing the channel.
 print("=== Cancel + Channel Tests ===")
 
 

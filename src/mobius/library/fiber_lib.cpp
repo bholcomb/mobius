@@ -51,6 +51,16 @@ int lib_fiber_cancel(MobiusState* state, int arg_count) {
     return 1;
 }
 
+// Whether fiber.cancel() was called on the fiber running this native.
+// Every wait loop checks it: a fiber blocked in await, fiber.all/any or a
+// channel operation ignored cancellation, so cancelling it never ended it.
+static bool current_fiber_cancelled() {
+    MobiusVM* vm = MobiusVM::t_current_vm;
+    return vm && vm->future_ && vm->future_->isCancelled();
+}
+
+static const char* const kCancelledMessage = "CancellationError: fiber was cancelled";
+
 // Copy the futures out of the argument (a plain or `shared` array) and
 // check them. Waiting yields, and other fibers may pop or overwrite the
 // array meanwhile, releasing futures, so the waits work on these held
@@ -98,6 +108,10 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
     for (size_t i = 0; i < count; i++) {
         FutureValue* future = held[i].as.future;
         while (!future->isDone()) {
+            if (current_fiber_cancelled()) {
+                results->release();
+                return state->error(kCancelledMessage);
+            }
             if (js) js->yieldFiber();
             else std::this_thread::yield();
         }
@@ -139,6 +153,9 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
         // Every future failed: there will never be a result to return.
         if (failed == count) {
             return state->error("fiber.any: all fibers failed");
+        }
+        if (current_fiber_cancelled()) {
+            return state->error(kCancelledMessage);
         }
         if (js) js->yieldFiber();
         else std::this_thread::yield();
@@ -260,6 +277,9 @@ int channel_method_send(MobiusState* state, int arg_count) {
             state->npush(make_bool_value(false));
             return 1;
         }
+        if (current_fiber_cancelled()) {
+            return state->error(kCancelledMessage);
+        }
         if (js) js->yieldFiber();
         else std::this_thread::yield();
     }
@@ -281,6 +301,9 @@ int channel_method_recv(MobiusState* state, int arg_count) {
     while (!ch->tryRecv(result)) {
         if (ch->isClosed()) {
             return state->error("ChannelClosedError: recv on closed and empty channel");
+        }
+        if (current_fiber_cancelled()) {
+            return state->error(kCancelledMessage);
         }
         if (js) js->yieldFiber();
         else std::this_thread::yield();

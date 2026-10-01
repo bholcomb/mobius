@@ -1,0 +1,35 @@
+// Cancelling a fiber that is blocked waiting (await, fiber.all/any, channel
+// recv/send) ends it with a CancellationError. Only fiber.sleep checked for
+// cancellation, so these waits ignored fiber.cancel() and hung.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func forever() { fiber.sleep(100000); return 1 }
+
+func cancelled_with(f) {
+    fiber.sleep(20)
+    fiber.cancel(f)
+    var message = ""
+    try { await f } catch e { message = str(e) }
+    return contains(message, "CancellationError")
+}
+
+func wait_await(g) { return await g }
+check("await", cancelled_with(spawn wait_await(spawn forever())))
+
+func wait_all(g) { return fiber.all([g]) }
+check("fiber.all", cancelled_with(spawn wait_all(spawn forever())))
+
+func wait_any(g) { return fiber.any([g]) }
+check("fiber.any", cancelled_with(spawn wait_any(spawn forever())))
+
+func wait_recv(ch) { return ch:recv() }
+check("channel recv", cancelled_with(spawn wait_recv(fiber.channel(1))))
+
+func wait_send(ch) { ch:send(1); ch:send(2); return 0 }
+check("channel send on a full channel", cancelled_with(spawn wait_send(fiber.channel(1))))
+print("cancel blocked fiber: PASS")
