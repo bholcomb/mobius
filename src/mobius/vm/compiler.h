@@ -4,6 +4,7 @@
 #include "vm/bytecode.h"
 #include "frontend/ast.h"
 #include "internal/string_intern.h"
+#include "vm/fiber_check.h"
 
 #include <vector>
 #include <unordered_map>
@@ -226,6 +227,11 @@ private:
     std::unordered_map<std::string, bool> global_maybe_shared_;
     std::unordered_map<std::string, ValueType> native_return_types_;
     std::unordered_set<std::string> readonly_function_globals_;
+
+    // Top-level vars and funcs of the chunk being compiled, for the
+    // compile-time fiber check at `spawn f(...)` (see fiber_check.h).
+    TopLevelDecls top_level_decls_;
+    void checkSpawnedFunction(Expr* callee);
     // Prototypes of readonly global functions, by name, for resolving direct
     // calls to a global function from inside another function. Only functions
     // already compiled (defined earlier) are present; a forward reference falls

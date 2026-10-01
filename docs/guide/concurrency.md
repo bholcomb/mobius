@@ -115,6 +115,19 @@ Declare it `shared var items = []`, or pass the value to the fiber as an
 argument (which copies it). The main script itself uses top-level variables
 freely.
 
+When the compiler can see the problem it reports it before the program runs:
+at `spawn work()`, where `work` is a top-level function in the same file, it
+checks `work` and every top-level function it calls:
+
+```text
+Compile error [app.mob:3]: spawned function 'work' uses top-level variable
+'items' (line 2, via work), which is not shared; declare it `shared var items`,
+or pass the value to the fiber as an argument
+```
+
+Anything it cannot follow, such as spawning a closure stored in a variable,
+is caught when the fiber runs.
+
 ### Restrictions
 
 - Native (C) functions cannot be spawned.
