@@ -1,0 +1,35 @@
+// Impossible array sizes are a catchable error. SmallVec ignored a failed
+// malloc (and size overflow), so these segfaulted by writing through a
+// NULL buffer.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func error_of(f) {
+    var message = ""
+    try { f() } catch e { message = str(e) }
+    return message
+}
+
+check("array_create with a huge capacity",
+      contains(error_of(func() { var a = array_create(1000000000000000) }), "cannot allocate"))
+check("array_create with a huge fill",
+      contains(error_of(func() { var a = array_create(1000000000000000, 0) }), "cannot allocate"))
+
+var arr = [1]
+check("assigning far past the end",
+      contains(error_of(func() { arr[1000000000000000] = 1 }), "too large"))
+check("array unchanged after the failed assignment", arr:size() == 1)
+
+shared var shared_arr = [1]
+check("assigning far past the end of a shared array",
+      contains(error_of(func() { shared_arr[1000000000000000] = 1 }), "too large"))
+
+// Ordinary growth still works.
+var grow = array_create(5, 0)
+grow[9] = 7
+check("growth by index", grow:size() == 10 and grow[9] == 7 and grow[5] == nil)
+print("huge array allocation: PASS")

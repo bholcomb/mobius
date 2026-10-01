@@ -94,6 +94,10 @@ void ArrayValue::reserve(size_t new_capacity) {
     elements.reserve(new_capacity);
 }
 
+bool ArrayValue::tryReserve(size_t new_capacity) {
+    return elements.try_reserve(new_capacity);
+}
+
 void ArrayValue::reverse() {
     std::reverse(elements.begin(), elements.end());
 }

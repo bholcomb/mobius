@@ -1,6 +1,8 @@
 #ifndef MOBIUS_SMALL_VEC_H
 #define MOBIUS_SMALL_VEC_H
 
+#include <cstdint>
+#include <cstdio>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -72,6 +74,18 @@ public:
 
     void reserve(size_t n) {
         if (n > cap_) grow(n);
+    }
+
+    // Like reserve, but reports failure (size overflow or allocation
+    // failure) instead of aborting; the vector is unchanged on failure.
+    // Use it where the size comes from script input.
+    bool try_reserve(size_t n) {
+        if (n <= cap_) return true;
+        if (n > SIZE_MAX / sizeof(T)) return false;
+        T* nd = (T*)malloc(n * sizeof(T));
+        if (!nd) return false;
+        relocate_to(nd, n);
+        return true;
     }
 
     void push_back(const T& v) {
@@ -175,7 +189,18 @@ private:
 
     void grow(size_t n) {
         size_t new_cap = cap_ * 2 > n ? cap_ * 2 : n;
-        T* nd = (T*)malloc(new_cap * sizeof(T));
+        if (new_cap > SIZE_MAX / sizeof(T)) new_cap = n;
+        T* nd = (new_cap <= SIZE_MAX / sizeof(T)) ? (T*)malloc(new_cap * sizeof(T)) : nullptr;
+        if (!nd) {
+            // Writing through a failed allocation would corrupt memory;
+            // stop cleanly. Script-controlled sizes go through try_reserve.
+            fprintf(stderr, "Mobius: out of memory (vector of %zu elements)\n", n);
+            abort();
+        }
+        relocate_to(nd, new_cap);
+    }
+
+    void relocate_to(T* nd, size_t new_cap) {
         memcpy((void*)nd, (const void*)data_, size_ * sizeof(T));   // relocate
         if (data_ != (T*)inline_) free(data_);
         data_ = nd;
