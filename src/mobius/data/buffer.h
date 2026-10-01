@@ -6,8 +6,14 @@
 #include <cstddef>
 #include <cstdint>
 
+class SharedCell;
+
 class BufferValue : public RefCounted {
 public:
+    // See ArrayValue::ownerCell.
+    SharedCell* ownerCell() const { return owner_cell_; }
+    void setOwnerCell(SharedCell* cell) { owner_cell_ = cell; }
+
     typedef void (*ReleaseFn)(void* ptr, size_t size, void* userdata);
 
     BufferValue(size_t size = 0, uint8_t fill = 0, bool fixed = false, bool readonly = false);
@@ -39,6 +45,7 @@ public:
     BufferValue* clone() const;
 
 private:
+    SharedCell* owner_cell_ = nullptr;
     bool allocate(size_t size, uint8_t fill, bool fixed, bool readonly);
 
     uint8_t* data_ = nullptr;

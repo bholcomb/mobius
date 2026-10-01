@@ -21,6 +21,8 @@ struct TableEntry {
     // slot is live. Iterate with entries()+tags(), never by inspecting keys.
 };
 
+class SharedCell;
+
 class MobiusState;
 
 class Table : public RefCounted {
@@ -39,6 +41,13 @@ public:
     size_t size() const { return size_; }
 
     Table* copy() const;
+
+    // The SharedCell this container belongs to, if it is part of a shared
+    // value (non-owning; the cell clears it when it lets go). Containers
+    // stored into an owned container are shared too (share_for_cell).
+    SharedCell* ownerCell() const { return owner_cell_; }
+    void setOwnerCell(SharedCell* cell) { owner_cell_ = cell; }
+
 
     void setMetatable(Table* mt);
     Table* getMetatable() const { return metatable_; }
@@ -122,6 +131,7 @@ public:
     }
 
 private:
+    SharedCell* owner_cell_ = nullptr;
     static inline uint8_t tagFromHash(size_t h) { return 0x80 | (uint8_t)(h >> 57); }
 
     const Value& getUnlocked(const Value& key) const;

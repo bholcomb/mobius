@@ -1,4 +1,5 @@
 #include "data/table.h"
+#include "data/shared_cell.h"
 #include "data/array.h"
 #include "data/metamethods.h"
 #include "internal/string_intern.h"
@@ -361,6 +362,10 @@ bool Table::set(const Value& key, const Value& value) {
 }
 
 bool Table::setUnlocked(const Value& key, const Value& value) {
+    if (MOBIUS_UNLIKELY(owner_cell_ != nullptr)) {
+        Value shared = share_for_cell(value);   // shared all the way down
+        if (shared.type != value.type) return setUnlocked(key, shared);
+    }
     mm_cache_name_ = nullptr;   // this table may be someone's metatable
     if (size_ * 4 >= entries_.size() * 3) {
         resize(entries_.size() * 2);
@@ -394,6 +399,10 @@ bool Table::setByString(MobiusString* key, const Value& value) {
 }
 
 bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
+    if (MOBIUS_UNLIKELY(owner_cell_ != nullptr)) {
+        Value shared = share_for_cell(value);   // shared all the way down
+        if (shared.type != value.type) return setByStringUnlocked(key, shared);
+    }
     mm_cache_name_ = nullptr;   // this table may be someone's metatable
     if (!key) return false;
 

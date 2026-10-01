@@ -1,0 +1,52 @@
+// Sharing goes all the way down: arrays, tables and buffers inside a
+// shared value, or stored into one later, are shared too, each with its
+// own lock. Nested containers used to be reachable from every fiber with
+// no lock at all, so concurrent `t.inner:push(x)` corrupted the heap.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func run_all(f, n) {
+    var fs = []
+    for (var i = 0; i < n; i++) { fs:push(spawn f(i)) }
+    fiber.all(fs)
+}
+
+// Nested at declaration.
+shared var t = {inner: []}
+func push_inner(k) { for (var i = 0; i < 5000; i++) { t.inner:push(i) } return 0 }
+run_all(push_inner, 8)
+check("nested at declaration", t.inner:size() == 40000)
+
+// Stored into the shared value later.
+shared var u = {}
+u.list = []
+func push_list(k) { for (var i = 0; i < 3000; i++) { u.list:push(i) } return 0 }
+run_all(push_list, 8)
+check("stored later", u.list:size() == 24000)
+
+// Arrays of arrays, and several levels deep.
+shared var grid = [[], []]
+func push_row(k) { for (var i = 0; i < 3000; i++) { grid[k % 2]:push(i) } return 0 }
+run_all(push_row, 8)
+check("array of arrays", grid[0]:size() + grid[1]:size() == 24000)
+shared var deep = {a: {b: {list: []}}}
+func push_deep(k) { for (var i = 0; i < 2000; i++) { deep.a.b.list:push(i) } return 0 }
+run_all(push_deep, 8)
+check("three levels", deep.a.b.list:size() == 16000)
+
+// Nested values still look like ordinary values.
+check("typeof nested", typeof(deep.a) == "table" and deep.a.b.list is array)
+
+// One container stays one shared value, however it is reached.
+var plain = [1]
+shared var aliases = {p: plain, q: plain}
+aliases.p:push(2)
+check("aliases share one value", aliases.q:size() == 2)
+shared var cyc = {x: 1}
+cyc.self = cyc
+check("cycles", cyc.self.x == 1)
+print("nested shared: PASS")

@@ -1170,7 +1170,9 @@ MOBIUS_FORCEINLINE static int vm_op_getfield(MobiusVM* vm, VMFrame& f, uint32_t 
 MOBIUS_FORCEINLINE static int vm_op_setfield(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value& obj = RA(inst);
     if (MOBIUS_LIKELY(obj.type == VAL_TABLE && obj.as.table &&
-                      IS_CONSTANT(DECODE_B(inst)))) {
+                      IS_CONSTANT(DECODE_B(inst)) && !obj.as.table->ownerCell())) {
+        // (A table inside a shared value takes the full path, which shares
+        // stored containers.)
         const Value& key = f.ci->proto->constants[RK_AS_CONSTANT(DECODE_B(inst))];
         Value* slot = obj.as.table->findStringSlot(key.as.string);
         if (MOBIUS_LIKELY(slot != nullptr)) {
@@ -3966,13 +3968,19 @@ MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t ins
         return 0;
     }
 
-    SharedCell* cell = new (std::nothrow) SharedCell(val);
-    if (!cell) {
-        VM_ERROR(vm, f, "shared: failed to allocate shared cell");
-        return -1;
+    // A container already part of a shared value keeps its one cell (and
+    // lock); share_for_cell returns it. Anything else gets a new cell.
+    Value shared = share_for_cell(val);
+    if (shared.type != VAL_SHARED_CELL) {
+        SharedCell* cell = new (std::nothrow) SharedCell(val);
+        if (!cell) {
+            VM_ERROR(vm, f, "shared: failed to allocate shared cell");
+            return -1;
+        }
+        shared = make_shared_cell_value(cell);
+        shared.flags |= VAL_FLAG_SHARED;
     }
-    val = make_shared_cell_value(cell);
-    val.flags |= VAL_FLAG_SHARED;
+    val = shared;
     return 0;
 }
 
