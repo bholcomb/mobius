@@ -208,6 +208,14 @@ public:
 
     NativeCallContext native_ctx_;
     InternalError* last_error_;
+    // The value thrown by the error currently propagating, when it came from
+    // `throw` (or was rethrown by await): catch blocks receive this original
+    // value rather than its text. Any new error clears it (setError).
+    // Without it, a thrown table reached a catch as a string whenever it
+    // crossed a run() boundary (callbacks, metamethods) or a fiber.
+    Value error_value_;
+    // Raise a rejected future's error in this VM as the original value.
+    void rethrowFutureError(FutureValue* future);
     const char* source_code_;
     ExecutionContext* exec_context_;
     FutureValue* future_ = nullptr;

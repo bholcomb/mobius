@@ -1,0 +1,44 @@
+// An error raised in a fiber reaches the awaiter as the original value.
+// Errors crossed fibers (and run() boundaries such as callbacks) as their
+// message text: a thrown table arrived as the string "<table>", and each
+// await wrapped the message in another "spawned fiber failed: " until long
+// chains cut the real error off.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func throw_table() { throw {code: 7} }
+var caught = nil
+try { await spawn throw_table() } catch e { caught = e }
+check("thrown table through await", typeof(caught) == "table" and caught.code == 7)
+
+func throw_string() { throw "plain" }
+var caught_s = ""
+try { await spawn throw_string() } catch e { caught_s = e }
+check("thrown string is not wrapped", caught_s == "plain")
+
+func runtime_error() { var x = nil
+    return x.y }
+var caught_r = ""
+try { await spawn runtime_error() } catch e { caught_r = e }
+check("runtime error message", contains(caught_r, "Attempt to index a nil value") and !contains(caught_r, "spawned fiber failed"))
+
+var caught_all = nil
+try { fiber.all([spawn throw_table()]) } catch e { caught_all = e }
+check("fiber.all propagates the original error", typeof(caught_all) == "table" and caught_all.code == 7)
+
+var caught_map = nil
+try { [1, 2]:map(func(x, i) { throw {code: 3} }) } catch e { caught_map = e }
+check("thrown table through a callback", typeof(caught_map) == "table" and caught_map.code == 3)
+
+func deep(n) {
+    if (n == 0) { throw {depth: 0} }
+    return await spawn deep(n - 1)
+}
+var caught_deep = nil
+try { deep(50) } catch e { caught_deep = e }
+check("thrown table through 50 nested awaits", typeof(caught_deep) == "table" and caught_deep.depth == 0)
+print("await rethrows original error: PASS")

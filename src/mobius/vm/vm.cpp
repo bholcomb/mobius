@@ -400,6 +400,19 @@ void MobiusVM::runtimeError(const char* fmt, ...) {
     state_->setError(MOBIUS_ERROR_RUNTIME, buf, nullptr, line, 0, nullptr, source);
 }
 
+void MobiusVM::rethrowFutureError(FutureValue* future) {
+    const Value& err = future->error();
+    Value thrown = copy_for_awaiter(err);
+    if (err.type == VAL_STRING && err.as.string) {
+        runtimeError("%s", err.as.string->data);
+    } else {
+        char* s = value_to_string(err);
+        runtimeError("%s", s ? s : "Uncaught exception");
+        free(s);
+    }
+    error_value_ = thrown;   // after runtimeError, which clears it
+}
+
 int MobiusVM::currentLine() const {
     const CallInfo& ci = callStackTop();
     int pc = (int)(ci.ip - ci.proto->code.data()) - 1;
@@ -3635,6 +3648,7 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
             VM_ERROR(vm, f, "%s", s ? s : "Uncaught exception");
             free(s);
         }
+        vm->error_value_ = thrown_value;   // after VM_ERROR, which clears it
         return -1;
     }
 
@@ -3761,8 +3775,13 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
                 // dead fiber's heap — the last aliasing escape route.
                 future->resolve(deep_copy_value_for_spawn(fiber_vm.registers_[0]));
             } else {
+                // Reject with what was thrown, so await can rethrow the
+                // original value; a runtime error (no thrown value) is
+                // represented by its message.
                 Value err;
-                if (fiber_vm.last_error_ && fiber_vm.last_error_->message) {
+                if (fiber_vm.error_value_.type != VAL_NIL) {
+                    err = deep_copy_value_for_spawn(fiber_vm.error_value_);
+                } else if (fiber_vm.last_error_ && fiber_vm.last_error_->message) {
                     err = make_string_value_from_cstr(state, fiber_vm.last_error_->message);
                 } else {
                     err = make_string_value_from_cstr(state, "spawn: fiber execution failed");
@@ -3831,12 +3850,12 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
     if (future->isResolved()) {
         RA(inst) = copy_for_awaiter(future->result());
     } else {
-        const Value& err = future->error();
-        if (err.type == VAL_STRING && err.as.string) {
-            VM_ERROR(vm, f, "spawned fiber failed: %s", err.as.string->data);
-        } else {
-            VM_ERROR(vm, f, "spawned fiber failed");
-        }
+        // Re-raise the fiber's error as itself: a thrown table stays a
+        // table, and messages are not wrapped once per await level (deep
+        // chains used to produce "spawned fiber failed: spawned fiber
+        // failed: ..." until the message buffer cut off the real error).
+        f.ci->ip = f.ip;   // so the error reports this line
+        vm->rethrowFutureError(future);
         return -1;
     }
 
@@ -3951,9 +3970,16 @@ MOBIUS_NOINLINE int MobiusVM::handleHandlerError(size_t base_depth) {
                 closeUpvalues(callStackTop(), 0);
             callStackPop();
         }
-        InternalError* ie = state_->getLastError();
-        const char* err = ie ? ie->message : nullptr;
-        registers_[tb.base + tb.catch_reg] = make_error_string_value(err);
+        Value caught;
+        if (error_value_.type != VAL_NIL) {
+            caught = error_value_;                    // the original thrown value
+            error_value_ = Value();
+        } else {
+            InternalError* ie = state_->getLastError();   // a copy; ours to free
+            caught = make_error_string_value(ie ? ie->message : nullptr);
+            free_internal_error(ie);
+        }
+        registers_[tb.base + tb.catch_reg] = caught;
         callStackTop().ip = tb.catch_ip;
         try_stack_.pop_back();
         return 0;
