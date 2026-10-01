@@ -291,6 +291,16 @@ func __ctx_html(self, body) {
     })
 }
 
+// Render a template through the renderer set with app:templates(). Any
+// object with a render(name, data) method works, e.g. a stencil env.
+func __ctx_render(self, name, data) {
+    var renderer = self.app.renderer
+    if (renderer == nil) {
+        throw "ctx:render: no template renderer; call app:templates(renderer) first"
+    }
+    return __ctx_html(self, renderer:render(name, data))
+}
+
 func __ctx_json(self, value) {
     var status = 200
     if (self.response != nil && self.response.status != nil) {
@@ -349,6 +359,7 @@ func __make_ctx(app_value, request, conn, params) {
     ctx.send = __ctx_send
     ctx.text = __ctx_text
     ctx.html = __ctx_html
+    ctx.render = __ctx_render
     ctx.json = __ctx_json
     ctx.redirect = __ctx_redirect
     return ctx
@@ -607,6 +618,14 @@ func __app_on_error(self, handler) {
     return self
 }
 
+func __app_templates(self, renderer) {
+    if (typeof(renderer) != "table" or typeof(renderer.render) != "function") {
+        throw "app:templates: renderer must have a render(name, data) method"
+    }
+    self.renderer = renderer
+    return self
+}
+
 func __app_on_not_found(self, handler) {
     self.not_found_handler = handler
     return self
@@ -701,7 +720,8 @@ func app() {
         routes: [],
         middleware: [],
         error_handler: __default_error,
-        not_found_handler: __default_not_found
+        not_found_handler: __default_not_found,
+        renderer: nil
     }
     value.use = __app_use
     value.get = __app_get
@@ -711,6 +731,7 @@ func app() {
     value.websocket = __app_websocket
     value.on_error = __app_on_error
     value.on_not_found = __app_on_not_found
+    value.templates = __app_templates
     value.serve = __app_serve
     value.serve_async = __app_serve_async
     value.listen = __app_listen

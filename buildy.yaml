@@ -137,6 +137,10 @@ staging:
       files:
         - "${out_dir}/bin/sqlite.so"
         - ".buildy_cache/deps/sqlite3/build/${platform}-${arch}-${config}/bin/libsqlite3.so"
+    - folder: "packages/stencil"
+      files:
+        - "src/packages/stencil/module.yaml"
+        - "src/packages/stencil/stencil.mob"
     - folder: "packages/glfw"
       files:
         - "src/packages/glfw/module.yaml"

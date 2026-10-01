@@ -18,7 +18,13 @@ Like any package, they must be installed into a `modules/` root before
 | `monstro`  | 0.1.0   | `import "monstro"`  | Monstro immediate-mode UI: a UI context, windows, layout, widgets, and input plumbing (helpers like `monstro.vec2`, `monstro.rect`, `monstro.color`). |
 | `vulkease` | 0.1.0   | `import "vulkease"` | VulkEase Vulkan graphics bootstrap: instance/device context creation, physical-device enumeration, and capability queries. |
 
-These are most interesting together — for example, a `glfw` window feeding a
+One experimental package is pure Mobius, with no native code:
+
+| Package    | Version | Import              | What it provides |
+|------------|---------|---------------------|------------------|
+| `stencil`  | 0.1.0   | `import "stencil"`  | Text templates: `{{ expr }}` output, `if`/`for`/`set`, `include`, `extends`/`block` with `super()`, components with slots, filters in method syntax (`name:upper()`), strict undefined, and `env:check()` to validate a template tree. Plugs into `web` with `app:templates(env)` and `ctx:render`. Its design notes live in `src/packages/stencil/DESIGN.md`. |
+
+The native packages are most interesting together — for example, a `glfw` window feeding a
 `vulkease` device with a `monstro` UI on top. Because the surfaces are evolving,
 treat the `.mob` companion scripts in each package directory
 (`packages/<name>/<name>.mob`) and their `module.yaml` as the current source of

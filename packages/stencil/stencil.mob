@@ -1,0 +1,2707 @@
+// stencil — text templating for Mobius.
+// See DESIGN.md in this directory for the language and the roadmap.
+
+import "json"
+import "os"
+import "url"
+
+var __MAX_DEPTH = 64
+
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
+
+func __make_error(file, line, col, reason, trace) {
+    var where = file + ":" + str(line) + ":" + str(col)
+    var message = where + ": " + reason
+    if (trace != nil) {
+        for (var i = 0; i < size(trace); i++) {
+            message = message + "\n  " + trace[i]
+        }
+    }
+    return {
+        stencil: true,
+        template: file,
+        line: line,
+        col: col,
+        reason: reason,
+        trace: trace,
+        message: message
+    }
+}
+
+func __fail(node, reason) {
+    throw __make_error(node.file, node.line, node.col, reason, nil)
+}
+
+// Lookup failures are marked so :default() and :defined() can recover from them.
+func __fail_undefined(node, reason) {
+    var err = __make_error(node.file, node.line, node.col, reason, nil)
+    err.undefined = true
+    throw err
+}
+
+func __is_stencil_error(err) {
+    return typeof(err) == "table" and err:has_key("stencil")
+}
+
+func __error_text(err) {
+    if (typeof(err) == "table" and err:has_key("message")) {
+        return str(err.message)
+    }
+    return str(err)
+}
+
+func format_error(err) {
+    return __error_text(err)
+}
+
+// Attach the include/extends chain to an error leaving a nested template.
+func __add_trace(err, entry) {
+    if (!__is_stencil_error(err)) {
+        return err
+    }
+    var trace = []
+    if (err.trace != nil) {
+        trace = err.trace
+    }
+    trace:push(entry)
+    return __make_error(err.template, err.line, err.col, err.reason, trace)
+}
+
+// ---------------------------------------------------------------------------
+// Small string helpers
+// ---------------------------------------------------------------------------
+
+func __find_from(text, needle, start) {
+    if (start >= size(text)) {
+        return -1
+    }
+    var k = find(substr(text, start, size(text) - start), needle)
+    if (k < 0) {
+        return -1
+    }
+    return start + k
+}
+
+func __is_space(c) {
+    return c == " " or c == "\t" or c == "\n" or c == "\r"
+}
+
+func __is_hspace(c) {
+    return c == " " or c == "\t"
+}
+
+func __is_digit(c) {
+    return c >= "0" and c <= "9"
+}
+
+func __is_upper(c) {
+    return c >= "A" and c <= "Z"
+}
+
+func __is_lower(c) {
+    return c >= "a" and c <= "z"
+}
+
+func __is_alpha(c) {
+    return __is_upper(c) or __is_lower(c) or c == "_"
+}
+
+func __is_alnum(c) {
+    return __is_alpha(c) or __is_digit(c)
+}
+
+func __ltrim_all(text) {
+    var i = 0
+    while (i < size(text) and __is_space(text[i])) {
+        i++
+    }
+    return substr(text, i, size(text) - i)
+}
+
+func __rtrim_all(text) {
+    var n = size(text)
+    while (n > 0 and __is_space(text[n - 1])) {
+        n--
+    }
+    return substr(text, 0, n)
+}
+
+// ---------------------------------------------------------------------------
+// Positions
+// ---------------------------------------------------------------------------
+
+func __line_starts(src) {
+    var starts = [0]
+    var pos = __find_from(src, "\n", 0)
+    while (pos >= 0) {
+        starts:push(pos + 1)
+        pos = __find_from(src, "\n", pos + 1)
+    }
+    return starts
+}
+
+// 1-based line and column for a byte offset.
+func __position(starts, offset) {
+    var lo = 0
+    var hi = size(starts) - 1
+    while (lo < hi) {
+        var mid = int((lo + hi + 1) / 2)
+        if (starts[mid] <= offset) {
+            lo = mid
+        } else {
+            hi = mid - 1
+        }
+    }
+    return { line: lo + 1, col: offset - starts[lo] + 1 }
+}
+
+// ---------------------------------------------------------------------------
+// Lexer: source -> text / output / tag tokens
+// ---------------------------------------------------------------------------
+
+func __lex_fail(lx, offset, reason) {
+    var p = __position(lx.starts, offset)
+    throw __make_error(lx.file, p.line, p.col, reason, nil)
+}
+
+// Find the closing delimiter of a tag, skipping string literals and
+// balanced braces so `{{ {a: 1} }}` and `{{ "}}" }}` work.
+func __scan_tag_end(lx, start, closer, open_offset) {
+    var src = lx.src
+    var n = size(src)
+    var depth = 0
+    var i = start
+    while (i < n) {
+        var c = src[i]
+        if (c == "\"") {
+            i++
+            while (i < n and src[i] != "\"") {
+                if (src[i] == "\\") {
+                    i++
+                }
+                i++
+            }
+            if (i >= n) {
+                __lex_fail(lx, open_offset, "unterminated string inside tag")
+            }
+        } elif (c == "{") {
+            depth++
+        } elif (c == "}" and depth > 0) {
+            depth--
+        } elif (depth == 0 and i + 1 < n and c == closer[0] and src[i + 1] == closer[1]) {
+            return i
+        }
+        i++
+    }
+    __lex_fail(lx, open_offset, "unclosed '" + substr(src, open_offset, 2) + "' (expected '" + closer + "')")
+}
+
+func __first_word(text) {
+    var t = trim(text)
+    var i = 0
+    while (i < size(t) and __is_alnum(t[i])) {
+        i++
+    }
+    return substr(t, 0, i)
+}
+
+func __lex(src, file) {
+    var lx = { src: src, file: file, starts: __line_starts(src) }
+    var tokens = []
+    var n = size(src)
+    var pos = 0
+    while (pos < n) {
+        var open = __find_from(src, "{", pos)
+        while (open >= 0 and open + 1 < n) {
+            var next = src[open + 1]
+            if (next == "{" or next == "%" or next == "#") {
+                break
+            }
+            open = __find_from(src, "{", open + 1)
+        }
+        if (open < 0 or open + 1 >= n) {
+            tokens:push({ kind: "text", value: substr(src, pos, n - pos), offset: pos })
+            break
+        }
+        if (open > pos) {
+            tokens:push({ kind: "text", value: substr(src, pos, open - pos), offset: pos })
+        }
+
+        var marker = src[open + 1]
+        var kind = "output"
+        var closer = "}}"
+        if (marker == "%") {
+            kind = "tag"
+            closer = "%}"
+        } elif (marker == "#") {
+            kind = "comment"
+            closer = "#}"
+        }
+
+        var body_start = open + 2
+        var trim_left = false
+        if (body_start < n and src[body_start] == "-") {
+            trim_left = true
+            body_start++
+        }
+
+        var close = -1
+        if (kind == "comment") {
+            close = __find_from(src, "#}", body_start)
+            if (close < 0) {
+                __lex_fail(lx, open, "unclosed comment (expected '#}')")
+            }
+        } else {
+            close = __scan_tag_end(lx, body_start, closer, open)
+        }
+
+        var body_end = close
+        var trim_right = false
+        if (body_end > body_start and src[body_end - 1] == "-") {
+            trim_right = true
+            body_end--
+        }
+
+        var body = substr(src, body_start, body_end - body_start)
+        tokens:push({
+            kind: kind,
+            body: body,
+            offset: open,
+            body_offset: body_start,
+            trim_left: trim_left,
+            trim_right: trim_right
+        })
+        pos = close + 2
+
+        // {% raw %} ... {% endraw %}: everything in between is literal text.
+        if (kind == "tag" and trim(body) == "raw") {
+            var search = pos
+            var found = false
+            while (!found) {
+                var end_open = __find_from(src, "{%", search)
+                if (end_open < 0) {
+                    __lex_fail(lx, open, "unclosed {% raw %}")
+                }
+                var end_close = __find_from(src, "%}", end_open + 2)
+                if (end_close < 0) {
+                    __lex_fail(lx, end_open, "unclosed '{%' (expected '%}')")
+                }
+                var inner = substr(src, end_open + 2, end_close - end_open - 2)
+                var end_trim_left = startswith(inner, "-")
+                var end_trim_right = endswith(inner, "-")
+                var word = inner
+                if (end_trim_left) {
+                    word = substr(word, 1, size(word) - 1)
+                }
+                if (end_trim_right) {
+                    word = substr(word, 0, size(word) - 1)
+                }
+                if (trim(word) == "endraw") {
+                    tokens:push({ kind: "text", value: substr(src, pos, end_open - pos), offset: pos, verbatim: true })
+                    tokens:push({
+                        kind: "tag",
+                        body: word,
+                        offset: end_open,
+                        body_offset: end_open + 2,
+                        trim_left: end_trim_left,
+                        trim_right: end_trim_right
+                    })
+                    pos = end_close + 2
+                    found = true
+                } else {
+                    search = end_open + 2
+                }
+            }
+        }
+    }
+
+    __apply_whitespace(tokens)
+
+    for (var i = 0; i < size(tokens); i++) {
+        var tok = tokens[i]
+        var p = __position(lx.starts, tok.offset)
+        tok.line = p.line
+        tok.col = p.col
+    }
+    return { tokens: tokens, lx: lx }
+}
+
+// Text after the last newline (or all of it), used by the standalone rule.
+func __tail_after_newline(text) {
+    var k = -1
+    var pos = __find_from(text, "\n", 0)
+    while (pos >= 0) {
+        k = pos
+        pos = __find_from(text, "\n", pos + 1)
+    }
+    if (k < 0) {
+        return { has_newline: false, tail: text }
+    }
+    return { has_newline: true, tail: substr(text, k + 1, size(text) - k - 1) }
+}
+
+func __only_hspace(text) {
+    for (var i = 0; i < size(text); i++) {
+        if (!__is_hspace(text[i])) {
+            return false
+        }
+    }
+    return true
+}
+
+// Standalone rule: a line holding only one {% %} or {# #} tag disappears.
+// Then `-` markers trim all adjacent whitespace.
+func __apply_whitespace(tokens) {
+    var n = size(tokens)
+    var strip_trail = {}
+    var strip_lead = {}
+
+    for (var i = 0; i < n; i++) {
+        var tok = tokens[i]
+        if (tok.kind != "tag" and tok.kind != "comment") {
+            continue
+        }
+
+        // Before: start of source, or text whose last line is blank and
+        // which itself starts a line (has a newline, or begins the source).
+        var before_ok = false
+        if (i == 0) {
+            before_ok = true
+        } elif (tokens[i - 1].kind == "text") {
+            var info = __tail_after_newline(tokens[i - 1].value)
+            if (__only_hspace(info.tail)) {
+                before_ok = info.has_newline or i - 1 == 0
+            }
+        }
+
+        // After: end of source, or text whose first line is blank.
+        var after_ok = false
+        if (i == n - 1) {
+            after_ok = true
+        } elif (tokens[i + 1].kind == "text") {
+            var text = tokens[i + 1].value
+            var nl = __find_from(text, "\n", 0)
+            if (nl >= 0) {
+                var first_line = substr(text, 0, nl)
+                if (endswith(first_line, "\r")) {
+                    first_line = substr(first_line, 0, nl - 1)
+                }
+                after_ok = __only_hspace(first_line)
+            } else {
+                after_ok = __only_hspace(text) and i + 1 == n - 1
+            }
+        }
+
+        if (before_ok and after_ok) {
+            if (i > 0) {
+                strip_trail[i - 1] = true
+            }
+            if (i < n - 1) {
+                strip_lead[i + 1] = true
+            }
+        }
+    }
+
+    for (var i = 0; i < n; i++) {
+        var tok = tokens[i]
+        if (tok.kind != "text") {
+            continue
+        }
+        var value = tok.value
+        if (strip_trail:has_key(i)) {
+            var cut = size(value)
+            while (cut > 0 and __is_hspace(value[cut - 1])) {
+                cut--
+            }
+            value = substr(value, 0, cut)
+        }
+        if (strip_lead:has_key(i)) {
+            var start = 0
+            while (start < size(value) and __is_hspace(value[start])) {
+                start++
+            }
+            if (start < size(value) and value[start] == "\r") {
+                start++
+            }
+            if (start < size(value) and value[start] == "\n") {
+                start++
+            }
+            value = substr(value, start, size(value) - start)
+        }
+        tok.value = value
+    }
+
+    for (var i = 0; i < n; i++) {
+        var tok = tokens[i]
+        if (tok.kind == "text") {
+            continue
+        }
+        if (tok.trim_left and i > 0 and tokens[i - 1].kind == "text") {
+            tokens[i - 1].value = __rtrim_all(tokens[i - 1].value)
+        }
+        if (tok.trim_right and i < n - 1 and tokens[i + 1].kind == "text") {
+            tokens[i + 1].value = __ltrim_all(tokens[i + 1].value)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Expression lexer
+// ---------------------------------------------------------------------------
+
+var __KEYWORDS = { ["and"] = true, ["or"] = true, ["not"] = true, ["nil"] = true, ["true"] = true, ["false"] = true, ["in"] = true }
+
+var __PUNCT2 = { ["=="] = true, ["!="] = true, ["<="] = true, [">="] = true, ["&&"] = true, ["||"] = true }
+
+var __PUNCT1 = {
+    ["("] = true, [")"] = true, ["["] = true, ["]"] = true, ["{"] = true, ["}"] = true,
+    [","] = true, ["."] = true, [":"] = true, ["+"] = true, ["-"] = true, ["*"] = true,
+    ["/"] = true, ["%"] = true, ["<"] = true, [">"] = true, ["!"] = true, ["="] = true,
+    ["?"] = true
+}
+
+var __UNSUPPORTED = {
+    ["|"] = "'|' is bitwise-or in Mobius; use method syntax for filters, e.g. x:upper()",
+    ["&"] = "bitwise operators are not supported in templates",
+    ["^"] = "bitwise operators are not supported in templates",
+    ["~"] = "bitwise operators are not supported in templates",
+    ["'"] = "strings use double quotes"
+}
+
+// Tokenize a tag or output body. `base` is the absolute source offset of
+// `text` so that tokens carry real line/column positions.
+func __lex_expr(text, base, lx) {
+    var toks = []
+    var n = size(text)
+    var i = 0
+    while (i < n) {
+        var c = text[i]
+        if (__is_space(c)) {
+            i++
+            continue
+        }
+        var start = i
+        var p = __position(lx.starts, base + start)
+        var tok = { line: p.line, col: p.col, file: lx.file, start: start }
+
+        if (__is_digit(c)) {
+            while (i < n and __is_digit(text[i])) {
+                i++
+            }
+            var is_float = false
+            if (i + 1 < n and text[i] == "." and __is_digit(text[i + 1])) {
+                is_float = true
+                i++
+                while (i < n and __is_digit(text[i])) {
+                    i++
+                }
+            }
+            if (i < n and (text[i] == "e" or text[i] == "E")) {
+                is_float = true
+                i++
+                if (i < n and (text[i] == "+" or text[i] == "-")) {
+                    i++
+                }
+                while (i < n and __is_digit(text[i])) {
+                    i++
+                }
+            }
+            var digits = substr(text, start, i - start)
+            tok.kind = "number"
+            if (is_float) {
+                tok.value = float(digits)
+            } else {
+                tok.value = int(digits)
+            }
+        } elif (__is_alpha(c)) {
+            while (i < n and __is_alnum(text[i])) {
+                i++
+            }
+            var word = substr(text, start, i - start)
+            if (__KEYWORDS:has_key(word)) {
+                tok.kind = word
+            } else {
+                tok.kind = "name"
+                tok.value = word
+            }
+        } elif (c == "\"") {
+            i++
+            var parts = []
+            var closed = false
+            while (i < n and !closed) {
+                var ch = text[i]
+                if (ch == "\"") {
+                    closed = true
+                } elif (ch == "\\") {
+                    if (i + 1 >= n) {
+                        break
+                    }
+                    var esc = text[i + 1]
+                    switch (esc) {
+                        case "n":  parts:push("\n"); break
+                        case "t":  parts:push("\t"); break
+                        case "r":  parts:push("\r"); break
+                        case "\\": parts:push("\\"); break
+                        case "\"": parts:push("\""); break
+                        case "0":  parts:push("\0"); break
+                        default:
+                            __fail(tok, "unknown escape '\\" + esc + "' in string")
+                    }
+                    i++
+                } else {
+                    parts:push(ch)
+                }
+                i++
+            }
+            if (!closed) {
+                __fail(tok, "unterminated string")
+            }
+            tok.kind = "string"
+            tok.value = join(parts, "")
+        } elif (i + 1 < n and __PUNCT2:has_key(substr(text, i, 2))) {
+            tok.kind = substr(text, i, 2)
+            i += 2
+        } elif (__PUNCT1:has_key(c)) {
+            tok.kind = c
+            i++
+        } elif (__UNSUPPORTED:has_key(c)) {
+            __fail(tok, __UNSUPPORTED[c])
+        } else {
+            __fail(tok, "unexpected character '" + c + "'")
+        }
+        tok.stop = i
+        toks:push(tok)
+    }
+    var end_pos = __position(lx.starts, base + n)
+    toks:push({ kind: "eof", line: end_pos.line, col: end_pos.col, file: lx.file, start: n, stop: n })
+    return toks
+}
+
+// ---------------------------------------------------------------------------
+// Expression parser (precedence climbing over a Mobius expression subset)
+// ---------------------------------------------------------------------------
+
+func __peek(ps) {
+    return ps.toks[ps.pos]
+}
+
+func __advance(ps) {
+    var tok = ps.toks[ps.pos]
+    if (tok.kind != "eof") {
+        ps.pos = ps.pos + 1
+    }
+    return tok
+}
+
+func __check(ps, kind) {
+    return ps.toks[ps.pos].kind == kind
+}
+
+func __accept(ps, kind) {
+    if (__check(ps, kind)) {
+        __advance(ps)
+        return true
+    }
+    return false
+}
+
+func __describe(tok) {
+    switch (tok.kind) {
+        case "eof":    return "end of tag"
+        case "name":   return "'" + tok.value + "'"
+        case "string": return "string"
+        case "number": return "number"
+        default:       return "'" + tok.kind + "'"
+    }
+}
+
+func __expect(ps, kind, what) {
+    var tok = __peek(ps)
+    if (tok.kind != kind) {
+        __fail(tok, "expected " + what + ", found " + __describe(tok))
+    }
+    return __advance(ps)
+}
+
+func __expect_name(ps, what) {
+    return __expect(ps, "name", what).value
+}
+
+func __node(tok, type) {
+    return { type: type, file: tok.file, line: tok.line, col: tok.col }
+}
+
+var __BINARY_PREC = {
+    ["or"] = 1, ["||"] = 1,
+    ["and"] = 2, ["&&"] = 2,
+    ["=="] = 3, ["!="] = 3,
+    ["<"] = 4, ["<="] = 4, [">"] = 4, [">="] = 4,
+    ["+"] = 5, ["-"] = 5,
+    ["*"] = 6, ["/"] = 6, ["%"] = 6
+}
+
+func __parse_expr(ps) {
+    return __parse_ternary(ps)
+}
+
+// cond ? a : b, right-associative, as in Mobius. Filters are written
+// without spaces (`x:upper()`), so a spaced ':' in the true branch is the
+// ternary's: `ok ? a : f(x)`.
+func __parse_ternary(ps) {
+    var cond = __parse_binary(ps, 1)
+    if (!__check(ps, "?")) {
+        return cond
+    }
+    var tok = __advance(ps)
+    ps.colon_ends = __colon_ends(ps) + 1
+    var then_expr = __parse_ternary(ps)
+    ps.colon_ends = ps.colon_ends - 1
+    __expect(ps, ":", "':' in conditional expression")
+    var node = __node(tok, "conditional")
+    node.cond = cond
+    node.then_expr = then_expr
+    node.else_expr = __parse_ternary(ps)
+    return node
+}
+
+func __colon_ends(ps) {
+    if (ps.colon_ends == nil) {
+        return 0
+    }
+    return ps.colon_ends
+}
+
+// Two tokens touch when there is no whitespace between them.
+func __touching(a, b) {
+    return a.stop == b.start
+}
+
+func __parse_binary(ps, min_prec) {
+    var left = __parse_unary(ps)
+    while (true) {
+        var tok = __peek(ps)
+        if (!__BINARY_PREC:has_key(tok.kind)) {
+            break
+        }
+        var prec = __BINARY_PREC[tok.kind]
+        if (prec < min_prec) {
+            break
+        }
+        __advance(ps)
+        var right = __parse_binary(ps, prec + 1)
+        var node = __node(tok, "binary")
+        node.op = tok.kind
+        if (node.op == "&&") {
+            node.op = "and"
+        } elif (node.op == "||") {
+            node.op = "or"
+        }
+        node.left = left
+        node.right = right
+        left = node
+    }
+    return left
+}
+
+func __parse_unary(ps) {
+    var tok = __peek(ps)
+    if (tok.kind == "-" or tok.kind == "not" or tok.kind == "!" or tok.kind == "+") {
+        __advance(ps)
+        var node = __node(tok, "unary")
+        node.op = tok.kind
+        if (node.op == "!") {
+            node.op = "not"
+        }
+        node.operand = __parse_unary(ps)
+        return node
+    }
+    return __parse_postfix(ps)
+}
+
+func __parse_args(ps, closer) {
+    var args = []
+    if (!__check(ps, closer)) {
+        args:push(__parse_expr(ps))
+        while (__accept(ps, ",")) {
+            args:push(__parse_expr(ps))
+        }
+    }
+    __expect(ps, closer, "'" + closer + "'")
+    return args
+}
+
+func __parse_postfix(ps) {
+    var expr = __parse_primary(ps)
+    while (true) {
+        var tok = __peek(ps)
+        if (tok.kind == ".") {
+            __advance(ps)
+            var node = __node(tok, "attr")
+            node.object = expr
+            node.name = __expect_name(ps, "field name after '.'")
+            expr = node
+        } elif (tok.kind == "[") {
+            __advance(ps)
+            var node = __node(tok, "index")
+            node.object = expr
+            node.key = __parse_expr(ps)
+            __expect(ps, "]", "']'")
+            expr = node
+        } elif (tok.kind == "(") {
+            __advance(ps)
+            var node = __node(tok, "call")
+            node.callee = expr
+            node.args = __parse_args(ps, ")")
+            expr = node
+        } elif (tok.kind == ":") {
+            var prev = ps.toks[ps.pos - 1]
+            var next = ps.toks[ps.pos + 1]
+            if (!__touching(prev, tok) or !__touching(tok, next)) {
+                if (__colon_ends(ps) > 0) {
+                    break
+                }
+                __fail(tok, "filters are written without spaces around ':', e.g. x:upper()")
+            }
+            __advance(ps)
+            var name_tok = __expect(ps, "name", "filter name after ':'")
+            var node = __node(name_tok, "filter")
+            node.receiver = expr
+            node.name = name_tok.value
+            __expect(ps, "(", "'(' after filter name (filters are called like methods: x:" + name_tok.value + "())")
+            node.args = __parse_args(ps, ")")
+            expr = node
+        } else {
+            break
+        }
+    }
+    return expr
+}
+
+func __parse_primary(ps) {
+    var tok = __advance(ps)
+    switch (tok.kind) {
+        case "number", "string": {
+            var node = __node(tok, "literal")
+            node.value = tok.value
+            return node
+        }
+        case "true", "false": {
+            var node = __node(tok, "literal")
+            node.value = tok.kind == "true"
+            return node
+        }
+        case "nil":
+            return __node(tok, "literal")
+        case "name": {
+            var node = __node(tok, "name")
+            node.name = tok.value
+            return node
+        }
+        case "(": {
+            var inner = __parse_expr(ps)
+            __expect(ps, ")", "')'")
+            return inner
+        }
+        case "[": {
+            var node = __node(tok, "array")
+            node.items = []
+            if (!__check(ps, "]")) {
+                node.items:push(__parse_expr(ps))
+                while (__accept(ps, ",")) {
+                    if (__check(ps, "]")) {
+                        break
+                    }
+                    node.items:push(__parse_expr(ps))
+                }
+            }
+            __expect(ps, "]", "']'")
+            return node
+        }
+        case "{": {
+            var node = __node(tok, "table")
+            node.entries = []
+            while (!__check(ps, "}")) {
+                var entry = {}
+                if (__accept(ps, "[")) {
+                    entry.key = __parse_expr(ps)
+                    __expect(ps, "]", "']'")
+                    __expect(ps, "=", "'=' after table key")
+                } else {
+                    var key_tok = __expect(ps, "name", "table key")
+                    entry.key = __node(key_tok, "literal")
+                    entry.key.value = key_tok.value
+                    __expect(ps, ":", "':' after table key")
+                }
+                entry.value = __parse_expr(ps)
+                node.entries:push(entry)
+                if (!__accept(ps, ",")) {
+                    break
+                }
+            }
+            __expect(ps, "}", "'}'")
+            return node
+        }
+        default:
+            __fail(tok, "expected an expression, found " + __describe(tok))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Template parser: tokens -> node tree
+// ---------------------------------------------------------------------------
+
+// Jinja tags that stencil replaces with components; named in the error.
+var __JINJA_TAGS = { ["macro"] = true, ["call"] = true }
+
+func __tag_node(tok, type) {
+    return { type: type, file: tok.file, line: tok.line, col: tok.col }
+}
+
+func __parse_template(src, name) {
+    var lexed = __lex(src, name)
+    var tokens = lexed.tokens
+    for (var i = 0; i < size(tokens); i++) {
+        tokens[i].file = name
+    }
+    // A template's components and imports; `use` nodes keep a reference so
+    // they can resolve component names at render time.
+    var unit = { components: {}, imports: [] }
+    var tp = { tokens: tokens, pos: 0, lx: lexed.lx, file: name, blocks: {}, extends: nil, unit: unit, component: nil }
+    var result = __parse_body(tp, [], nil)
+    var tpl = {
+        name: name,
+        nodes: result.nodes,
+        blocks: tp.blocks,
+        extends: tp.extends,
+        extends_node: tp.extends_node,
+        unit: unit
+    }
+    if (tpl.extends != nil) {
+        __validate_child(tpl)
+    }
+    return tpl
+}
+
+// Parse the expression stream of a tag body (after the tag name).
+func __tag_stream(tp, tok) {
+    var toks = __lex_expr(tok.body, tok.body_offset, tp.lx)
+    var ps = { toks: toks, pos: 0 }
+    return ps
+}
+
+func __expect_end(ps) {
+    var tok = __peek(ps)
+    if (tok.kind != "eof") {
+        __fail(tok, "unexpected " + __describe(tok) + " at end of tag")
+    }
+}
+
+// Parse nodes until one of `end_tags` (or end of input when the list is
+// empty). Returns { nodes, end: { name, ps, tok } }.
+func __parse_body(tp, end_tags, opener) {
+    var nodes = []
+    while (tp.pos < size(tp.tokens)) {
+        var tok = tp.tokens[tp.pos]
+        tp.pos = tp.pos + 1
+
+        if (tok.kind == "text") {
+            if (size(tok.value) > 0) {
+                var node = __tag_node(tok, "text")
+                node.value = tok.value
+                nodes:push(node)
+            }
+            continue
+        }
+        if (tok.kind == "comment") {
+            continue
+        }
+        if (tok.kind == "output") {
+            var ps = __tag_stream(tp, tok)
+            var node = __tag_node(tok, "output")
+            if (__check(ps, "eof")) {
+                __fail(tok, "empty {{ }}")
+            }
+            node.expr = __parse_expr(ps)
+            __expect_end(ps)
+            nodes:push(node)
+            continue
+        }
+
+        // {% tag %}
+        var ps = __tag_stream(tp, tok)
+        var head = __peek(ps)
+        if (head.kind != "name" and head.kind != "else") {
+            __fail(tok, "expected a tag name, found " + __describe(head))
+        }
+        __advance(ps)
+        var tag = "else"
+        if (head.kind == "name") {
+            tag = head.value
+        }
+
+        if (end_tags:find(tag) >= 0) {
+            return { nodes: nodes, end: { name: tag, ps: ps, tok: tok } }
+        }
+
+        switch (tag) {
+            case "if":
+                nodes:push(__parse_if(tp, tok, ps))
+                break
+            case "for":
+                nodes:push(__parse_for(tp, tok, ps))
+                break
+            case "set": {
+                var node = __tag_node(tok, "set")
+                node.name = __expect_name(ps, "variable name after 'set'")
+                __expect(ps, "=", "'=' in set")
+                node.expr = __parse_expr(ps)
+                __expect_end(ps)
+                nodes:push(node)
+                break
+            }
+            case "include": {
+                var node = __tag_node(tok, "include")
+                node.target = __parse_expr(ps)
+                __expect_end(ps)
+                nodes:push(node)
+                break
+            }
+            case "extends": {
+                if (opener != nil or tp.extends != nil) {
+                    __fail(tok, "'extends' must be the first tag in a template")
+                }
+                for (var i = 0; i < size(nodes); i++) {
+                    if (nodes[i].type != "text" or size(trim(nodes[i].value)) > 0) {
+                        __fail(tok, "'extends' must come before any other content")
+                    }
+                }
+                nodes = []
+                tp.extends = __parse_expr(ps)
+                tp.extends_node = __tag_node(tok, "extends")
+                __expect_end(ps)
+                break
+            }
+            case "block": {
+                var node = __tag_node(tok, "block")
+                node.name = __expect_name(ps, "block name")
+                __expect_end(ps)
+                if (tp.component != nil) {
+                    __fail(tok, "blocks can't be defined inside a component")
+                }
+                if (tp.blocks:has_key(node.name)) {
+                    var first = tp.blocks[node.name]
+                    __fail(tok, "block '" + node.name + "' is already defined at line " + str(first.line))
+                }
+                node.top_level = opener == nil
+                tp.blocks[node.name] = node
+                var body = __parse_body(tp, ["endblock"], tok)
+                __expect_end_name(body.end.ps, "block", node.name)
+                node.body = body.nodes
+                nodes:push(node)
+                break
+            }
+            case "component":
+                __parse_component(tp, tok, ps, opener)
+                break
+            case "slot":
+                nodes:push(__parse_slot(tp, tok, ps))
+                break
+            case "use":
+                nodes:push(__parse_use(tp, tok, ps))
+                break
+            case "fill": {
+                if (__opener_tag(opener) != "use") {
+                    __fail(tok, "{% fill %} must be directly inside {% use %}")
+                }
+                var node = __tag_node(tok, "fill")
+                node.name = __expect_name(ps, "slot name after 'fill'")
+                __expect_end(ps)
+                var body = __parse_body(tp, ["endfill"], tok)
+                __expect_end_name(body.end.ps, "fill", node.name)
+                node.body = body.nodes
+                nodes:push(node)
+                break
+            }
+            case "import": {
+                if (opener != nil) {
+                    __fail(tok, "'import' must be at the top level of a template")
+                }
+                var node = __tag_node(tok, "import")
+                node.target = __parse_expr(ps)
+                __expect_end(ps)
+                tp.unit.imports:push(node)
+                break
+            }
+            case "raw", "endraw":
+                // The lexer already turned the contents into verbatim text.
+                break
+            case "elif", "else", "endif", "endfor", "endblock", "endcomponent", "endslot", "enduse", "endfill":
+                __fail(tok, "unexpected {% " + tag + " %}" + __open_hint(opener))
+            default:
+                if (__JINJA_TAGS:has_key(tag)) {
+                    __fail(tok, "'" + tag + "' is a Jinja tag; stencil uses {% component %} and {% use %} instead")
+                }
+                __fail(tok, "unknown tag '" + tag + "'")
+        }
+    }
+
+    if (size(end_tags) > 0) {
+        var p = opener
+        __fail(p, "unclosed {% " + __first_word(p.body) + " %} (expected {% " + end_tags[size(end_tags) - 1] + " %})")
+    }
+    return { nodes: nodes, end: nil }
+}
+
+// `{% endblock name %}`-style end tags may repeat the opening name.
+func __expect_end_name(ps, kind, name) {
+    var tok = __peek(ps)
+    if (tok.kind == "name") {
+        if (tok.value != name) {
+            __fail(tok, "end" + kind + " '" + tok.value + "' does not match " + kind + " '" + name + "'")
+        }
+        __advance(ps)
+    }
+    __expect_end(ps)
+}
+
+func __opener_tag(opener) {
+    if (opener == nil) {
+        return ""
+    }
+    return __first_word(opener.body)
+}
+
+func __open_hint(opener) {
+    if (opener == nil) {
+        return ""
+    }
+    return " inside {% " + __first_word(opener.body) + " %} opened at line " + str(opener.line)
+}
+
+func __parse_if(tp, tok, ps) {
+    var node = __tag_node(tok, "if")
+    node.branches = []
+    node.else_body = nil
+    var cond = __parse_expr(ps)
+    __expect_end(ps)
+    while (true) {
+        var body = __parse_body(tp, ["elif", "else", "endif"], tok)
+        node.branches:push({ cond: cond, body: body.nodes })
+        var end = body.end
+        if (end.name == "elif") {
+            cond = __parse_expr(end.ps)
+            __expect_end(end.ps)
+        } elif (end.name == "else") {
+            __expect_end(end.ps)
+            var else_body = __parse_body(tp, ["endif"], tok)
+            __expect_end(else_body.end.ps)
+            node.else_body = else_body.nodes
+            break
+        } else {
+            __expect_end(end.ps)
+            break
+        }
+    }
+    return node
+}
+
+func __parse_for(tp, tok, ps) {
+    var node = __tag_node(tok, "for")
+    var first = __expect_name(ps, "loop variable after 'for'")
+    if (__accept(ps, ",")) {
+        node.key_var = first
+        node.value_var = __expect_name(ps, "second loop variable")
+    } else {
+        node.value_var = first
+    }
+    __expect(ps, "in", "'in'")
+    node.iter = __parse_expr(ps)
+    __expect_end(ps)
+    var body = __parse_body(tp, ["else", "endfor"], tok)
+    node.body = body.nodes
+    __expect_end(body.end.ps)
+    if (body.end.name == "else") {
+        var else_body = __parse_body(tp, ["endfor"], tok)
+        __expect_end(else_body.end.ps)
+        node.else_body = else_body.nodes
+    }
+    return node
+}
+
+// {% component name(param, param = default) %} ... {% endcomponent %}
+// Defines a component in this template's unit; produces no output.
+func __parse_component(tp, tok, ps, opener) {
+    if (opener != nil) {
+        __fail(tok, "components must be defined at the top level of a template")
+    }
+    var node = __tag_node(tok, "component")
+    node.name = __expect_name(ps, "component name")
+    node.params = []
+    node.slots = {}
+    var seen = {}
+    if (__accept(ps, "(")) {
+        if (!__check(ps, ")")) {
+            while (true) {
+                var param_tok = __expect(ps, "name", "parameter name")
+                if (seen:has_key(param_tok.value)) {
+                    __fail(param_tok, "duplicate parameter '" + param_tok.value + "'")
+                }
+                seen[param_tok.value] = true
+                var param = { name: param_tok.value, default_value: nil }
+                if (__accept(ps, "=")) {
+                    param.default_value = __parse_expr(ps)
+                }
+                node.params:push(param)
+                if (!__accept(ps, ",")) {
+                    break
+                }
+            }
+        }
+        __expect(ps, ")", "')' after parameters")
+    }
+    __expect_end(ps)
+    if (tp.unit.components:has_key(node.name)) {
+        var first = tp.unit.components[node.name]
+        __fail(tok, "component '" + node.name + "' is already defined at line " + str(first.line))
+    }
+    tp.component = node
+    var body = __parse_body(tp, ["endcomponent"], tok)
+    tp.component = nil
+    __expect_end_name(body.end.ps, "component", node.name)
+    node.body = body.nodes
+    tp.unit.components[node.name] = node
+}
+
+// {% slot [name] %} default content {% endslot %}
+func __parse_slot(tp, tok, ps) {
+    if (tp.component == nil) {
+        __fail(tok, "{% slot %} can only be used inside a {% component %}")
+    }
+    var node = __tag_node(tok, "slot")
+    node.name = "default"
+    if (__check(ps, "name")) {
+        node.name = __advance(ps).value
+    }
+    __expect_end(ps)
+    if (tp.component.slots:has_key(node.name)) {
+        __fail(tok, "component '" + tp.component.name + "' already has a slot named '" + node.name + "'")
+    }
+    tp.component.slots[node.name] = true
+    var body = __parse_body(tp, ["endslot"], tok)
+    __expect_end_name(body.end.ps, "slot", node.name)
+    node.body = body.nodes
+    return node
+}
+
+// {% use name(args) %} {% fill slot %}...{% endfill %} {% enduse %}
+// Content outside any fill goes to the default slot; mixing the two is an error.
+func __parse_use(tp, tok, ps) {
+    var node = __tag_node(tok, "use")
+    node.name = __expect_name(ps, "component name after 'use'")
+    node.args = nil
+    if (__accept(ps, "(")) {
+        if (!__check(ps, ")")) {
+            node.args = __parse_expr(ps)
+        }
+        __expect(ps, ")", "')' after component arguments (pass one table: name({ key: value }))")
+    }
+    __expect_end(ps)
+    node.unit = tp.unit
+    var body = __parse_body(tp, ["enduse"], tok)
+    __expect_end_name(body.end.ps, "use", node.name)
+
+    node.fills = {}
+    var loose = []
+    var has_content = false
+    for (var i = 0; i < size(body.nodes); i++) {
+        var child = body.nodes[i]
+        if (child.type == "fill") {
+            if (node.fills:has_key(child.name)) {
+                __fail(child, "slot '" + child.name + "' is filled twice")
+            }
+            node.fills[child.name] = child
+        } else {
+            loose:push(child)
+            if (child.type != "text" or size(trim(child.value)) > 0) {
+                has_content = true
+            }
+        }
+    }
+    if (has_content) {
+        if (node.fills:size() > 0) {
+            __fail(tok, "{% use %} body mixes {% fill %} blocks with other content; put that content in {% fill default %}")
+        }
+        node.fills["default"] = { type: "fill", name: "default", body: loose, file: tok.file, line: tok.line, col: tok.col }
+    }
+    return node
+}
+
+// A child template may only contain blocks (and whitespace) at top level.
+func __validate_child(tpl) {
+    for (var i = 0; i < size(tpl.nodes); i++) {
+        var node = tpl.nodes[i]
+        if (node.type == "block") {
+            continue
+        }
+        if (node.type == "text" and size(trim(node.value)) == 0) {
+            continue
+        }
+        __fail(node, "a template that uses 'extends' may only contain blocks, components, and imports at the top level")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Values
+// ---------------------------------------------------------------------------
+
+func __safe(text) {
+    // Tagged with a field rather than a metatable, so the check doesn't rely
+    // on metatable identity, which a copy into another fiber doesn't keep.
+    return { __stencil_safe: true, text: text }
+}
+
+func __is_safe(value) {
+    return typeof(value) == "table" and value:has_key("__stencil_safe")
+}
+
+func __plain(value) {
+    if (__is_safe(value)) {
+        return value.text
+    }
+    return value
+}
+
+func __truthy(value) {
+    return value != nil and value != false
+}
+
+func __type_name(value) {
+    if (__is_safe(value)) {
+        return "string"
+    }
+    return typeof(value)
+}
+
+// ---------------------------------------------------------------------------
+// Interpreter
+// ---------------------------------------------------------------------------
+
+func __lookup(ctx, node) {
+    var name = node.name
+    for (var i = size(ctx.scopes) - 1; i >= 0; i--) {
+        var scope = ctx.scopes[i]
+        if (scope:has_key(name)) {
+            return scope[name].value
+        }
+    }
+    if (ctx.data != nil and ctx.data:has_key(name)) {
+        return ctx.data[name]
+    }
+    if (ctx.env.globals:has_key(name)) {
+        return ctx.env.globals[name]
+    }
+    __fail_undefined(node, "undefined variable '" + name + "'")
+}
+
+func __call_fn(node, fn, args) {
+    switch (size(args)) {
+        case 0: return fn()
+        case 1: return fn(args[0])
+        case 2: return fn(args[0], args[1])
+        case 3: return fn(args[0], args[1], args[2])
+        case 4: return fn(args[0], args[1], args[2], args[3])
+        case 5: return fn(args[0], args[1], args[2], args[3], args[4])
+        case 6: return fn(args[0], args[1], args[2], args[3], args[4], args[5])
+        default:
+            __fail(node, "too many arguments (at most 6 are supported)")
+    }
+}
+
+func __eval_args(ctx, nodes) {
+    var out = []
+    for (var i = 0; i < size(nodes); i++) {
+        out:push(__plain(__eval(ctx, nodes[i])))
+    }
+    return out
+}
+
+func __eval(ctx, node) {
+    switch (node.type) {
+        case "literal":
+            return node.value
+        case "name":
+            return __lookup(ctx, node)
+        case "attr":
+            return __eval_attr(ctx, node)
+        case "index":
+            return __eval_index(ctx, node)
+        case "call":
+            return __eval_call(ctx, node)
+        case "filter":
+            return __eval_filter(ctx, node)
+        case "unary":
+            return __eval_unary(ctx, node)
+        case "binary":
+            return __eval_binary(ctx, node)
+        case "conditional":
+            if (__truthy(__plain(__eval(ctx, node.cond)))) {
+                return __eval(ctx, node.then_expr)
+            }
+            return __eval(ctx, node.else_expr)
+        case "array":
+            return __eval_array(ctx, node)
+        case "table":
+            return __eval_table(ctx, node)
+        default:
+            __fail(node, "internal error: unknown expression type '" + node.type + "'")
+    }
+}
+
+func __eval_array(ctx, node) {
+    var out = []
+    for (var i = 0; i < size(node.items); i++) {
+        out:push(__plain(__eval(ctx, node.items[i])))
+    }
+    return out
+}
+
+func __eval_table(ctx, node) {
+    var out = {}
+    for (var i = 0; i < size(node.entries); i++) {
+        var entry = node.entries[i]
+        out[__plain(__eval(ctx, entry.key))] = __plain(__eval(ctx, entry.value))
+    }
+    return out
+}
+
+func __describe_expr(node) {
+    switch (node.type) {
+        case "name":  return node.name
+        case "attr":  return __describe_expr(node.object) + "." + node.name
+        case "index": return __describe_expr(node.object) + "[...]"
+        default:      return "value"
+    }
+}
+
+func __eval_attr(ctx, node) {
+    var object = __plain(__eval(ctx, node.object))
+    var kind = typeof(object)
+    if (kind != "table") {
+        __fail_undefined(node, "cannot read field '" + node.name + "' of " + __describe_expr(node.object) + " (a " + kind + ")")
+    }
+    if (!object:has_key(node.name)) {
+        __fail_undefined(node, __describe_expr(node.object) + " has no field '" + node.name + "'")
+    }
+    return object[node.name]
+}
+
+func __eval_index(ctx, node) {
+    var object = __plain(__eval(ctx, node.object))
+    var key = __plain(__eval(ctx, node.key))
+    var kind = typeof(object)
+    if (kind == "array" or kind == "string") {
+        if (typeof(key) != "int64") {
+            __fail(node, "index into " + kind + " must be an integer, got " + typeof(key))
+        }
+        var length = size(object)
+        if (key < 0 or key >= length) {
+            __fail_undefined(node, "index " + str(key) + " out of range for " + __describe_expr(node.object) + " (size " + str(length) + ")")
+        }
+        return object[key]
+    }
+    if (kind == "table") {
+        if (!object:has_key(key)) {
+            __fail_undefined(node, __describe_expr(node.object) + " has no key " + json.stringify(key))
+        }
+        return object[key]
+    }
+    __fail_undefined(node, "cannot index " + __describe_expr(node.object) + " (a " + kind + ")")
+}
+
+func __eval_call(ctx, node) {
+    if (node.callee.type == "name" and node.callee.name == "super") {
+        return __render_super(ctx, node)
+    }
+    var fn = __eval(ctx, node.callee)
+    if (__is_builtin(fn)) {
+        var builtin_args = __eval_args(ctx, node.args)
+        var count = size(builtin_args)
+        if (count < fn.min or count > fn.max) {
+            __fail(node, fn.name + "() takes " + str(fn.min) + " to " + str(fn.max) + " arguments, got " + str(count))
+        }
+        try {
+            return fn.fn(builtin_args)
+        } catch err {
+            __fail(node, "error calling " + fn.name + "(): " + __error_text(err))
+        }
+    }
+    if (typeof(fn) != "function") {
+        __fail(node, __describe_expr(node.callee) + " is not a function (it is a " + typeof(fn) + ")")
+    }
+    var args = __eval_args(ctx, node.args)
+    try {
+        return __call_fn(node, fn, args)
+    } catch err {
+        if (__is_stencil_error(err)) {
+            throw err
+        }
+        __fail(node, "error calling " + __describe_expr(node.callee) + ": " + __error_text(err))
+    }
+}
+
+func __eval_filter(ctx, node) {
+    var name = node.name
+    var receiver = nil
+    if (name == "default" or name == "defined") {
+        // These two see a failed lookup as nil instead of an error.
+        try {
+            receiver = __eval(ctx, node.receiver)
+        } catch err {
+            if (!(typeof(err) == "table" and err:has_key("undefined"))) {
+                throw err
+            }
+        }
+    } else {
+        receiver = __eval(ctx, node.receiver)
+    }
+
+    if (name == "raw") {
+        if (size(node.args) != 0) {
+            __fail(node, "filter 'raw' takes no arguments")
+        }
+        if (__is_safe(receiver)) {
+            return receiver
+        }
+        if (receiver == nil) {
+            __fail(node, "cannot mark nil as raw")
+        }
+        return __safe(str(receiver))
+    }
+
+    var args = __eval_args(ctx, node.args)
+    var value = __plain(receiver)
+
+    if (ctx.env.filters:has_key(name)) {
+        var user_args = [value]
+        for (var i = 0; i < size(args); i++) {
+            user_args:push(args[i])
+        }
+        try {
+            return __call_fn(node, ctx.env.filters[name], user_args)
+        } catch err {
+            if (__is_stencil_error(err)) {
+                throw err
+            }
+            __fail(node, "filter '" + name + "': " + __error_text(err))
+        }
+    }
+
+    if (!__FILTERS:has_key(name)) {
+        __fail(node, "unknown filter '" + name + "'")
+    }
+    var spec = __FILTERS[name]
+    var count = size(args)
+    if (count < spec.min or count > spec.max) {
+        var expected = str(spec.min)
+        if (spec.max != spec.min) {
+            expected = str(spec.min) + " to " + str(spec.max)
+        }
+        __fail(node, "filter '" + name + "' takes " + expected + " argument(s), got " + str(count))
+    }
+    try {
+        return spec.fn(value, args)
+    } catch err {
+        if (__is_stencil_error(err)) {
+            throw err
+        }
+        __fail(node, "filter '" + name + "': " + __error_text(err))
+    }
+}
+
+func __eval_unary(ctx, node) {
+    var value = __plain(__eval(ctx, node.operand))
+    if (node.op == "not") {
+        return !__truthy(value)
+    }
+    var kind = typeof(value)
+    if (kind != "int64" and kind != "float64") {
+        __fail(node, "cannot apply unary '" + node.op + "' to a " + kind)
+    }
+    if (node.op == "-") {
+        return -value
+    }
+    return value
+}
+
+func __eval_binary(ctx, node) {
+    var op = node.op
+    if (op == "and") {
+        var left_and = __plain(__eval(ctx, node.left))
+        if (!__truthy(left_and)) {
+            return left_and
+        }
+        return __plain(__eval(ctx, node.right))
+    }
+    if (op == "or") {
+        var left_or = __plain(__eval(ctx, node.left))
+        if (__truthy(left_or)) {
+            return left_or
+        }
+        return __plain(__eval(ctx, node.right))
+    }
+
+    var left = __plain(__eval(ctx, node.left))
+    var right = __plain(__eval(ctx, node.right))
+    if (op == "==") {
+        return left == right
+    }
+    if (op == "!=") {
+        return left != right
+    }
+
+    var lt = typeof(left)
+    var rt = typeof(right)
+    var lnum = lt == "int64" or lt == "float64"
+    var rnum = rt == "int64" or rt == "float64"
+    var ok = lnum and rnum
+    if (op == "+" and (lt == "string" or rt == "string")) {
+        ok = left != nil and right != nil
+    }
+    if ((op == "<" or op == "<=" or op == ">" or op == ">=") and lt == "string" and rt == "string") {
+        ok = true
+    }
+    if (!ok) {
+        __fail(node, "cannot apply '" + op + "' to " + lt + " and " + rt)
+    }
+    if ((op == "/" or op == "%") and right == 0) {
+        __fail(node, "division by zero")
+    }
+
+    switch (op) {
+        case "+":  return left + right
+        case "-":  return left - right
+        case "*":  return left * right
+        case "/":  return left / right
+        case "%":  return left % right
+        case "<":  return left < right
+        case "<=": return left <= right
+        case ">":  return left > right
+        case ">=": return left >= right
+    }
+    __fail(node, "internal error: unknown operator '" + op + "'")
+}
+
+func __to_output(ctx, node, value) {
+    if (__is_safe(value)) {
+        return value.text
+    }
+    var kind = typeof(value)
+    var text = ""
+    switch (kind) {
+        case "string":
+            text = value
+            break
+        case "int64", "uint64", "float64", "bool", "char":
+            text = str(value)
+            break
+        case "nil":
+            __fail(node, __describe_expr(node.expr) + " is nil; use :default(...) to supply a fallback")
+        default:
+            __fail(node, "cannot output a " + kind + "; use a filter such as :json() or :join(\", \")")
+    }
+    if (ctx.env.escape != nil) {
+        return ctx.env.escape(text)
+    }
+    return text
+}
+
+func __push_scope(ctx) {
+    ctx.scopes:push({})
+}
+
+func __pop_scope(ctx) {
+    ctx.scopes:pop()
+}
+
+func __render_nodes(ctx, nodes, out) {
+    for (var i = 0; i < size(nodes); i++) {
+        __render_node(ctx, nodes[i], out)
+    }
+}
+
+func __render_scoped(ctx, nodes, out) {
+    __push_scope(ctx)
+    __render_nodes(ctx, nodes, out)
+    __pop_scope(ctx)
+}
+
+func __render_node(ctx, node, out) {
+    switch (node.type) {
+        case "text":
+            out:push(node.value)
+            break
+        case "output":
+            out:push(__to_output(ctx, node, __eval(ctx, node.expr)))
+            break
+        case "if": {
+            var done = false
+            for (var i = 0; i < size(node.branches) and !done; i++) {
+                var branch = node.branches[i]
+                if (__truthy(__plain(__eval(ctx, branch.cond)))) {
+                    __render_scoped(ctx, branch.body, out)
+                    done = true
+                }
+            }
+            if (!done and node.else_body != nil) {
+                __render_scoped(ctx, node.else_body, out)
+            }
+            break
+        }
+        case "for":
+            __render_for(ctx, node, out)
+            break
+        case "set":
+            __render_set(ctx, node)
+            break
+        case "include":
+            __render_include(ctx, node, out)
+            break
+        case "block":
+            __render_block(ctx, node, out)
+            break
+        case "use":
+            __render_use(ctx, node, out)
+            break
+        case "slot":
+            __render_slot(ctx, node, out)
+            break
+        default:
+            __fail(node, "internal error: unknown node type '" + node.type + "'")
+    }
+}
+
+// ctx: { env, data, scopes: [name -> { value }], blocks: name -> [block
+// nodes, most-derived first], block_stack, slots, depth }
+func __new_ctx(env, data, scopes, depth) {
+    return { env: env, data: data, scopes: scopes, blocks: nil, block_stack: [], slots: nil, depth: depth }
+}
+
+func __render_block_level(ctx, chain, level, out) {
+    ctx.block_stack:push({ chain: chain, level: level })
+    __render_scoped(ctx, chain[level].body, out)
+    ctx.block_stack:pop()
+}
+
+func __render_block(ctx, node, out) {
+    var chain = [node]
+    if (ctx.blocks != nil and ctx.blocks:has_key(node.name)) {
+        chain = ctx.blocks[node.name]
+    }
+    __render_block_level(ctx, chain, 0, out)
+}
+
+// {{ super() }}: the next definition of the current block up the chain.
+func __render_super(ctx, node) {
+    if (size(node.args) != 0) {
+        __fail(node, "super() takes no arguments")
+    }
+    if (size(ctx.block_stack) == 0) {
+        __fail(node, "super() can only be used inside a block")
+    }
+    var top = ctx.block_stack[size(ctx.block_stack) - 1]
+    var level = top.level + 1
+    if (level >= size(top.chain)) {
+        __fail(node, "block '" + top.chain[0].name + "' has no parent definition for super()")
+    }
+    var out = []
+    __render_block_level(ctx, top.chain, level, out)
+    return __safe(join(out, ""))
+}
+
+func __find_component(ctx, node) {
+    var unit = node.unit
+    if (unit.components:has_key(node.name)) {
+        return unit.components[node.name]
+    }
+    var found = nil
+    var found_in = nil
+    for (var i = 0; i < size(unit.imports); i++) {
+        var import_node = unit.imports[i]
+        var target = __plain(__eval(ctx, import_node.target))
+        if (typeof(target) != "string") {
+            __fail(import_node, "import target must be a string, got " + typeof(target))
+        }
+        var tpl = __env_load(ctx.env, target, import_node)
+        if (tpl.unit.components:has_key(node.name)) {
+            if (found != nil) {
+                __fail(node, "component '" + node.name + "' is defined in both '" + found_in + "' and '" + target + "'")
+            }
+            found = tpl.unit.components[node.name]
+            found_in = target
+        }
+    }
+    if (found == nil) {
+        __fail(node, "unknown component '" + node.name + "'")
+    }
+    return found
+}
+
+func __render_use(ctx, node, out) {
+    var component = __find_component(ctx, node)
+    var args = {}
+    if (node.args != nil) {
+        args = __plain(__eval(ctx, node.args))
+        if (typeof(args) != "table") {
+            __fail(node.args, "component arguments must be a table, e.g. " + node.name + "({ key: value }), got " + typeof(args))
+        }
+    }
+    var params = {}
+    for (var i = 0; i < size(component.params); i++) {
+        params[component.params[i].name] = true
+    }
+    var arg_names = __sorted_keys(args)
+    for (var i = 0; i < size(arg_names); i++) {
+        if (!params:has_key(arg_names[i])) {
+            __fail(node, "component '" + node.name + "' has no parameter '" + str(arg_names[i]) + "'")
+        }
+    }
+    var fill_names = __sorted_keys(node.fills)
+    for (var i = 0; i < size(fill_names); i++) {
+        if (!component.slots:has_key(fill_names[i])) {
+            var fill = node.fills[fill_names[i]]
+            __fail(fill, "component '" + node.name + "' has no slot '" + fill_names[i] + "'")
+        }
+    }
+    if (ctx.depth >= __MAX_DEPTH) {
+        __fail(node, "component nesting exceeded " + str(__MAX_DEPTH) + " (recursive component?)")
+    }
+
+    // The body sees only its parameters and env globals, never the caller's
+    // variables. Defaults may refer to earlier parameters.
+    var scope = {}
+    var inner = __new_ctx(ctx.env, nil, [scope], ctx.depth + 1)
+    inner.slots = { fills: node.fills, caller: ctx }
+    for (var i = 0; i < size(component.params); i++) {
+        var param = component.params[i]
+        if (args:has_key(param.name)) {
+            scope[param.name] = { value: args[param.name] }
+        } elif (param.default_value != nil) {
+            scope[param.name] = { value: __plain(__eval(inner, param.default_value)) }
+        } else {
+            __fail(node, "component '" + node.name + "' is missing argument '" + param.name + "'")
+        }
+    }
+    try {
+        __render_scoped(inner, component.body, out)
+    } catch err {
+        throw __add_trace(err, "in component '" + node.name + "' used at " + node.file + ":" + str(node.line) + ":" + str(node.col))
+    }
+}
+
+// A fill renders in the caller's scope; an unfilled slot renders its default.
+func __render_slot(ctx, node, out) {
+    if (ctx.slots != nil and ctx.slots.fills:has_key(node.name)) {
+        __render_scoped(ctx.slots.caller, ctx.slots.fills[node.name].body, out)
+    } else {
+        __render_scoped(ctx, node.body, out)
+    }
+}
+
+func __render_set(ctx, node) {
+    var value = __plain(__eval(ctx, node.expr))
+    for (var i = size(ctx.scopes) - 1; i >= 0; i--) {
+        var scope = ctx.scopes[i]
+        if (scope:has_key(node.name)) {
+            scope[node.name].value = value
+            return
+        }
+    }
+    ctx.scopes[size(ctx.scopes) - 1][node.name] = { value: value }
+}
+
+func __sorted_keys(table_value) {
+    var keys = []
+    for (var key, value in table_value) {
+        keys:push(key)
+    }
+    keys:sort()
+    return keys
+}
+
+func __render_for(ctx, node, out) {
+    var collection = __plain(__eval(ctx, node.iter))
+    var kind = typeof(collection)
+    var keys = nil
+    var values = nil
+    if (kind == "array") {
+        values = collection
+    } elif (kind == "table") {
+        keys = __sorted_keys(collection)
+        values = []
+        for (var i = 0; i < size(keys); i++) {
+            values:push(collection[keys[i]])
+        }
+    } else {
+        __fail(node, "cannot iterate over " + __describe_expr(node.iter) + " (a " + kind + ")")
+    }
+
+    var length = size(values)
+    if (length == 0) {
+        if (node.else_body != nil) {
+            __render_scoped(ctx, node.else_body, out)
+        }
+        return
+    }
+
+    for (var i = 0; i < length; i++) {
+        var scope = {}
+        var loop = { index: i, number: i + 1, first: i == 0, last: i == length - 1, length: length }
+        scope["loop"] = { value: loop }
+        if (node.key_var != nil) {
+            if (keys != nil) {
+                scope[node.key_var] = { value: keys[i] }
+            } else {
+                scope[node.key_var] = { value: i }
+            }
+            scope[node.value_var] = { value: values[i] }
+        } elif (keys != nil) {
+            // `for k in table` iterates keys, as in Mobius.
+            scope[node.value_var] = { value: keys[i] }
+        } else {
+            scope[node.value_var] = { value: values[i] }
+        }
+        ctx.scopes:push(scope)
+        __render_nodes(ctx, node.body, out)
+        ctx.scopes:pop()
+    }
+}
+
+func __render_include(ctx, node, out) {
+    var target = __plain(__eval(ctx, node.target))
+    if (typeof(target) != "string") {
+        __fail(node, "include target must be a string, got " + typeof(target))
+    }
+    if (ctx.depth >= __MAX_DEPTH) {
+        __fail(node, "include depth exceeded " + str(__MAX_DEPTH) + " (recursive include?)")
+    }
+    var tpl = __env_load(ctx.env, target, node)
+    var child = __new_ctx(ctx.env, ctx.data, ctx.scopes, ctx.depth + 1)
+    child.slots = ctx.slots
+    __push_scope(child)
+    try {
+        __render_template(child, tpl, out)
+    } catch err {
+        throw __add_trace(err, "included from " + node.file + ":" + str(node.line) + ":" + str(node.col))
+    }
+    __pop_scope(child)
+}
+
+// The template followed by its ancestors: [tpl, parent, ..., root].
+// `ctx` evaluates non-literal extends targets; with ctx nil (env:check) a
+// non-literal target ends the chain early and `complete` is false.
+func __resolve_chain(env, tpl, ctx) {
+    var chain = [tpl]
+    var seen = {}
+    var current = tpl
+    var complete = true
+    while (current.extends != nil) {
+        seen[current.name] = true
+        var parent_name = nil
+        if (ctx != nil) {
+            parent_name = __plain(__eval(ctx, current.extends))
+        } elif (current.extends.type == "literal") {
+            parent_name = current.extends.value
+        } else {
+            complete = false
+            break
+        }
+        if (typeof(parent_name) != "string") {
+            __fail(current.extends, "extends target must be a string, got " + typeof(parent_name))
+        }
+        if (seen:has_key(parent_name)) {
+            __fail(current.extends, "circular extends: '" + parent_name + "'")
+        }
+        current = __env_load(env, parent_name, current.extends_node)
+        chain:push(current)
+    }
+
+    // Every top-level block of a child must exist somewhere above it;
+    // otherwise it would never render (usually a typo).
+    if (complete) {
+        for (var i = 0; i < size(chain) - 1; i++) {
+            var child = chain[i]
+            for (var name, block in child.blocks) {
+                if (!block.top_level) {
+                    continue
+                }
+                var defined = false
+                for (var j = i + 1; j < size(chain) and !defined; j++) {
+                    defined = chain[j].blocks:has_key(name)
+                }
+                if (!defined) {
+                    __fail(block, "block '" + name + "' is not defined in '" + chain[i + 1].name + "' or its parents")
+                }
+            }
+        }
+    }
+    return chain
+}
+
+// Resolve the extends chain, then render the root template. Each block
+// renders its most-derived definition; super() walks toward the root.
+func __render_template(ctx, tpl, out) {
+    try {
+        var chain = __resolve_chain(ctx.env, tpl, ctx)
+        var blocks = {}
+        for (var i = 0; i < size(chain); i++) {
+            for (var name, block in chain[i].blocks) {
+                if (!blocks:has_key(name)) {
+                    blocks[name] = []
+                }
+                blocks[name]:push(block)
+            }
+        }
+        ctx.blocks = blocks
+        __render_nodes(ctx, chain[size(chain) - 1].nodes, out)
+    } catch err {
+        if (__is_stencil_error(err) and err.template != tpl.name and tpl.extends != nil) {
+            throw __add_trace(err, "while rendering " + tpl.name)
+        }
+        throw err
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Built-in filters: name -> { fn(value, args), min, max }
+// ---------------------------------------------------------------------------
+
+func __need_string(value, filter_name) {
+    if (typeof(value) != "string") {
+        throw filter_name + " expects a string, got " + typeof(value)
+    }
+    return value
+}
+
+// Split identifiers and phrases into lowercase words:
+// "helloWorld", "Hello World", "hello_world", "HTTPServer" -> words.
+func __words(text) {
+    var words = []
+    var current = []
+    var n = size(text)
+    for (var i = 0; i < n; i++) {
+        var c = text[i]
+        if (!__is_upper(c) and !__is_lower(c) and !__is_digit(c)) {
+            if (size(current) > 0) {
+                words:push(lower(join(current, "")))
+                current = []
+            }
+            continue
+        }
+        if (__is_upper(c) and size(current) > 0) {
+            var prev = text[i - 1]
+            var next_lower = i + 1 < n and __is_lower(text[i + 1])
+            if (__is_lower(prev) or __is_digit(prev) or (__is_upper(prev) and next_lower)) {
+                words:push(lower(join(current, "")))
+                current = []
+            }
+        }
+        current:push(c)
+    }
+    if (size(current) > 0) {
+        words:push(lower(join(current, "")))
+    }
+    return words
+}
+
+func __capitalize_word(word) {
+    if (size(word) == 0) {
+        return word
+    }
+    return upper(substr(word, 0, 1)) + lower(substr(word, 1, size(word) - 1))
+}
+
+// Truncate to at most `limit` bytes without splitting a UTF-8 sequence.
+func __utf8_cut(text, limit) {
+    if (size(text) <= limit) {
+        return text
+    }
+    var bytes = buffer_from_string(text)
+    var cut = limit
+    while (cut > 0 and (bytes[cut] & 0xC0) == 0x80) {
+        cut--
+    }
+    return substr(text, 0, cut)
+}
+
+func escape_html(text) {
+    var out = replace(str(text), "&", "&amp;")
+    out = replace(out, "<", "&lt;")
+    out = replace(out, ">", "&gt;")
+    out = replace(out, "\"", "&quot;")
+    out = replace(out, "'", "&#39;")
+    return out
+}
+
+func escape_url(text) {
+    return url.encode(str(text))
+}
+
+func __f_upper(v, a) { return upper(__need_string(v, "upper")) }
+func __f_lower(v, a) { return lower(__need_string(v, "lower")) }
+func __f_trim(v, a) { return trim(__need_string(v, "trim")) }
+
+func __f_capitalize(v, a) {
+    return __capitalize_word(__need_string(v, "capitalize"))
+}
+
+func __f_title(v, a) {
+    var parts = split(__need_string(v, "title"), " ")
+    for (var i = 0; i < size(parts); i++) {
+        parts[i] = __capitalize_word(parts[i])
+    }
+    return join(parts, " ")
+}
+
+func __f_pascal(v, a) {
+    var words = __words(__need_string(v, "pascal"))
+    for (var i = 0; i < size(words); i++) {
+        words[i] = __capitalize_word(words[i])
+    }
+    return join(words, "")
+}
+
+func __f_camel(v, a) {
+    var words = __words(__need_string(v, "camel"))
+    for (var i = 1; i < size(words); i++) {
+        words[i] = __capitalize_word(words[i])
+    }
+    return join(words, "")
+}
+
+func __f_snake(v, a) { return join(__words(__need_string(v, "snake")), "_") }
+func __f_kebab(v, a) { return join(__words(__need_string(v, "kebab")), "-") }
+
+func __f_replace(v, a) {
+    return replace(__need_string(v, "replace"), str(a[0]), str(a[1]))
+}
+
+func __f_truncate(v, a) {
+    var text = __need_string(v, "truncate")
+    var limit = a[0]
+    if (typeof(limit) != "int64" or limit < 0) {
+        throw "length must be a non-negative integer"
+    }
+    var suffix = "..."
+    if (size(a) > 1) {
+        suffix = str(a[1])
+    }
+    if (size(text) <= limit) {
+        return text
+    }
+    return __utf8_cut(text, limit) + suffix
+}
+
+func __f_repeat(v, a) { return repeat(__need_string(v, "repeat"), a[0]) }
+func __f_split(v, a) { return split(__need_string(v, "split"), str(a[0])) }
+func __f_startswith(v, a) { return startswith(__need_string(v, "startswith"), str(a[0])) }
+func __f_endswith(v, a) { return endswith(__need_string(v, "endswith"), str(a[0])) }
+
+func __f_join(v, a) {
+    if (typeof(v) != "array") {
+        throw "join expects an array, got " + typeof(v)
+    }
+    var sep = ""
+    if (size(a) > 0) {
+        sep = str(a[0])
+    }
+    var parts = []
+    for (var i = 0; i < size(v); i++) {
+        if (v[i] == nil) {
+            throw "array element " + str(i) + " is nil"
+        }
+        parts:push(str(v[i]))
+    }
+    return join(parts, sep)
+}
+
+func __f_size(v, a) {
+    var kind = typeof(v)
+    if (kind != "string" and kind != "array" and kind != "table" and kind != "buffer") {
+        throw "size expects a string, array, or table, got " + kind
+    }
+    return size(v)
+}
+
+func __f_first(v, a) {
+    var kind = typeof(v)
+    if ((kind != "array" and kind != "string") or size(v) == 0) {
+        throw "first expects a non-empty array or string"
+    }
+    return v[0]
+}
+
+func __f_last(v, a) {
+    var kind = typeof(v)
+    if ((kind != "array" and kind != "string") or size(v) == 0) {
+        throw "last expects a non-empty array or string"
+    }
+    return v[size(v) - 1]
+}
+
+func __reverse_string(v) {
+    var chars = []
+    for (var i = size(v) - 1; i >= 0; i--) {
+        chars:push(v[i])
+    }
+    return join(chars, "")
+}
+
+func __f_reverse(v, a) {
+    if (typeof(v) == "string") {
+        return __reverse_string(v)
+    }
+    if (typeof(v) != "array") {
+        throw "reverse expects an array or string, got " + typeof(v)
+    }
+    return v:slice(0, size(v)):reverse()
+}
+
+func __f_sort(v, a) {
+    if (typeof(v) != "array") {
+        throw "sort expects an array, got " + typeof(v)
+    }
+    return v:slice(0, size(v)):sort()
+}
+
+func __f_keys(v, a) {
+    if (typeof(v) != "table") {
+        throw "keys expects a table, got " + typeof(v)
+    }
+    return __sorted_keys(v)
+}
+
+func __f_contains(v, a) {
+    var kind = typeof(v)
+    if (kind == "string") {
+        return contains(v, str(a[0]))
+    }
+    if (kind == "array") {
+        return v:find(a[0]) >= 0
+    }
+    if (kind == "table") {
+        return v:has_key(a[0])
+    }
+    throw "contains expects a string, array, or table, got " + kind
+}
+
+func __f_default(v, a) {
+    if (v == nil) {
+        return a[0]
+    }
+    return v
+}
+
+func __f_defined(v, a) { return v != nil }
+func __f_escape(v, a) { return escape_html(v) }
+func __f_escape_url(v, a) { return escape_url(v) }
+
+func __f_json(v, a) {
+    if (size(a) > 0) {
+        return json.stringify(v, { indent: a[0], sort_keys: true })
+    }
+    return json.stringify(v, { sort_keys: true })
+}
+
+func __f_str(v, a) { return str(v) }
+func __f_int(v, a) { return int(v) }
+func __f_float(v, a) { return float(v) }
+
+var __FILTERS = {
+    upper:      { fn: __f_upper, min: 0, max: 0 },
+    lower:      { fn: __f_lower, min: 0, max: 0 },
+    trim:       { fn: __f_trim, min: 0, max: 0 },
+    capitalize: { fn: __f_capitalize, min: 0, max: 0 },
+    title:      { fn: __f_title, min: 0, max: 0 },
+    pascal:     { fn: __f_pascal, min: 0, max: 0 },
+    camel:      { fn: __f_camel, min: 0, max: 0 },
+    snake:      { fn: __f_snake, min: 0, max: 0 },
+    kebab:      { fn: __f_kebab, min: 0, max: 0 },
+    replace:    { fn: __f_replace, min: 2, max: 2 },
+    truncate:   { fn: __f_truncate, min: 1, max: 2 },
+    repeat:     { fn: __f_repeat, min: 1, max: 1 },
+    split:      { fn: __f_split, min: 1, max: 1 },
+    startswith: { fn: __f_startswith, min: 1, max: 1 },
+    endswith:   { fn: __f_endswith, min: 1, max: 1 },
+    join:       { fn: __f_join, min: 0, max: 1 },
+    size:       { fn: __f_size, min: 0, max: 0 },
+    first:      { fn: __f_first, min: 0, max: 0 },
+    last:       { fn: __f_last, min: 0, max: 0 },
+    reverse:    { fn: __f_reverse, min: 0, max: 0 },
+    sort:       { fn: __f_sort, min: 0, max: 0 },
+    keys:       { fn: __f_keys, min: 0, max: 0 },
+    contains:   { fn: __f_contains, min: 1, max: 1 },
+    ["default"] = { fn: __f_default, min: 1, max: 1 },
+    defined:    { fn: __f_defined, min: 0, max: 0 },
+    escape:     { fn: __f_escape, min: 0, max: 0 },
+    escape_url: { fn: __f_escape_url, min: 0, max: 0 },
+    json:       { fn: __f_json, min: 0, max: 1 },
+    str:        { fn: __f_str, min: 0, max: 0 },
+    int:        { fn: __f_int, min: 0, max: 0 },
+    float:      { fn: __f_float, min: 0, max: 0 }
+}
+
+// Built-in global functions take a variable number of arguments, which plain
+// Mobius functions can't, so they are wrapped and dispatched by __eval_call.
+
+func __builtin(name, fn, min, max) {
+    // Tagged with a field, like safe strings.
+    return { __stencil_builtin: true, name: name, fn: fn, min: min, max: max }
+}
+
+func __is_builtin(value) {
+    return typeof(value) == "table" and value:has_key("__stencil_builtin")
+}
+
+// range(n) -> [0, n), range(a, b) -> [a, b)
+func __g_range(args) {
+    var lo = 0
+    var hi = args[0]
+    if (size(args) > 1) {
+        lo = args[0]
+        hi = args[1]
+    }
+    if (typeof(lo) != "int64" or typeof(hi) != "int64") {
+        throw "range expects integers"
+    }
+    var out = []
+    for (var i = lo; i < hi; i++) {
+        out:push(i)
+    }
+    return out
+}
+
+// ---------------------------------------------------------------------------
+// Environment
+// ---------------------------------------------------------------------------
+
+func __check_name(name, node) {
+    var bad = startswith(name, "/") or name == ".." or startswith(name, "../") or contains(name, "/../") or endswith(name, "/..")
+    if (bad) {
+        var reason = "template name '" + name + "' must be relative and must not contain '..'"
+        if (node == nil) {
+            throw __make_error(name, 1, 1, reason, nil)
+        }
+        __fail(node, reason)
+    }
+}
+
+func __env_load(env, name, node) {
+    __check_name(name, node)
+    var cached = nil
+    if (env.cache and env.templates:has_key(name)) {
+        cached = env.templates[name]
+        // Within one render each file is checked at most once; it can't
+        // usefully change mid-render, and a component used per row would
+        // otherwise stat its file on every row.
+        if (!env.reload or (env.render_depth > 0 and env.checked:has_key(name))) {
+            return cached
+        }
+    }
+    if (env.root == nil) {
+        var reason = "template '" + name + "' not found (no root directory configured)"
+        if (node == nil) {
+            throw __make_error(name, 1, 1, reason, nil)
+        }
+        __fail(node, reason)
+    }
+    var path = os.join(env.root, name)
+    var info = os.stat(path)
+    if (info == nil or !info.is_file) {
+        var reason = "template '" + name + "' not found in " + env.root
+        if (node == nil) {
+            throw __make_error(name, 1, 1, reason, nil)
+        }
+        __fail(node, reason)
+    }
+    if (env.render_depth > 0) {
+        env.checked[name] = true
+    }
+    // With reload on, a cached template is reused until the file's mtime
+    // changes, so edits show up on the next render without a restart.
+    if (cached != nil and cached.mtime == info.mtime) {
+        return cached
+    }
+    var tpl = __parse_template(readfile(path), name)
+    tpl.mtime = info.mtime
+    tpl.env = env
+    tpl.render = __template_render
+    if (env.cache) {
+        env.templates[name] = tpl
+    }
+    return tpl
+}
+
+func __template_render(self, data) {
+    if (data != nil and typeof(data) != "table") {
+        throw "render data must be a table, got " + typeof(data)
+    }
+    var env = self.env
+    if (env.render_depth == 0) {
+        env.checked = {}
+    }
+    env.render_depth = env.render_depth + 1
+    var out = []
+    try {
+        __render_template(__new_ctx(env, data, [{}], 0), self, out)
+    } catch err {
+        env.render_depth = env.render_depth - 1
+        throw err
+    }
+    env.render_depth = env.render_depth - 1
+    return join(out, "")
+}
+
+func __env_get(self, name) {
+    return __env_load(self, name, nil)
+}
+
+func __env_render(self, name, data) {
+    return __env_load(self, name, nil):render(data)
+}
+
+func __env_from_string(self, src, name) {
+    if (name == nil) {
+        name = "<string>"
+    }
+    var tpl = __parse_template(src, name)
+    tpl.env = self
+    tpl.render = __template_render
+    return tpl
+}
+
+func __env_filter(self, name, fn) {
+    if (typeof(fn) != "function") {
+        throw "filter '" + name + "' must be a function"
+    }
+    if (name == "raw" or name == "default" or name == "defined") {
+        throw "filter '" + name + "' is built in and cannot be replaced"
+    }
+    self.filters[name] = fn
+    return self
+}
+
+func __env_global(self, name, value) {
+    self.globals[name] = value
+    return self
+}
+
+// Collect filter names and literal include/extends targets from a template.
+func __collect_refs(nodes, refs) {
+    for (var i = 0; i < size(nodes); i++) {
+        __collect_node_refs(nodes[i], refs)
+    }
+}
+
+func __collect_node_refs(node, refs) {
+    if (node == nil) {
+        return
+    }
+    switch (node.type) {
+        case "output":
+            __collect_expr_refs(node.expr, refs)
+            break
+        case "set":
+            __collect_expr_refs(node.expr, refs)
+            break
+        case "include":
+            __collect_expr_refs(node.target, refs)
+            if (node.target.type == "literal" and typeof(node.target.value) == "string") {
+                refs.targets:push({ name: node.target.value, node: node })
+            }
+            break
+        case "if":
+            for (var i = 0; i < size(node.branches); i++) {
+                __collect_expr_refs(node.branches[i].cond, refs)
+                __collect_refs(node.branches[i].body, refs)
+            }
+            if (node.else_body != nil) {
+                __collect_refs(node.else_body, refs)
+            }
+            break
+        case "for":
+            __collect_expr_refs(node.iter, refs)
+            __collect_refs(node.body, refs)
+            if (node.else_body != nil) {
+                __collect_refs(node.else_body, refs)
+            }
+            break
+        case "block", "slot", "fill":
+            __collect_refs(node.body, refs)
+            break
+        case "use": {
+            refs.uses:push(node)
+            __collect_expr_refs(node.args, refs)
+            var names = __sorted_keys(node.fills)
+            for (var i = 0; i < size(names); i++) {
+                __collect_refs(node.fills[names[i]].body, refs)
+            }
+            break
+        }
+    }
+}
+
+func __collect_expr_refs(node, refs) {
+    if (node == nil) {
+        return
+    }
+    switch (node.type) {
+        case "filter":
+            refs.filters:push(node)
+            __collect_expr_refs(node.receiver, refs)
+            for (var i = 0; i < size(node.args); i++) {
+                __collect_expr_refs(node.args[i], refs)
+            }
+            break
+        case "attr":
+            __collect_expr_refs(node.object, refs)
+            break
+        case "index":
+            __collect_expr_refs(node.object, refs)
+            __collect_expr_refs(node.key, refs)
+            break
+        case "call":
+            __collect_expr_refs(node.callee, refs)
+            for (var i = 0; i < size(node.args); i++) {
+                __collect_expr_refs(node.args[i], refs)
+            }
+            break
+        case "unary":
+            __collect_expr_refs(node.operand, refs)
+            break
+        case "binary":
+            __collect_expr_refs(node.left, refs)
+            __collect_expr_refs(node.right, refs)
+            break
+        case "conditional":
+            __collect_expr_refs(node.cond, refs)
+            __collect_expr_refs(node.then_expr, refs)
+            __collect_expr_refs(node.else_expr, refs)
+            break
+        case "array":
+            for (var i = 0; i < size(node.items); i++) {
+                __collect_expr_refs(node.items[i], refs)
+            }
+            break
+        case "table":
+            for (var i = 0; i < size(node.entries); i++) {
+                __collect_expr_refs(node.entries[i].key, refs)
+                __collect_expr_refs(node.entries[i].value, refs)
+            }
+            break
+    }
+}
+
+func __check_template(env, name, errors) {
+    var tpl = nil
+    try {
+        tpl = __env_load(env, name, nil)
+    } catch err {
+        errors:push(err)
+        return
+    }
+    var refs = { filters: [], targets: [], uses: [] }
+    __collect_refs(tpl.nodes, refs)
+    var component_names = __sorted_keys(tpl.unit.components)
+    for (var i = 0; i < size(component_names); i++) {
+        var component = tpl.unit.components[component_names[i]]
+        __collect_refs(component.body, refs)
+        for (var j = 0; j < size(component.params); j++) {
+            __collect_expr_refs(component.params[j].default_value, refs)
+        }
+    }
+    for (var i = 0; i < size(tpl.unit.imports); i++) {
+        var import_node = tpl.unit.imports[i]
+        if (import_node.target.type == "literal" and typeof(import_node.target.value) == "string") {
+            refs.targets:push({ name: import_node.target.value, node: import_node })
+        }
+    }
+    if (tpl.extends != nil) {
+        __collect_expr_refs(tpl.extends, refs)
+        if (tpl.extends.type == "literal" and typeof(tpl.extends.value) == "string") {
+            refs.targets:push({ name: tpl.extends.value, node: tpl.extends_node })
+        }
+    }
+    for (var i = 0; i < size(refs.filters); i++) {
+        var f = refs.filters[i]
+        if (f.name != "raw" and !env.filters:has_key(f.name) and !__FILTERS:has_key(f.name)) {
+            errors:push(__make_error(f.file, f.line, f.col, "unknown filter '" + f.name + "'", nil))
+        }
+    }
+    for (var i = 0; i < size(refs.targets); i++) {
+        var target = refs.targets[i]
+        var path = os.join(env.root, target.name)
+        if (!os.is_file(path)) {
+            var n = target.node
+            errors:push(__make_error(n.file, n.line, n.col, "template '" + target.name + "' not found in " + env.root, nil))
+        }
+    }
+    if (tpl.extends != nil) {
+        try {
+            __resolve_chain(env, tpl, nil)
+        } catch err {
+            // A missing parent was already reported above.
+            if (!(__is_stencil_error(err) and contains(err.reason, "not found in"))) {
+                errors:push(err)
+            }
+        }
+    }
+    for (var i = 0; i < size(refs.uses); i++) {
+        __check_use(env, tpl, refs.uses[i], errors)
+    }
+}
+
+// Static checks for one {% use %}: the component exists (resolving literal
+// imports), fills match its slots, and literal arguments match its params.
+func __check_use(env, tpl, node, errors) {
+    var unit = node.unit
+    var component = nil
+    if (unit.components:has_key(node.name)) {
+        component = unit.components[node.name]
+    }
+    for (var i = 0; i < size(unit.imports) and component == nil; i++) {
+        var target = unit.imports[i].target
+        if (target.type != "literal" or typeof(target.value) != "string") {
+            // Can't resolve statically; leave it to render time.
+            return
+        }
+        try {
+            var imported = __env_load(env, target.value, unit.imports[i])
+            if (imported.unit.components:has_key(node.name)) {
+                component = imported.unit.components[node.name]
+            }
+        } catch err {
+            // Reported elsewhere (missing or unparsable template).
+            return
+        }
+    }
+    if (component == nil) {
+        errors:push(__make_error(node.file, node.line, node.col, "unknown component '" + node.name + "'", nil))
+        return
+    }
+    var fill_names = __sorted_keys(node.fills)
+    for (var i = 0; i < size(fill_names); i++) {
+        if (!component.slots:has_key(fill_names[i])) {
+            var fill = node.fills[fill_names[i]]
+            errors:push(__make_error(fill.file, fill.line, fill.col, "component '" + node.name + "' has no slot '" + fill_names[i] + "'", nil))
+        }
+    }
+    if (node.args != nil and node.args.type != "table") {
+        return
+    }
+    var given = {}
+    if (node.args != nil) {
+        for (var i = 0; i < size(node.args.entries); i++) {
+            var key = node.args.entries[i].key
+            if (key.type != "literal") {
+                return
+            }
+            given[key.value] = true
+        }
+    }
+    var params = {}
+    for (var i = 0; i < size(component.params); i++) {
+        var param = component.params[i]
+        params[param.name] = true
+        if (!given:has_key(param.name) and param.default_value == nil) {
+            errors:push(__make_error(node.file, node.line, node.col, "component '" + node.name + "' is missing argument '" + param.name + "'", nil))
+        }
+    }
+    var given_names = __sorted_keys(given)
+    for (var i = 0; i < size(given_names); i++) {
+        if (!params:has_key(given_names[i])) {
+            errors:push(__make_error(node.file, node.line, node.col, "component '" + node.name + "' has no parameter '" + str(given_names[i]) + "'", nil))
+        }
+    }
+}
+
+// Parse every file under root and report all problems at once.
+// Returns an array of error tables (empty when everything checks out).
+func __env_check(self) {
+    if (self.root == nil) {
+        throw "check() needs a root directory"
+    }
+    var errors = []
+    var files = os.walkdir(self.root)
+    files:sort()
+    var prefix = self.root
+    if (!endswith(prefix, "/")) {
+        prefix = prefix + "/"
+    }
+    for (var i = 0; i < size(files); i++) {
+        var path = files[i]
+        if (!os.is_file(path)) {
+            continue
+        }
+        var name = path
+        if (startswith(path, prefix)) {
+            name = substr(path, size(prefix), size(path) - size(prefix))
+        }
+        __check_template(self, name, errors)
+    }
+    return errors
+}
+
+func env(options) {
+    if (options == nil) {
+        options = {}
+    }
+    var cache = true
+    if (options:has_key("cache")) {
+        cache = options.cache
+    }
+    var reload = true
+    if (options:has_key("reload")) {
+        reload = options.reload
+    }
+    var escape = nil
+    if (options:has_key("escape")) {
+        escape = options.escape
+        if (typeof(escape) != "function") {
+            throw "stencil.env: 'escape' must be a function"
+        }
+    }
+    var globals = { range: __builtin("range", __g_range, 1, 2) }
+    if (options:has_key("globals")) {
+        for (var key, value in options.globals) {
+            globals[key] = value
+        }
+    }
+    var root = nil
+    if (options:has_key("root")) {
+        root = options.root
+    }
+    return {
+        root: root,
+        escape: escape,
+        cache: cache,
+        reload: reload,
+        checked: {},
+        render_depth: 0,
+        globals: globals,
+        filters: {},
+        templates: {},
+        get: __env_get,
+        render: __env_render,
+        from_string: __env_from_string,
+        filter: __env_filter,
+        global: __env_global,
+        check: __env_check
+    }
+}
+
+func render_string(src, data) {
+    var e = env(nil)
+    return e:from_string(src, "<string>"):render(data)
+}
