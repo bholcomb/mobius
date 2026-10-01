@@ -238,7 +238,9 @@ fiber.cancel(f)
 ```
 
 A cancelled fiber throws a `CancellationError` at its next cancellation check
-point (loop back-edges and yield points).
+point: loop back-edges, and anywhere it waits (`await`, `fiber.sleep`,
+`fiber.all`, `fiber.any`, and channel `send`/`recv`). A fiber blocked waiting is
+interrupted, not left hanging.
 
 ### Array spans
 
