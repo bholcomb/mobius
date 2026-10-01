@@ -99,6 +99,7 @@ spawn add_arg(totals, 1, 5)        // also shared by reference
 A spawned fiber can use only top-level values that are safe to share:
 
 - `shared var` variables;
+- `const` values, which are deeply immutable and need no locking;
 - things that cannot change: functions, enums, structs, imported modules, and
   builtins such as `print` and `fiber`.
 

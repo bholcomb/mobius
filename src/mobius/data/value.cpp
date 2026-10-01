@@ -306,6 +306,7 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
     switch (value.type) {
         case VAL_ARRAY: {
             if (!value.as.array) return make_nil_value();
+            if (value.as.array->isFrozen()) return value;   // immutable: share
             auto it = memo.find(value.as.array);
             if (it != memo.end()) return it->second;
 
@@ -322,6 +323,7 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
         }
         case VAL_TABLE: {
             if (!value.as.table) return make_nil_value();
+            if (value.as.table->isFrozen()) return value;   // immutable: share
             auto it = memo.find(value.as.table);
             if (it != memo.end()) return it->second;
 
@@ -428,12 +430,103 @@ Value deep_copy_value_for_spawn(const Value& value) {
     return deep_copy_value_impl(value, memo);
 }
 
+bool value_is_frozen(const Value& v) {
+    if (v.type == VAL_ARRAY && v.as.array) return v.as.array->isFrozen();
+    if (v.type == VAL_TABLE && v.as.table) return v.as.table->isFrozen();
+    if (v.type == VAL_BUFFER && v.as.buffer) return v.as.buffer->isReadonly();
+    return false;
+}
+
 bool value_needs_fiber_copy(const Value& v) {
     bool container = (v.type == VAL_ARRAY && v.as.array) ||
                      (v.type == VAL_TABLE && v.as.table) ||
                      (v.type == VAL_BUFFER && v.as.buffer) ||
                      (v.type == VAL_FUNCTION && v.as.function);
-    return container && (v.flags & VAL_FLAG_SHARED) == 0;
+    // Frozen (const) values cannot change, so fibers share them as-is.
+    return container && (v.flags & VAL_FLAG_SHARED) == 0 && !value_is_frozen(v);
+}
+
+namespace {
+bool freeze_impl(const Value& v, Value* out, const char** error,
+                 std::unordered_map<const void*, Value>& memo) {
+    switch (v.type) {
+        case VAL_ARRAY: {
+            ArrayValue* src = v.as.array;
+            if (!src) { *out = v; return true; }
+            if (src->isFrozen()) { *out = v; return true; }
+            auto it = memo.find(src);
+            if (it != memo.end()) { *out = it->second; return true; }
+            ArrayValue* copy = new (std::nothrow) ArrayValue(src->length());
+            if (!copy) { *error = "out of memory"; return false; }
+            Value cv = make_array_value(copy);
+            memo.emplace(src, cv);
+            for (size_t i = 0; i < src->length(); i++) {
+                Value elem;
+                if (!freeze_impl(src->get(i), &elem, error, memo)) return false;
+                copy->push(elem);
+            }
+            copy->freeze();
+            *out = cv;
+            return true;
+        }
+        case VAL_TABLE: {
+            Table* src = v.as.table;
+            if (!src) { *out = v; return true; }
+            if (src->isFrozen()) { *out = v; return true; }
+            auto it = memo.find(src);
+            if (it != memo.end()) { *out = it->second; return true; }
+            Table* copy = new (std::nothrow) Table(src->getState(), src->entries().size());
+            if (!copy) { *error = "out of memory"; return false; }
+            Value cv = make_table_value(copy);
+            memo.emplace(src, cv);
+            bool ok = true;
+            src->forEach([&](const Value& key, const Value& value) {
+                if (!ok) return;
+                Value fk, fv;
+                ok = freeze_impl(key, &fk, error, memo) && freeze_impl(value, &fv, error, memo);
+                if (ok) copy->set(fk, fv);
+            });
+            if (!ok) return false;
+            copy->setMetatable(src->getMetatable());
+            copy->freeze();
+            *out = cv;
+            return true;
+        }
+        case VAL_BUFFER: {
+            BufferValue* src = v.as.buffer;
+            if (!src || src->isReadonly()) { *out = v; return true; }
+            BufferValue* copy = src->clone();
+            if (!copy) { *error = "out of memory"; return false; }
+            copy->setReadonly(true);
+            *out = make_buffer_value(copy);
+            return true;
+        }
+        case VAL_FUNCTION:
+            if (v.as.function && v.as.function->upvalues && v.as.function->upvalue_count > 0) {
+                *error = "a closure that captures variables can change, so it cannot be const";
+                return false;
+            }
+            *out = v;
+            return true;
+        case VAL_SHARED_CELL:
+            *error = "a shared value cannot be const";
+            return false;
+        case VAL_CHANNEL:
+        case VAL_FUTURE:
+        case VAL_USERDATA:
+        case VAL_ARRAY_SLICE:
+            *error = "channels, futures, userdata and array spans cannot be const";
+            return false;
+        default:
+            *out = v;   // nil, bool, numbers, strings, chars, enums, natives
+            return true;
+    }
+}
+}  // namespace
+
+bool freeze_for_const(const Value& v, Value* out, const char** error) {
+    std::unordered_map<const void*, Value> memo;
+    return freeze_impl(v, out, error, memo);
 }
 
 void deep_copy_values_for_spawn(std::vector<Value>& values) {

@@ -42,6 +42,7 @@ static const Keyword keywords[] = {
     {"catch",    TOKEN_CATCH},
     {"in",       TOKEN_IN},
     {"var",      TOKEN_VAR},
+    {"const",    TOKEN_CONST},
     {"when",     TOKEN_WHEN},
     {"while",    TOKEN_WHILE},
     {"finally",  TOKEN_FINALLY},

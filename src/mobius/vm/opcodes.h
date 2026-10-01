@@ -313,6 +313,7 @@ enum OpCode : uint8_t {
                     //           encoding (scratch, arr, idx); word3 = TYPECHECK
                     //           word. Fallback replays all three generically.
     OP_ASET,        // A B C     R[A].array[RK(B)] = RK(C)   (fallback: INDEX_SET)
+    OP_FREEZE,      // A         R[A] = deep-frozen copy of R[A] (`const` initializer)
 
     OP_MAX_OPCODE
 };
@@ -490,6 +491,7 @@ inline const OpcodeInfo& opcode_info(OpCode op) {
         {"ADD_CHECK", FMT_FUSED2},
         {"AGET_ADD_CHECK", FMT_ABC_D},
         {"ASET",      FMT_ABC},
+        {"FREEZE",    FMT_ABC},
     };
     static_assert(sizeof(info) / sizeof(info[0]) == OP_MAX_OPCODE,
                   "opcode_info table must match OpCode enum");

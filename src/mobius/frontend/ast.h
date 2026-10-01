@@ -224,6 +224,7 @@ typedef struct {
     Expr* initializer;  // Can be NULL for uninitialized variables
     NumberType type_hint; // Optional type annotation
     bool is_annotated; // true if explicitly specified by user
+    bool is_const;     // `const`: initializer required, binding fixed, value frozen
 } VarStmt;
 
 typedef struct {

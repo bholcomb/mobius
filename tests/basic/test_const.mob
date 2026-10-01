@@ -1,0 +1,73 @@
+// `const` binds a deeply immutable value: the name cannot be reassigned
+// and arrays, tables and buffers inside the value are frozen.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func error_of(f) {
+    var message = ""
+    try { f() } catch e { message = str(e) }
+    return message
+}
+
+const LIMIT = 10
+const NAMES = ["a", "b"]
+const CONFIG = {retries: 3, hosts: ["x", "y"], nested: {list: [1]}}
+check("values", LIMIT == 10 and NAMES[1] == "b" and CONFIG.nested.list[0] == 1)
+check("typeof", typeof(CONFIG) == "table" and typeof(NAMES) == "array")
+
+check("push", contains(error_of(func() { NAMES:push("c") }), "cannot modify a const array"))
+check("pop", contains(error_of(func() { NAMES:pop() }), "cannot modify a const array"))
+check("element", contains(error_of(func() { NAMES[0] = "z" }), "cannot modify a const array"))
+check("field", contains(error_of(func() { CONFIG.retries = 5 }), "cannot modify a const table"))
+check("new field", contains(error_of(func() { CONFIG.extra = 1 }), "cannot modify a const table"))
+check("nested", contains(error_of(func() { CONFIG.hosts[0] = "z" }), "cannot modify a const array"))
+check("deeply nested", contains(error_of(func() { CONFIG.nested.list:push(2) }), "cannot modify a const array"))
+check("sort", contains(error_of(func() { NAMES:sort() }), "cannot modify a const array"))
+check("reverse", contains(error_of(func() { NAMES:reverse() }), "cannot modify a const array"))
+check("remove", contains(error_of(func() { CONFIG:remove("retries") }), "cannot modify a const table"))
+check("setmetatable", contains(error_of(func() { setmetatable(CONFIG, {}) }), "cannot modify a const table"))
+check("span", contains(error_of(func() { var s = NAMES:span(0, 1) }), "cannot modify a const array"))
+check("unchanged after attempts", NAMES:size() == 2 and NAMES[0] == "a" and CONFIG.retries == 3)
+
+// The initializer is copied, then frozen; the original stays mutable.
+var source = [1]
+const COPY = source
+source:push(2)
+check("original still mutable", source:size() == 2 and COPY:size() == 1)
+
+// Copies of a constant are ordinary values.
+var mutable = NAMES:slice(0, 2)
+mutable:push("c")
+check("slice of a const is mutable", mutable:size() == 3)
+
+// Local constants.
+func local_const() {
+    const items = [1, 2, 3]
+    var total = 0
+    for (var v in items) { total += v }
+    return total
+}
+check("local const", local_const() == 6)
+
+// Functions without captures can be const; closures with captures cannot.
+func add(a, b) { return a + b }
+const ADD = add
+check("function const", ADD(2, 3) == 5)
+func make_counter() {
+    var count = 0
+    func next() { count = count + 1; return count }
+    return next
+}
+check("closure with captures rejected",
+      contains(error_of(func() { const C = make_counter() }), "closure that captures variables"))
+shared var cell = [1]
+check("shared value rejected", contains(error_of(func() { const S = cell }), "shared value cannot be const"))
+
+// Spawned fibers may use top-level constants.
+func read_config() { return CONFIG.hosts[1] }
+check("const in a fiber", await spawn read_config() == "y")
+print("const: PASS")

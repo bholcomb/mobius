@@ -26,7 +26,7 @@ static const char* token_names[] = {
     "AND", "BREAK", "CASE", "CONTINUE", "DEFAULT", "ELSE", "ELIF", 
     "ENUM", "FALSE", "FOR", "FUNC", "IF", "IMPORT", "IS", "NIL", 
     "NOT", "OR", "RETURN", "SWITCH", "TRUE", "THROW", "TRY", "CATCH", "IN",
-    "VAR", "WHEN", "WHILE", "FINALLY", "SPAWN", "AWAIT", "YIELD", "SHARED", "ATOMIC",
+    "VAR", "CONST", "WHEN", "WHILE", "FINALLY", "SPAWN", "AWAIT", "YIELD", "SHARED", "ATOMIC",
     "STRUCT", "UNION", "AT",
     
     // Type annotation tokens

@@ -57,6 +57,7 @@ int table_method_remove(MobiusState* state, int arg_count) {
     TableSelfAccess access;
     Table* tbl = extract_table_self(state, "tbl:remove: self is not a table", &access);
     if (!tbl) return -1;
+    if (tbl->isFrozen()) return state->error("tbl:remove: cannot modify a const table");
 
     Value key = state->npop();
     state->npop();
@@ -155,6 +156,9 @@ int lib_setmetatable(MobiusState* state, int arg_count) {
 
     if (target.type != VAL_TABLE || !target.as.table) {
         return state->error("setmetatable first argument must be a table");
+    }
+    if (target.as.table->isFrozen()) {
+        return state->error("setmetatable: cannot modify a const table");
     }
 
     if ((metatable_val.type == VAL_TABLE && !metatable_val.as.table) ||

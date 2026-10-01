@@ -322,6 +322,15 @@ MOBIUS_API Value deep_copy_value_for_spawn(const Value& value);
 // and immutable values pass as-is.
 MOBIUS_API bool value_needs_fiber_copy(const Value& value);
 
+// The value a `const` binds: a deep copy of v in which every array, table
+// and buffer is frozen (immutable). Fails, with *error set, for values that
+// cannot be immutable: closures that capture variables, shared values,
+// channels, futures, userdata and array spans.
+MOBIUS_API bool freeze_for_const(const Value& v, Value* out, const char** error);
+
+// Whether v is an array or table that is part of a const value.
+MOBIUS_API bool value_is_frozen(const Value& v);
+
 // Copy several values for one fiber crossing with a single memo, so a
 // container reachable from more than one of them stays one container in
 // the copy (`spawn f(a, a)` gives the fiber one copy of `a`, not two).

@@ -44,6 +44,11 @@ public:
     SharedCell* ownerCell() const { return owner_cell_; }
     void setOwnerCell(SharedCell* cell) { owner_cell_ = cell; }
 
+    // Part of a `const` value: deeply immutable. Every mutation path checks
+    // this and raises an error (see freeze_for_const).
+    bool isFrozen() const { return frozen_; }
+    void freeze() { frozen_ = true; }
+
     const Value& operator[](size_t index) const;
     Value& operator[](size_t index);
 
@@ -65,6 +70,7 @@ public:
 
 private:
     SharedCell* owner_cell_ = nullptr;
+    bool frozen_ = false;
     SmallVec<Value, 8> elements;   // literals up to 8 need no heap
     std::atomic<size_t> active_slice_count_{0};
     GcHeader gc_;   // tracing-GC registry link (see internal/gc.h)

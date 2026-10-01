@@ -1775,6 +1775,9 @@ std::vector<bool> compute_param_shared_identity_flags(Token* params, size_t para
 
 int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
     currentLine_ = assignment_target_line(expr->target);
+    if (expr->target->type == EXPR_VARIABLE) {
+        rejectConstAssignment(expr->target->as.variable.name.identifier, currentLine_);
+    }
 
     auto finish_assignment = [&](int save_reg, int value_reg) -> int {
         setFreeReg(save_reg);
@@ -2322,6 +2325,7 @@ int Compiler::compileEnumAccess(EnumAccessExpr* expr, int dest) {
 int Compiler::compileIncrement(IncrementExpr* expr, int dest) {
     currentLine_ = expr->op.line;
     const char* name = expr->name.identifier;
+    rejectConstAssignment(name, currentLine_);
 
     int local = resolveLocal(name);
     OpCode op = expr->is_increment ? OP_INC : OP_DEC;
@@ -2569,6 +2573,10 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
         if (stmt->is_annotated) {
             emitABC(OP_TYPECHECK, (uint8_t)reg, (uint8_t)stmt->type_hint, 0);
         }
+        if (stmt->is_const) {
+            emitABC(OP_FREEZE, (uint8_t)reg, 0, 0);
+            current_->locals.back().is_const = true;
+        }
         if (inferred == VAL_UNKNOWN && stmt->initializer) {
             emitABC(OP_TYPELOCK, (uint8_t)reg, 0, 0);
             current_->proto->has_type_locks = true;
@@ -2607,7 +2615,15 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
                 default:          inferred = VAL_UNKNOWN; break;
             }
         }
+        if (stmt->is_const) emitABC(OP_FREEZE, (uint8_t)reg, 0, 0);
         emitSetGlobal(reg, name);
+        if (stmt->is_const) {
+            // Read-only like functions: reassignment fails at runtime too, and
+            // spawned fibers may use it.
+            const_globals_.insert(name);
+            int slot = state_ ? state_->assignGlobalSlot(name, globals_) : -1;
+            if (slot >= 0) emitABx(OP_GLOBAL_READONLY, 1, (uint16_t)slot);
+        }
         if (inferred != VAL_UNKNOWN) {
             global_types_[name] = inferred;
         }
@@ -4675,6 +4691,31 @@ void Compiler::compileThrowStmt(ThrowStmt* stmt) {
 }
 
 // OP_SPAWN A B C -- spawn function R[B] with C-1 args; result (future) into R[A]
+// Assigning to a const is a compile error. The nearest binding of `name`
+// decides: a local of this or an enclosing function (a captured const), or
+// a top-level const of this chunk. Returns true (after reporting) when the
+// assignment must be rejected.
+bool Compiler::rejectConstAssignment(const char* name, int line) {
+    if (!name) return false;
+    bool is_const = false;
+    bool found = false;
+    for (FunctionState* fs = current_; fs && !found; fs = fs->enclosing) {
+        for (int i = (int)fs->locals.size() - 1; i >= 0; i--) {
+            if (fs->locals[i].name == name) {
+                is_const = fs->locals[i].is_const;
+                found = true;
+                break;
+            }
+        }
+    }
+    if (!found) is_const = const_globals_.count(name) > 0;
+    if (!is_const) return false;
+    fprintf(stderr, "Compile error [%s:%d]: cannot assign to const '%s'\n",
+            current_->proto->source.c_str(), line, name);
+    had_error_ = true;
+    return true;
+}
+
 // `spawn f(...)` where f is a top-level function of this chunk: report a
 // non-shared top-level var used by f or by the top-level functions it
 // references, at compile time. Other spawns (closures, methods, functions

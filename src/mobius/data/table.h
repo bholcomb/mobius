@@ -48,6 +48,14 @@ public:
     SharedCell* ownerCell() const { return owner_cell_; }
     void setOwnerCell(SharedCell* cell) { owner_cell_ = cell; }
 
+    // Part of a `const` value: deeply immutable. Every mutation path checks
+    // this and raises an error (see freeze_for_const).
+    bool isFrozen() const { return frozen_; }
+    void freeze() { frozen_ = true; }
+    // Fast-path writes are allowed only on plain tables: not frozen, and
+    // not inside a shared value (whose stores must share containers).
+    bool allowsFastWrite() const { return !owner_cell_ && !frozen_; }
+
 
     void setMetatable(Table* mt);
     Table* getMetatable() const { return metatable_; }
@@ -132,6 +140,7 @@ public:
 
 private:
     SharedCell* owner_cell_ = nullptr;
+    bool frozen_ = false;
     static inline uint8_t tagFromHash(size_t h) { return 0x80 | (uint8_t)(h >> 57); }
 
     const Value& getUnlocked(const Value& key) const;
