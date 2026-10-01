@@ -957,10 +957,21 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                     break;
                 }
                 case TOKEN_SLASH: {
-                    double b = to_double(rv);
-                    if (b != 0.0) {
-                        result = make_float_value(to_double(lv) / b);
-                        folded = true;
+                    // Match the runtime: int / int is integer division
+                    // (truncating, like OP_DIV_II). Division by zero and
+                    // INT64_MIN / -1 are left for the runtime to report.
+                    if (l_int && r_int) {
+                        int64_t b = rv.as.i64;
+                        if (b != 0 && !(b == -1 && lv.as.i64 == std::numeric_limits<int64_t>::min())) {
+                            result = make_int64_value(lv.as.i64 / b);
+                            folded = true;
+                        }
+                    } else {
+                        double b = to_double(rv);
+                        if (b != 0.0) {
+                            result = make_float_value(to_double(lv) / b);
+                            folded = true;
+                        }
                     }
                     break;
                 }

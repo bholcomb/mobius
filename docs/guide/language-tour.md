@@ -110,7 +110,8 @@ var doc = """multi-line
 ## Operators
 
 ```mobius
-15 / 4        // 3.75   (division produces a float)
+15 / 4        // 3      (int / int is integer division, truncating)
+15 / 4.0      // 3.75   (a float on either side gives a float)
 15 % 4        // 3
 pow(2, 8)     // 256.0  (exponent is the builtin pow, not an operator)
 0xF0 | 0x0F   // bitwise: & | ^ ~ << >>
