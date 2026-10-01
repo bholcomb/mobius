@@ -22,6 +22,7 @@ void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token
     parser->source_name = state ? state->getSourceContext() : nullptr;
     parser->state = state;
     parser->suppress_method_colon = false;
+    parser->colon_ends_expr = 0;
 }
 
 // Parser state functions
@@ -449,6 +450,19 @@ Expr* parse_primary(Parser* parser) {
     return NULL;
 }
 
+// Two tokens touch: no whitespace between them on the same line.
+static bool tokens_adjacent(const Token& a, const Token& b) {
+    return a.line == b.line && a.column + a.length == b.column;
+}
+
+// At `: name (`, is this a method call? Method calls are written without
+// spaces: `obj:method(...)`. `prev` is the token that ends the receiver.
+static bool is_tight_method_colon(Parser* parser, const Token& prev) {
+    const Token& colon = parser->tokens[parser->current];
+    const Token& name = parser->tokens[parser->current + 1];
+    return tokens_adjacent(prev, colon) && tokens_adjacent(colon, name);
+}
+
 Expr* parse_table_literal(Parser* parser) {
     TablePair* pairs = NULL;
     size_t pair_count = 0;
@@ -499,7 +513,14 @@ Expr* parse_table_literal(Parser* parser) {
         // Check for identifier key: value
         else if (parser_check(parser, TOKEN_IDENTIFIER)) {
             Token key_token = parser_advance(parser);
-            if (parser_match(parser, TOKEN_COLON)) {
+            // `{ obj:method() }` is a value (a method call); `{ key: f() }`
+            // is a key. Spacing decides, as everywhere else.
+            bool tight_method = parser_check(parser, TOKEN_COLON) &&
+                parser->current + 2 < parser->token_count &&
+                parser->tokens[parser->current + 1].type == TOKEN_IDENTIFIER &&
+                parser->tokens[parser->current + 2].type == TOKEN_LEFT_PAREN &&
+                is_tight_method_colon(parser, key_token);
+            if (!tight_method && parser_match(parser, TOKEN_COLON)) {
                 // Create a string literal from the identifier
                 char* key_str = (char*)malloc(key_token.length + 1);
                 if (key_str) {
@@ -635,6 +656,15 @@ Expr* parse_call(Parser* parser) {
                    parser->current + 2 < parser->token_count &&
                    parser->tokens[parser->current + 1].type == TOKEN_IDENTIFIER &&
                    parser->tokens[parser->current + 2].type == TOKEN_LEFT_PAREN) {
+            if (!is_tight_method_colon(parser, parser_previous(parser))) {
+                // `a ? b : f(x)` and `case x when y : f()`: the ':' belongs
+                // to the enclosing construct.
+                if (parser->colon_ends_expr > 0) break;
+                parser_error_at_current(parser,
+                    "Method calls can't have spaces around ':'; write obj:method(...)");
+                ast_release_expr(expr);
+                return NULL;
+            }
             parser_advance(parser);
             Token key = consume(parser, TOKEN_IDENTIFIER, "Expect method name after ':'");
             expr = make_method_dot_expr(expr, key);
@@ -898,7 +928,9 @@ Expr* parse_ternary(Parser* parser) {
     Expr* expr = parse_or(parser);
 
     if (parser_match(parser, TOKEN_QUESTION)) {
+        parser->colon_ends_expr++;
         Expr* then_expr = parse_expression(parser);
+        parser->colon_ends_expr--;
         consume(parser, TOKEN_COLON, "Expect ':' in ternary expression.");
         Expr* else_expr = parse_ternary(parser);
         expr = make_ternary_expr(expr, then_expr, else_expr);
@@ -1351,9 +1383,9 @@ Stmt* parse_statement(Parser* parser) {
         //
         // Disambiguation: `{ id : id ( }` could be a table literal
         // `{ key: func() }` or a block with a method call `{ obj:method() }`.
-        // We treat `identifier : identifier (` as a block (method call)
-        // since that is far more common. Use `["key"]: func()` for the
-        // table literal form if needed.
+        // Spacing decides: method calls are written without spaces around
+        // the ':', so `{ obj:method() }` is a block and `{ key: f() }` is a
+        // table literal.
         if (parser_check(parser, TOKEN_RIGHT_BRACE) ||
             parser_check(parser, TOKEN_LEFT_BRACKET) ||
             (parser_check(parser, TOKEN_IDENTIFIER) && 
@@ -1361,7 +1393,11 @@ Stmt* parse_statement(Parser* parser) {
              parser->tokens[parser->current + 1].type == TOKEN_COLON &&
              !(parser->current + 3 < parser->token_count &&
                parser->tokens[parser->current + 2].type == TOKEN_IDENTIFIER &&
-               parser->tokens[parser->current + 3].type == TOKEN_LEFT_PAREN))) {
+               parser->tokens[parser->current + 3].type == TOKEN_LEFT_PAREN &&
+               tokens_adjacent(parser->tokens[parser->current],
+                               parser->tokens[parser->current + 1]) &&
+               tokens_adjacent(parser->tokens[parser->current + 1],
+                               parser->tokens[parser->current + 2])))) {
             is_table_literal = true;
         }
         
@@ -1922,7 +1958,9 @@ SwitchCase* parse_switch_case(Parser* parser) {
 
     Expr* guard = NULL;
     if (parser_match(parser, TOKEN_WHEN)) {
+        parser->colon_ends_expr++;
         guard = parse_expression(parser);
+        parser->colon_ends_expr--;
     }
 
     consume(parser, TOKEN_COLON, "Expect ':' after case pattern");

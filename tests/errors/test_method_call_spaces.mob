@@ -1,0 +1,3 @@
+// Expected failure: method calls may not have spaces around the colon.
+var arr = [1, 2]
+print(arr : size())

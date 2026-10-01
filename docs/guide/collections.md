@@ -26,6 +26,10 @@ var person = { name: "Alice" }
 print(person.name)      // field access — no self
 ```
 
+Write method calls without spaces around the `:`. `arr : sort()` is a
+syntax error, and inside a ternary a spaced `:` belongs to the ternary:
+`ok ? a : f(x)`.
+
 Method calls chain:
 
 ```mobius
