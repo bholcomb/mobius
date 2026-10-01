@@ -1,0 +1,35 @@
+// Each await of a future gets its own copy of a container result. Every
+// await used to return the same stored object, so awaiting one future
+// twice gave aliased values, and several fibers awaiting the same future
+// mutated one array concurrently (heap corruption on every run).
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func make() { return [1, 2] }
+var f = spawn make()
+var a = await f
+var b = await f
+a:push(3)
+check("two awaits give independent copies", b:size() == 2)
+
+var all_results = fiber.all([f, f])
+all_results[0]:push(9)
+check("fiber.all copies each result", all_results[1]:size() == 2)
+
+// Several fibers awaiting one future and mutating the result.
+func fill(fu) {
+    var arr = await fu
+    for (var i = 0; i < 5000; i++) { arr:push(i) }
+    return arr:size()
+}
+var source = spawn make()
+var workers = []
+for (var i = 0; i < 8; i++) { workers:push(spawn fill(source)) }
+var sizes = fiber.all(workers)
+for (var s in sizes) { check("each worker had its own array", s == 5002) }
+check("the stored result is untouched", (await source):size() == 2)
+print("await copies result: PASS")

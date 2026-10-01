@@ -327,6 +327,13 @@ MOBIUS_API bool value_needs_fiber_copy(const Value& value);
 // the copy (`spawn f(a, a)` gives the fiber one copy of `a`, not two).
 MOBIUS_API void deep_copy_values_for_spawn(std::vector<Value>& values);
 
+// A future's result as handed to one awaiter: a fresh copy of non-shared
+// containers. A future can be awaited many times and from many fibers;
+// handing out the stored object made every awaiter share it unsynchronized.
+inline Value copy_for_awaiter(const Value& result) {
+    return value_needs_fiber_copy(result) ? deep_copy_value_for_spawn(result) : result;
+}
+
 inline bool is_truthy(const Value& value) {
     switch (value.type) {
         case VAL_NIL: return false;
