@@ -1808,6 +1808,20 @@ MOBIUS_FORCEINLINE static int vm_op_mul(MobiusVM* vm, VMFrame& f, uint32_t inst)
         &Metamethods::mul, "multiply");
 }
 
+// Signed integer division and modulo with defined results for every
+// non-zero divisor. INT64_MIN / -1 overflows, which C++ leaves undefined
+// and x86 turns into SIGFPE, killing the process. Mobius integer
+// arithmetic wraps, so the quotient wraps to INT64_MIN and the remainder
+// is 0. Callers still check for a zero divisor.
+MOBIUS_FORCEINLINE static int64_t mobius_div_i64(int64_t a, int64_t b) {
+    if (MOBIUS_UNLIKELY(b == -1)) return (int64_t)(0 - (uint64_t)a);
+    return a / b;
+}
+MOBIUS_FORCEINLINE static int64_t mobius_mod_i64(int64_t a, int64_t b) {
+    if (MOBIUS_UNLIKELY(b == -1)) return 0;
+    return a % b;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value lhs_s, rhs_s;
     const Value& lhs = shared_peek(RKB(inst), lhs_s);
@@ -1816,7 +1830,7 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
         Value& dst = RA(inst);
-        dst.as.i64 = lhs.as.i64 / rv;
+        dst.as.i64 = mobius_div_i64(lhs.as.i64, rv);
         dst.type = VAL_INT64; dst.flags = 0;
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
         Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
@@ -1847,7 +1861,7 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
         Value& dst = RA(inst);
-        dst.as.i64 = lhs.as.i64 % rv;
+        dst.as.i64 = mobius_mod_i64(lhs.as.i64, rv);
         dst.type = VAL_INT64; dst.flags = 0;
     } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
@@ -1860,7 +1874,7 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
             int64_t lv = MobiusVM::vm_extract_int64(lhs);
             int64_t rv = MobiusVM::vm_extract_int64(rhs);
             if (rv == 0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-            RA(inst) = make_int64_value(lv % rv);
+            RA(inst) = make_int64_value(mobius_mod_i64(lv, rv));
         }
     } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
         double rv = rhs.as.double_val;
@@ -2223,13 +2237,13 @@ MOBIUS_FORCEINLINE static int vm_op_mul_ff(MobiusVM* vm, VMFrame& f, uint32_t in
 MOBIUS_FORCEINLINE static int vm_op_mod_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int64_t rv = RKC(inst).as.i64;
     if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-    Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 % rv;
+    Value& dst = RA(inst); dst.as.i64 = mobius_mod_i64(RKB(inst).as.i64, rv);
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_div_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int64_t rv = RKC(inst).as.i64;
     if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
-    Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 / rv;
+    Value& dst = RA(inst); dst.as.i64 = mobius_div_i64(RKB(inst).as.i64, rv);
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_div_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -2290,7 +2304,7 @@ MOBIUS_FORCEINLINE static int vm_op_divk(MobiusVM* vm, VMFrame& f, uint32_t inst
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
         if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
-        dst.as.i64 = src.as.i64 / k;
+        dst.as.i64 = mobius_div_i64(src.as.i64, k);
         dst.type = VAL_INT64; dst.flags = 0;
     } else {
         double sv = MobiusVM::vm_extract_double(src);
@@ -2312,7 +2326,7 @@ MOBIUS_FORCEINLINE static int vm_op_modk(MobiusVM* vm, VMFrame& f, uint32_t inst
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
         if (MOBIUS_UNLIKELY(k == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-        dst.as.i64 = src.as.i64 % k;
+        dst.as.i64 = mobius_mod_i64(src.as.i64, k);
         dst.type = VAL_INT64; dst.flags = 0;
     } else {
         double sv = MobiusVM::vm_extract_double(src);
@@ -2336,7 +2350,10 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     int imm = DECODE_sBx(inst); \
     if (check_zero && MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; } \
     Value& val = f.regs[a]; \
-    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 op_char##= imm; } \
+    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { \
+        if (check_zero) val.as.i64 = mobius_div_i64(val.as.i64, imm); \
+        else val.as.i64 op_char##= imm; \
+    } \
     else if (val.type == VAL_UINT64) val.as.u64 op_char##= (uint64_t)(int64_t)imm; \
     else if (val.type == VAL_FLOAT64) val.as.double_val op_char##= imm; \
     else { VM_ERROR(vm, f, err_msg " requires numeric operand"); return -1; } \
@@ -2355,7 +2372,7 @@ MOBIUS_FORCEINLINE static int vm_op_modi(MobiusVM* vm, VMFrame& f, uint32_t inst
     int imm = DECODE_sBx(inst);
     if (MOBIUS_UNLIKELY(imm == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
     Value& val = f.regs[a];
-    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 %= imm; }
+    if (MOBIUS_LIKELY(val.type == VAL_INT64)) { val.as.i64 = mobius_mod_i64(val.as.i64, imm); }
     else if (val.type == VAL_UINT64) val.as.u64 %= (uint64_t)(int64_t)imm;
     else if (val.type == VAL_FLOAT64) val.as.double_val = fmod(val.as.double_val, (double)imm);
     else { VM_ERROR(vm, f, "MODI requires numeric operand"); return -1; }

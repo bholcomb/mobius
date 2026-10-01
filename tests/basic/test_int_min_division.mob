@@ -1,0 +1,44 @@
+// INT64_MIN / -1 overflows. It used to kill the process with SIGFPE on
+// every division path; integer arithmetic wraps, so the quotient is
+// INT64_MIN and the remainder is 0.
+func check(name, got, want) {
+    if (got != want or typeof(got) != typeof(want)) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func ident(x) { return x }
+var int_min = -9223372036854775807 - 1
+
+// Generic DIV/MOD (operand types unknown at compile time).
+check("generic /", ident(int_min) / ident(-1), int_min)
+check("generic %", ident(int_min) % ident(-1), 0)
+
+// Typed parameters use the int-specialized DIV_II/MOD_II.
+func div_ii(a: int64, b: int64): int64 { return a / b }
+func mod_ii(a: int64, b: int64): int64 { return a % b }
+check("DIV_II", div_ii(int_min, -1), int_min)
+check("MOD_II", mod_ii(int_min, -1), 0)
+
+// A literal divisor uses the immediate DIVI/MODI forms.
+check("DIVI", ident(int_min) / -1, int_min)
+check("MODI", ident(int_min) % -1, 0)
+var m = ident(int_min)
+m /= -1
+check("compound /=", m, int_min)
+
+// A divisor beyond the immediate range uses DIVK/MODK; check they still work.
+check("DIVK", ident(10000000000) / 100000, 100000)
+check("MODK", ident(10000000007) % 100000, 7)
+
+// Ordinary cases are unchanged.
+check("7 / -1", ident(7) / ident(-1), -7)
+check("7 % -1", ident(7) % ident(-1), 0)
+check("-7 / 2", ident(-7) / ident(2), -3)
+check("-7 % 2", ident(-7) % ident(2), -1)
+
+var caught = false
+try { var z = ident(int_min) / ident(0) } catch e { caught = true }
+check("division by zero still throws", caught, true)
+print("INT64_MIN division: PASS")
