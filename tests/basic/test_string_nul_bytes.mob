@@ -1,0 +1,45 @@
+// String search functions respect the string's length, including embedded
+// NUL bytes. They used C string functions: a "\0" needle looked empty to
+// strstr, so split/replace matched forever while reading past the string
+// (a hang), and text after an embedded NUL was ignored.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+// NUL as the needle.
+check("split on NUL", size(split("a\0b\0c", "\0")), 3)
+check("split on NUL, no match", size(split("abc", "\0")), 1)
+check("replace NUL", replace("a\0b", "\0", "-"), "a-b")
+check("replace NUL, no match", replace("abc", "\0", "x"), "abc")
+check("find NUL", find("ab\0cd", "\0"), 2)
+check("contains NUL", contains("ab\0cd", "\0"), true)
+check("contains NUL, no match", contains("abcd", "\0"), false)
+
+// Text after an embedded NUL is searched and kept.
+check("find after NUL", find("ab\0cd", "cd"), 3)
+check("contains after NUL", contains("ab\0cd", "cd"), true)
+var parts = split("a,b\0c,d", ",")
+check("split keeps NUL segment", size(parts[1]), 3)
+check("split last segment", parts[2], "d")
+var replaced = replace("ab\0cdef", "c", "X")
+check("replace keeps bytes after NUL", size(replaced), 7)
+check("replace result", replaced, "ab\0Xdef")
+
+// Ordinary behavior is unchanged.
+check("split", join(split("a,b,,c", ","), "|"), "a|b||c")
+check("split empty delimiter", join(split("abc", ""), "|"), "a|b|c")
+check("split no match", split("abc", ",")[0], "abc")
+check("split trailing delimiter", size(split("a,", ",")), 2)
+check("replace all", replace("aXbXc", "X", "--"), "a--b--c")
+check("replace shrink", replace("aXXbXX", "XX", "y"), "ayby")
+check("replace empty needle", replace("abc", "", "x"), "abc")
+check("find", find("hello", "ll"), 2)
+check("find missing", find("hello", "z"), -1)
+check("find empty", find("hello", ""), 0)
+check("find longer needle", find("hi", "high"), -1)
+check("contains", contains("hello", "ell"), true)
+check("contains empty", contains("hello", ""), true)
+print("string NUL bytes: PASS")

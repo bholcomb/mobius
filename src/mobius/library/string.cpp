@@ -43,6 +43,36 @@ static MobiusString* finalize_string(MobiusState* state, MobiusString* pending, 
     return StringInternPool::finishHeap(pending, len);   // sets length + hash, keeps rc = 1
 }
 
+// Length-aware substring search. Mobius strings carry their length and may
+// contain NUL bytes, so the C string functions (strstr, strcpy) are wrong
+// here: a needle of "\0" looked empty to strstr, which matched forever
+// without advancing (split/replace hung reading past the string), and any
+// text after an embedded NUL was ignored. Returns a pointer into hay, or
+// nullptr. An empty needle matches at hay.
+static const char* find_bytes(const char* hay, size_t hay_len,
+                              const char* needle, size_t needle_len) {
+    if (needle_len == 0) return hay;
+    if (needle_len > hay_len) return nullptr;
+    const char* last = hay + (hay_len - needle_len);
+    for (const char* p = hay; p <= last; ) {
+        p = (const char*)memchr(p, needle[0], (size_t)(last - p) + 1);
+        if (!p) return nullptr;
+        if (memcmp(p, needle, needle_len) == 0) return p;
+        p++;
+    }
+    return nullptr;
+}
+
+// A new heap string holding exactly len bytes (which may include NULs).
+static MobiusString* make_bytes_string(MobiusState* state, const char* data, size_t len) {
+    MobiusString* pending = alloc_pending_string(state, len);
+    if (!pending) return nullptr;
+    char* out = pending->mutableData();
+    memcpy(out, data, len);
+    out[len] = '\0';
+    return finalize_string(state, pending, len);
+}
+
 // =============================================================================
 // UNIFIED STRING FUNCTION IMPLEMENTATIONS
 // =============================================================================
@@ -292,10 +322,8 @@ int lib_contains(MobiusState* state, int arg_count) {
         return state->error("contains expects both arguments to be strings");
     }
     
-    const char* haystack = haystack_val.as.string->data;
-    const char* needle = needle_val.as.string->data;
-    
-    bool found = strstr(haystack, needle) != NULL;
+    bool found = find_bytes(haystack_val.as.string->data, haystack_val.as.string->length,
+                            needle_val.as.string->data, needle_val.as.string->length) != nullptr;
     state->npush(make_bool_value(found));
     
     return 1;
@@ -321,33 +349,31 @@ int lib_split(MobiusState* state, int arg_count) {
         return state->error("Memory allocation failed");
     }
 
+    size_t str_len = str_val.as.string->length;
     if (delim_len == 0) {
-        size_t slen = str_val.as.string->length;
-        for (size_t i = 0; i < slen; i++) {
-            char buf[2] = { str[i], '\0' };
-            arr->push(make_string_value_from_cstr(state, buf));
+        for (size_t i = 0; i < str_len; i++) {
+            MobiusString* ch = make_bytes_string(state, str + i, 1);
+            if (!ch) {
+                arr->release();
+                return state->error("String creation failed");
+            }
+            arr->push(make_string_value_adopt(ch));
         }
     } else {
         const char* p = str;
-        const char* found;
-        while ((found = strstr(p, delim)) != NULL) {
-            size_t seg_len = found - p;
-            MobiusString* pending = alloc_pending_string(state, seg_len);
-            if (!pending) {
-                arr->release();
-                return state->error("Memory allocation failed");
-            }
-            char* seg = pending->mutableData();
-            memcpy(seg, p, seg_len); seg[seg_len] = '\0';
-            MobiusString* seg_str = finalize_string(state, pending, seg_len);
+        const char* end = str + str_len;
+        while (true) {
+            const char* found = find_bytes(p, (size_t)(end - p), delim, delim_len);
+            const char* seg_end = found ? found : end;
+            MobiusString* seg_str = make_bytes_string(state, p, (size_t)(seg_end - p));
             if (!seg_str) {
                 arr->release();
                 return state->error("String creation failed");
             }
             arr->push(make_string_value_adopt(seg_str));
+            if (!found) break;
             p = found + delim_len;
         }
-        arr->push(make_string_value_from_cstr(state, p));
     }
 
     state->npush(make_array_value(arr));
@@ -510,9 +536,11 @@ int lib_replace(MobiusState* state, int arg_count) {
         return 1;
     }
 
+    size_t s_len = str_val.as.string->length;
+    const char* s_end = s + s_len;
     size_t count = 0;
     const char* p = s;
-    while ((p = strstr(p, old_s)) != NULL) { count++; p += old_len; }
+    while ((p = find_bytes(p, (size_t)(s_end - p), old_s, old_len)) != nullptr) { count++; p += old_len; }
 
     size_t replacement_delta = 0;
     if (new_len >= old_len) {
@@ -542,13 +570,14 @@ int lib_replace(MobiusState* state, int arg_count) {
     char* dst = buf;
     p = s;
     const char* found;
-    while ((found = strstr(p, old_s)) != NULL) {
+    while ((found = find_bytes(p, (size_t)(s_end - p), old_s, old_len)) != nullptr) {
         size_t seg = found - p;
         memcpy(dst, p, seg); dst += seg;
         memcpy(dst, new_s, new_len); dst += new_len;
         p = found + old_len;
     }
-    strcpy(dst, p);
+    memcpy(dst, p, (size_t)(s_end - p));
+    dst[s_end - p] = '\0';
 
     MobiusString* result = finalize_string(state, pending, result_len);
     if (!result) {
@@ -569,7 +598,8 @@ int lib_find(MobiusState* state, int arg_count) {
         needle_val.type != VAL_STRING || !needle_val.as.string)
         return state->error("find expects string arguments");
 
-    const char* found = strstr(hay_val.as.string->data, needle_val.as.string->data);
+    const char* found = find_bytes(hay_val.as.string->data, hay_val.as.string->length,
+                                   needle_val.as.string->data, needle_val.as.string->length);
     if (found) {
         state->npush(make_int64_value((int64_t)(found - hay_val.as.string->data)));
     } else {
