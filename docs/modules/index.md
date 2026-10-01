@@ -38,6 +38,7 @@ resolves modules and how packages are installed.
 | Package | Summary |
 |---------|---------|
 | [`sqlite`](sqlite.md)     | SQLite bindings: databases, prepared statements, transactions |
+| [`stencil`](stencil.md)   | Text templates: layouts, components, filters, strict errors, and `web` integration |
 | [Other packages](packages.md) | Experimental native packages: `glfw`, `monstro`, `vulkease` |
 
 ---

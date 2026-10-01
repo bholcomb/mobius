@@ -1,5 +1,5 @@
 // stencil — text templating for Mobius.
-// See DESIGN.md in this directory for the language and the roadmap.
+// User documentation: docs/modules/stencil.md. Open work: TODO.md.
 
 import "json"
 import "os"
