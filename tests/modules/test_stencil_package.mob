@@ -1,0 +1,30 @@
+// Runs tests/modules/stencil/cases.mob with the stencil package on the module
+// search path. The package is pure Mobius, so it is used straight from source.
+import "os"
+
+var repo_root = os.getcwd()
+var mobius_bin = os.join(repo_root, "bin", "mobius")
+var package_source = os.join(repo_root, "src", "packages", "stencil")
+var cases = os.join(repo_root, "tests", "modules", "stencil", "cases.mob")
+
+var workspace = os.join(os.tmpdir(), "mobius_stencil_pkg_" + str(os.getpid()))
+var package_dir = os.join(workspace, "modules", "stencil")
+
+func fail(message) {
+    print("FAIL: " + message)
+    exit(1)
+}
+
+if (!os.mkdirp(package_dir)) { fail("create workspace") }
+if (!os.cp(os.join(package_source, "module.yaml"), os.join(package_dir, "module.yaml"))) { fail("copy module.yaml") }
+if (!os.cp(os.join(package_source, "stencil.mob"), os.join(package_dir, "stencil.mob"))) { fail("copy stencil.mob") }
+
+os.setenv("MOBIUS_MODULE_PATH", os.join(workspace, "modules"))
+os.setenv("STENCIL_TEST_WORKSPACE", workspace)
+var code = os.system("\"" + mobius_bin + "\" \"" + cases + "\"")
+os.system("rm -rf \"" + workspace + "\"")
+
+if (code != 0) {
+    fail("stencil cases exited with " + str(code))
+}
+print("stencil package tests passed")

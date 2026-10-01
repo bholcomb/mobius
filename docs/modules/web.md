@@ -60,6 +60,7 @@ Application methods:
 - `app:websocket(path, handler)`
 - `app:on_error(handler)`
 - `app:on_not_found(handler)`
+- `app:templates(renderer)`: set the renderer used by `ctx:render`
 - `app:serve(listener, options)`
 - `app:listen(host, port, options)`
 - `app:serve_async(listener, options)`
@@ -100,6 +101,7 @@ Response helpers:
 - `ctx:text(body)`
 - `ctx:html(body)`
 - `ctx:json(value)`
+- `ctx:render(name, data)`: render a template and send it as HTML
 - `ctx:redirect(location)`
 
 `ctx:status(...)` and `ctx:set_header(...)` compose with the later body helper:
@@ -116,6 +118,27 @@ Useful context fields:
 - `ctx.headers`
 - `ctx.body`
 - `ctx.remote_addr`
+
+## Templates
+
+`ctx:render(name, data)` calls `renderer:render(name, data)` on the object
+passed to `app:templates(...)` and sends the result with `ctx:html`. Any
+object with that method works. The [`stencil`](packages.md) package's
+environment is one:
+
+```mobius
+import "web"
+import "stencil"
+
+var app = web.app()
+app:templates(stencil.env({ root: "templates", escape: stencil.escape_html }))
+
+app:get("/users/:id", func(ctx) {
+    return ctx:render("user.html", { id: ctx:param("id") })
+})
+```
+
+Calling `ctx:render` without a renderer is an error.
 
 ## WebSocket Routes
 

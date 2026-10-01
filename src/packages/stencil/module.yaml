@@ -1,0 +1,8 @@
+name: stencil
+version: 0.1.0
+entry:
+  script: stencil.mob
+dependencies:
+  mobius_modules: [json, os, url]
+metadata:
+  description: Text templating with inheritance, filters, and strict undefined

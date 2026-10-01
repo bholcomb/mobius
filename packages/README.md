@@ -12,3 +12,4 @@ Current package candidates:
 - `imgui`
 - `vulkease`
 - `monstro`
+- `stencil`

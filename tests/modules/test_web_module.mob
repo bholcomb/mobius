@@ -18,6 +18,10 @@ func assert_test(name, cond) {
 
 assert_test("html escape helper", web.html_escape("<tag attr=\"x\">&") == "&lt;tag attr=&quot;x&quot;&gt;&amp;")
 
+var bad_renderer_error = nil
+try { web.app():templates({}) } catch err { bad_renderer_error = err }
+assert_test("templates rejects non-renderer", bad_renderer_error != nil)
+
 var app = web.app()
 app:use(func(ctx, next) {
     ctx:set_header("x-middleware", "yes")
@@ -41,10 +45,20 @@ app:post("/form", func(ctx) {
     return ctx:html("<p>" + form.title + "</p>")
 })
 
+// ctx:render goes through any object with a render(name, data) method.
+app:templates({
+    render: func(self, name, data) {
+        return "<" + name + ">" + data.title
+    }
+})
+app:get("/page", func(ctx) {
+    return ctx:render("page.html", { title: "Rendered" })
+})
+
 var listener = socket.listen("127.0.0.1", 0)
 var port = listener:local_addr().port
 var server = app:serve_async(listener, {
-    max_connections: 4,
+    max_connections: 5,
     timeout_ms: 1000
 })
 
@@ -87,6 +101,16 @@ var form_response = http.request({
 assert_test("form route status", form_response.status == 200)
 assert_test("form route html", form_response.text == "<p>FormTitle</p>")
 
+var render_response = http.request({
+    host: "127.0.0.1",
+    port: port,
+    path: "/page",
+    timeout_ms: 1000
+})
+assert_test("render route status", render_response.status == 200)
+assert_test("render route body", render_response.text == "<page.html>Rendered")
+assert_test("render route content type", contains(render_response.headers["content-type"], "text/html"))
+
 var missing_response = http.request({
     host: "127.0.0.1",
     port: port,
@@ -96,7 +120,7 @@ var missing_response = http.request({
 assert_test("not found status", missing_response.status == 404)
 assert_test("not found text", missing_response.text == "Not found\n")
 
-assert_test("server handled expected count", await server == 4)
+assert_test("server handled expected count", await server == 5)
 listener:close()
 
 var ws_app = web.app()

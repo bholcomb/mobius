@@ -1,0 +1,442 @@
+// Behavior tests for the stencil package; run by tests/modules/test_stencil_package.mob.
+import "http"
+import "os"
+import "socket"
+import "stencil"
+import "web"
+
+var pass_count = 0
+var fail_count = 0
+
+func check(name, got, want) {
+    if (got == want) {
+        pass_count = pass_count + 1
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+        print("  want: " + str(want))
+        print("  got:  " + str(got))
+    }
+}
+
+func render(src, data) {
+    return stencil.render_string(src, data)
+}
+
+// Render and expect an error whose message contains `needle`.
+func check_error(name, src, data, needle) {
+    var message = nil
+    try {
+        render(src, data)
+    } catch err {
+        message = stencil.format_error(err)
+    }
+    if (message == nil) {
+        fail_count = fail_count + 1
+        print("FAIL: " + name + " (no error raised)")
+    } elif (!contains(message, needle)) {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+        print("  want error containing: " + needle)
+        print("  got: " + message)
+    } else {
+        pass_count = pass_count + 1
+    }
+}
+
+func check_env_error(name, e, template_name, data, needle) {
+    var message = nil
+    try {
+        e:render(template_name, data)
+    } catch err {
+        message = stencil.format_error(err)
+    }
+    if (message == nil) {
+        fail_count = fail_count + 1
+        print("FAIL: " + name + " (no error raised)")
+    } elif (!contains(message, needle)) {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+        print("  want error containing: " + needle)
+        print("  got: " + message)
+    } else {
+        pass_count = pass_count + 1
+    }
+}
+
+// --- output and expressions -------------------------------------------------
+
+check("plain text", render("hello", {}), "hello")
+check("variable", render("Hi {{ name }}!", { name: "Bob" }), "Hi Bob!")
+check("attr and index", render("{{ user.tags[1] }}", { user: { tags: ["a", "b"] } }), "b")
+check("table key index", render("{{ t[\"k\"] }}", { t: { k: 5 } }), "5")
+check("arithmetic", render("{{ 1 + 2 * 3 }} {{ (1 + 2) * 3 }} {{ 7 % 4 }}", {}), "7 9 3")
+check("division follows Mobius", render("{{ 7 / 2 }} {{ 7.0 / 2 }} {{ n / 2 }}", { n: 7 }), "3 3.5 3")
+check("ternary", render("{{ n > 1 ? \"many\" : \"one\" }}", { n: 2 }), "many")
+check("ternary is lazy", render("{{ true ? \"ok\" : missing }}", {}), "ok")
+check("ternary right-associative", render("{{ n == 1 ? \"a\" : n == 2 ? \"b\" : \"c\" }}", { n: 2 }), "b")
+check("ternary with call in false branch", render("{{ false ? x : f(1) }}", { x: "x", f: func(v) { return "f" + str(v) } }), "f1")
+check("ternary with filters in branches", render("{{ true ? (x:upper()) : y:lower() }}", { x: "a", y: "B" }), "A")
+check("ternary with filtered true branch", render("{{ true ? x:upper() : \"n\" }}", { x: "a" }), "A")
+check("concat", render("{{ \"n=\" + n }}", { n: 4 }), "n=4")
+check("unary", render("{{ -x }} {{ not false }} {{ !true }}", { x: 3 }), "-3 true false")
+check("comparison", render("{{ 2 < 3 and 3 <= 3 }} {{ \"a\" < \"b\" }} {{ 1 == 2 or 2 != 3 }}", {}), "true true true")
+check("and/or return operands", render("{{ nil or \"fallback\" }} {{ 1 and 2 }}", {}), "fallback 2")
+check("string escapes", render("{{ \"a\\\"b\\tc\" }}", {}), "a\"b\tc")
+check("braces in string", render("{{ \"}}\" }}", {}), "}}")
+check("table literal", render("{{ { a: 1, [\"b\"] = 2 }:json() }}", {}), "{\"a\":1,\"b\":2}")
+check("array literal", render("{{ [1, 2, 3]:join(\"-\") }}", {}), "1-2-3")
+check("call data function", render("{{ greet(\"x\") }}", { greet: func(who) { return "hi " + who } }), "hi x")
+check("globals", stencil.env({ globals: { site: "S" } }):from_string("{{ site }}", "g"):render({}), "S")
+check("data shadows globals", stencil.env({ globals: { site: "S" } }):from_string("{{ site }}", "g"):render({ site: "D" }), "D")
+check("range one arg", render("{% for i in range(3) %}{{ i }}{% endfor %}", {}), "012")
+check("range two args", render("{% for i in range(2, 4) %}{{ i }}{% endfor %}", {}), "23")
+
+// --- filters ------------------------------------------------------------------
+
+check("upper/lower", render("{{ \"aB\":upper() }}{{ \"aB\":lower() }}", {}), "ABab")
+check("chained filters", render("{{ \"  hi  \":trim():upper() }}", {}), "HI")
+check("pascal", render("{{ \"hello_world-foo bar\":pascal() }}", {}), "HelloWorldFooBar")
+check("camel", render("{{ \"Hello World\":camel() }}", {}), "helloWorld")
+check("snake from camel", render("{{ \"parseHTTPServerV2\":snake() }}", {}), "parse_http_server_v2")
+check("kebab", render("{{ \"HelloWorld\":kebab() }}", {}), "hello-world")
+check("title", render("{{ \"the quick FOX\":title() }}", {}), "The Quick Fox")
+check("capitalize", render("{{ \"hELLO\":capitalize() }}", {}), "Hello")
+check("replace", render("{{ \"a-b-c\":replace(\"-\", \"+\") }}", {}), "a+b+c")
+check("truncate", render("{{ \"abcdef\":truncate(3) }}|{{ \"abc\":truncate(3) }}", {}), "abc...|abc")
+check("truncate suffix", render("{{ \"abcdef\":truncate(2, \"~\") }}", {}), "ab~")
+check("truncate keeps utf8 whole", render("{{ s:truncate(2, \"\") }}", { s: "aé" + "z" }), "a")
+check("size", render("{{ xs:size() }} {{ \"abc\":size() }} {{ t:size() }}", { xs: [1, 2], t: { a: 1 } }), "2 3 1")
+check("first/last", render("{{ xs:first() }}{{ xs:last() }}", { xs: [1, 2, 3] }), "13")
+check("reverse copies", render("{{ xs:reverse():join() }}{{ xs:join() }}", { xs: [1, 2] }), "2112")
+check("sort copies", render("{{ xs:sort():join() }}{{ xs:join() }}", { xs: [3, 1, 2] }), "123312")
+check("keys sorted", render("{{ t:keys():join(\",\") }}", { t: { b: 1, a: 2, c: 3 } }), "a,b,c")
+check("contains", render("{{ xs:contains(2) }} {{ \"abc\":contains(\"z\") }} {{ t:contains(\"a\") }}", { xs: [1, 2], t: { a: 1 } }), "true false true")
+check("split", render("{{ \"a,b\":split(\",\"):last() }}", {}), "b")
+check("json", render("{{ t:json() }}", { t: { b: [1, 2], a: "x" } }), "{\"a\":\"x\",\"b\":[1,2]}")
+check("escape", render("{{ s:escape() }}", { s: "<a href=\"x\">'&'</a>" }), "&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;")
+check("escape_url", render("{{ \"a b&c\":escape_url() }}", {}), "a%20b%26c")
+check("conversions", render("{{ \"42\":int() + 1 }} {{ 2:float() }} {{ 5:str() + \"!\" }}", {}), "43 2.0 5!")
+
+var custom = stencil.env(nil)
+custom:filter("money", func(v) { return "$" + str(v) })
+custom:filter("wrap", func(v, l, r) { return l + v + r })
+check("custom filter", custom:from_string("{{ 5:money() }}", "c"):render({}), "$5")
+check("custom filter args", custom:from_string("{{ \"x\":wrap(\"[\", \"]\") }}", "c"):render({}), "[x]")
+
+// --- strict undefined, default, defined ---------------------------------------
+
+check_error("undefined variable", "a\n  {{ usr.name }}", {}, "<string>:2:6: undefined variable 'usr'")
+check_error("missing field", "{{ user.nme }}", { user: { name: "x" } }, "user has no field 'nme'")
+check_error("index out of range", "{{ xs[5] }}", { xs: [1] }, "index 5 out of range for xs (size 1)")
+check_error("field of non-table", "{{ n.x }}", { n: 3 }, "cannot read field 'x' of n (a int64)")
+check_error("output nil", "{{ f() }}", { f: func() { return nil } }, "is nil; use :default")
+check_error("output table", "{{ t }}", { t: {} }, "cannot output a table")
+check_error("arith type error", "{{ 1 + nil }}", {}, "cannot apply '+' to int64 and nil")
+check_error("division by zero", "{{ 1 / 0 }}", {}, "division by zero")
+check_error("call non-function", "{{ x() }}", { x: 1 }, "x is not a function")
+check_error("unknown filter", "{{ 1:nope() }}", {}, "unknown filter 'nope'")
+check_error("filter arity", "{{ \"x\":truncate() }}", {}, "filter 'truncate' takes 1 to 2 argument(s), got 0")
+check_error("filter type", "{{ 3:upper() }}", {}, "upper expects a string, got int64")
+check_error("iterate string", "{% for c in s %}{% endfor %}", { s: "abc" }, "cannot iterate over s (a string)")
+
+check("default on undefined", render("{{ missing:default(\"d\") }}", {}), "d")
+check("default on missing field", render("{{ u.nick:default(u.name) }}", { u: { name: "Bob" } }), "Bob")
+check("default keeps value", render("{{ n:default(0) }}", { n: 7 }), "7")
+check("defined", render("{{ u.a:defined() }} {{ u.b:defined() }} {{ zz:defined() }}", { u: { a: 1 } }), "true false false")
+check("default in if", render("{% if u.admin:default(false) %}A{% else %}U{% endif %}", { u: {} }), "U")
+check_error("default does not hide other errors", "{{ (1 + nil):default(2) }}", {}, "cannot apply '+'")
+
+// --- whitespace ---------------------------------------------------------------
+
+check("standalone tags vanish", render("<ul>\n{% for x in xs %}\n  <li>{{ x }}</li>\n{% endfor %}\n</ul>\n", { xs: [1, 2] }), "<ul>\n  <li>1</li>\n  <li>2</li>\n</ul>\n")
+check("indented standalone tags vanish", render("a\n    {% if true %}\n    b\n    {% endif %}\nc", {}), "a\n    b\nc")
+check("standalone comment vanishes", render("a\n{# note #}\nb", {}), "a\nb")
+check("inline tag keeps whitespace", render("a {% if true %}b{% endif %} c", {}), "a b c")
+check("two tags on a line are not standalone", render("{% if true %}{% if true %}\nx\n{% endif %}{% endif %}\n", {}), "\nx\n\n")
+check("output tags are never standalone", render("a\n{{ x }}\nb", { x: 1 }), "a\n1\nb")
+check("dash trims", render("a   {{- x -}}   b", { x: 1 }), "a1b")
+check("dash trims newlines", render("a\n\n{%- if true -%}\n\nb{% endif %}", {}), "ab")
+check("crlf standalone", render("a\r\n{% if true %}\r\nb\r\n{% endif %}\r\n", {}), "a\r\nb\r\n")
+check("standalone at start of source", render("{% set x = 1 %}\nv={{ x }}", {}), "v=1")
+
+// --- if / for / set -----------------------------------------------------------
+
+check("if/elif/else", render("{% if n > 1 %}big{% elif n == 1 %}one{% else %}small{% endif %}", { n: 1 }), "one")
+check("only nil/false are falsy", render("{% if 0 %}z{% endif %}{% if \"\" %}e{% endif %}{% if nil %}n{% endif %}", {}), "ze")
+check("for loop vars", render("{% for x in xs %}{{ loop.index }}{{ loop.number }}{{ loop.first }}{{ loop.last }}{{ loop.length }};{% endfor %}", { xs: ["a", "b"] }), "01truefalse2;12falsetrue2;")
+check("for else", render("{% for x in xs %}{{ x }}{% else %}empty{% endfor %}", { xs: [] }), "empty")
+check("for over table sorted", render("{% for k, v in t %}{{ k }}={{ v }};{% endfor %}", { t: { c: 3, a: 1, b: 2 } }), "a=1;b=2;c=3;")
+check("for single var over table gives keys", render("{% for k in t %}{{ k }}{% endfor %}", { t: { b: 1, a: 2 } }), "ab")
+check("for index, value over array", render("{% for i, x in xs %}{{ i }}{{ x }}{% endfor %}", { xs: ["a", "b"] }), "0a1b")
+check("nested loops", render("{% for r in rows %}{% for c in r %}{{ c }}{% endfor %};{% endfor %}", { rows: [[1, 2], [3]] }), "12;3;")
+check("set", render("{% set x = 2 %}{{ x * 3 }}", {}), "6")
+check("set updates outer binding from loop", render("{% set total = 0 %}{% for x in xs %}{% set total = total + x %}{% endfor %}{{ total }}", { xs: [1, 2, 3] }), "6")
+check_error("set inside block is block-scoped", "{% if true %}{% set y = 1 %}{% endif %}{{ y }}", {}, "undefined variable 'y'")
+check("set shadows data without mutating it", render("{% set n = n + 1 %}{{ n }}", { n: 1 }), "2")
+var shared_data = { n: 1 }
+render("{% set n = 5 %}", shared_data)
+check("render data not mutated", shared_data.n, 1)
+
+// --- comments and raw ---------------------------------------------------------
+
+check("comment", render("a{# {{ not parsed }} #}b", {}), "ab")
+check("raw", render("{% raw %}{{ x }} {% if %}{% endraw %}", {}), "{{ x }} {% if %}")
+check("raw with dashes", render("a {%- raw -%} {{x}} {%- endraw -%} b", {}), "a{{x}}b")
+
+// --- escaping switch ----------------------------------------------------------
+
+var html = stencil.env({ escape: stencil.escape_html })
+check("default escape", html:from_string("{{ s }}", "e"):render({ s: "<b>" }), "&lt;b&gt;")
+check("raw skips default escape", html:from_string("{{ s:raw() }}", "e"):render({ s: "<b>" }), "<b>")
+check("numbers pass through escaper", html:from_string("{{ 1 + 1 }}", "e"):render({}), "2")
+check("filters on raw get plain strings", html:from_string("{{ s:raw():upper() }}", "e"):render({ s: "<b>" }), "&lt;B&gt;")
+check("no escape by default", render("{{ s }}", { s: "<b>" }), "<b>")
+check("custom escaper", stencil.env({ escape: func(s) { return "[" + s + "]" } }):from_string("{{ 1 }}{{ \"x\":raw() }}", "e"):render({}), "[1]x")
+
+// --- parse errors -------------------------------------------------------------
+
+check_error("pipe hint", "{{ x | upper }}", { x: "a" }, "use method syntax for filters")
+check_error("single quote hint", "{{ 'a' }}", {}, "strings use double quotes")
+check_error("ternary missing colon", "{{ a ? b }}", { a: true, b: 1 }, "expected ':' in conditional expression")
+check_error("unclosed for", "{% for x in xs %}\nbody", { xs: [] }, "<string>:1:1: unclosed {% for %} (expected {% endfor %})")
+check_error("unexpected endif", "a\n{% endif %}", {}, "<string>:2:1: unexpected {% endif %}")
+check_error("mismatched end", "{% if true %}{% endfor %}", {}, "unexpected {% endfor %} inside {% if %} opened at line 1")
+check_error("unknown tag", "{% frobnicate %}", {}, "unknown tag 'frobnicate'")
+check_error("jinja macro hint", "{% macro x() %}", {}, "'macro' is a Jinja tag")
+check_error("unclosed output", "{{ x", {}, "unclosed '{{' (expected '}}')")
+check_error("unclosed comment", "{# x", {}, "unclosed comment")
+check_error("unclosed raw", "{% raw %} x", {}, "unclosed {% raw %}")
+check_error("empty output", "{{ }}", {}, "empty {{ }}")
+check_error("trailing tokens", "{% set x = 1 2 %}", {}, "unexpected number at end of tag")
+check_error("filter needs parens", "{{ x:upper }}", { x: "a" }, "'(' after filter name")
+check_error("space before filter colon", "{{ x :upper() }}", { x: "a" }, "<string>:1:6: filters are written without spaces around ':'")
+check_error("space after filter colon", "{{ x: upper() }}", { x: "a" }, "filters are written without spaces around ':'")
+check("spaced colon inside ternary is the ternary's", render("{{ ok ? x : f(1) }}", { ok: false, x: "x", f: func(v) { return "f" + str(v) } }), "f1")
+check_error("error column inside tag", "{% if x and %}{% endif %}", { x: true }, "<string>:1:13: expected an expression, found end of tag")
+
+// --- templates on disk: include, extends, check --------------------------------
+
+var workspace = os.getenv("STENCIL_TEST_WORKSPACE")
+var root = os.join(workspace, "templates")
+os.mkdirp(os.join(root, "partials"))
+
+writefile(os.join(root, "base.html"), "<title>{% block title %}Site{% endblock %}</title>\n<main>\n{% block body %}{% endblock %}\n</main>\n{% block footer %}(c){% endblock %}\n")
+writefile(os.join(root, "layout.html"), "{% extends \"base.html\" %}\n{% block body %}[layout {% block content %}{% endblock %}]{% endblock %}\n{% block footer %}layout footer{% endblock %}\n")
+writefile(os.join(root, "page.html"), "{# a page #}\n{% extends \"layout.html\" %}\n{% block title %}{{ title }}{% endblock %}\n{% block content %}{% include \"partials/item.html\" %}{% endblock %}\n")
+writefile(os.join(root, "partials/item.html"), "item={{ item }}")
+writefile(os.join(root, "list.html"), "{% for item in items %}{% include \"partials/item.html\" %};{% endfor %}")
+writefile(os.join(root, "bad_child.html"), "{% extends \"base.html\" %}\nstray text\n{% block body %}x{% endblock %}\n")
+writefile(os.join(root, "loop_a.html"), "{% extends \"loop_b.html\" %}")
+writefile(os.join(root, "loop_b.html"), "{% extends \"loop_a.html\" %}")
+writefile(os.join(root, "outer.html"), "line1\n{% include \"partials/broken.html\" %}")
+writefile(os.join(root, "partials/broken.html"), "ok\n{{ nope }}")
+writefile(os.join(root, "self.html"), "{% include \"self.html\" %}")
+
+var e = stencil.env({ root: root })
+check("multi-level extends", e:render("page.html", { title: "T", item: 7 }), "<title>T</title>\n<main>\n[layout item=7]\n</main>\nlayout footer\n")
+check("include sees loop variables", e:render("list.html", { items: [1, 2] }), "item=1;item=2;")
+check("template object", e:get("partials/item.html"):render({ item: "x" }), "item=x")
+check("cache returns same template", e:get("base.html") == e:get("base.html"), true)
+check_env_error("child with stray content", e, "bad_child.html", {}, "may only contain blocks, components, and imports at the top level")
+check_env_error("circular extends", e, "loop_a.html", {}, "circular extends")
+check_env_error("missing template", e, "nope.html", {}, "template 'nope.html' not found")
+check_env_error("parent traversal rejected", e, "../x.html", {}, "must not contain '..'")
+check_env_error("include trace", e, "outer.html", {}, "partials/broken.html:2:4: undefined variable 'nope'\n  included from outer.html:2:1")
+check_env_error("recursive include", e, "self.html", {}, "include depth exceeded")
+check_env_error("extends trace", e, "page.html", { item: 1 }, "page.html:3:21: undefined variable 'title'")
+check_error("extends must be first", "x{% extends \"a\" %}", {}, "'extends' must come before any other content")
+check_error("duplicate block", "{% block a %}{% endblock %}{% block a %}{% endblock %}", {}, "block 'a' is already defined")
+check_error("include without root", "{% include \"a\" %}", {}, "no root directory configured")
+
+// env:check() reports every problem at once.
+var check_root = os.join(workspace, "check")
+os.mkdirp(check_root)
+writefile(os.join(check_root, "good.html"), "{% include \"other.html\" %}{{ x:upper() }}")
+writefile(os.join(check_root, "other.html"), "{{ y:money() }}")
+writefile(os.join(check_root, "broken.html"), "{% for x in xs %}")
+writefile(os.join(check_root, "missing.html"), "{% extends \"gone.html\" %}{% block a %}{{ 1:nope() }}{% endblock %}")
+var checker = stencil.env({ root: check_root })
+checker:filter("money", func(v) { return v })
+var problems = checker:check()
+var messages = []
+for (var i = 0; i < size(problems); i++) {
+    messages:push(stencil.format_error(problems[i]))
+}
+var all = join(messages, "\n")
+check("check finds every problem", size(problems), 3)
+check("check: syntax error", contains(all, "broken.html:1:1: unclosed {% for %}"), true)
+check("check: missing parent", contains(all, "missing.html:1:1: template 'gone.html' not found"), true)
+check("check: unknown filter", contains(all, "unknown filter 'nope'"), true)
+check("check: clean tree", stencil.env({ root: os.join(root, "partials") }):check():size(), 0)
+
+// --- components -----------------------------------------------------------------
+
+var card_src = """{% component card(title, tone = "plain") %}
+<div class="card {{ tone }}">
+  <h2>{{ title }}</h2>
+  {% slot body %}(no body){% endslot %}
+  {% slot footer %}<small>default footer</small>{% endslot %}
+</div>
+{% endcomponent %}
+"""
+check("component with fills", render(card_src + """{% use card({ title: "Hi" }) %}
+  {% fill body %}Body {{ who }}{% endfill %}
+{% enduse %}
+""", { who: "Bob" }), """<div class="card plain">
+  <h2>Hi</h2>
+  Body Bob
+  <small>default footer</small>
+</div>
+""")
+check("component defaults and unfilled slots", render(card_src + "{% use card({ title: \"T\", tone: \"loud\" }) %}{% enduse %}", {}), "<div class=\"card loud\">\n  <h2>T</h2>\n  (no body)\n  <small>default footer</small>\n</div>\n")
+check("default slot from loose content", render("{% component box %}[{% slot %}empty{% endslot %}]{% endcomponent %}{% use box %}inside {{ x }}{% enduse %}", { x: 1 }), "[inside 1]")
+check("default slot unfilled", render("{% component box %}[{% slot %}empty{% endslot %}]{% endcomponent %}{% use box %}{% enduse %}", {}), "[empty]")
+check("component used before definition", render("{% use b() %}{% enduse %}{% component b() %}B{% endcomponent %}", {}), "B")
+check("defaults can use earlier params", render("{% component c(a, b = a + 1) %}{{ b }}{% endcomponent %}{% use c({ a: 1 }) %}{% enduse %}", {}), "2")
+check("components nest and fills see caller scope", render("""{% component outer %}<o>{% slot %}{% endslot %}</o>{% endcomponent %}{% component inner(v) %}<i>{{ v }}</i>{% endcomponent %}{% for x in xs %}{% use outer %}{% use inner({ v: x }) %}{% enduse %}{% enduse %}{% endfor %}""", { xs: [1, 2] }), "<o><i>1</i></o><o><i>2</i></o>")
+check("slot passthrough", render("""{% component inner %}<i>{% slot %}{% endslot %}</i>{% endcomponent %}{% component outer %}{% use inner %}{% slot %}{% endslot %}{% enduse %}{% endcomponent %}{% use outer %}deep{% enduse %}""", {}), "<i>deep</i>")
+check_error("component cannot see caller variables", "{% component c %}{{ secret }}{% endcomponent %}{% use c %}{% enduse %}", { secret: 1 }, "undefined variable 'secret'")
+check("component sees globals", stencil.env({ globals: { site: "S" } }):from_string("{% component c %}{{ site }}{% endcomponent %}{% use c %}{% enduse %}", "g"):render({}), "S")
+check_error("component error trace", "{% component c %}\n{{ nope }}{% endcomponent %}\n{% use c %}{% enduse %}", {}, "<string>:2:4: undefined variable 'nope'\n  in component 'c' used at <string>:3:1")
+check_error("missing argument", card_src + "{% use card %}{% enduse %}", {}, "component 'card' is missing argument 'title'")
+check_error("unknown argument", card_src + "{% use card({ title: \"x\", colour: 1 }) %}{% enduse %}", {}, "component 'card' has no parameter 'colour'")
+check_error("unknown slot", card_src + "{% use card({ title: \"x\" }) %}{% fill sidebar %}x{% endfill %}{% enduse %}", {}, "component 'card' has no slot 'sidebar'")
+check_error("args must be a table", "{% component c(a) %}{% endcomponent %}{% use c(1) %}{% enduse %}", {}, "component arguments must be a table")
+check_error("unknown component", "{% use nope %}{% enduse %}", {}, "unknown component 'nope'")
+check_error("mixed fills and content", "{% component c %}{% slot a %}{% endslot %}{% endcomponent %}{% use c %}x{% fill a %}y{% endfill %}{% enduse %}", {}, "mixes {% fill %} blocks with other content")
+check_error("duplicate fill", "{% component c %}{% slot a %}{% endslot %}{% endcomponent %}{% use c %}{% fill a %}{% endfill %}{% fill a %}{% endfill %}{% enduse %}", {}, "slot 'a' is filled twice")
+check_error("slot outside component", "{% slot a %}{% endslot %}", {}, "{% slot %} can only be used inside a {% component %}")
+check_error("fill outside use", "{% fill a %}{% endfill %}", {}, "{% fill %} must be directly inside {% use %}")
+check_error("fill nested in if inside use", "{% component c %}{% slot a %}{% endslot %}{% endcomponent %}{% use c %}{% if true %}{% fill a %}{% endfill %}{% endif %}{% enduse %}", {}, "{% fill %} must be directly inside {% use %}")
+check_error("component not at top level", "{% if true %}{% component c %}{% endcomponent %}{% endif %}", {}, "components must be defined at the top level")
+check_error("duplicate component", "{% component c %}{% endcomponent %}{% component c %}{% endcomponent %}", {}, "component 'c' is already defined at line 1")
+check_error("duplicate slot", "{% component c %}{% slot %}{% endslot %}{% slot %}{% endslot %}{% endcomponent %}", {}, "already has a slot named 'default'")
+check_error("block inside component", "{% component c %}{% block b %}{% endblock %}{% endcomponent %}", {}, "blocks can't be defined inside a component")
+check_error("mismatched endcomponent", "{% component c %}{% endcomponent d %}", {}, "endcomponent 'd' does not match component 'c'")
+check_error("recursive component", "{% component c %}{% use c %}{% enduse %}{% endcomponent %}{% use c %}{% enduse %}", {}, "component nesting exceeded")
+check("components escape like other output", stencil.env({ escape: stencil.escape_html }):from_string("{% component c(v) %}{{ v }}{% endcomponent %}{% use c({ v: \"<b>\" }) %}{% enduse %}", "e"):render({}), "&lt;b&gt;")
+
+// --- super(), block checks, imports on disk ---------------------------------------
+
+check_error("super outside block", "{{ super() }}", {}, "super() can only be used inside a block")
+check_error("super without parent", "{% block a %}{{ super() }}{% endblock %}", {}, "block 'a' has no parent definition for super()")
+
+var root2 = os.join(workspace, "templates2")
+os.mkdirp(os.join(root2, "ui"))
+writefile(os.join(root2, "base.html"), "<h>{% block head %}base-head{% endblock %}</h>")
+writefile(os.join(root2, "mid.html"), "{% extends \"base.html\" %}{% block head %}mid+{{ super() }}{% endblock %}")
+writefile(os.join(root2, "leaf.html"), "{% extends \"mid.html\" %}{% block head %}leaf+{{ super() }}{% endblock %}")
+writefile(os.join(root2, "typo.html"), "{% extends \"base.html\" %}{% block haed %}x{% endblock %}")
+writefile(os.join(root2, "ui/cards.html"), "{% component card(title) %}<card>{{ title }}:{% slot %}{% endslot %}</card>{% endcomponent %}{% component badge %}<badge/>{% endcomponent %}")
+writefile(os.join(root2, "ui/other.html"), "{% component badge %}<other-badge/>{% endcomponent %}")
+writefile(os.join(root2, "uses.html"), "{% import \"ui/cards.html\" %}{% use card({ title: \"T\" }) %}{{ x }}{% enduse %}{% use badge %}{% enduse %}")
+writefile(os.join(root2, "child_uses.html"), "{% extends \"base.html\" %}{% import \"ui/cards.html\" %}{% block head %}{% use badge %}{% enduse %}{% endblock %}")
+writefile(os.join(root2, "ambiguous.html"), "{% import \"ui/cards.html\" %}{% import \"ui/other.html\" %}{% use badge %}{% enduse %}")
+writefile(os.join(root2, "local_wins.html"), "{% import \"ui/other.html\" %}{% component badge %}<local/>{% endcomponent %}{% use badge %}{% enduse %}")
+writefile(os.join(root2, "esc_super.html"), "{% extends \"esc_base.html\" %}{% block b %}[{{ super() }}]{% endblock %}")
+writefile(os.join(root2, "esc_base.html"), "{% block b %}{{ v }}{% endblock %}")
+
+var e2 = stencil.env({ root: root2 })
+check("super chain", e2:render("leaf.html", {}), "<h>leaf+mid+base-head</h>")
+check("super at middle level", e2:render("mid.html", {}), "<h>mid+base-head</h>")
+check_env_error("block typo in child", e2, "typo.html", {}, "typo.html:1:26: block 'haed' is not defined in 'base.html' or its parents")
+check("imported components", e2:render("uses.html", { x: 5 }), "<card>T:5</card><badge/>")
+check("child template imports", e2:render("child_uses.html", {}), "<h><badge/></h>")
+check_env_error("ambiguous import", e2, "ambiguous.html", {}, "component 'badge' is defined in both 'ui/cards.html' and 'ui/other.html'")
+check("local component wins over import", e2:render("local_wins.html", {}), "<local/>")
+check("super output is not escaped twice", stencil.env({ root: root2, escape: stencil.escape_html }):render("esc_super.html", { v: "<i>" }), "[&lt;i&gt;]")
+check_error("import must be top level", "{% if true %}{% import \"x\" %}{% endif %}", {}, "'import' must be at the top level")
+
+// env:check() understands components, imports, and block overrides.
+var check_root2 = os.join(workspace, "check2")
+os.mkdirp(check_root2)
+writefile(os.join(check_root2, "lib.html"), "{% component card(title) %}{% slot body %}{% endslot %}{% endcomponent %}")
+writefile(os.join(check_root2, "base.html"), "{% block main %}{% endblock %}")
+writefile(os.join(check_root2, "ok.html"), "{% extends \"base.html\" %}{% import \"lib.html\" %}{% block main %}{% use card({ title: \"x\" }) %}{% fill body %}b{% endfill %}{% enduse %}{% endblock %}")
+writefile(os.join(check_root2, "bad.html"), "{% import \"lib.html\" %}{% import \"gone.html\" %}{% use card({ titel: \"x\" }) %}{% fill bdy %}{% endfill %}{% enduse %}{% use nothere %}{% enduse %}")
+writefile(os.join(check_root2, "bad_block.html"), "{% extends \"base.html\" %}{% block mian %}{% endblock %}")
+writefile(os.join(check_root2, "bad_default.html"), "{% component c(a = x:nope()) %}{% endcomponent %}")
+var problems2 = stencil.env({ root: check_root2 }):check()
+var messages2 = []
+for (var i = 0; i < size(problems2); i++) {
+    messages2:push(stencil.format_error(problems2[i]))
+}
+var all2 = join(messages2, "\n")
+check("check2: missing import target", contains(all2, "bad.html:1:24: template 'gone.html' not found"), true)
+check("check2: bad slot", contains(all2, "component 'card' has no slot 'bdy'"), true)
+check("check2: missing argument", contains(all2, "component 'card' is missing argument 'title'"), true)
+check("check2: unknown argument", contains(all2, "component 'card' has no parameter 'titel'"), true)
+check("check2: block typo", contains(all2, "bad_block.html:1:26: block 'mian' is not defined in 'base.html'"), true)
+check("check2: filter in default", contains(all2, "bad_default.html:1:22: unknown filter 'nope'"), true)
+check("check2: ok.html is clean", contains(all2, "ok.html"), false)
+check("check2: lib.html is clean", contains(all2, "lib.html:"), false)
+// bad.html: gone.html, bdy, title, titel. 'nothere' can't be resolved because
+// gone.html is missing, so check() leaves it to render time.
+check("check2: problem count", size(problems2), 6)
+
+// --- reload ---------------------------------------------------------------------
+
+var reload_root = os.join(workspace, "reload")
+os.mkdirp(reload_root)
+
+// Edits in this test happen within the same second, and reload compares
+// whole-second mtimes, so each write gets its own explicit mtime.
+var fake_mtime = 1700000000
+func edit(name, text) {
+    var path = os.join(reload_root, name)
+    writefile(path, text)
+    fake_mtime = fake_mtime + 1
+    os.system("touch -d @" + str(fake_mtime) + " \"" + path + "\"")
+}
+
+edit("page.html", "{% extends \"base.html\" %}{% import \"ui.html\" %}{% block b %}{% use tag %}{% enduse %}{% include \"part.html\" %}{% endblock %}")
+edit("base.html", "base1[{% block b %}{% endblock %}]")
+edit("ui.html", "{% component tag %}tag1{% endcomponent %}")
+edit("part.html", "part1")
+
+var live = stencil.env({ root: reload_root })
+check("reload: first render", live:render("page.html", {}), "base1[tag1part1]")
+edit("part.html", "part2")
+check("reload: included file", live:render("page.html", {}), "base1[tag1part2]")
+edit("base.html", "base2[{% block b %}{% endblock %}]")
+check("reload: parent template", live:render("page.html", {}), "base2[tag1part2]")
+edit("ui.html", "{% component tag %}tag2{% endcomponent %}")
+check("reload: imported components", live:render("page.html", {}), "base2[tag2part2]")
+var first = live:get("ui.html")
+check("reload: unchanged file reuses the cached parse", live:get("ui.html") == first, true)
+
+// A failed render must not leave the env thinking it is mid-render.
+edit("part.html", "{{ nope }}")
+check_env_error("reload: broken edit is reported", live, "page.html", {}, "part.html:1:4: undefined variable 'nope'")
+edit("part.html", "fixed")
+check("reload: fixed edit after an error", live:render("page.html", {}), "base2[tag2fixed]")
+
+os.remove(os.join(reload_root, "part.html"))
+check_env_error("reload: deleted file", live, "page.html", {}, "template 'part.html' not found")
+edit("part.html", "back")
+
+var frozen = stencil.env({ root: reload_root, reload: false })
+check("reload off: first render", frozen:render("page.html", {}), "base2[tag2back]")
+edit("part.html", "changed")
+check("reload off: keeps the cached template", frozen:render("page.html", {}), "base2[tag2back]")
+
+// --- web integration ------------------------------------------------------------
+// The env rides along in the app into web's worker fibers, so this also
+// guards against stencil values that can't be copied across fibers.
+
+var app = web.app()
+app:templates(stencil.env({ root: root, escape: stencil.escape_html }))
+app:get("/page", func(ctx) { return ctx:render("page.html", { title: "<T>", item: 1 }) })
+var listener = socket.listen("127.0.0.1", 0)
+var server = app:serve_async(listener, { max_connections: 1, timeout_ms: 1000 })
+var response = http.request({ host: "127.0.0.1", port: listener:local_addr().port, path: "/page", timeout_ms: 1000 })
+await server
+listener:close()
+check("web render status", response.status, 200)
+check("web render body", response.text, "<title>&lt;T&gt;</title>\n<main>\n[layout item=1]\n</main>\nlayout footer\n")
+
+print("stencil: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count > 0) {
+    exit(1)
+}
