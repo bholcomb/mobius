@@ -1,0 +1,49 @@
+// A spawned fiber may use top-level values only if they are shared or
+// cannot change. Plain top-level vars were read and written by fibers with
+// no synchronization (concurrent pushes to a global array crashed with
+// heap corruption on every run); using one from a fiber is now an error.
+import "json"
+
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func error_in_fiber(f) {
+    var message = ""
+    try { await spawn f() } catch e { message = str(e) }
+    return message
+}
+
+var items = []
+func push_item() { items:push(1); return 0 }
+check("writing a top-level var",
+      contains(error_in_fiber(push_item), "top-level variable 'items' is not shared"))
+
+var LIMIT = 10
+func read_limit() { return LIMIT }
+check("reading a top-level var", contains(error_in_fiber(read_limit), "'LIMIT' is not shared"))
+
+func set_new() { brand_new_global = 1; return 0 }
+check("creating a top-level var", contains(error_in_fiber(set_new), "is not shared"))
+
+// Allowed: shared vars, functions, enums, imported modules, builtins.
+shared var counter = [0]
+func helper(x) { return x + 1 }
+enum Color { RED, GREEN }
+func allowed() {
+    atomic(counter[0] = counter[0] + 1)
+    var parsed = json.parse("[1]")
+    fiber.sleep(1)
+    var c = Color.GREEN
+    return helper(1) + parsed[0] + (c == Color.GREEN ? 0 : 100)
+}
+check("shared, functions, enums, modules, builtins", await spawn allowed() == 3)
+check("shared write landed", counter[0] == 1)
+
+// The main fiber is unaffected.
+items:push(2)
+check("main fiber uses top-level vars freely", items:size() == 1 and LIMIT == 10)
+print("fiber top-level vars: PASS")
