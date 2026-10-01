@@ -1,0 +1,62 @@
+// `spawn f(...)` where f is a top-level function is checked at compile
+// time: if f, or a top-level function it references, uses a non-shared
+// top-level var, compilation fails and names the variable and the call
+// path. (Cases the compiler cannot see are caught at runtime.)
+import "os"
+
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+var workspace = os.join(os.tmpdir(), "mobius_fiber_compile_" + str(os.getpid()))
+os.mkdirp(workspace)
+var failures = 0
+var counter = 0
+
+func compile_output(source) {
+    counter = counter + 1
+    var path = os.join(workspace, "case" + str(counter) + ".mob")
+    writefile(path, source)
+    return os.exec("\"" + mobius_bin + "\" \"" + path + "\" 2>&1")
+}
+
+func expect_error(name, source, needle) {
+    var out = compile_output(source)
+    if (!contains(out, "Compile error") or !contains(out, needle)) {
+        failures = failures + 1
+        print("FAIL: " + name + ": expected a compile error containing '" + needle + "', got: " + out)
+    }
+}
+
+func expect_ok(name, source) {
+    var out = compile_output(source)
+    if (contains(out, "Compile error") or !contains(out, "OK")) {
+        failures = failures + 1
+        print("FAIL: " + name + ": expected to run, got: " + out)
+    }
+}
+
+expect_error("direct use",
+    "var items = []\nfunc work() { items:push(1); return 0 }\nawait spawn work()\n",
+    "uses top-level variable 'items' (line 2, via work)")
+expect_error("through a helper",
+    "var items = []\nfunc add(x) { items:push(x) }\nfunc work() { add(1); return 0 }\nawait spawn work()\n",
+    "via work -> add")
+expect_error("spawn before the definition",
+    "var counter = 0\nvar f = spawn work()\nfunc work() { return counter }\nawait f\n",
+    "'counter'")
+expect_error("closure created in the fiber",
+    "var LIMIT = 3\nfunc work() { var f = func() { return LIMIT }\n return f() }\nawait spawn work()\n",
+    "'LIMIT'")
+
+expect_ok("shared var",
+    "shared var items = []\nfunc work() { items:push(1); return items:size() }\nawait spawn work()\nprint(\"OK\")\n")
+expect_ok("local shadows the global",
+    "var items = []\nfunc work() { var items = [1]; return items:size() }\nawait spawn work()\nprint(\"OK\")\n")
+expect_ok("parameter shadows the global",
+    "var items = []\nfunc work(items) { return items:size() }\nawait spawn work([1])\nprint(\"OK\")\n")
+expect_ok("mutually recursive functions",
+    "func a(n) { return n == 0 ? 0 : b(n - 1) }\nfunc b(n) { return a(n) }\nawait spawn a(3)\nprint(\"OK\")\n")
+
+os.system("rm -rf \"" + workspace + "\"")
+if (failures > 0) {
+    exit(1)
+}
+print("fiber globals compile check: PASS")

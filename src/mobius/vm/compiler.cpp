@@ -37,6 +37,9 @@ Prototype* Compiler::compile(Stmt** statements, size_t count,
     FunctionState fs;
     initCompiler(nullptr, source_name);
 
+    top_level_decls_ = TopLevelDecls();
+    collect_top_level_decls(statements, count, top_level_decls_);
+
     compileBlock(statements, count);
     emitReturn(0, 0);
 
@@ -4672,7 +4675,33 @@ void Compiler::compileThrowStmt(ThrowStmt* stmt) {
 }
 
 // OP_SPAWN A B C -- spawn function R[B] with C-1 args; result (future) into R[A]
+// `spawn f(...)` where f is a top-level function of this chunk: report a
+// non-shared top-level var used by f or by the top-level functions it
+// references, at compile time. Other spawns (closures, methods, functions
+// from elsewhere) are left to the runtime check.
+void Compiler::checkSpawnedFunction(Expr* callee) {
+    if (!callee || callee->type != EXPR_VARIABLE || !callee->as.variable.name.identifier) return;
+    const char* name = callee->as.variable.name.identifier;
+    if (resolveLocal(name) >= 0 || resolveUpvalue(current_, name) >= 0) return;
+
+    UnsharedGlobalUse use;
+    if (!find_unshared_global_use(name, top_level_decls_, &use)) return;
+
+    std::string via;
+    for (size_t i = 0; i < use.path.size(); i++) {
+        if (i > 0) via += " -> ";
+        via += use.path[i];
+    }
+    fprintf(stderr, "Compile error [%s:%d]: spawned function '%s' uses top-level variable '%s' "
+                    "(line %d, via %s), which is not shared; declare it `shared var %s`, "
+                    "or pass the value to the fiber as an argument\n",
+            current_->proto->source.c_str(), callee->as.variable.name.line, name, use.var.c_str(),
+            use.line, via.c_str(), use.var.c_str());
+    had_error_ = true;
+}
+
 int Compiler::compileSpawn(SpawnExpr* expr, int dest) {
+    checkSpawnedFunction(expr->callee);
     int base = current_->free_reg;
     int func_reg = allocReg();
 
