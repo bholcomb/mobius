@@ -2571,7 +2571,13 @@ MOBIUS_FORCEINLINE static int vm_op_typeis(MobiusVM* vm, VMFrame& f, uint32_t in
     int a = DECODE_A(inst);
     const Value& val = RB(inst);
     uint8_t expected_type = DECODE_C(inst);
-    bool match = ((uint8_t)val.type == expected_type);
+    // `x is array` (and array/table switch patterns) look through a shared
+    // value to what it holds, matching typeof.
+    uint8_t actual = (uint8_t)val.type;
+    if (MOBIUS_UNLIKELY(val.type == VAL_SHARED_CELL && val.as.shared_cell)) {
+        actual = (uint8_t)val.as.shared_cell->load().type;
+    }
+    bool match = (actual == expected_type);
     if (match != (a != 0)) f.ip++;
     return 0;
 }

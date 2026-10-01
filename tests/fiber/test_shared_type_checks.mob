@@ -1,0 +1,36 @@
+// typeof, `is`, and switch type/destructuring patterns see through a
+// shared value to what it holds. typeof used to report "shared", `s is
+// array` was false, and `case [a, b]` never matched a shared array.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+shared var s = [1, 2]
+shared var t = {a: 1}
+shared var n = 5
+check("typeof shared array", typeof(s) == "array")
+check("typeof shared table", typeof(t) == "table")
+check("typeof shared scalar", typeof(n) == "int64")
+check("is array", s is array)
+check("is table", t is table)
+
+func sum_pair(v) {
+    switch (v) {
+        case [a, b]: return a + b
+        default: return -1
+    }
+}
+check("array pattern on a shared array", sum_pair(s) == 3)
+
+func kind(v) {
+    switch (v) {
+        case is table: return "table"
+        case is array: return "array"
+        default: return "other"
+    }
+}
+check("type pattern on shared values", kind(s) == "array" and kind(t) == "table")
+print("shared type checks: PASS")

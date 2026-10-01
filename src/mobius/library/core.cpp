@@ -2,6 +2,7 @@
 #include "internal/gc.h"
 #include "vm/vm.h"
 #include "data/value.h"
+#include "data/shared_cell.h"
 #include "data/table.h"
 #include "data/metamethods.h"
 #include <stdio.h>
@@ -61,6 +62,12 @@ int lib_typeof(MobiusState* state, int arg_count) {
     }
 
     Value arg = state->npeek(0);
+    // A shared value reports what it holds: sharing is a property of the
+    // binding, and `typeof(x) == "array"` should not depend on whether x
+    // came from a shared structure.
+    if (arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+        arg = arg.as.shared_cell->load();
+    }
     const char* type_name = value_type_name(arg.type);
     
     // Pop argument from stack
