@@ -3330,6 +3330,32 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
 
     Value& iter_val = f.regs[a];
 
+    // A shared array or table: on the first iteration, replace it in the
+    // iterator register with a snapshot of its contents, taken under the
+    // lock. The loop then runs on the snapshot, so other fibers may keep
+    // changing the shared value and no lock is held between iterations.
+    // (Iterating a shared value used to fail: the cell fell through to the
+    // function-iterator path, "Attempt to call a non-function value".)
+    if (MOBIUS_UNLIKELY(iter_val.type == VAL_SHARED_CELL && iter_val.as.shared_cell &&
+                        f.regs[a + 2].type == VAL_NIL)) {
+        SharedCell* cell = iter_val.as.shared_cell;
+        std::lock_guard<FiberMutex> lock(cell->mutex());
+        const Value& inner = cell->unsafeValue();
+        Value snapshot = inner;
+        if (inner.type == VAL_ARRAY && inner.as.array) {
+            ArrayValue* arr = inner.as.array;
+            ArrayValue* copy = new (std::nothrow) ArrayValue(arr->length());
+            if (!copy) { VM_ERROR(vm, f, "for-in: out of memory"); return -1; }
+            for (size_t i = 0; i < arr->length(); i++) copy->push(arr->get(i));
+            snapshot = make_array_value(copy);
+        } else if (inner.type == VAL_TABLE && inner.as.table) {
+            Table* copy = inner.as.table->copy();
+            if (!copy) { VM_ERROR(vm, f, "for-in: out of memory"); return -1; }
+            snapshot = make_table_value(copy);
+        }
+        iter_val = snapshot;
+    }
+
     if (iter_val.type == VAL_ARRAY && iter_val.as.array) {
         ArrayValue* arr = iter_val.as.array;
         int64_t idx = (f.regs[a + 2].type == VAL_NIL) ? 0 : f.regs[a + 2].as.i64 + 1;
