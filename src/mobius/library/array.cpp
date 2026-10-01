@@ -24,7 +24,7 @@ struct ArraySelfAccess {
     Value array_value;
     ArrayValue* array = nullptr;
     SharedCell* cell = nullptr;
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<FiberMutex> lock;
 };
 
 static ArrayValue* extract_array_self(MobiusState* state, const char* err_msg, ArraySelfAccess* access = nullptr) {
@@ -37,7 +37,7 @@ static ArrayValue* extract_array_self(MobiusState* state, const char* err_msg, A
     if (self.type == VAL_SHARED_CELL && self.as.shared_cell) {
         if (access) {
             access->cell = self.as.shared_cell;
-            access->lock = std::unique_lock<std::recursive_mutex>(self.as.shared_cell->mutex());
+            access->lock = std::unique_lock<FiberMutex>(self.as.shared_cell->mutex());
             Value& inner = self.as.shared_cell->unsafeValue();
             if (inner.type == VAL_ARRAY && inner.as.array) {
                 access->array_value = inner;
@@ -45,7 +45,7 @@ static ArrayValue* extract_array_self(MobiusState* state, const char* err_msg, A
                 return inner.as.array;
             }
         } else {
-            std::lock_guard<std::recursive_mutex> lock(self.as.shared_cell->mutex());
+            std::lock_guard<FiberMutex> lock(self.as.shared_cell->mutex());
             Value& inner = self.as.shared_cell->unsafeValue();
             if (inner.type == VAL_ARRAY && inner.as.array) {
                 return inner.as.array;

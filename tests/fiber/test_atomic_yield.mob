@@ -1,0 +1,40 @@
+// A fiber may yield inside atomic(...) (here via fiber.sleep in the
+// expression). Shared values were locked with std::recursive_mutex, which
+// belongs to an OS thread; the fiber resumed on another thread and its
+// unlock never released the lock, so every later atomic deadlocked, even
+// with a single spawned fiber.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+shared var total = [0]
+func slow(x) { fiber.sleep(2); return x }
+func worker() {
+    for (var i = 0; i < 5; i++) {
+        atomic(total[0] = total[0] + slow(1))
+    }
+    return 0
+}
+
+await spawn worker()
+check("one fiber", total[0], 5)
+
+var fs = []
+for (var i = 0; i < 16; i++) { fs:push(spawn worker()) }
+fiber.all(fs)
+check("sixteen fibers, no lost updates", total[0], 85)
+
+// Plain contention still excludes correctly.
+shared var counter = [0]
+func bump() {
+    for (var i = 0; i < 2000; i++) { atomic(counter[0] = counter[0] + 1) }
+    return 0
+}
+var bs = []
+for (var i = 0; i < 16; i++) { bs:push(spawn bump()) }
+fiber.all(bs)
+check("contended atomic", counter[0], 32000)
+print("atomic with yield: PASS")

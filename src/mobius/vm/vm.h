@@ -16,6 +16,7 @@ class FutureValue;
 struct InternalError;
 
 #include "state/mobius_state.h"
+#include "fiber/fiber_mutex.h"
 
 // ============================================================================
 // Upvalue — runtime representation of a captured variable
@@ -256,7 +257,7 @@ public:
     void closeUpvalues(CallInfo& ci, int from_reg);
 
     struct AtomicLock {
-        std::recursive_mutex* mutex = nullptr;
+        FiberMutex* mutex = nullptr;
     };
     std::vector<AtomicLock> atomic_locks_;
 

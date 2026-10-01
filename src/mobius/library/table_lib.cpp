@@ -16,7 +16,7 @@ struct TableSelfAccess {
     Value self_value;
     Table* table = nullptr;
     SharedCell* cell = nullptr;
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<FiberMutex> lock;
 };
 
 static Table* extract_table_self(MobiusState* state, const char* err_msg, TableSelfAccess* access = nullptr) {
@@ -29,14 +29,14 @@ static Table* extract_table_self(MobiusState* state, const char* err_msg, TableS
     if (self.type == VAL_SHARED_CELL && self.as.shared_cell) {
         if (access) {
             access->cell = self.as.shared_cell;
-            access->lock = std::unique_lock<std::recursive_mutex>(self.as.shared_cell->mutex());
+            access->lock = std::unique_lock<FiberMutex>(self.as.shared_cell->mutex());
             Value& inner = self.as.shared_cell->unsafeValue();
             if (inner.type == VAL_TABLE && inner.as.table) {
                 access->table = inner.as.table;
                 return inner.as.table;
             }
         } else {
-            std::lock_guard<std::recursive_mutex> lock(self.as.shared_cell->mutex());
+            std::lock_guard<FiberMutex> lock(self.as.shared_cell->mutex());
             Value& inner = self.as.shared_cell->unsafeValue();
             if (inner.type == VAL_TABLE && inner.as.table) {
                 return inner.as.table;

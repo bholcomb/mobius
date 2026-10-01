@@ -1154,7 +1154,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
     const Value& obj = RB(inst);
     const Value& key = RKC(inst);
     if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
-        std::unique_lock<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+        std::unique_lock<FiberMutex> lock(obj.as.shared_cell->mutex());
         const Value& inner = obj.as.shared_cell->unsafeValue();
         if (inner.type == VAL_ARRAY && inner.as.array) {
             ArrayValue* arr = inner.as.array;
@@ -1304,7 +1304,7 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
     const Value& key = RKB(inst);
     const Value& val = RKC(inst);
     if (obj.type == VAL_SHARED_CELL && obj.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+        std::lock_guard<FiberMutex> lock(obj.as.shared_cell->mutex());
         Value& inner = obj.as.shared_cell->unsafeValue();
         if (inner.type == VAL_ARRAY && inner.as.array) {
             int64_t idx = vm_index_or_neg1(key);
@@ -1562,7 +1562,7 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
         // any method resolution, which may invoke a function __index.
         Value inner;
         {
-            std::lock_guard<std::recursive_mutex> lock(obj.as.shared_cell->mutex());
+            std::lock_guard<FiberMutex> lock(obj.as.shared_cell->mutex());
             inner = obj.as.shared_cell->unsafeValue();
         }
         if (inner.type == VAL_USERDATA) {
@@ -1730,7 +1730,7 @@ MOBIUS_FORCEINLINE static int vm_op_array_push(MobiusVM* vm, VMFrame& f, uint32_
     Value& arr_val = RA(inst);
     const Value& val = RB(inst);
     if (arr_val.type == VAL_SHARED_CELL && arr_val.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(arr_val.as.shared_cell->mutex());
+        std::lock_guard<FiberMutex> lock(arr_val.as.shared_cell->mutex());
         Value& inner = arr_val.as.shared_cell->unsafeValue();
         if (inner.type != VAL_ARRAY || !inner.as.array) {
             VM_ERROR(vm, f, "OP_ARRAY_PUSH applied to non-array (%s)", value_type_name(inner.type));
@@ -2448,7 +2448,7 @@ MOBIUS_FORCEINLINE static int vm_op_inc(MobiusVM* vm, VMFrame& f, uint32_t inst)
     Value& dst = RA(inst);
     const Value& src = RB(inst);
     if (&dst == &src && dst.type == VAL_SHARED_CELL && dst.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(dst.as.shared_cell->mutex());
+        std::lock_guard<FiberMutex> lock(dst.as.shared_cell->mutex());
         Value current = dst.as.shared_cell->unsafeValue();
         if (current.type != VAL_INT64 && current.type != VAL_UINT64) {
             VM_ERROR(vm, f, "Increment requires an integer operand");
@@ -2473,7 +2473,7 @@ MOBIUS_FORCEINLINE static int vm_op_dec(MobiusVM* vm, VMFrame& f, uint32_t inst)
     Value& dst = RA(inst);
     const Value& src = RB(inst);
     if (&dst == &src && dst.type == VAL_SHARED_CELL && dst.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(dst.as.shared_cell->mutex());
+        std::lock_guard<FiberMutex> lock(dst.as.shared_cell->mutex());
         Value current = dst.as.shared_cell->unsafeValue();
         if (current.type != VAL_INT64 && current.type != VAL_UINT64) {
             VM_ERROR(vm, f, "Decrement requires an integer operand");
@@ -2703,7 +2703,7 @@ MOBIUS_FORCEINLINE static int vm_op_eq_ff(MobiusVM* vm, VMFrame& f, uint32_t ins
 MOBIUS_FORCEINLINE static int vm_op_len(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     const Value& raw = RB(inst);
     if (raw.type == VAL_SHARED_CELL && raw.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(raw.as.shared_cell->mutex());
+        std::lock_guard<FiberMutex> lock(raw.as.shared_cell->mutex());
         const Value& inner = raw.as.shared_cell->unsafeValue();
         if (inner.type == VAL_ARRAY && inner.as.array) {
             RA(inst) = make_int64_value((int64_t)inner.as.array->length());
@@ -3910,7 +3910,7 @@ MOBIUS_FORCEINLINE static int vm_op_share(MobiusVM* vm, VMFrame& f, uint32_t ins
 MOBIUS_FORCEINLINE static int vm_op_atomic_begin(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t a = DECODE_A(inst);
     Value& val = f.regs[a];
-    std::recursive_mutex* held_mutex = nullptr;
+    FiberMutex* held_mutex = nullptr;
 
     if (val.type == VAL_SHARED_CELL && val.as.shared_cell) {
         held_mutex = &val.as.shared_cell->mutex();

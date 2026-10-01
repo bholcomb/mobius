@@ -2,6 +2,7 @@
 #define MOBIUS_DATA_SHARED_CELL_H
 
 #include "internal/ref_counted.h"
+#include "fiber/fiber_mutex.h"
 
 #include <mutex>
 
@@ -17,11 +18,11 @@ public:
     Value& unsafeValue() { return *value_; }
     const Value& unsafeValue() const { return *value_; }
 
-    std::recursive_mutex& mutex() { return mutex_; }
+    FiberMutex& mutex() { return mutex_; }
 
 private:
     Value* value_;
-    std::recursive_mutex mutex_;
+    FiberMutex mutex_;
 };
 
 #endif // MOBIUS_DATA_SHARED_CELL_H
