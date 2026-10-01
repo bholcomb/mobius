@@ -18,6 +18,10 @@
 
 struct ArraySelfAccess {
     Value self_value;
+    // For a shared self, self_value only keeps the SharedCell alive. Hold
+    // the inner array as well: a callback (map, sort, ...) may store a new
+    // value into the cell, which would otherwise free the array mid-call.
+    Value array_value;
     ArrayValue* array = nullptr;
     SharedCell* cell = nullptr;
     std::unique_lock<std::recursive_mutex> lock;
@@ -36,6 +40,7 @@ static ArrayValue* extract_array_self(MobiusState* state, const char* err_msg, A
             access->lock = std::unique_lock<std::recursive_mutex>(self.as.shared_cell->mutex());
             Value& inner = self.as.shared_cell->unsafeValue();
             if (inner.type == VAL_ARRAY && inner.as.array) {
+                access->array_value = inner;
                 access->array = inner.as.array;
                 return inner.as.array;
             }
