@@ -1,0 +1,13 @@
+// __gc_collect() called from inside a native callback (here arr:map) must
+// not collect: the outer native holds its result array only on the C++
+// stack, so collecting freed it (use-after-free under AddressSanitizer).
+var src = [1, 2, 3, 4, 5]
+var out = src:map(func(x, i) {
+    __gc_collect()
+    return {v: x}
+})
+if (out:size() != 5 or out[4].v != 5) {
+    print("FAIL: map result corrupted")
+    exit(1)
+}
+print("gc collect in callback: PASS")
