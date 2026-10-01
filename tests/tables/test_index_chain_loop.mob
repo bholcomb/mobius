@@ -1,0 +1,36 @@
+// A loop through table __index links raises an error. Lookups followed
+// table-valued __index recursively with no limit, so `a.__index = a` (or
+// a longer loop) hung forever on any missing key.
+func error_of(f) {
+    var message = ""
+    try { f() } catch e { message = str(e) }
+    return message
+}
+
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+var a = {}
+setmetatable(a, { ["__index"] = a })
+check("self loop, field", contains(error_of(func() { var v = a.missing }), "__index chain is too long"))
+var key = "missing"
+check("self loop, index", contains(error_of(func() { var v = a[key] }), "__index chain is too long"))
+
+var t = {}
+var mt = {}
+mt.__index = t
+setmetatable(t, mt)
+check("two-table loop", contains(error_of(func() { var v = t.missing }), "__index chain is too long"))
+
+// Keys that exist are still found, and normal chains work.
+a.present = 1
+check("existing key on looping table", a.present == 1)
+var base = {greet: "hi"}
+var mid = setmetatable({}, {["__index"] = base})
+var leaf = setmetatable({}, {["__index"] = mid})
+check("normal chain", leaf.greet == "hi" and leaf.nope == nil)
+print("index chain loop: PASS")

@@ -126,6 +126,9 @@ private:
 
     const Value& getUnlocked(const Value& key) const;
     const Value& getByStringUnlocked(MobiusString* key) const;
+    // This table's own entry for key (no __index), or nullptr.
+    const Value* findRaw(const Value& key) const;
+    const Value* findRawString(MobiusString* key) const;
     bool setUnlocked(const Value& key, const Value& value);
     bool setByStringUnlocked(MobiusString* key, const Value& value);
     bool removeUnlocked(const Value& key);
