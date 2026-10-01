@@ -24,6 +24,9 @@ typedef struct {
                                 // branch, a case guard). There a spaced ':'
                                 // stops the expression instead of being a
                                 // malformed method call.
+    int depth;                  // current nesting of statements/expressions,
+                                // capped so deep input can't overflow the C
+                                // stack (see NestingGuard in parser.cpp)
 } Parser;
 
 // Parser result structure

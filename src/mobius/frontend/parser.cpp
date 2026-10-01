@@ -23,6 +23,7 @@ void init_parser(Parser* parser, MobiusState* state, Token* tokens, size_t token
     parser->state = state;
     parser->suppress_method_colon = false;
     parser->colon_ends_expr = 0;
+    parser->depth = 0;
 }
 
 // Parser state functions
@@ -170,6 +171,24 @@ bool consume_statement_terminator(Parser* parser, const char* message) {
     // Otherwise, newline is implicit and we're good
     return true;
 }
+
+// Recursive descent uses the C stack, so arbitrarily deep input (thousands
+// of nested parentheses, blocks or function literals) used to overflow it.
+// Past this many counted levels it is a parse error instead. Each source
+// level costs two or three counts (about 200 nested parentheses or blocks),
+// which real code stays far below.
+static const int MAX_PARSE_DEPTH = 512;
+
+struct NestingGuard {
+    Parser* parser;
+    bool ok;
+    explicit NestingGuard(Parser* p) : parser(p), ok(++p->depth <= MAX_PARSE_DEPTH) {
+        if (!ok && !p->panic_mode) {
+            parser_error_at_current(p, "Code is nested too deeply");
+        }
+    }
+    ~NestingGuard() { parser->depth--; }
+};
 
 static void skip_newlines(Parser* parser) {
     while (parser_match(parser, TOKEN_NEWLINE)) {}
@@ -335,6 +354,7 @@ Expr* parse_primary(Parser* parser) {
                 Parser sub_parser;
                 init_parser(&sub_parser, parser->state, sub_tokens.tokens, sub_tokens.count);
                 sub_parser.source_name = parser->source_name;
+                sub_parser.depth = parser->depth;   // nested `${`${...}`}` counts too
                 expr_node = parse_expression(&sub_parser);
                 while (parser_match(&sub_parser, TOKEN_NEWLINE)) {}
                 if (expr_node && !sub_parser.had_error && !parser_at_end(&sub_parser)) {
@@ -731,6 +751,8 @@ Expr* parse_call(Parser* parser) {
 }
 
 Expr* parse_unary(Parser* parser) {
+    NestingGuard guard(parser);
+    if (!guard.ok) return NULL;
     // Handle prefix increment/decrement
     if (parser_match_any(parser, 2, TOKEN_PLUS_PLUS, TOKEN_MINUS_MINUS)) {
         Token op = parser_previous(parser);
@@ -1037,6 +1059,8 @@ Expr* parse_assignment(Parser* parser) {
 }
 
 Expr* parse_expression(Parser* parser) {
+    NestingGuard guard(parser);
+    if (!guard.ok) return NULL;
     return parse_assignment(parser);
 }
 
@@ -1407,6 +1431,8 @@ Stmt* parse_for_statement(Parser* parser) {
 }
 
 Stmt* parse_statement(Parser* parser) {
+    NestingGuard guard(parser);
+    if (!guard.ok) return NULL;
     // Special handling for { to distinguish table literals from block statements
     if (parser_check(parser, TOKEN_LEFT_BRACE)) {
         // Look ahead to distinguish table literal from block statement
