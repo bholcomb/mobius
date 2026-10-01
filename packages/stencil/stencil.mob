@@ -1,7 +1,7 @@
 // stencil — text templating for Mobius.
 // User documentation: docs/modules/stencil.md. Open work: TODO.md.
 //
-// Module-level tables are `shared var`: the web module renders templates on
+// Module-level tables are `const`: the web module renders templates on
 // worker fibers, and spawned fibers may only use top-level values that are
 // shared or immutable.
 
@@ -9,7 +9,7 @@ import "json"
 import "os"
 import "url"
 
-shared var __MAX_DEPTH = 64
+const __MAX_DEPTH = 64
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -455,18 +455,18 @@ func __apply_whitespace(tokens) {
 // Expression lexer
 // ---------------------------------------------------------------------------
 
-shared var __KEYWORDS = { ["and"] = true, ["or"] = true, ["not"] = true, ["nil"] = true, ["true"] = true, ["false"] = true, ["in"] = true }
+const __KEYWORDS = { ["and"] = true, ["or"] = true, ["not"] = true, ["nil"] = true, ["true"] = true, ["false"] = true, ["in"] = true }
 
-shared var __PUNCT2 = { ["=="] = true, ["!="] = true, ["<="] = true, [">="] = true, ["&&"] = true, ["||"] = true }
+const __PUNCT2 = { ["=="] = true, ["!="] = true, ["<="] = true, [">="] = true, ["&&"] = true, ["||"] = true }
 
-shared var __PUNCT1 = {
+const __PUNCT1 = {
     ["("] = true, [")"] = true, ["["] = true, ["]"] = true, ["{"] = true, ["}"] = true,
     [","] = true, ["."] = true, [":"] = true, ["+"] = true, ["-"] = true, ["*"] = true,
     ["/"] = true, ["%"] = true, ["<"] = true, [">"] = true, ["!"] = true, ["="] = true,
     ["?"] = true
 }
 
-shared var __UNSUPPORTED = {
+const __UNSUPPORTED = {
     ["|"] = "'|' is bitwise-or in Mobius; use method syntax for filters, e.g. x:upper()",
     ["&"] = "bitwise operators are not supported in templates",
     ["^"] = "bitwise operators are not supported in templates",
@@ -637,7 +637,7 @@ func __node(tok, type) {
     return { type: type, file: tok.file, line: tok.line, col: tok.col }
 }
 
-shared var __BINARY_PREC = {
+const __BINARY_PREC = {
     ["or"] = 1, ["||"] = 1,
     ["and"] = 2, ["&&"] = 2,
     ["=="] = 3, ["!="] = 3,
@@ -857,7 +857,7 @@ func __parse_primary(ps) {
 // ---------------------------------------------------------------------------
 
 // Jinja tags that stencil replaces with components; named in the error.
-shared var __JINJA_TAGS = { ["macro"] = true, ["call"] = true }
+const __JINJA_TAGS = { ["macro"] = true, ["call"] = true }
 
 func __tag_node(tok, type) {
     return { type: type, file: tok.file, line: tok.line, col: tok.col }
@@ -2222,7 +2222,7 @@ func __f_str(v, a) { return str(v) }
 func __f_int(v, a) { return int(v) }
 func __f_float(v, a) { return float(v) }
 
-shared var __FILTERS = {
+const __FILTERS = {
     upper:      { fn: __f_upper, min: 0, max: 0 },
     lower:      { fn: __f_lower, min: 0, max: 0 },
     trim:       { fn: __f_trim, min: 0, max: 0 },
