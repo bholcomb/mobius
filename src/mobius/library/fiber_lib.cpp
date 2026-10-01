@@ -105,7 +105,7 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
             results->release();
             return state->error("fiber.all: one or more fibers failed");
         }
-        results->push(future->result());
+        results->push(copy_for_awaiter(future->result()));
     }
 
     state->npush(make_array_value(results));
@@ -130,7 +130,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
             FutureValue* future = held[i].as.future;
             if (future->isDone()) {
                 if (future->isResolved()) {
-                    state->npush(future->result());
+                    state->npush(copy_for_awaiter(future->result()));
                     return 1;
                 }
                 failed++;

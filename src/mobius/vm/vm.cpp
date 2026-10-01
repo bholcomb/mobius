@@ -3823,7 +3823,7 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
     }
 
     if (future->isResolved()) {
-        RA(inst) = future->result();
+        RA(inst) = copy_for_awaiter(future->result());
     } else {
         const Value& err = future->error();
         if (err.type == VAL_STRING && err.as.string) {
