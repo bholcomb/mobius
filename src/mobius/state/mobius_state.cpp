@@ -1058,6 +1058,7 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     clearErrorInternal();
 
     MobiusVM* vm = boundVM();
+    if (vm) vm->error_value_ = Value();   // a new error carries no thrown value
     InternalError*& err_slot = vm ? vm->last_error_ : fallback_last_error_;
 
     err_slot = (InternalError*)malloc(sizeof(InternalError));

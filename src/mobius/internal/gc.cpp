@@ -477,6 +477,7 @@ static void gc_mark_from_roots(MobiusVM* vm) {
     //    liveness. (The eventual collector scans only the live range — that
     //    is a policy improvement, not a soundness requirement.)
     for (const Value& v : vm->registers_) mark_value(v, &ctx);
+    mark_value(vm->error_value_, &ctx);   // a thrown value still propagating
     // 2. Upvalues tracked by live frames.
     for (size_t d = 0; d <= vm->call_depth_; d++) {
         CallInfo& ci = vm->call_stack_[d];

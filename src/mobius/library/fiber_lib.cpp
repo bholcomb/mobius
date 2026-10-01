@@ -116,7 +116,14 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
             else std::this_thread::yield();
         }
         if (future->isRejected()) {
+            // Propagate the first failure as itself (documented behavior),
+            // not a generic "one or more fibers failed".
             results->release();
+            MobiusVM* vm = MobiusVM::t_current_vm;
+            if (vm) {
+                vm->rethrowFutureError(future);
+                return -1;
+            }
             return state->error("fiber.all: one or more fibers failed");
         }
         results->push(copy_for_awaiter(future->result()));
