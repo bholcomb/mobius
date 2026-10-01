@@ -31,6 +31,9 @@ public:
     inline const Value& unsafeGet(size_t index) const { return elements[index]; }
 
     void reserve(size_t new_capacity);
+    // Reserve room for new_capacity elements; false if that is impossible
+    // (too large, or out of memory). The array is unchanged on failure.
+    bool tryReserve(size_t new_capacity);
     void reverse();
 
     const Value& operator[](size_t index) const;

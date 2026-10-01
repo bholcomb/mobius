@@ -1295,6 +1295,10 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
                     VM_ERROR(vm, f, "cannot resize array while slices are alive");
                     return -1;
                 }
+                if (!arr->tryReserve((size_t)idx + 1)) {
+                    VM_ERROR(vm, f, "Array index %lld is too large: cannot grow the array that far", (long long)idx);
+                    return -1;
+                }
                 while ((int64_t)arr->length() <= idx)
                     arr->push(Value());
                 arr->set((size_t)idx, val);
@@ -1369,6 +1373,10 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
             ArrayValue* arr = obj.as.array;
             if ((int64_t)arr->length() <= idx && arr->hasActiveSlices()) {
                 VM_ERROR(vm, f, "cannot resize array while slices are alive");
+                return -1;
+            }
+            if (!arr->tryReserve((size_t)idx + 1)) {
+                VM_ERROR(vm, f, "Array index %lld is too large: cannot grow the array that far", (long long)idx);
                 return -1;
             }
             while ((int64_t)arr->length() <= idx)

@@ -78,9 +78,16 @@ int lib_array_create(MobiusState* state, int arg_count) {
     size_t capacity = (size_t)cap_arg.as.i64;
     if (capacity == 0) capacity = 8;
 
-    ArrayValue* array = new (std::nothrow) ArrayValue(capacity);
+    ArrayValue* array = new (std::nothrow) ArrayValue();
     if (!array) {
         return state->error("Failed to create array");
+    }
+    if (!array->tryReserve(capacity)) {
+        { Value owner = make_array_value(array); }   // adopts and frees it
+        char msg[96];
+        snprintf(msg, sizeof(msg), "array_create: cannot allocate %lld elements",
+                 (long long)cap_arg.as.i64);
+        return state->error(msg);
     }
 
     if (has_fill) {
