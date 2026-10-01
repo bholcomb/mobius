@@ -179,6 +179,12 @@ static int vm_index_function_fallback(MobiusVM* vm, const Value& receiver, Table
         if (idx.type == VAL_TABLE && idx.as.table) { cur = idx.as.table; continue; }
         return 0;
     }
+    if (cur) {
+        // Still following table __index links after 1000 steps: a cycle
+        // (Table::get gives up at the same length and returns nil).
+        vm->runtimeError("__index chain is too long (is there a loop through __index?)");
+        return -1;
+    }
     return 0;
 }
 

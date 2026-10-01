@@ -289,49 +289,32 @@ const Value& Table::get(const Value& key) const {
     return getUnlocked(key);
 }
 
-const Value& Table::getUnlocked(const Value& key) const {
-    if (size_ == 0) {
-        if (metatable_) {
-            const Value& index_method = getMetamethod(state_->metamethods()->index());
-            if (index_method.type == VAL_TABLE)
-                return index_method.as.table->get(key);
-        }
-        return kNilValue;
-    }
+// Longest table __index chain a lookup follows. A cycle (t's __index is t,
+// or a loop through several tables) used to recurse forever; past this
+// many links the lookup gives nil and the VM reports the loop
+// (vm_index_function_fallback).
+static const int MAX_INDEX_CHAIN = 1000;
 
+// Next table in the __index chain of `t`, or nullptr.
+static const Table* index_parent(const Table* t, MobiusState* state) {
+    Table* mt = t->getMetatable();
+    if (!mt) return nullptr;
+    const Value& index_method = t->getMetamethod(state->metamethods()->index());
+    return index_method.type == VAL_TABLE ? index_method.as.table : nullptr;
+}
+
+const Value* Table::findRaw(const Value& key) const {
+    if (size_ == 0) return nullptr;
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
     if (tags_[index] != TAG_EMPTY && entries_[index].key.exactlyEqual(key)) {
-        return entries_[index].value;
+        return &entries_[index].value;
     }
-
-    if (metatable_) {
-        const Value& index_method = getMetamethod(state_->metamethods()->index());
-        if (index_method.type == VAL_TABLE) {
-            return index_method.as.table->get(key);
-        }
-    }
-
-    return kNilValue;
+    return nullptr;
 }
 
-const Value& Table::getByString(MobiusString* key) const {
-    return getByStringUnlocked(key);
-}
-
-const Value& Table::getByStringUnlocked(MobiusString* key) const {
-    if (MOBIUS_UNLIKELY(!key)) return kNilValue;
-    if (MOBIUS_UNLIKELY(size_ == 0)) {
-        if (metatable_) {
-            const Value& index_method = getMetamethod(state_->metamethods()->index());
-            if (index_method.type == VAL_TABLE) {
-                Value key_val = make_string_value(key);
-                return index_method.as.table->get(key_val);
-            }
-        }
-        return kNilValue;
-    }
-
+const Value* Table::findRawString(MobiusString* key) const {
+    if (size_ == 0) return nullptr;
     size_t h = (size_t)key->hash;
     size_t mask = entries_.size() - 1;
     size_t index = h & mask;
@@ -343,19 +326,33 @@ const Value& Table::getByStringUnlocked(MobiusString* key) const {
         if (t == TAG_EMPTY) break;
         if (t == tag) {
             if (string_key_equals(entries_[index].key, key))
-                return entries_[index].value;
+                return &entries_[index].value;
         }
         index = (index + 1) & mask;
     } while (index != start);
+    return nullptr;
+}
 
-    if (metatable_) {
-        const Value& index_method = getMetamethod(state_->metamethods()->index());
-        if (index_method.type == VAL_TABLE) {
-            Value key_val = make_string_value(key);
-            return index_method.as.table->get(key_val);
-        }
+const Value& Table::getUnlocked(const Value& key) const {
+    const Table* t = this;
+    for (int hops = 0; t && hops <= MAX_INDEX_CHAIN; hops++) {
+        if (const Value* v = t->findRaw(key)) return *v;
+        t = index_parent(t, state_);
     }
+    return kNilValue;
+}
 
+const Value& Table::getByString(MobiusString* key) const {
+    return getByStringUnlocked(key);
+}
+
+const Value& Table::getByStringUnlocked(MobiusString* key) const {
+    if (MOBIUS_UNLIKELY(!key)) return kNilValue;
+    const Table* t = this;
+    for (int hops = 0; t && hops <= MAX_INDEX_CHAIN; hops++) {
+        if (const Value* v = t->findRawString(key)) return *v;
+        t = index_parent(t, state_);
+    }
     return kNilValue;
 }
 
