@@ -30,6 +30,13 @@ expect_parse_error("compound assignment without value", "var a = [1]\na[0] += \n
 // A postfix operator must not wrap an operand that failed to parse.
 expect_parse_error("spawn of prefix increment", "spawn ++x\n")
 
+// Error recovery must make progress when a statement fails on its first
+// token right after a ';' (this used to loop forever).
+expect_parse_error("stray ) after ;", "var x = 1; )\n")
+expect_parse_error("stray } after ;", "var x = 1; }\n")
+expect_parse_error("stray ) after ; in block", "if (true) { print(1); ) }\n")
+expect_parse_error("stray ] after ; in function", "func f() {\n  var a = 1; ]\n}\n")
+
 os.system("rm -rf \"" + workspace + "\"")
 if (failures > 0) {
     exit(1)

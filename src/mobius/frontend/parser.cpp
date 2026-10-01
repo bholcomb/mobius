@@ -171,6 +171,16 @@ bool consume_statement_terminator(Parser* parser, const char* message) {
     return true;
 }
 
+// After error recovery, make sure the parse loop moved forward. A statement
+// can fail on its very first token, and synchronize() returns at once when
+// the previous token is ';' (e.g. `var x = 1; )`), so without this the loop
+// retried the same token forever.
+static void ensure_progress(Parser* parser, size_t start) {
+    if (parser->current == start && !parser_at_end(parser)) {
+        parser_advance(parser);
+    }
+}
+
 void synchronize(Parser* parser) {
     parser->panic_mode = false;
     
@@ -1218,6 +1228,7 @@ Stmt* parse_block_statement(Parser* parser) {
             continue;
         }
         
+        size_t start = parser->current;
         Stmt* stmt = parse_declaration(parser);
         if (stmt) {
             // Resize statements array if needed
@@ -1230,6 +1241,7 @@ Stmt* parse_block_statement(Parser* parser) {
         
         if (parser->panic_mode) {
             synchronize(parser);
+            ensure_progress(parser, start);
         }
     }
     
@@ -1601,6 +1613,7 @@ ParseResult parse(MobiusState* state, TokenArray tokens) {
             statements = new_statements;
         }
         
+        size_t start = parser.current;
         Stmt* stmt = parse_declaration(&parser);
         if (stmt) {
             statements[count++] = stmt;
@@ -1608,6 +1621,7 @@ ParseResult parse(MobiusState* state, TokenArray tokens) {
         
         if (parser.panic_mode) {
             synchronize(&parser);
+            ensure_progress(&parser, start);
         }
     }
 
