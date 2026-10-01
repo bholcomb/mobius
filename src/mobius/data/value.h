@@ -9,6 +9,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <mobius/mobius.h>
+#include <vector>
 
 #if defined(__GNUC__) || defined(__clang__)
 #  define MOBIUS_LIKELY(x)   __builtin_expect(!!(x), 1)
@@ -314,6 +315,17 @@ MOBIUS_API Value make_table_value(struct Table* table);
 MOBIUS_API Value make_shared_cell_value(SharedCell* shared_cell);
 MOBIUS_API Value make_buffer_value(BufferValue* buffer);
 MOBIUS_API Value deep_copy_value_for_spawn(const Value& value);
+
+// Whether a value crossing a fiber boundary (spawn arguments and captured
+// upvalues, channel send/recv) must be deep-copied: non-shared arrays,
+// tables, buffers and closures. Shared values keep their identity; scalars
+// and immutable values pass as-is.
+MOBIUS_API bool value_needs_fiber_copy(const Value& value);
+
+// Copy several values for one fiber crossing with a single memo, so a
+// container reachable from more than one of them stays one container in
+// the copy (`spawn f(a, a)` gives the fiber one copy of `a`, not two).
+MOBIUS_API void deep_copy_values_for_spawn(std::vector<Value>& values);
 
 inline bool is_truthy(const Value& value) {
     switch (value.type) {

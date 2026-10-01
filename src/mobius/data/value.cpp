@@ -428,6 +428,21 @@ Value deep_copy_value_for_spawn(const Value& value) {
     return deep_copy_value_impl(value, memo);
 }
 
+bool value_needs_fiber_copy(const Value& v) {
+    bool container = (v.type == VAL_ARRAY && v.as.array) ||
+                     (v.type == VAL_TABLE && v.as.table) ||
+                     (v.type == VAL_BUFFER && v.as.buffer) ||
+                     (v.type == VAL_FUNCTION && v.as.function);
+    return container && (v.flags & VAL_FLAG_SHARED) == 0;
+}
+
+void deep_copy_values_for_spawn(std::vector<Value>& values) {
+    std::unordered_map<const void*, Value> memo;
+    for (Value& v : values) {
+        if (value_needs_fiber_copy(v)) v = deep_copy_value_impl(v, memo);
+    }
+}
+
 
 static const size_t MAX_PRINT_DEPTH = 100;
 static thread_local std::vector<const void*> t_print_path;

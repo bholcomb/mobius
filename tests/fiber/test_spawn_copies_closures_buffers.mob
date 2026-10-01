@@ -1,0 +1,57 @@
+// Closures and buffers passed to spawn (as arguments or captured upvalues)
+// are copied into the fiber, like arrays and tables already were and like
+// channel transfers. They used to be shared by reference, so a fiber and
+// its parent mutated the same closure state or buffer without any
+// synchronization (concurrent use crashed with heap corruption).
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func make_counter() {
+    var items = []
+    func add(x) { items:push(x); return items:size() }
+    return add
+}
+
+// A closure argument: the fiber works on its own copy.
+var add = make_counter()
+func use3(f) { f(1); f(2); return f(3) }
+check("fiber's copy counts from its own state", await spawn use3(add) == 3)
+check("parent's closure state untouched", add(9) == 1)
+
+// A closure reached through a captured upvalue of the spawned closure.
+func make_task() {
+    var counter_fn = make_counter()
+    func task() { counter_fn(1); return counter_fn(2) }
+    func peek() { return counter_fn(9) }
+    return [task, peek]
+}
+var pair = make_task()
+var task = pair[0]
+var peek = pair[1]
+check("captured closure in fiber", await spawn task() == 2)
+check("captured closure state untouched", peek() == 1)
+
+// A buffer argument.
+var buf = buffer_create(4, 0)
+func poke(b) { b[0] = 7; return b[0] }
+check("fiber writes its own buffer", await spawn poke(buf) == 7)
+check("parent buffer untouched", buf[0] == 0)
+
+// Aliasing between arguments is preserved within one spawn.
+var shared_arr = [1]
+func same(a, b) { a:push(2); return b:size() }
+check("two arguments naming one array stay one array", await spawn same(shared_arr, shared_arr) == 2)
+check("parent array untouched", shared_arr:size() == 1)
+
+// Many fibers using copies of one closure concurrently is safe.
+var counter = make_counter()
+func work(f) { for (var i = 0; i < 2000; i++) { f(i) } return 0 }
+var fs = []
+for (var i = 0; i < 8; i++) { fs:push(spawn work(counter)) }
+fiber.all(fs)
+check("parent closure still untouched after concurrent use", counter(0) == 1)
+print("spawn copies closures and buffers: PASS")

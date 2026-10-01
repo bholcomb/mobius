@@ -3661,13 +3661,6 @@ MOBIUS_FORCEINLINE static int vm_op_throw(MobiusVM* vm, VMFrame& f, uint32_t ins
 // array or table. Shared containers (already mutex-protected), shared cells,
 // array spans, scalars, and functions are passed by reference so explicit
 // sharing is preserved across fibers.
-static inline bool value_needs_spawn_copy(const Value& v) {
-    if ((v.type == VAL_ARRAY && v.as.array) || (v.type == VAL_TABLE && v.as.table)) {
-        return (v.flags & VAL_FLAG_SHARED) == 0;
-    }
-    return false;
-}
-
 // ---- NOP ----
 // OP_SPAWN A B C -- spawn R[B] with C-1 args; R[A] = FutureValue
 MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t inst) {
@@ -3685,31 +3678,24 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
         }
         FutureValue* future = new FutureValue();
 
-        std::vector<Value> args;
-        args.reserve(nargs);
+        // Arguments and captured upvalues cross into the new fiber with the
+        // same value semantics as channel transfers: non-shared arrays,
+        // tables, buffers and closures are deep-copied (closures and buffers
+        // used to be shared, so both fibers mutated them unsynchronized),
+        // shared cells and spans pass by reference, scalars copy. One memo
+        // covers all of them, so aliasing between arguments is preserved.
+        std::vector<Value> crossing;
+        crossing.reserve(nargs + mf->upvalue_count);
         for (int i = 0; i < nargs; i++) {
-            const Value& arg = f.regs[b + 1 + i];
-            if (value_needs_spawn_copy(arg)) {
-                args.push_back(deep_copy_value_for_spawn(arg));
-            } else {
-                args.push_back(arg);
-            }
+            crossing.push_back(f.regs[b + 1 + i]);
         }
-
-        // Snapshot captured upvalues using the same value semantics as
-        // arguments: non-shared arrays/tables are deep-copied (each fiber gets
-        // its own), shared cells and spans pass by reference, scalars copy.
-        std::vector<Value> upvalue_snapshot;
-        upvalue_snapshot.reserve(mf->upvalue_count);
         for (int i = 0; i < mf->upvalue_count; i++) {
             Upvalue* uv = mf->upvalues[i];
-            Value captured = (uv && uv->location) ? *uv->location : Value();
-            if (value_needs_spawn_copy(captured)) {
-                upvalue_snapshot.push_back(deep_copy_value_for_spawn(captured));
-            } else {
-                upvalue_snapshot.push_back(captured);
-            }
+            crossing.push_back((uv && uv->location) ? *uv->location : Value());
         }
+        deep_copy_values_for_spawn(crossing);
+        std::vector<Value> args(crossing.begin(), crossing.begin() + nargs);
+        std::vector<Value> upvalue_snapshot(crossing.begin() + nargs, crossing.end());
 
         Prototype* proto = mf->proto;
         MobiusState* state = vm->state_;
