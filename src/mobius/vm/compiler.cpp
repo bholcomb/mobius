@@ -3265,8 +3265,25 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
 // --- Switch statement ---
 
 void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
+    // The subject gets its own scope. A plain local subject is used in place;
+    // anything else is stored in a hidden local. A bare temporary would sit
+    // in the register the first `var` of a case body claims (locals map
+    // 1:1 onto registers), so that var would read back the subject.
+    beginScope();
     int save = current_->free_reg;
-    int disc_reg = compileExpr(stmt->discriminant);
+    int disc_reg = -1;
+    Expr* disc = stmt->discriminant;
+    if (disc && disc->type == EXPR_VARIABLE &&
+        resolveLocal(disc->as.variable.name.identifier) >= 0) {
+        disc_reg = compileExpr(disc);
+    } else {
+        disc_reg = addLocal("(switch subject)");
+        int value_reg = compileExpr(disc, disc_reg);
+        if (value_reg != disc_reg) {
+            emitABC(OP_MOVE, (uint8_t)disc_reg, (uint8_t)value_reg, 0);
+        }
+        setFreeReg(disc_reg + 1);
+    }
 
     // Push a pseudo-loop so 'break' statements inside case bodies
     // can target the end of the switch (same semantics as C switch).
@@ -3593,6 +3610,7 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
     }
     current_->loops.pop_back();
 
+    endScope();
     setFreeReg(save);
     unreachable_ = false;
 }

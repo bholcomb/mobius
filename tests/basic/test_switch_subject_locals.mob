@@ -1,0 +1,93 @@
+// Regression: a `var` declared in a case body must not alias the switch
+// subject when the subject is not a plain local (field access, call, ...).
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func by_field(t) {
+    switch (t.kind) {
+        case "a": {
+            var node = { x: 1 }
+            return typeof(node)
+        }
+        default:
+            return "none"
+    }
+}
+
+func ident(v) { return v }
+
+func by_call(t) {
+    switch (ident(t.kind)) {
+        case "a": {
+            var first = [1, 2]
+            var second = "s"
+            return typeof(first) + "," + typeof(second)
+        }
+    }
+    return "none"
+}
+
+func by_local(t) {
+    var k = t.kind
+    switch (k) {
+        case "a": {
+            var node = { x: 1 }
+            return typeof(node)
+        }
+    }
+    return "none"
+}
+
+// Locals declared after the switch must also land in the right registers.
+func after_switch(t) {
+    switch (t.kind) {
+        case "a": {
+            var tmp = 5
+            break
+        }
+    }
+    var after = "after"
+    return after + ":" + t.kind
+}
+
+// Nested switches with non-local subjects.
+func nested(t) {
+    switch (t.kind) {
+        case "a": {
+            var outer = "o"
+            switch (t.sub) {
+                case 1: {
+                    var inner = "i"
+                    return outer + inner
+                }
+            }
+        }
+    }
+    return "none"
+}
+
+// Captured case-body locals still close correctly.
+func capture(t) {
+    var fns = []
+    switch (t.kind) {
+        case "a": {
+            var v = 41
+            fns:push(func() { return v + 1 })
+        }
+    }
+    return fns[0]()
+}
+
+var t = { kind: "a", sub: 1 }
+check("field subject", by_field(t), "table")
+check("call subject", by_call(t), "array,string")
+check("local subject", by_local(t), "table")
+check("locals after switch", after_switch(t), "after:a")
+check("nested switches", nested(t), "oi")
+check("captured case local", capture(t), 42)
+check("no match", by_field({ kind: "z" }), "none")
+print("switch subject locals: PASS")
