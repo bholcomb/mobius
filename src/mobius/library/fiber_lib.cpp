@@ -70,7 +70,7 @@ static bool snapshot_futures(MobiusState* state, const char* fn, std::vector<Val
     state->npop();
     char msg[96];
     if (arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
-        std::lock_guard<std::recursive_mutex> lock(arg.as.shared_cell->mutex());
+        std::lock_guard<FiberMutex> lock(arg.as.shared_cell->mutex());
         const Value& inner = arg.as.shared_cell->unsafeValue();
         if (inner.type == VAL_ARRAY && inner.as.array) {
             held.assign(inner.as.array->data(), inner.as.array->data() + inner.as.array->length());
@@ -232,7 +232,7 @@ int lib_fiber_slice(MobiusState* state, int arg_count) {
         arr = arr_val.as.array;
     } else if (arr_val.type == VAL_SHARED_CELL && arr_val.as.shared_cell) {
         owner_cell = arr_val.as.shared_cell;
-        std::lock_guard<std::recursive_mutex> lock(owner_cell->mutex());
+        std::lock_guard<FiberMutex> lock(owner_cell->mutex());
         Value& inner = owner_cell->unsafeValue();
         if (inner.type != VAL_ARRAY || !inner.as.array) {
             return state->error("fiber.slice: first argument must be an array");

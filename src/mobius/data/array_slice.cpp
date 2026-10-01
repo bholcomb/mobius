@@ -28,7 +28,7 @@ Value ArraySlice::get(size_t index) const {
         return make_nil_value();
     }
     if (owner_cell_) {
-        std::lock_guard<std::recursive_mutex> lock(owner_cell_->mutex());
+        std::lock_guard<FiberMutex> lock(owner_cell_->mutex());
         return parent_->get(parent_index);
     }
     return parent_->get(parent_index);
@@ -43,7 +43,7 @@ void ArraySlice::set(size_t index, const Value& value) {
         return;
     }
     if (owner_cell_) {
-        std::lock_guard<std::recursive_mutex> lock(owner_cell_->mutex());
+        std::lock_guard<FiberMutex> lock(owner_cell_->mutex());
         parent_->set(parent_index, value);
         return;
     }

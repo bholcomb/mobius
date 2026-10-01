@@ -104,7 +104,7 @@ struct LayoutBuildResult {
 struct BufferViewSelfAccess {
     BufferValue* buffer = nullptr;
     SharedCell* cell = nullptr;
-    std::unique_lock<std::recursive_mutex> lock;
+    std::unique_lock<FiberMutex> lock;
 };
 
 static size_t align_up(size_t value, size_t alignment) {
@@ -225,14 +225,14 @@ static BufferValue* extract_buffer_self_or_shared(MobiusState* state, const char
     if (self.type == VAL_SHARED_CELL && self.as.shared_cell) {
         if (access) {
             access->cell = self.as.shared_cell;
-            access->lock = std::unique_lock<std::recursive_mutex>(self.as.shared_cell->mutex());
+            access->lock = std::unique_lock<FiberMutex>(self.as.shared_cell->mutex());
             Value& inner = self.as.shared_cell->unsafeValue();
             if (inner.type == VAL_BUFFER && inner.as.buffer) {
                 access->buffer = inner.as.buffer;
                 return inner.as.buffer;
             }
         } else {
-            std::lock_guard<std::recursive_mutex> lock(self.as.shared_cell->mutex());
+            std::lock_guard<FiberMutex> lock(self.as.shared_cell->mutex());
             Value& inner = self.as.shared_cell->unsafeValue();
             if (inner.type == VAL_BUFFER && inner.as.buffer) return inner.as.buffer;
         }
