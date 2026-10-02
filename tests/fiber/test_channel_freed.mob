@@ -1,0 +1,28 @@
+// Channels are freed when the last reference goes away. Creating one took
+// an extra reference, so every channel and its buffer leaked: 20,000
+// channels of capacity 4096 held about 1.3 GB. Measured through
+// /proc/self/statm where available (Linux); elsewhere this only exercises
+// the path.
+import "os"
+
+func resident_pages() {
+    if (!os.exists("/proc/self/statm")) { return -1 }
+    var fields = split(readfile("/proc/self/statm"), " ")
+    return int(fields[1])
+}
+
+var before = resident_pages()
+for (var i = 0; i < 20000; i++) {
+    var ch = fiber.channel(4096)
+    ch:send(i)
+    ch:recv()
+}
+var after = resident_pages()
+if (before >= 0) {
+    // 4 KB pages: a leak would add roughly 320,000 pages. Allow 100 MB.
+    if (after - before > 25600) {
+        print("FAIL: resident memory grew by " + str((after - before) * 4) + " KB")
+        exit(1)
+    }
+}
+print("channels are freed: PASS")
