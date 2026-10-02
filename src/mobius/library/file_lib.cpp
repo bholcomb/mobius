@@ -128,42 +128,33 @@ int lib_readlines(MobiusState* state, int arg_count) {
         return state->error("readlines: argument must be a string");
     }
 
-    FILE* f = fopen(path_val.as.string->data, "r");
+    FILE* f = fopen(path_val.as.string->data, "rb");
     if (!f) {
         return state->error("readlines: could not open file");
     }
+    // Read everything, then split on '\n' (dropping a '\r' before it). The
+    // lines are heap strings of their full length: fgets/strlen cut lines at
+    // a NUL byte, and interning every line leaked (the pool never frees).
+    std::string data;
+    char chunk[65536];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) data.append(chunk, n);
+    bool failed = ferror(f) != 0;
+    fclose(f);
+    if (failed) return state->error("readlines: error while reading file");
 
     ArrayValue* arr = new (std::nothrow) ArrayValue();
-    if (!arr) {
-        fclose(f);
-        return state->error("readlines: failed to allocate result array");
+    if (!arr) return state->error("readlines: failed to allocate result array");
+    size_t start = 0;
+    while (start < data.size()) {
+        size_t nl = data.find('\n', start);
+        size_t end = nl == std::string::npos ? data.size() : nl;
+        size_t len = end - start;
+        if (len > 0 && data[start + len - 1] == '\r') len--;
+        arr->push(make_heap_string_value(data.data() + start, len));
+        if (nl == std::string::npos) break;
+        start = nl + 1;
     }
-    char line_buf[4096];
-    std::string current_line;
-    while (fgets(line_buf, sizeof(line_buf), f)) {
-        size_t len = strlen(line_buf);
-        bool has_newline = len > 0 && line_buf[len - 1] == '\n';
-        if (has_newline) {
-            line_buf[--len] = '\0';
-        }
-        if (len > 0 && line_buf[len - 1] == '\r') {
-            line_buf[--len] = '\0';
-        }
-        current_line.append(line_buf, len);
-        if (has_newline) {
-            arr->push(make_string_value_from_cstr(state, current_line.c_str()));
-            current_line.clear();
-        }
-    }
-    if (ferror(f)) {
-        fclose(f);
-        arr->release();
-        return state->error("readlines: error while reading file");
-    }
-    if (!current_line.empty()) {
-        arr->push(make_string_value_from_cstr(state, current_line.c_str()));
-    }
-    fclose(f);
 
     state->npush(make_array_value(arr));
     return 1;

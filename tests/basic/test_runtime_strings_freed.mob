@@ -1,0 +1,42 @@
+// Strings made from runtime data are refcounted, not interned. The intern
+// pool never frees, so buffer:to_string, readlines and strings pushed by
+// native modules grew memory without bound (to_string in a 200k loop
+// reached ~100 MB). readlines also cut lines at a NUL byte. Memory is
+// measured through /proc/self/statm where available (Linux).
+import "os"
+
+func resident_pages() {
+    if (!os.exists("/proc/self/statm")) { return -1 }
+    return int(split(readfile("/proc/self/statm"), " ")[1])
+}
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+var pad = "x"
+for (var i = 0; i < 9; i++) { pad = pad + pad }   // 512 bytes
+var before = resident_pages()
+for (var i = 0; i < 100000; i++) {
+    var s = buffer_from_string(str(i) + pad):to_string()
+}
+var after = resident_pages()
+if (before >= 0) {
+    // Interned, 100,000 distinct 512-byte strings would add ~60 MB.
+    check("to_string strings are freed", (after - before) * 4 < 20000)
+}
+
+var dir = os.join(os.tmpdir(), "mobius_strings_" + str(os.getpid()))
+os.mkdirp(dir)
+var path = os.join(dir, "lines.txt")
+writefile(path, "one\r\ntw\0o\n\nlast")
+var lines = readlines(path)
+check("line count", size(lines) == 4)
+check("CRLF stripped", lines[0] == "one")
+check("NUL kept", lines[1] == "tw\0o" and size(lines[1]) == 4)
+check("empty line", lines[2] == "")
+check("last line without newline", lines[3] == "last")
+os.system("rm -rf \"" + dir + "\"")
+print("runtime strings are freed: PASS")

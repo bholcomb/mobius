@@ -645,7 +645,9 @@ void mobius_stack_pushString(MobiusState* state, const char* str) {
         stack_push(state, make_nil_value());
         return;
     }
-    stack_push(state, make_string_value_from_cstr(state, str));
+    // Not interned: plugins push runtime data (rows, JSON values, file
+    // contents), and the intern pool never frees.
+    stack_push(state, make_heap_string_value(str, strlen(str)));
 }
 
 void mobius_stack_pushStringLength(MobiusState* state, const char* str, size_t length) {
@@ -653,7 +655,7 @@ void mobius_stack_pushStringLength(MobiusState* state, const char* str, size_t l
         stack_push(state, make_nil_value());
         return;
     }
-    stack_push(state, make_string_value(state->stringPool()->intern(str, length)));
+    stack_push(state, make_heap_string_value(str, length));   // see pushString
 }
 
 void mobius_stack_pushNil(MobiusState* state) {
@@ -871,7 +873,7 @@ void mobius_stack_setTableField(MobiusState* state, int table_idx, const char* k
         return;
     }
 
-    Value key_val   = make_string_value_from_cstr(state, key);
+    Value key_val   = make_heap_string_value(key, strlen(key));   // keys can be data too
     Value field_val = nctx->registers[--nctx->top];
     table_val->as.table->set(key_val, field_val);
 }
@@ -893,7 +895,7 @@ void mobius_stack_getTableField(MobiusState* state, int table_idx, const char* k
         return;
     }
 
-    Value key_val = make_string_value_from_cstr(state, key);
+    Value key_val = make_heap_string_value(key, strlen(key));   // a lookup: don't intern
     stack_push(state, table_val->as.table->get(key_val));
 }
 

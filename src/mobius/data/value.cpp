@@ -859,6 +859,14 @@ const char* value_type_name(ValueType type) {
     }
 }
 
+Value make_heap_string_value(const char* data, size_t len) {
+    MobiusString* s = StringInternPool::allocHeap(len);
+    if (!s) return make_nil_value();
+    if (len) memcpy(s->mutableData(), data, len);
+    StringInternPool::finishHeap(s, len);
+    return make_string_value_adopt(s);
+}
+
 Value make_string_value_from_cstr(MobiusState* state, const char* cstr) {
     if (!state || !cstr) {
         return make_nil_value();

@@ -313,6 +313,11 @@ MOBIUS_API Value make_string_value(MobiusString* string);
 // not create.
 MOBIUS_API Value make_string_value_adopt(MobiusString* string);
 MOBIUS_API Value make_string_value_from_cstr(MobiusState* state, const char* cstr);
+// A refcounted (not interned) string holding `len` bytes, embedded NULs
+// included. For runtime data: the intern pool never frees, so interning
+// unboundedly many distinct strings leaks. make_string_value_from_cstr
+// interns and is meant for names and other bounded sets.
+MOBIUS_API Value make_heap_string_value(const char* data, size_t len);
 MOBIUS_API MobiusString* value_to_interned_string(MobiusState* state, const Value& value);
 // str()-facing: heap (reclaimable) result for numeric/char values, pass-through
 // for strings, interned for the bounded/rare cases. Returns an owned Value.
