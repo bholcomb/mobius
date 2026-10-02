@@ -318,6 +318,12 @@ MOBIUS_API Value make_string_value_from_cstr(MobiusState* state, const char* cst
 // unboundedly many distinct strings leaks. make_string_value_from_cstr
 // interns and is meant for names and other bounded sets.
 MOBIUS_API Value make_heap_string_value(const char* data, size_t len);
+// Format a float the way str() and print show it: the shortest digits that
+// read back as the same double, fixed notation for exponents -4..15 and
+// scientific otherwise, with ".0" on integral values (Python's repr):
+// 0.1 + 0.2 -> "0.30000000000000004", 3.0 -> "3.0", 1e300 -> "1e+300".
+// Writes at most 32 bytes plus a NUL; returns the length.
+MOBIUS_API int format_float(double d, char* buf, size_t size);
 MOBIUS_API MobiusString* value_to_interned_string(MobiusState* state, const Value& value);
 // str()-facing: heap (reclaimable) result for numeric/char values, pass-through
 // for strings, interned for the bounded/rare cases. Returns an owned Value.

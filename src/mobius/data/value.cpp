@@ -1,3 +1,4 @@
+#include <cmath>
 #include "data/value.h"
 #include "data/channel.h"
 #include "data/enum.h"
@@ -600,13 +601,12 @@ void print_value(const Value& value) {
         case VAL_UINT64:
             printf("%lu", value.as.u64);
             break;
-        case VAL_FLOAT64:
-            if (value.as.double_val == (double)(long long)value.as.double_val) {
-                printf("%.1f", value.as.double_val);
-            } else {
-                printf("%g", value.as.double_val);
-            }
+        case VAL_FLOAT64: {
+            char fb[40];
+            format_float(value.as.double_val, fb, sizeof(fb));
+            fputs(fb, stdout);
             break;
+        }
         case VAL_STRING:
             printf("%s", value.as.string ? value.as.string->data : "(null)");
             break;
@@ -720,11 +720,7 @@ char* value_to_string(const Value& value) {
             if (result) strcpy(result, buffer);
             break;
         case VAL_FLOAT64:
-            if (value.as.double_val == (double)(long long)value.as.double_val) {
-                snprintf(buffer, sizeof(buffer), "%.1f", value.as.double_val);
-            } else {
-                snprintf(buffer, sizeof(buffer), "%g", value.as.double_val);
-            }
+            format_float(value.as.double_val, buffer, sizeof(buffer));
             result = (char*)malloc(strlen(buffer) + 1);
             if (result) strcpy(result, buffer);
             break;
@@ -859,6 +855,32 @@ const char* value_type_name(ValueType type) {
     }
 }
 
+int format_float(double d, char* buf, size_t size) {
+    if (size < 33) { if (size) buf[0] = '\0'; return 0; }
+    const char* special = nullptr;
+    if (d != d) special = "nan";
+    else if (d == HUGE_VAL) special = "inf";
+    else if (d == -HUGE_VAL) special = "-inf";
+    if (special) return snprintf(buf, size, "%s", special);
+
+    char sci[40];
+    auto r = std::to_chars(sci, sci + sizeof(sci) - 1, d, std::chars_format::scientific);
+    *r.ptr = '\0';
+    const char* e = strchr(sci, 'e');
+    int exp = e ? atoi(e + 1) : 0;
+    int len;
+    if (exp >= -4 && exp < 16) {
+        auto f = std::to_chars(buf, buf + size - 3, d, std::chars_format::fixed);
+        len = (int)(f.ptr - buf);
+        if (!memchr(buf, '.', (size_t)len)) { buf[len++] = '.'; buf[len++] = '0'; }
+    } else {
+        len = (int)(r.ptr - sci);
+        memcpy(buf, sci, (size_t)len);
+    }
+    buf[len] = '\0';
+    return len;
+}
+
 Value make_heap_string_value(const char* data, size_t len) {
     MobiusString* s = StringInternPool::allocHeap(len);
     if (!s) return make_nil_value();
@@ -901,10 +923,7 @@ Value value_to_string_value(MobiusState* state, const Value& value) {
             break;
         }
         case VAL_FLOAT64:
-            if (value.as.double_val == (double)(long long)value.as.double_val)
-                len = snprintf(buffer, sizeof(buffer), "%.1f", value.as.double_val);
-            else
-                len = snprintf(buffer, sizeof(buffer), "%g", value.as.double_val);
+            len = format_float(value.as.double_val, buffer, sizeof(buffer));
             break;
         case VAL_CHAR:
             buffer[0] = value.as.character; len = 1;
@@ -942,13 +961,8 @@ MobiusString* value_to_interned_string(MobiusState* state, const Value& value) {
             return (ec == std::errc()) ? pool->intern(buffer, (size_t)(ptr - buffer)) : nullptr;
         }
         case VAL_FLOAT64: {
-            int len = 0;
-            if (value.as.double_val == (double)(long long)value.as.double_val) {
-                len = snprintf(buffer, sizeof(buffer), "%.1f", value.as.double_val);
-            } else {
-                len = snprintf(buffer, sizeof(buffer), "%g", value.as.double_val);
-            }
-            return (len >= 0) ? pool->intern(buffer, (size_t)len) : nullptr;
+            int len = format_float(value.as.double_val, buffer, sizeof(buffer));
+            return pool->intern(buffer, (size_t)len);
         }
         case VAL_STRING:
             return value.as.string ? value.as.string : common.null_string;

@@ -320,17 +320,19 @@ static const char* stack_value_to_string(Value* val) {
             }
             return "";
         case VAL_INT64:
-            snprintf(buffer, sizeof(buffer), "%" PRId64, val->as.i64);
+            snprintf(buffer, sizeof(buffers[0]), "%" PRId64, val->as.i64);
             return buffer;
         case VAL_FLOAT64:
-            snprintf(buffer, sizeof(buffer), "%g", val->as.double_val);
+            // buffer is a pointer into buffers[], so sizeof(buffer) was 8 and
+            // the text was cut to 7 characters.
+            format_float(val->as.double_val, buffer, sizeof(buffers[0]));
             return buffer;
         case VAL_BOOL:
             return val->as.boolean ? "true" : "false";
         case VAL_NIL:
             return "nil";
         default:
-            snprintf(buffer, sizeof(buffer), "<%s>", value_type_name(val->type));
+            snprintf(buffer, sizeof(buffers[0]), "<%s>", value_type_name(val->type));
             return buffer;
     }
 }

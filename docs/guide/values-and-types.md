@@ -196,6 +196,18 @@ var avo = 6.022e23
 var tiny = 1.6e-19
 ```
 
+`str()`, `print` and string interpolation show a float with the shortest digits
+that read back as the same value, so `float(str(x)) == x`. Exponents from -4
+to 15 print in fixed notation, others in scientific; integral values keep a
+`.0`:
+
+```mobius
+print(1234567.5)    // 1234567.5
+print(0.1 + 0.2)    // 0.30000000000000004
+print(3.0)          // 3.0
+print(1e300)        // 1e+300
+```
+
 > Numeric literals do **not** allow `_` digit separators.
 
 **Strings** — double-quoted, with escape sequences:

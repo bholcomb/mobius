@@ -1,0 +1,33 @@
+// str() and print show floats with the shortest digits that read back as
+// the same value (like Python's repr). They used %g's 6 significant digits,
+// so str(1234567.5) gave "1.23457e+06" and float(str(x)) != x for most
+// floats.
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + want + ", got " + got)
+        exit(1)
+    }
+}
+check("seven digits", str(opaque(1234567.5)), "1234567.5")
+check("inexact sum", str(opaque(0.1) + opaque(0.2)), "0.30000000000000004")
+check("integral", str(opaque(3.0)), "3.0")
+check("negative", str(opaque(-2.5)), "-2.5")
+check("large integral", str(opaque(1e15)), "1000000000000000.0")
+check("exponent at 16", str(opaque(1e16)), "1e+16")
+check("huge", str(opaque(1e300)), "1e+300")
+check("small fixed", str(opaque(0.0001)), "0.0001")
+check("small scientific", str(opaque(1e-7)), "1e-07")
+check("interpolation", `${opaque(0.5)}`, "0.5")
+var infinity_value = opaque(1e308) * 10.0
+check("infinity", str(infinity_value), "inf")
+check("negative infinity", str(-infinity_value), "-inf")
+check("NaN", str(infinity_value - infinity_value), "nan")
+var samples = [0.1, 2.0 / 3.0, 123.456, 1e-10, 9007199254740993.0, 6.02214076e23]
+for (var x in samples) {
+    if (float(str(x)) != x) {
+        print("FAIL: round trip of " + str(x))
+        exit(1)
+    }
+}
+print("float formatting: PASS")
