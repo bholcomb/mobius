@@ -1,0 +1,106 @@
+// finally runs however the try statement is left: normal completion, a
+// caught throw, return, break or continue out of try or catch, and a throw
+// out of the catch body (which then propagates).
+var log = ""
+func note(s) { log = log + s }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+func reset() { log = "" }
+
+// return from try, and the value is fixed before finally runs
+func ret_try() {
+    var x = 1
+    try { return x } catch e { note("c") } finally { x = 2
+        note("f") }
+    return 0
+}
+reset()
+check("return from try value", ret_try(), 1)
+check("return from try runs finally", log, "f")
+
+func ret_catch() {
+    try { throw "e" } catch e { return "from catch" } finally { note("f") }
+    return "after"
+}
+reset()
+check("return from catch value", ret_catch(), "from catch")
+check("return from catch runs finally", log, "f")
+
+// finally that returns overrides
+func finally_returns() {
+    try { return "try" } catch e { } finally { return "finally" }
+}
+check("finally return overrides", finally_returns(), "finally")
+
+// break and continue from try and catch
+reset()
+for (var i = 0; i < 3; i++) {
+    try {
+        if (i == 0) { continue }
+        if (i == 1) { throw "x" }
+        break
+    } catch e {
+        continue
+    } finally {
+        note(str(i))
+    }
+}
+check("break/continue run finally", log, "012")
+
+reset()
+var w = 0
+while (w < 5) {
+    w++
+    try { if (w == 2) { break } } catch e { } finally { note("w" + str(w)) }
+}
+check("while break", log, "w1w2")
+
+// a throw out of catch runs finally, then propagates
+reset()
+func throws_from_catch() {
+    try { throw "first" } catch e { throw "second" } finally { note("f") }
+}
+var caught = ""
+try { throws_from_catch() } catch e2 { caught = e2 }
+check("finally before propagation", log, "f")
+check("propagated value", caught, "second")
+
+// nested: inner and outer finally run innermost first on return
+func nested() {
+    try {
+        try { return "v" } catch e { } finally { note("inner") }
+    } catch e { } finally { note("outer") }
+    return "no"
+}
+reset()
+check("nested return value", nested(), "v")
+check("nested order", log, "innerouter")
+
+// break out of a loop crosses only the try statements inside it
+reset()
+try {
+    for (var k = 0; k < 2; k++) {
+        try { break } catch e { } finally { note("in") }
+    }
+    note("after-loop")
+} catch e { } finally { note("out") }
+check("break crosses only inner try", log, "inafter-loopout")
+
+// a throw after finally-on-return still reaches an outer handler
+func ret_then_outer() {
+    try {
+        try { return 1 } catch e { } finally { throw "from finally" }
+    } catch e { return e }
+}
+check("throw from inlined finally caught outside", ret_then_outer(), "from finally")
+
+// normal completion and caught throw, unchanged
+reset()
+try { note("t") } catch e { note("c") } finally { note("f") }
+try { throw "x" } catch e { note("c") } finally { note("f") }
+check("normal and caught", log, "tfcf")
+print("finally always runs: PASS")
