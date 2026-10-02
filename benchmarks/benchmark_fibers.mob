@@ -1,0 +1,75 @@
+// Fiber scaling benchmark (Mobius only; not part of the cross-language
+// comparison in benchmark_comprehensive.mob).
+//
+// Each workload runs the same per-fiber loop on 1, 4 and 8 fibers at once.
+// On a machine with at least 8 cores the time should stay roughly flat as
+// fibers are added; growth means fibers are contending for something
+// shared (a lock, or a cache line written by every core).
+//
+//   private        each fiber reads its own table
+//   const_global   every fiber reads one top-level const table by name
+//   const_copy     every fiber copies a reference to one shared const table
+//   func_global    every fiber calls a top-level function through a variable
+//
+// Output: BENCH <workload>_<fibers> <seconds> <checksum>
+
+const SHARED = {a: 1, b: 2, c: 3}
+
+func step(x) { return x + 1 }
+
+func private_reader(n) {
+    var mine = {a: 1, b: 2, c: 3}
+    var sum = 0
+    for (var i = 0; i < n; i++) {
+        var t = mine
+        sum = sum + t.a
+    }
+    return sum
+}
+
+func const_global_reader(n) {
+    var sum = 0
+    for (var i = 0; i < n; i++) {
+        var t = SHARED
+        sum = sum + t.a
+    }
+    return sum
+}
+
+func const_copy_reader(n) {
+    var tbl = SHARED
+    var sum = 0
+    for (var i = 0; i < n; i++) {
+        var t = tbl
+        sum = sum + t.a
+    }
+    return sum
+}
+
+func func_global_caller(n) {
+    var f = step
+    var sum = 0
+    for (var i = 0; i < n; i++) {
+        f = step
+        sum = f(sum)
+    }
+    return sum
+}
+
+func run(name, worker, fibers, n) {
+    var start = clock()
+    var futures = []
+    for (var k = 0; k < fibers; k++) { futures:push(spawn worker(n)) }
+    var results = fiber.all(futures)
+    var checksum = 0
+    for (var r in results) { checksum = checksum + r }
+    print("BENCH", name + "_" + str(fibers), float(clock() - start) / 1000000000.0, checksum)
+}
+
+var n = 2000000
+for (var fibers in [1, 4, 8]) {
+    run("private", private_reader, fibers, n)
+    run("const_global", const_global_reader, fibers, n)
+    run("const_copy", const_copy_reader, fibers, n)
+    run("func_global", func_global_caller, fibers, n)
+}
