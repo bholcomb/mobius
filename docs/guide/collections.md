@@ -294,6 +294,22 @@ var v3 = v1 + v2
 print(v3.x, v3.y)    // 4  6
 ```
 
+### `__call` — callable tables
+
+A table whose metatable has `__call` can be called like a function. The
+metamethod receives the table itself first, then the call's arguments:
+
+```mobius
+var counter = setmetatable({count: 0}, {
+    __call: func(self, step) {
+        self.count = self.count + step
+        return self.count
+    }
+})
+counter(2)
+print(counter(3))    // 5
+```
+
 | Function                    | Description                   |
 |-----------------------------|-------------------------------|
 | `setmetatable(table, meta)` | Set the metatable for a table |

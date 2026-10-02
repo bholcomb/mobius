@@ -1,0 +1,31 @@
+// __call receives the called table as its first argument, then the call's
+// arguments. It used to receive only the arguments.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var counter = setmetatable({count: 0}, {
+        __call: func(self, step) {
+            self.count = self.count + step
+            return self.count
+        }
+    })
+    counter(2)
+    check("state through self", counter(3), 5)
+
+    var noargs = setmetatable({name: "t"}, {__call: func(self) { return self.name }})
+    check("no arguments", noargs(), "t")
+
+    var many = setmetatable({}, {__call: func(self, a, b, c) { return a + b + c }})
+    check("several arguments", many(1, 2, 3), 6)
+
+    // Called from inside an expression with values in other registers.
+    var x = 10
+    check("in an expression", x + many(1, 2, 3) + x, 26)
+}
+main()
+print("__call receives self: PASS")
