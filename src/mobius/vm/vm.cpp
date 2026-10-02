@@ -681,60 +681,79 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
     }
 
     if (method.type == VAL_FUNCTION && method.as.function) {
-        MobiusFunction* mf = method.as.function;
-        if (!mf->proto) {
-            runtimeError("Metamethod '%s' has no bytecode prototype", mm_name->data);
-            return -1;
-        }
-        if ((int)mf->param_count != 2) {
-            runtimeError("Metamethod '%s' expects 2 arguments but got %zu params",
-                         mm_name->data, mf->param_count);
-            return -1;
-        }
-
-        int caller_base = callStackTop().base;
-        int caller_num_regs = callStackTop().proto->num_registers;
-        int scratch = caller_base + caller_num_regs;
-
-        Prototype* child = mf->proto;
-        // Copy operands before ensureRegisters: a caller passing references
-        // into registers_ would otherwise see them invalidated by the resize
-        // (the native branch above already copies defensively).
-        Value lhs_copy = lhs;
-        Value rhs_copy = rhs;
-        ensureRegisters(scratch + 3 + child->num_registers + 16);
-
-        registers_[scratch]     = method;
-        registers_[scratch + 1] = lhs_copy;
-        registers_[scratch + 2] = rhs_copy;
-
-        int child_base = scratch + 1;
-        if (!child->param_unwrap_on_entry.empty()) {
-            for (int i = 0; i < 2; i++) {
-                Value& arg = registers_[child_base + i];
-                if (i < (int)child->param_unwrap_on_entry.size() &&
-                    child->param_unwrap_on_entry[i] &&
-                    arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
-                    arg = arg.as.shared_cell->load();
-                }
-            }
-        }
-        if (MOBIUS_UNLIKELY(child->has_type_locks)) {
-            memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
-        }
-        size_t stop_depth = callStackSize();
-        callStackPush(child, child_base, 2).ip = child->code.data();
-
-        int rc = run(stop_depth);
-
-        if (rc < 0) return -1;
-
-        out = registers_[scratch];
-        return 1;
+        Value args[2] = {lhs, rhs};
+        return callScriptMetamethod(method, mm_name, args, 2, &out);
     }
 
     runtimeError("'%s' metamethod must be a function", mm_name->data);
     return -1;
+}
+
+int MobiusVM::callScriptMetamethod(const Value& fn, MobiusString* mm_name,
+                                   const Value* args, int nargs, Value* out) {
+    MobiusFunction* mf = fn.as.function;
+    if (!mf->proto) {
+        runtimeError("Metamethod '%s' has no bytecode prototype", mm_name->data);
+        return -1;
+    }
+    if ((int)mf->param_count != nargs) {
+        runtimeError("Metamethod '%s' expects %d arguments but got %zu params",
+                     mm_name->data, nargs, mf->param_count);
+        return -1;
+    }
+    if (MOBIUS_UNLIKELY(callDepthExceeded())) {
+        runtimeError("Stack overflow: more than %zu nested calls", max_call_depth_);
+        return -1;
+    }
+
+    int caller_base = callStackTop().base;
+    int caller_num_regs = callStackTop().proto->num_registers;
+    int scratch = caller_base + caller_num_regs;
+
+    Prototype* child = mf->proto;
+    // Copy the function and operands before ensureRegisters: a caller
+    // passing references into registers_ would otherwise see them
+    // invalidated by the resize.
+    Value fn_copy = fn;
+    Value arg_copies[3];
+    for (int i = 0; i < nargs; i++) arg_copies[i] = args[i];
+    ensureRegisters(scratch + 1 + nargs + child->num_registers + 16);
+
+    registers_[scratch] = fn_copy;
+    int child_base = scratch + 1;
+    for (int i = 0; i < nargs; i++) registers_[child_base + i] = arg_copies[i];
+
+    if (!child->param_unwrap_on_entry.empty()) {
+        for (int i = 0; i < nargs; i++) {
+            Value& arg = registers_[child_base + i];
+            if (i < (int)child->param_unwrap_on_entry.size() &&
+                child->param_unwrap_on_entry[i] &&
+                arg.type == VAL_SHARED_CELL && arg.as.shared_cell) {
+                arg = arg.as.shared_cell->load();
+            }
+        }
+    }
+    if (MOBIUS_UNLIKELY(child->has_type_locks)) {
+        memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
+    }
+    size_t stop_depth = callStackSize();
+    CallInfo& ci = callStackPush(child, child_base, 2);
+    ci.ip = child->code.data();
+    // Closures used as metamethods see their captured variables. (They
+    // used to run without upvalues, reading nil.)
+    if (mf->upvalues && mf->upvalue_count > 0) {
+        if (!ci.setUpvaluesFrom(mf->upvalues, mf->upvalue_count)) {
+            callStackPop();
+            runtimeError("Failed to allocate closure upvalues");
+            return -1;
+        }
+    }
+
+    int rc = run(stop_depth);
+    if (rc < 0) return -1;
+
+    *out = registers_[scratch];
+    return 1;
 }
 
 // ============================================================================

@@ -198,6 +198,12 @@ public:
                        const Value& lhs, const Value& rhs, Value& out);
     int callTernaryMetamethod(const Value& table_val, MobiusString* mm_name,
                               const Value& a, const Value& b, const Value& c);
+    // Call the Mobius function `fn` with `nargs` arguments in fresh
+    // registers above the current frame, putting its result in *out. Used
+    // for metamethods implemented in Mobius; installs the closure's
+    // upvalues and enforces the call depth limit like an ordinary call.
+    int callScriptMetamethod(const Value& fn, MobiusString* mm_name,
+                             const Value* args, int nargs, Value* out);
 
     static thread_local MobiusVM* t_current_vm;
 

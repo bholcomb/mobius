@@ -1,0 +1,28 @@
+// A closure used as a metamethod sees the variables it captured. Script
+// metamethods used to run without their upvalues, so captures read nil.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func make_counter_type(start) {
+    var base = start
+    var calls = 0
+    return {
+        __add: func(a, b) { calls++; return base + b },
+        __lt: func(a, b) { calls++; return base < b },
+        count: func() { return calls }
+    }
+}
+
+func main() {
+    var mt = make_counter_type(100)
+    var t = setmetatable({}, mt)
+    check("captured value in __add", t + 1, 101)
+    check("captured value in __lt", t < 200, true)
+    check("captured counter updated", mt.count(), 2)
+}
+main()
+print("metamethod closures: PASS")
