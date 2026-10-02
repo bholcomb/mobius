@@ -1,0 +1,40 @@
+// `const` globals are read without the globals lock, since nothing can
+// write them again: not ordinary assignment, and not a chunk using the
+// override pragma (which may replace read-only globals such as functions).
+// With fibers running, every global read used to take one shared mutex.
+import "os"
+
+var dir = os.join(os.tmpdir(), "mobius_const_globals_" + str(os.getpid()))
+var mod_dir = os.join(dir, "modules", "overrider")
+os.mkdirp(mod_dir)
+writefile(os.join(mod_dir, "module.yaml"), "name: overrider\nversion: 0.1.0\nentry:\n  script: overrider.mob\n")
+writefile(os.join(mod_dir, "overrider.mob"), "#pragma override_behavior quiet\nfunc replace_limit() {\n    LIMIT = {n: 5}\n    return 0\n}\n")
+var script = os.join(dir, "main.mob")
+writefile(script, "const LIMIT = {n: 10}\nimport \"overrider\"\nvar msg = \"\"\ntry { overrider.replace_limit() } catch e { msg = e }\nprint(msg)\nprint(LIMIT.n)\n")
+var out_file = os.join(dir, "out.txt")
+os.system("MOBIUS_MODULE_PATH=\"" + os.join(dir, "modules") + "\" \"" + os.join(os.getcwd(), "bin", "mobius") +
+          "\" \"" + script + "\" > \"" + out_file + "\" 2>&1")
+var out = readfile(out_file)
+os.system("rm -rf \"" + dir + "\"")
+if (!contains(out, "constant") or !contains(out, "10")) {
+    print("FAIL: a constant was overwritten or the error is missing: " + out)
+    exit(1)
+}
+
+// Many fibers reading a constant table all see it.
+const SHARED = {a: 1, b: 2}
+func reader(n) {
+    var sum = 0
+    for (var i = 0; i < n; i++) { sum = sum + SHARED.a }
+    return sum
+}
+var fs = []
+for (var k = 0; k < 8; k++) { fs:push(spawn reader(10000)) }
+var results = fiber.all(fs)
+for (var r in results) {
+    if (r != 10000) {
+        print("FAIL: reader got " + str(r))
+        exit(1)
+    }
+}
+print("const global reads: PASS")

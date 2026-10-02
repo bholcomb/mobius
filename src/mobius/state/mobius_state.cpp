@@ -339,6 +339,7 @@ MobiusState::MobiusState(MobiusConfig* config)
     size_t buckets = config_.string_pool_buckets ? config_.string_pool_buckets
                                                  : kInitialStringBucketCount;
     root_globals_.slots.resize(slot_cap);
+    root_globals_.constant.reset(new std::atomic<uint8_t>[slot_cap]());
     root_globals_.slot_names.resize(slot_cap);
 
     string_pool_ = new (std::nothrow) StringInternPool(buckets);
@@ -783,8 +784,8 @@ void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
     int slot = it->second;
     if (readonly)
         globals->slots[slot].flags |= VAL_FLAG_READONLY;
-    else
-        globals->slots[slot].flags &= ~VAL_FLAG_READONLY;
+    else if (!(globals->constant && globals->constant[slot].load(std::memory_order_relaxed)))
+        globals->slots[slot].flags &= ~VAL_FLAG_READONLY;   // constants stay read-only
 }
 
 void MobiusState::setGlobalReadonly(int slot, bool readonly, GlobalEnvironment* env) {
@@ -794,8 +795,24 @@ void MobiusState::setGlobalReadonly(int slot, bool readonly, GlobalEnvironment* 
     if (!global_slot_in_bounds(globals, slot, count)) return;
     if (readonly)
         globals->slots[slot].flags |= VAL_FLAG_READONLY;
-    else
-        globals->slots[slot].flags &= ~VAL_FLAG_READONLY;
+    else if (!(globals->constant && globals->constant[slot].load(std::memory_order_relaxed)))
+        globals->slots[slot].flags &= ~VAL_FLAG_READONLY;   // constants stay read-only
+}
+
+void MobiusState::setGlobalConstant(int slot, GlobalEnvironment* env) {
+    GlobalEnvironment* globals = env_or_root(this, env);
+    std::lock_guard<std::mutex> lock(globals->mutex);
+    int count = globals->count.load(std::memory_order_acquire);
+    if (!global_slot_in_bounds(globals, slot, count) || !globals->constant) return;
+    globals->slots[slot].flags |= VAL_FLAG_READONLY;
+    // Release: a reader that sees the flag also sees the slot's value.
+    globals->constant[slot].store(1, std::memory_order_release);
+}
+
+bool MobiusState::isGlobalConstant(int slot, const GlobalEnvironment* env) const {
+    const GlobalEnvironment* globals = env ? env : &root_globals_;
+    return slot >= 0 && (size_t)slot < globals->slots.size() && globals->constant &&
+           globals->constant[slot].load(std::memory_order_acquire);
 }
 
 bool MobiusState::removeGlobal(const char* name) {
@@ -804,6 +821,8 @@ bool MobiusState::removeGlobal(const char* name) {
     auto it = globals->slot_map.find(name);
     if (it == globals->slot_map.end()) return false;
     int slot = it->second;
+    if (globals->constant && globals->constant[slot].load(std::memory_order_relaxed))
+        return false;   // constants are read without the lock; never rewritten
     globals->slots[slot] = Value();
     globals->slots[slot].flags = 0;
     globals->slot_map.erase(it);
@@ -815,6 +834,10 @@ void MobiusState::setGlobalValue(int slot, const Value& value, GlobalEnvironment
     int count = globals->count.load(std::memory_order_acquire);
     if (!global_slot_in_bounds(globals, slot, count)) {
         setError(MOBIUS_ERROR_ARGUMENT, "Global slot index out of bounds", nullptr, 0, 0, nullptr);
+        return;
+    }
+    if (globals->constant && globals->constant[slot].load(std::memory_order_acquire)) {
+        setError(MOBIUS_ERROR_RUNTIME, "Cannot assign to a constant", nullptr, 0, 0, nullptr);
         return;
     }
     if (!globals->shared.load(std::memory_order_acquire)) {
@@ -899,6 +922,7 @@ void MobiusState::removeGlobalSlots(int from_slot, GlobalEnvironment* env) {
     }
 
     for (int i = from_slot; i < count; i++) {
+        if (globals->constant) globals->constant[i].store(0, std::memory_order_relaxed);
         globals->slots[i] = Value();
     }
     globals->count.store(from_slot, std::memory_order_release);

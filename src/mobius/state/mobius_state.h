@@ -1,6 +1,7 @@
 #ifndef MOBIUS_STATE_H
 #define MOBIUS_STATE_H
 
+#include <memory>
 #include "data/value.h"
 #include <mobius/mobius.h>
 
@@ -32,6 +33,11 @@ struct GlobalEnvironment {
     mutable std::mutex mutex;
     std::unordered_map<std::string, int> slot_map;
     Table* backing_table = nullptr;
+    // Slots of `const` globals, one flag per slot (allocated with slots,
+    // which never resize). A constant slot is never written again, so
+    // reads skip the mutex: under fibers, every global read used to lock
+    // it, and with many fibers its cache line bounced between cores.
+    std::unique_ptr<std::atomic<uint8_t>[]> constant;
 
     GlobalEnvironment() = default;
     GlobalEnvironment(const GlobalEnvironment&) = delete;
@@ -236,13 +242,18 @@ public:
         int count = g->count.load(std::memory_order_acquire);
         if (MOBIUS_UNLIKELY(idx < 0 || idx >= count ||
                             (size_t)idx >= g->slots.size())) return false;
-        if (MOBIUS_LIKELY(!g->shared.load(std::memory_order_acquire))) {
+        if (MOBIUS_LIKELY(!g->shared.load(std::memory_order_acquire)) ||
+            (g->constant && g->constant[idx].load(std::memory_order_acquire))) {
             if (out) *out = g->slots[idx];
             return true;
         }
         return copyGlobalValueShared(idx, out, g);
     }
     bool copyGlobalValueShared(int idx, Value* out, const GlobalEnvironment* g) const;
+    // Mark a global as a constant (`const`): read-only, and refused by every
+    // later write (including override-pragma writes and the C API).
+    void setGlobalConstant(int slot, GlobalEnvironment* env = nullptr);
+    bool isGlobalConstant(int slot, const GlobalEnvironment* env = nullptr) const;
     Value getGlobalValue(int idx, GlobalEnvironment* env = nullptr) const;
     int globalSlotCount(GlobalEnvironment* env = nullptr) const;
     int findGlobalSlot(const char* name, GlobalEnvironment* env = nullptr) const;

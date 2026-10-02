@@ -755,6 +755,14 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
             record.globals->count.store(root_globals->count.load(std::memory_order_relaxed),
                                         std::memory_order_relaxed);
             record.globals->slot_map = root_globals->slot_map;
+            size_t n = root_globals->slots.size();
+            record.globals->constant.reset(new std::atomic<uint8_t>[n]());
+            if (root_globals->constant) {
+                for (size_t i = 0; i < n; i++)
+                    record.globals->constant[i].store(
+                        root_globals->constant[i].load(std::memory_order_relaxed),
+                        std::memory_order_relaxed);
+            }
         }
         record.globals->backing_table = mod_table;
         module_records_[module_name] = std::move(record);

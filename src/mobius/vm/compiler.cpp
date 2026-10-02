@@ -2765,7 +2765,7 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
                 global_types_[name] = cv.type;
             }
             int slot = state_ ? state_->assignGlobalSlot(name, globals_) : -1;
-            if (slot >= 0) emitABx(OP_GLOBAL_READONLY, 1, (uint16_t)slot);
+            if (slot >= 0) emitABx(OP_GLOBAL_READONLY, 2, (uint16_t)slot);   // constant
         }
         if (inferred != VAL_UNKNOWN) {
             global_types_[name] = inferred;

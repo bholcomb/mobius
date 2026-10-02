@@ -1125,6 +1125,11 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal_force(MobiusVM* vm, VMFrame& f, ui
     GlobalEnvironment* globals = frame_globals(vm, f);
     Value gv = vm->state_->getGlobalValue(slot, globals);
     CHECK_FIBER_GLOBAL(vm, f, gv, slot, globals);
+    if (MOBIUS_UNLIKELY(vm->state_->isGlobalConstant(slot, globals))) {
+        // Override pragmas may replace read-only globals, but not constants.
+        VM_ERROR(vm, f, "Cannot assign to constant '%s'", vm->state_->globalSlotName(slot, globals));
+        return -1;
+    }
     bool was_readonly = (gv.flags & VAL_FLAG_READONLY) != 0;
     uint8_t a = DECODE_A(inst);
     bool warn = (a & 0x80u) != 0;         // top bit of A = warn flag
@@ -1151,8 +1156,9 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal_force(MobiusVM* vm, VMFrame& f, ui
 MOBIUS_FORCEINLINE static int vm_op_global_readonly(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)f;
     int slot = DECODE_Bx(inst);
-    bool readonly = DECODE_A(inst) != 0;
-    vm->state_->setGlobalReadonly(slot, readonly, frame_globals(vm, f));
+    int mode = DECODE_A(inst);   // 0 writable, 1 read-only, 2 constant
+    if (mode == 2) vm->state_->setGlobalConstant(slot, frame_globals(vm, f));
+    else vm->state_->setGlobalReadonly(slot, mode != 0, frame_globals(vm, f));
     return 0;
 }
 
