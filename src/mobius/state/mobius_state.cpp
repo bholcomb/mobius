@@ -580,30 +580,30 @@ bool MobiusState::copyValueRef(MobiusValueRef ref, Value* out) const {
 int MobiusState::callValue(const Value& function, const Value* args, int nargs,
                            int nresults, std::vector<Value>* out_results) {
     if (!out_results) {
-        return setError(MOBIUS_ERROR_ARGUMENT,
+        { setError(MOBIUS_ERROR_ARGUMENT,
                         "callValue() requires an output results vector",
-                        nullptr, 0, 0, nullptr);
+                        nullptr, 0, 0, nullptr); return -1; }
     }
     out_results->clear();
 
     if (function.type != VAL_FUNCTION && function.type != VAL_NATIVE_FUNCTION) {
-        return setError(MOBIUS_ERROR_TYPE,
+        { setError(MOBIUS_ERROR_TYPE,
                         "callValue() target is not callable",
-                        nullptr, 0, 0, nullptr);
+                        nullptr, 0, 0, nullptr); return -1; }
     }
 
     if (nargs < 0 || nresults < 0) {
-        return setError(MOBIUS_ERROR_ARGUMENT,
+        { setError(MOBIUS_ERROR_ARGUMENT,
                         "callValue() argument counts must be non-negative",
-                        nullptr, 0, 0, nullptr);
+                        nullptr, 0, 0, nullptr); return -1; }
     }
 
     MobiusVM* vm = activeVM();
     if (!vm) vm = main_vm_;
     if (!vm) {
-        return setError(MOBIUS_ERROR_RUNTIME,
+        { setError(MOBIUS_ERROR_RUNTIME,
                         "callValue() requires a bound VM",
-                        nullptr, 0, 0, nullptr);
+                        nullptr, 0, 0, nullptr); return -1; }
     }
 
     ScopedCurrentVMOverride bind_vm(vm);
@@ -651,9 +651,9 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
         nctx->capacity = saved_capacity;
         nctx->base = saved_base;
         nctx->top = saved_top;
-        return setError(MOBIUS_ERROR_RUNTIME,
+        { setError(MOBIUS_ERROR_RUNTIME,
                         "callValue() function has no bytecode prototype",
-                        nullptr, 0, 0, nullptr);
+                        nullptr, 0, 0, nullptr); return -1; }
     }
 
     // Parameters with defaults may be omitted (see Prototype::min_params).
@@ -668,7 +668,7 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
                  "Function '%s' expects %zu arguments but got %d",
                  mf->name ? mf->name->data : "anonymous",
                  mf->param_count, nargs);
-        return setError(MOBIUS_ERROR_ARGUMENT, buf, nullptr, 0, 0, nullptr);
+        { setError(MOBIUS_ERROR_ARGUMENT, buf, nullptr, 0, 0, nullptr); return -1; }
     }
 
     Prototype* child_proto = mf->proto;
@@ -699,9 +699,9 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
             nctx->capacity = saved_capacity;
             nctx->base = saved_base;
             nctx->top = saved_top;
-            return setError(MOBIUS_ERROR_MEMORY,
+            { setError(MOBIUS_ERROR_MEMORY,
                             "Failed to allocate closure upvalues",
-                            nullptr, 0, 0, nullptr);
+                            nullptr, 0, 0, nullptr); return -1; }
         }
     }
 
