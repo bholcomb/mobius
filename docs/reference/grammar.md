@@ -46,7 +46,9 @@ function_decl       ::= "func" IDENTIFIER "(" [ param_list ] ")" [ ":" func_type
 
 param_list          ::= param { "," param }
 
-param               ::= IDENTIFIER [ ":" func_type_name ]
+param               ::= IDENTIFIER [ ":" func_type_name ] [ "=" expression ]
+                      // a default applies when the argument is omitted or nil;
+                      // parameters after one with a default need defaults too
 
 var_decl            ::= "var" IDENTIFIER [ type_annotation ] [ "=" expression ] terminator
 

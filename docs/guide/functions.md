@@ -27,6 +27,29 @@ func max(a, b) {
 }
 ```
 
+## Default parameter values
+
+A parameter can have a default value, used when the caller leaves the argument
+out **or passes `nil`**:
+
+```mobius
+func greet(name, greeting = "hello", punct = "!") {
+    return greeting + " " + name + punct
+}
+
+greet("bob")              // "hello bob!"
+greet("bob", "hi")        // "hi bob!"
+greet("bob", nil, "?")    // "hello bob?"
+```
+
+Parameters with defaults come last: once one parameter has a default, every
+later one needs one too. A default is evaluated each time it is used, so
+`func collect(x, into = [])` gets a new array on every call, and it can refer
+to earlier parameters (`func pad(s, width, fill = " ")`, `func area(w, h = w)`).
+
+Calling with fewer arguments than the required parameters, or more than all
+of them, is an error: `greet()` reports "expects 1 to 3 arguments but got 0".
+
 ## Type annotations
 
 Parameters and the return value can be annotated. Annotations are optional and

@@ -82,6 +82,8 @@ void AstNameScan::stmt(Stmt* s) {
             declare(fn.name);
             for (size_t i = 0; i < fn.param_count; i++) declare(fn.params[i]);
             function_depth++;
+            if (fn.param_defaults)
+                for (size_t i = 0; i < fn.param_count; i++) expr(fn.param_defaults[i]);
             stmts(fn.body, fn.body_count);
             function_depth--;
             break;
@@ -170,6 +172,8 @@ void AstNameScan::expr(Expr* e) {
             declare(fn.name);
             for (size_t i = 0; i < fn.param_count; i++) declare(fn.params[i]);
             function_depth++;
+            if (fn.param_defaults)
+                for (size_t i = 0; i < fn.param_count; i++) expr(fn.param_defaults[i]);
             stmts(fn.body, fn.body_count);
             function_depth--;
             break;

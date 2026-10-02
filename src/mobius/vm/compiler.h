@@ -258,6 +258,7 @@ private:
     bool writesDestBeforeOperands(Expr* e);
     void closeLoopLocals(const LoopContext& loop);
     void emitFinallyExits(int stop_open_trys);
+    int emitParamDefaults(Expr** defaults, size_t count);
     bool loopLimitIsStable(Expr* limit, const struct AstNameScan& body);
     void checkSpawnedFunction(Expr* callee);
     // Prototypes of readonly global functions, by name, for resolving direct

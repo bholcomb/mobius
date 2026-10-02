@@ -2194,7 +2194,25 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
         compileExpr(expr->arguments[i], arg_reg);
     }
 
-    int nargs = (int)expr->arg_count + 1 + (is_method ? 1 : 0);  // B = nargs + 1, +1 for self
+    // A direct call to a function with default parameters passes nil for
+    // the omitted ones, so the call sees its full parameter count. A count
+    // outside the allowed range takes the ordinary call, which reports it.
+    size_t passed = expr->arg_count;
+    if (use_direct_call && !is_method) {
+        const Prototype* target = direct_target.proto;
+        int total = target->num_params;
+        int required = target->min_params < 0 ? total : target->min_params;
+        if ((int)passed < required || (int)passed > total) {
+            use_direct_call = false;
+        } else {
+            for (; (int)passed < total; passed++) {
+                int pad = allocReg();
+                emitABC(OP_LOADNIL, (uint8_t)pad, 0, 0);
+            }
+        }
+    }
+
+    int nargs = (int)passed + 1 + (is_method ? 1 : 0);  // B = nargs + 1, +1 for self
     int nresults = 2;                       // C = nresults + 1 (1 result)
 
     if (use_direct_call) {
@@ -3397,6 +3415,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
         for (size_t i = 0; i < stmt->param_count; i++)
             child_fs.proto->param_type_hints[i] = (int8_t)stmt->param_types[i];
     }
+    child_fs.proto->min_params = emitParamDefaults(stmt->param_defaults, stmt->param_count);
 
     // Compile function body
     compileBlock(stmt->body, stmt->body_count);
@@ -4790,6 +4809,7 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
                 child_fs.proto->param_type_hints[i] = (int8_t)expr->param_types[i];
         }
     }
+    child_fs.proto->min_params = emitParamDefaults(expr->param_defaults, expr->param_count);
 
     compileBlock(expr->body, expr->body_count);
     emitReturn(0, 0);
@@ -4951,6 +4971,33 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
     unreachable_ = (try_unreachable && catch_unreachable) || finally_unreachable;
     endScope();
     setFreeReg(save);
+}
+
+// Default parameter values: at function entry, a parameter that is nil (its
+// argument was omitted or passed as nil) gets its default, evaluated on each
+// call; a default may use earlier parameters. Parameters occupy registers
+// 0..n-1. Returns the number of required parameters (those before the first
+// default), for the call-site arity check.
+int Compiler::emitParamDefaults(Expr** defaults, size_t count) {
+    if (!defaults) return (int)count;
+    int required = (int)count;
+    for (size_t i = 0; i < count; i++) {
+        if (!defaults[i]) continue;
+        if (required == (int)count) required = (int)i;
+        // TYPEIS with A=0 skips the next instruction (the jump past the
+        // default) when the parameter is nil. A type test, not ==, so a
+        // table argument's __eq is never called.
+        emitABC(OP_TYPEIS, 0, (uint8_t)i, (uint8_t)VAL_NIL);
+        int skip = emitJump();
+        int save = current_->free_reg;
+        bool saved_unreachable = unreachable_;
+        int reg = compileExpr(defaults[i], (int)i);
+        if (reg != (int)i) emitABC(OP_MOVE, (uint8_t)i, (uint8_t)reg, 0);
+        unreachable_ = saved_unreachable;
+        setFreeReg(save);
+        patchJump(skip);
+    }
+    return required;
 }
 
 // Leaving try statements early (return, break, continue): pop the handlers

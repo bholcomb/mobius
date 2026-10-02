@@ -617,7 +617,9 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
                         nullptr, 0, 0, nullptr);
     }
 
-    if ((int)mf->param_count != nargs) {
+    // Parameters with defaults may be omitted (see Prototype::min_params).
+    int required = mf->proto->min_params < 0 ? (int)mf->param_count : mf->proto->min_params;
+    if (nargs > (int)mf->param_count || nargs < required) {
         nctx->registers = saved_registers;
         nctx->capacity = saved_capacity;
         nctx->base = saved_base;
@@ -641,6 +643,9 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
     vm->registers_[pcall_base] = function;
     for (int i = 0; i < nargs; i++) {
         vm->registers_[child_base + i] = args ? args[i] : Value();
+    }
+    for (int i = nargs; i < (int)mf->param_count; i++) {
+        vm->registers_[child_base + i] = Value();   // omitted: the default applies
     }
 
     nctx->registers = vm->registers_.data();

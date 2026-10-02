@@ -159,6 +159,7 @@ typedef struct {
     ValueType return_type;  // Declared return type (VAL_UNKNOWN if omitted)
     Stmt** body;
     size_t body_count;
+    Expr** param_defaults;  // Default value per param, or NULL entries (NULL if none)
 } FunctionExpr;
 
 // spawn expression: spawn func(args...)
@@ -260,6 +261,7 @@ typedef struct {
     ValueType return_type;  // Declared return type (VAL_UNKNOWN if omitted)
     Stmt** body;        // Array of statements in function body
     size_t body_count;
+    Expr** param_defaults;  // Default value per param, or NULL entries (NULL if none)
 } FunctionStmt;
 
 
