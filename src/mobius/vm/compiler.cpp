@@ -5162,9 +5162,18 @@ int Compiler::compileAtomic(AtomicExpr* expr, int dest) {
         return -1;
     }
 
+    // Claim the result register before the container's temporary. With
+    // no dest the result used to land after the container, one register
+    // past where the caller expected it: as a call argument, it shifted
+    // every argument after it.
+    int save = current_->free_reg;
+    int result_reg = (dest >= 0) ? dest : allocReg();
     int container_reg = compileExpr(container_expr);
     emitABC(OP_ATOMIC_BEGIN, (uint8_t)container_reg, 0, 0);
-    int result_reg = compileExpr(expr->body, dest);
+    int body_reg = compileExpr(expr->body, result_reg);
+    if (body_reg != result_reg)
+        emitABC(OP_MOVE, (uint8_t)result_reg, (uint8_t)body_reg, 0);
     emitABC(OP_ATOMIC_END, (uint8_t)container_reg, 0, 0);
+    setFreeReg(dest >= 0 ? save : result_reg + 1);
     return result_reg;
 }

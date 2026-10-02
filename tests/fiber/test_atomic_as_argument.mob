@@ -1,0 +1,22 @@
+// atomic(...) used as a call argument keeps the arguments after it in
+// place. Its result used to land one register late, shifting them.
+func join3(a, b, c) { return str(a) + "|" + str(b) + "|" + str(c) }
+
+shared var counter = [0]
+shared var total = 10
+
+func main() {
+    shared var local_count = 5
+    var r1 = join3("a", atomic(counter[0] = counter[0] + 1), "c")
+    var r2 = join3("a", atomic(total = total + 1), "c")
+    var r3 = join3("a", atomic(local_count = local_count + 1), "c")
+    var r4 = join3(atomic(total = total + 1), "b", atomic(local_count = local_count + 1))
+    var want = "a|1|c a|11|c a|6|c 12|b|7"
+    var got = r1 + " " + r2 + " " + r3 + " " + r4
+    if (got != want) {
+        print("FAIL: expected " + want + ", got " + got)
+        exit(1)
+    }
+}
+main()
+print("atomic as a call argument: PASS")
