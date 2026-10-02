@@ -22,6 +22,7 @@ resolves modules and how packages are installed.
 | [`datetime`](datetime.md)       | Structured date/time tables, formatting, and ISO-8601 parsing |
 | [`fiber`](fiber.md)             | Channels, futures helpers, sleep, cancellation, and array slices — a builtin global, **no import** |
 | [`http`](http.md)               | HTTP request/response parsing and building, plus a plain-TCP client |
+| [`io`](io.md)                   | File and standard-stream objects: incremental, binary-safe reads and writes |
 | [`json`](json.md)               | JSON parsing and serialization |
 | [`math`](math.md)               | Trigonometry, logarithms, and number-theory functions and constants |
 | [`os`](os.md)                   | Filesystem, paths, environment, processes, and time conversion |

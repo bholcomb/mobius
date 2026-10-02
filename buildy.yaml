@@ -51,6 +51,13 @@ staging:
     - folder: "bin/modules/compression/native/linux-x86_64"
       files:
         - "${out_dir}/bin/compression.so"
+    - folder: "bin/modules/io"
+      files:
+        - "src/modules/io/module.yaml"
+        - "src/modules/io/io.mob"
+    - folder: "bin/modules/io/native/linux-x86_64"
+      files:
+        - "${out_dir}/bin/io.so"
     - folder: "bin/modules/math"
       files:
         - "src/modules/math/module.yaml"

@@ -17,6 +17,18 @@ targets:
       depends_on:
         targets: ["mobius-core"]
 
+    - name: io
+      language: cpp
+      output_prefix: ""
+      sources: ["io/io_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]
+
     - name: math
       language: cpp
       output_prefix: ""

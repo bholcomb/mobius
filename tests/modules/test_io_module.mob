@@ -1,0 +1,182 @@
+// io module: streams over files and the standard streams.
+import "io"
+import "os"
+
+var failures = 0
+func check(name, got, want) {
+    if (got != want) {
+        failures++
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+    }
+}
+func expect_error(name, f, needle) {
+    var msg = ""
+    try { f() } catch e { msg = str(e) }
+    if (!contains(msg, needle)) {
+        failures++
+        print("FAIL: " + name + ": expected error containing '" + needle + "', got '" + msg + "'")
+    }
+}
+
+var dir = os.join(os.tmpdir(), "mobius_io_" + str(os.getpid()))
+os.mkdirp(dir)
+func path(name) { return os.join(dir, name) }
+
+// Write and read back text, with every kind of line ending.
+var f = io.open(path("lines.txt"), "w")
+check("write returns byte count", f:write("one\r\ntwo\n\nlast"), 14)
+f:close()
+var lines = []
+var r = io.open(path("lines.txt"))
+for (var line in r:lines()) { lines:push(line) }
+r:close()
+check("line count", size(lines), 4)
+check("CRLF stripped", lines[0], "one")
+check("LF stripped", lines[1], "two")
+check("empty line", lines[2], "")
+check("last line without newline", lines[3], "last")
+
+// read_line returns nil at end of file, repeatedly.
+var r2 = io.open(path("lines.txt"))
+r2:read_text()
+check("read_line at EOF", r2:read_line(), nil)
+check("read_line at EOF again", r2:read_line(), nil)
+check("read at EOF", r2:read(10), nil)
+check("read_text at EOF", r2:read_text(), "")
+r2:close()
+
+// Binary data with NUL bytes round-trips exactly.
+var bin = io.open(path("bin.dat"), "w")
+bin:write("a\0b\0\0c")
+bin:write(buffer_from_string("\0xyz"))
+bin:close()
+var rb = io.open(path("bin.dat"))
+var all = rb:read_text()
+check("binary length", size(all), 10)
+check("binary content", all, "a\0b\0\0c\0xyz")
+rb:seek(0)
+var line_with_nul = rb:read_line()
+check("read_line keeps NULs", size(line_with_nul), 10)
+rb:close()
+
+// Empty file.
+io.open(path("empty.txt"), "w"):close()
+var re = io.open(path("empty.txt"))
+check("empty read_line", re:read_line(), nil)
+check("empty read_all size", size(re:read_all()), 0)
+re:close()
+
+// read(n), read_into, seek and tell.
+var w = io.open(path("digits.txt"), "w")
+w:write("0123456789")
+w:close()
+var d = io.open(path("digits.txt"))
+var chunk = d:read(4)
+check("read(n) gives a buffer", typeof(chunk), "buffer")
+check("read(n) size", size(chunk), 4)
+check("tell after read", d:tell(), 4)
+check("seek from end", d:seek(-2, "end"), 8)
+check("read after seek", d:read_text(), "89")
+check("seek from current", d:seek(-5, "cur"), 5)
+var into = buffer_create(3)
+check("read_into count", d:read_into(into), 3)
+check("read_into content", into:to_string(), "567")
+d:seek(9)
+var big = buffer_create(8)
+check("read_into short read", d:read_into(big), 1)
+check("read_into at EOF", d:read_into(big), 0)
+expect_error("read(0)", func() { return d:read(0) }, "positive")
+expect_error("bad origin", func() { return d:seek(0, "middle") }, "invalid origin")
+d:close()
+
+// Modes.
+var a = io.open(path("append.txt"), "w")
+a:write("first\n")
+a:close()
+var a2 = io.open(path("append.txt"), "a")
+a2:write("second\n")
+a2:close()
+check("append mode", readfile(path("append.txt")), "first\nsecond\n")
+expect_error("exclusive create on existing file", func() { return io.open(path("append.txt"), "x") }, "File exists")
+var x = io.open(path("new.txt"), "x")
+x:write("new")
+x:close()
+check("exclusive create", readfile(path("new.txt")), "new")
+expect_error("invalid mode", func() { return io.open(path("new.txt"), "rw") }, "invalid mode")
+expect_error("missing file", func() { return io.open(path("missing.txt")) }, "No such file")
+var ro = io.open(path("new.txt"))
+expect_error("write on read-only stream", func() { return ro:write("x") }, "not open for writing")
+ro:close()
+var wo = io.open(path("new.txt"), "w")
+expect_error("read on write-only stream", func() { return wo:read(1) }, "not open for reading")
+wo:close()
+
+// r+ switches between reading and writing without manual flush or seek.
+writefile(path("rw.txt"), "abcdef")
+var rw = io.open(path("rw.txt"), "r+")
+check("r+ read", size(rw:read(2)), 2)
+rw:write("XY")
+check("r+ read after write", rw:read_text(), "ef")
+rw:close()
+check("r+ result", readfile(path("rw.txt")), "abXYef")
+
+// Closing: twice is harmless, use after close is an error.
+var c = io.open(path("new.txt"))
+c:close()
+c:close()
+check("is_closed", c:is_closed(), true)
+expect_error("read after close", func() { return c:read_line() }, "stream is closed")
+expect_error("write after close", func() { return c:write("x") }, "stream is closed")
+
+// io.copy streams large data in bounded chunks.
+var big_out = io.open(path("big.dat"), "w")
+var piece = ""
+for (var i = 0; i < 1000; i++) { piece = piece + "0123456789" }
+for (var i = 0; i < 300; i++) { big_out:write(piece) }
+big_out:close()
+var src = io.open(path("big.dat"))
+var dst = io.open(path("copy.dat"), "w")
+check("copy byte count", io.copy(src, dst), 3000000)
+src:close()
+dst:close()
+check("copy size", os.filesize(path("copy.dat")), 3000000)
+var same = io.open(path("copy.dat"))
+expect_error("copy to itself", func() { return io.copy(same, same) }, "same stream")
+same:close()
+
+// One stream shared by several fibers: each write is atomic.
+var shared_out = io.open(path("fibers.txt"), "w")
+func writer(stream, tag) {
+    for (var i = 0; i < 200; i++) { stream:write(tag + "\n") }
+    return 0
+}
+var futures = []
+for (var k = 0; k < 4; k++) { futures:push(spawn writer(shared_out, "fiber" + str(k))) }
+fiber.all(futures)
+shared_out:close()
+var counts = {}
+var total = 0
+var fr = io.open(path("fibers.txt"))
+for (var line in fr:lines()) {
+    total++
+    counts[line] = (counts:has_key(line) ? counts[line] : 0) + 1
+}
+fr:close()
+check("all fiber lines written", total, 800)
+check("no torn lines", counts:size(), 4)
+
+// Standard streams, through a child process.
+var child = path("child.mob")
+writefile(child, "import \"io\"\nvar n = 0\nfor (var line in io.stdin:lines()) {\n    n++\n    io.stdout:write(\"got \" + line + \"\\n\")\n}\nprint(\"lines\", n)\nio.stderr:write(\"to stderr\\n\")\nio.stdout:close()\nprint(\"print still works\")\n")
+writefile(path("input.txt"), "alpha\nbeta\n")
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+os.system("\"" + mobius_bin + "\" \"" + child + "\" < \"" + path("input.txt") + "\" > \"" + path("out.txt") + "\" 2> \"" + path("err.txt") + "\"")
+check("stdin lines and stdout order", readfile(path("out.txt")), "got alpha\ngot beta\nlines 2\nprint still works\n")
+check("stderr separate", readfile(path("err.txt")), "to stderr\n")
+
+os.system("rm -rf \"" + dir + "\"")
+if (failures > 0) {
+    print("io module: " + str(failures) + " failures")
+    exit(1)
+}
+print("io module: PASS")

@@ -1,0 +1,28 @@
+// io: file and standard-stream objects. The native plugin provides open,
+// copy, stdin/stdout/stderr and the stream methods; this script assembles
+// the method table and adds conveniences written in Mobius.
+
+// stream:lines(): an iterator over the remaining lines, for for-in:
+//     for (var line in f:lines()) { ... }
+func __stream_lines(self) {
+    var stream = self
+    return func(state, control) {
+        return stream:read_line()
+    }
+}
+
+__set_stream_methods({
+    read: __read,
+    read_into: __read_into,
+    read_line: __read_line,
+    read_all: __read_all,
+    read_text: __read_text,
+    lines: __stream_lines,
+    write: __write,
+    flush: __flush,
+    close: __close,
+    is_closed: __is_closed,
+    seek: __seek,
+    tell: __tell,
+    name: __name
+})
