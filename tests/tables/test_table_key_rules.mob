@@ -1,0 +1,55 @@
+// Table keys follow ==: a float with an integer value and a uint64 that
+// fits in int64 are the same key as the equal int64. nil and NaN cannot be
+// stored as keys; looking them up finds nothing.
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+func expect_error(name, f, needle) {
+    var msg = ""
+    try { f() } catch e { msg = e }
+    if (!contains(msg, needle)) {
+        print("FAIL: " + name + ": expected error containing '" + needle + "', got '" + msg + "'")
+        exit(1)
+    }
+}
+
+func main() {
+    var t = {}
+    t[1] = "one"
+    check("float reads int key", t[1.0], "one")
+    check("uint64 reads int key", t[opaque(1) + 0], "one")
+    t[2.0] = "two"
+    check("float key stored as int", t[2], "two")
+    check("one entry per number", t:size(), 2)
+    t[-0.0] = "zero"
+    check("-0.0 is key 0", t[0], "zero")
+    t[1.5] = "half"
+    check("non-integral float is its own key", t[1.5], "half")
+    check("has_key with float", t:has_key(2.0), true)
+    check("remove with float", t:remove(2.0), true)
+    check("removed", t:has_key(2), false)
+
+    var huge = opaque(18446744073709551615)
+    t[huge] = "huge"
+    check("uint64 above int64 range stays distinct", t[huge], "huge")
+    check("not confused with -1", t[-1], nil)
+
+    var lit = {[3.0] = "three"}
+    check("literal key normalized", lit[3], "three")
+    for (var k, v in lit) { check("iterated key is int64", typeof(k), "int64") }
+
+    expect_error("nil key", func() { var x = {}
+        x[nil] = 1 }, "cannot be nil")
+    var inf = opaque(1e308) * 10.0
+    var nan = inf - inf
+    expect_error("NaN key", func() { var x = {}
+        x[nan] = 1 }, "cannot be NaN")
+    check("reading nil key", t[nil], nil)
+    check("reading NaN key", t[nan], nil)
+}
+main()
+print("table key rules: PASS")

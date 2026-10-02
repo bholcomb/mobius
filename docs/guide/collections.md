@@ -140,6 +140,10 @@ var lookup = {
 }
 ```
 
+Keys follow `==`: `t[1]`, `t[1.0]` and a `uint64` 1 are the same entry (stored
+as the integer 1), while `t[1.5]` is a different one. `nil` and NaN cannot be
+keys: storing with one is an error, and looking one up gives `nil`.
+
 ### Accessing fields
 
 ```mobius
