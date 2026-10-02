@@ -1,0 +1,64 @@
+// fiber.sleep parks the fiber on a reactor timer instead of polling: many
+// sleeping fibers use (almost) no CPU, still wake on time, and fiber.cancel
+// wakes one early.
+import "io"
+
+var failures = 0
+func check(name, got, want) {
+    if (got != want) {
+        failures++
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+    }
+}
+
+// CPU time of this process in clock ticks (user + system), or -1.
+func cpu_ticks() {
+    var f = nil
+    try { f = io.open("/proc/self/stat") } catch e { return -1 }
+    var stat = f:read_text()
+    f:close()
+    // Fields after the parenthesized command name; utime and stime are the
+    // 12th and 13th of them.
+    var from = find(stat, ")") + 2
+    var rest = split(substr(stat, from, size(stat) - from), " ")
+    return int(rest[11]) + int(rest[12])
+}
+
+func nap(ms) {
+    fiber.sleep(ms)
+    return 1
+}
+
+var before = cpu_ticks()
+var start = clock()
+var naps = []
+for (var i = 0; i < 100; i++) { naps:push(spawn nap(500)) }
+fiber.sleep(600)   // the main fiber sleeps too: nothing should be running
+var total = 0
+for (var f in naps) { total = total + await f }
+var wall_ms = int((clock() - start) / 1000000)
+check("all sleepers finished", total, 100)
+check("sleepers slept together", wall_ms < 1500, true)
+if (before >= 0) {
+    // Polling sleepers kept every worker busy (several CPU-seconds here);
+    // parked ones leave the process idle. Ticks are usually 10 ms.
+    var used = cpu_ticks() - before
+    check("sleeping fibers use little CPU (ticks: " + str(used) + ")", used < 30, true)
+}
+
+// fiber.cancel wakes a long sleep at once.
+func long_nap() { fiber.sleep(10000) }
+var sleeper = spawn long_nap()
+fiber.sleep(20)
+start = clock()
+fiber.cancel(sleeper)
+var msg = ""
+try { await sleeper } catch e { msg = str(e) }
+check("cancel wakes a sleeper", contains(msg, "CancellationError"), true)
+check("cancel is prompt", int((clock() - start) / 1000000) < 500, true)
+
+// Zero and negative sleeps return at once.
+fiber.sleep(0)
+fiber.sleep(-5)
+
+if (failures == 0) { print("fiber sleep parked: PASS") } else { exit(1) }

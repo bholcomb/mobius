@@ -1,3 +1,4 @@
+#include "fiber/io_reactor.h"
 #include "library/fiber_lib.h"
 #include "data/channel.h"
 #include "data/future.h"
@@ -47,6 +48,7 @@ int lib_fiber_cancel(MobiusState* state, int arg_count) {
     }
 
     fut_val.as.future->cancel();
+    mobius_io_cancel_future(fut_val.as.future);   // wake it if parked on I/O or a timer
     state->npush(make_nil_value());
     return 1;
 }
@@ -195,16 +197,10 @@ int lib_fiber_sleep(MobiusState* state, int arg_count) {
     }
 
     if (ms > 0) {
-        MobiusVM* vm = MobiusVM::t_current_vm;
-        FutureValue* fut = vm ? vm->future_ : nullptr;
-        JobSystem* js = state->jobSystem();
-        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
-        while (std::chrono::steady_clock::now() < deadline) {
-            if (fut && fut->isCancelled()) {
-                return state->error("CancellationError: fiber was cancelled");
-            }
-            if (js) js->yieldFiber();
-            else std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        // A timer in the I/O reactor: the fiber is parked, not polled, and
+        // fiber.cancel wakes it.
+        if (mobius_io_wait(state, nullptr, 0, ms) == MOBIUS_IO_CANCELLED) {
+            return state->error("CancellationError: fiber was cancelled");
         }
     }
     state->npush(make_nil_value());

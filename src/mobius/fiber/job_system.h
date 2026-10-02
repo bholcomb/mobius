@@ -59,6 +59,17 @@ public:
     void waitForCounter(AtomicCounter* counter, int32_t target_value);
     void yieldFiber();
 
+    // Parking: a fiber that must wait for an event leaves the ready queue
+    // instead of being polled. beginPark() before registering the wake
+    // source (so a wake that arrives during registration is not lost),
+    // then park() to switch out; cancelPark() if registration failed.
+    // wakeFiber() (from any thread) puts a parked fiber back in the ready
+    // queue; waking a fiber that is not parked does nothing.
+    void beginPark();
+    void park();
+    void cancelPark();
+    void wakeFiber(MobiusFiber* fiber);
+
     // Run `fn` as the main fiber. Blocks the calling thread until it completes.
     // Returns the int result from `fn`.
     int executeAsMainFiber(std::function<int()> fn);
