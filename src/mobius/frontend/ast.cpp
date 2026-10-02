@@ -777,6 +777,11 @@ void ast_release_expr(Expr* expr) {
                 ast_release_expr(expr->as.ternary.else_expr);
                 break;
             case EXPR_FUNCTION:
+                if (expr->as.function_expr.param_defaults) {
+                    for (size_t i = 0; i < expr->as.function_expr.param_count; i++)
+                        ast_release_expr(expr->as.function_expr.param_defaults[i]);
+                    free(expr->as.function_expr.param_defaults);
+                }
                 if (expr->as.function_expr.params) free(expr->as.function_expr.params);
                 if (expr->as.function_expr.param_types) free(expr->as.function_expr.param_types);
                 if (expr->as.function_expr.body) {
@@ -868,6 +873,11 @@ void ast_release_stmt(Stmt* stmt) {
                 break;
             case STMT_FUNCTION:
                 free_token(&stmt->as.function.name);
+                if (stmt->as.function.param_defaults) {
+                    for (size_t i = 0; i < stmt->as.function.param_count; i++)
+                        ast_release_expr(stmt->as.function.param_defaults[i]);
+                    free(stmt->as.function.param_defaults);
+                }
                 if (stmt->as.function.body) {
                     for (size_t i = 0; i < stmt->as.function.body_count; i++) {
                         ast_release_stmt(stmt->as.function.body[i]);

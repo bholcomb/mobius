@@ -1,0 +1,72 @@
+// Default parameter values: `func f(a, b = expr)`. A parameter takes its
+// default when the argument is omitted or passed as nil. Defaults are
+// evaluated on each call and may use earlier parameters.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+func expect_error(name, f, needle) {
+    var msg = ""
+    try { f() } catch e { msg = str(e) }
+    if (!contains(msg, needle)) {
+        print("FAIL: " + name + ": expected error containing '" + needle + "', got '" + msg + "'")
+        exit(1)
+    }
+}
+
+func greet(name, greeting = "hello", punct = "!") {
+    return greeting + " " + name + punct
+}
+check("all omitted", greet("bob"), "hello bob!")
+check("one given", greet("bob", "hi"), "hi bob!")
+check("all given", greet("bob", "hi", "?"), "hi bob?")
+check("explicit nil gets the default", greet("bob", nil, "."), "hello bob.")
+
+// Evaluated on each call: a fresh table every time.
+func collect(x, into = []) {
+    into:push(x)
+    return into
+}
+check("fresh default 1", size(collect(1)), 1)
+check("fresh default 2", size(collect(2)), 1)
+var mine = [0]
+check("given container", size(collect(1, mine)), 2)
+
+// Defaults can use earlier parameters and globals.
+var BASE = 100
+func offset(x, by = x * 2, base = BASE) { return base + x + by }
+check("default from earlier param", offset(1), 103)
+check("override middle", offset(1, 0), 101)
+
+// Closures, methods, recursion, spawn, metamethods.
+var add = func(a, b = 10) { return a + b }
+check("closure default", add(1), 11)
+var obj = {n: 5, scaled: func(self, k = 2) { return self.n * k }}
+check("method default", obj:scaled(), 10)
+check("method given", obj:scaled(3), 15)
+func countdown(n, acc = 0) {
+    if (n == 0) { return acc }
+    return countdown(n - 1, acc + n)
+}
+check("recursive default", countdown(4), 10)
+check("spawn default", await spawn greet("fiber"), "hello fiber!")
+var mt = {__call: func(self, x = 7) { return x }}
+var callable = setmetatable({}, mt)
+check("__call default", callable(), 7)
+check("callback default", [1, 2]:map(func(v, i, extra = 100) { return v + extra })[1], 102)
+
+// Typed parameters can have defaults.
+func scale(x: float64, factor: float64 = 2.0) { return x * factor }
+check("typed default", scale(1.5), 3.0)
+
+// Arity is still checked.
+expect_error("too few", func() { return greet() }, "expects 1 to 3 arguments but got 0")
+expect_error("too many", func() { return greet("a", "b", "c", "d") }, "expects 1 to 3 arguments but got 4")
+var dyn = greet
+expect_error("too few through a value", func() { return dyn() }, "expects 1 to 3 arguments")
+check("through a value", dyn("x"), "hello x!")
+func exact(a, b) { return a }
+expect_error("no defaults: exact count", func() { return exact(1) }, "expects 2 arguments but got 1")
+print("default parameters: PASS")

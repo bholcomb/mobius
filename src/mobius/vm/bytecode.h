@@ -59,6 +59,8 @@ struct Prototype {
 
     // -- Function metadata --
     int num_params   = 0;   // declared parameter count
+    int min_params   = -1;  // required parameters (those without a default);
+                            // -1: all of them
     int num_registers = 2;  // max registers needed (locals + temporaries)
     bool is_vararg   = false;
     bool has_type_locks = false;  // true if any OP_TYPELOCK/OP_TYPECHECK_LOCKED emitted

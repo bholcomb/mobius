@@ -29,6 +29,8 @@ static bool search(const std::string& name, const TopLevelDecls& decls,
     AstNameScan scan;
     const FunctionStmt* fn = fit->second;
     for (size_t i = 0; i < fn->param_count; i++) scan.declare(fn->params[i]);
+    if (fn->param_defaults)
+        for (size_t i = 0; i < fn->param_count; i++) scan.expr(fn->param_defaults[i]);
     scan.stmts(fn->body, fn->body_count);
 
     for (const auto& ref : scan.referenced) {

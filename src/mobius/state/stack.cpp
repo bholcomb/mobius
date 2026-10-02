@@ -1258,7 +1258,10 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     }
 
     MobiusFunction* mf = func_val.as.function;
-    if (!mf->proto || (int)mf->param_count != nargs) {
+    // Parameters with defaults may be omitted (see Prototype::min_params).
+    int required = (mf->proto && mf->proto->min_params >= 0) ? mf->proto->min_params
+                                                             : (int)mf->param_count;
+    if (!mf->proto || nargs > (int)mf->param_count || nargs < required) {
         if (args != inline_args) delete[] args;
         return state->error("pcall: argument count mismatch");
     }
@@ -1275,6 +1278,9 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     vm->registers_[pcall_base] = func_val;
     for (int i = 0; i < nargs; i++) {
         vm->registers_[child_base + i] = args[i];
+    }
+    for (int i = nargs; i < (int)mf->param_count; i++) {
+        vm->registers_[child_base + i] = Value();   // omitted: the default applies
     }
     if (args != inline_args) delete[] args;
 

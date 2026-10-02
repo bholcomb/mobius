@@ -541,6 +541,32 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
 // Mobius function call
 // ============================================================================
 
+// Calls may omit parameters that have defaults: the argument count must be
+// between the required count (proto->min_params; -1 means all) and the
+// parameter count. Omitted parameters are set to nil, and the callee's entry
+// code replaces nil with the default.
+static MOBIUS_FORCEINLINE int required_args(const MobiusFunction* mf) {
+    int m = mf->proto ? mf->proto->min_params : -1;
+    return m < 0 ? (int)mf->param_count : m;
+}
+static MOBIUS_FORCEINLINE bool arg_count_ok(const MobiusFunction* mf, int nargs) {
+    return nargs <= (int)mf->param_count && nargs >= required_args(mf);
+}
+static MOBIUS_FORCEINLINE void nil_omitted_params(Value* params, const MobiusFunction* mf, int nargs) {
+    for (int i = nargs; i < (int)mf->param_count; i++) params[i] = Value();
+}
+// Out of line and without a VMFrame& (see fiber_global_error); the caller
+// syncs the ip.
+MOBIUS_NOINLINE static int arg_count_error(MobiusVM* vm, const MobiusFunction* mf, int nargs) {
+    const char* name = mf->name ? mf->name->data : "anonymous";
+    int lo = required_args(mf), hi = (int)mf->param_count;
+    if (lo == hi)
+        vm->runtimeError("Function '%s' expects %d arguments but got %d", name, hi, nargs);
+    else
+        vm->runtimeError("Function '%s' expects %d to %d arguments but got %d", name, lo, hi, nargs);
+    return -1;
+}
+
 int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresults) {
     Value& func_val = R(caller, func_reg);
 
@@ -583,17 +609,14 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         return -1;
     }
 
-    if ((int)mf->param_count != nargs) {
-        runtimeError("Function '%s' expects %zu arguments but got %d",
-                     mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
-        return -1;
-    }
+    if (!arg_count_ok(mf, nargs)) return arg_count_error(this, mf, nargs);
 
     Prototype* child = mf->proto;
 
     int child_base = caller.base + func_reg + 1;
     int needed = child_base + child->num_registers + 16;
     ensureRegisters(needed);
+    nil_omitted_params(&registers_[child_base], mf, nargs);
 
     if (!child->param_unwrap_on_entry.empty()) {
         for (int i = 0; i < nargs; i++) {
@@ -717,8 +740,8 @@ int MobiusVM::callScriptMetamethod(const Value& fn, MobiusString* mm_name,
         runtimeError("Metamethod '%s' has no bytecode prototype", mm_name->data);
         return -1;
     }
-    if ((int)mf->param_count != nargs) {
-        runtimeError("Metamethod '%s' expects %d arguments but got %zu params",
+    if (!arg_count_ok(mf, nargs)) {
+        runtimeError("Metamethod '%s' is called with %d arguments but takes %zu",
                      mm_name->data, nargs, mf->param_count);
         return -1;
     }
@@ -743,6 +766,7 @@ int MobiusVM::callScriptMetamethod(const Value& fn, MobiusString* mm_name,
     registers_[scratch] = fn_copy;
     int child_base = scratch + 1;
     for (int i = 0; i < nargs; i++) registers_[child_base + i] = arg_copies[i];
+    nil_omitted_params(&registers_[child_base], mf, nargs);
 
     if (!child->param_unwrap_on_entry.empty()) {
         for (int i = 0; i < nargs; i++) {
@@ -3190,14 +3214,17 @@ MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t
             return -1;
         }
         if (MOBIUS_UNLIKELY((int)mf->param_count != nargs)) {
-            VM_ERROR(vm, f, "Function '%s' expects %zu arguments but got %d",
-                             mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
-            return -1;
+            if (!arg_count_ok(mf, nargs)) {
+                f.ci->ip = f.ip;
+                return arg_count_error(vm, mf, nargs);
+            }
         }
 
         Prototype* child = mf->proto;
         int child_base = f.ci->base + a + 1;
         vm->ensureRegisters(child_base + child->num_registers + 16);
+        if (MOBIUS_UNLIKELY((int)mf->param_count != nargs))
+            nil_omitted_params(&vm->registers_[child_base], mf, nargs);
 
         if (prepare_params && !child->param_unwrap_on_entry.empty()) {
             for (int i = 0; i < nargs; i++) {
@@ -3330,10 +3357,9 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
                          mf->name ? mf->name->data : "anonymous");
         return -1;
     }
-    if ((int)mf->param_count != nargs) {
-        VM_ERROR(vm, f, "Function '%s' expects %zu arguments but got %d",
-                         mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
-        return -1;
+    if (!arg_count_ok(mf, nargs)) {
+        f.ci->ip = f.ip;
+        return arg_count_error(vm, mf, nargs);
     }
 
     Prototype* child = mf->proto;
@@ -4008,10 +4034,9 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
         // The same check as an ordinary call, raised at the spawn site. It
         // was missing: the fiber ran with missing parameters as nil (or
         // extra arguments dropped) and failed later, inside the fiber.
-        if ((int)mf->param_count != nargs) {
-            VM_ERROR(vm, f, "Function '%s' expects %zu arguments but got %d",
-                     mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
-            return -1;
+        if (!arg_count_ok(mf, nargs)) {
+            f.ci->ip = f.ip;
+            return arg_count_error(vm, mf, nargs);
         }
         FutureValue* future = new FutureValue();
 

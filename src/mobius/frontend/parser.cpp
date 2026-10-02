@@ -1,3 +1,5 @@
+#include <vector>
+#include <string>
 #include <cctype>
 #include "parser.h"
 #include "util/utility.h"
@@ -89,6 +91,43 @@ bool parser_match_any(Parser* parser, size_t count, ...) {
 }
 
 // Error handling
+// Default parameter values, collected while parsing a parameter list.
+// Released on any parse-error return unless handed to the AST (take()).
+struct ParamDefaults {
+    std::vector<Expr*> exprs;
+    bool any = false;
+    ~ParamDefaults() { for (Expr* e : exprs) ast_release_expr(e); }
+    // NULL when no parameter has a default; otherwise one entry per
+    // parameter (NULL for parameters without one).
+    Expr** take() {
+        if (!any) return NULL;
+        Expr** out = (Expr**)calloc(exprs.size(), sizeof(Expr*));
+        if (!out) return NULL;
+        for (size_t i = 0; i < exprs.size(); i++) out[i] = exprs[i];
+        exprs.clear();
+        return out;
+    }
+};
+
+// After a parameter (and its type annotation): `= expr` gives it a default,
+// used when the argument is omitted or nil. Once a parameter has one, every
+// later parameter needs one too.
+static bool parse_param_default(Parser* parser, ParamDefaults& defaults, const Token& param) {
+    Expr* d = NULL;
+    if (parser_match(parser, TOKEN_EQUAL)) {
+        d = parse_expression(parser);
+        if (!d) return false;
+        defaults.any = true;
+    } else if (defaults.any) {
+        std::string msg = std::string("Parameter '") + (param.identifier ? param.identifier : "?") +
+                          "' needs a default value, because an earlier parameter has one";
+        parser_error(parser, param, msg.c_str());
+        return false;
+    }
+    defaults.exprs.push_back(d);
+    return true;
+}
+
 // The token as it appears in the source, for error messages. Only
 // identifiers carry their text, so keywords, symbols and literals all used
 // to show as 'unknown'.
@@ -486,6 +525,7 @@ Expr* parse_primary(Parser* parser) {
         size_t param_count = 0;
         size_t param_capacity = 0;
         bool has_any_type = false;
+        ParamDefaults defaults;
 
         if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
             do {
@@ -511,6 +551,10 @@ Expr* parse_primary(Parser* parser) {
                     has_any_type = true;
                 } else {
                     param_types[param_count] = VAL_UNKNOWN;
+                }
+                if (!parse_param_default(parser, defaults, params[param_count])) {
+                    free(params); free(param_types);
+                    return NULL;
                 }
                 param_count++;
             } while (parser_match(parser, TOKEN_COMMA));
@@ -550,7 +594,9 @@ Expr* parse_primary(Parser* parser) {
         }
         consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after function body.");
 
-        return make_function_expr(name, params, param_types, param_count, return_type, body, body_count);
+        Expr* fn = make_function_expr(name, params, param_types, param_count, return_type, body, body_count);
+        if (fn) fn->as.function_expr.param_defaults = defaults.take();
+        return fn;
     }
 
     if (parser_match(parser, TOKEN_LEFT_BRACE)) {
@@ -1767,6 +1813,7 @@ Stmt* parse_function_declaration(Parser* parser) {
     size_t param_count = 0;
     size_t param_capacity = 0;
     bool has_any_type = false;
+    ParamDefaults defaults;
     
     if (!parser_check(parser, TOKEN_RIGHT_PAREN)) {
         do {
@@ -1799,6 +1846,10 @@ Stmt* parse_function_declaration(Parser* parser) {
                 has_any_type = true;
             } else {
                 param_types[param_count] = VAL_UNKNOWN;
+            }
+            if (!parse_param_default(parser, defaults, params[param_count])) {
+                free(params); free(param_types);
+                return NULL;
             }
             param_count++;
             
@@ -1865,6 +1916,7 @@ Stmt* parse_function_declaration(Parser* parser) {
     // make_function_expr, which takes ownership); free the parser's buffers.
     Stmt* fn_stmt = make_function_stmt(name, params, param_types, param_count,
                                        return_type, body, body_count);
+    if (fn_stmt) fn_stmt->as.function.param_defaults = defaults.take();
     free(params);
     free(param_types);
     return fn_stmt;
