@@ -189,8 +189,10 @@ The `+` operator also concatenates when either operand is a string:
 
 ## Files
 
-Simple, blocking file helpers for text and line-oriented I/O. For richer
-filesystem and path operations, see the [`os` module](../modules/os.md).
+Simple, blocking helpers that read or write a whole file at once. For large
+files, incremental reads and writes, standard input and standard error, use
+streams from the [`io` module](../modules/io.md). For richer filesystem and path
+operations, see the [`os` module](../modules/os.md).
 
 | Function                   | Returns | Description                                            |
 |----------------------------|---------|--------------------------------------------------------|
