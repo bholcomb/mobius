@@ -75,8 +75,9 @@ typedef enum {
 } MobiusOverrideBehavior;
 
 typedef struct {
-    size_t initial_stack_size;
-    size_t max_stack_size;
+    size_t initial_stack_size;       /* Reserved; not used. */
+    size_t max_stack_size;           /* Reserved; not enforced. Recursion is
+                                       limited by max_call_depth. */
     size_t max_call_depth;
     bool   strict_mode;
     bool   warn_on_conversion;
