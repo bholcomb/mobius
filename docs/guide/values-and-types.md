@@ -145,6 +145,23 @@ typeof([1, 2])  // "array"
 typeof({a: 1})  // "table"
 ```
 
+## Integer arithmetic
+
+Integer arithmetic wraps around on overflow (two's complement) instead of
+failing: `+`, `-`, `*`, `++` and `--` all behave the same way.
+
+```mobius
+var big = 9223372036854775807   // the largest int64
+big++
+print(big)                      // -9223372036854775808
+```
+
+Division follows the same rule at its one overflowing case:
+`-9223372036854775808 / -1` is `-9223372036854775808`, and `% -1` is `0`.
+Dividing by zero is an error.
+
+`++` and `--` work on any number: a float steps by `1.0`.
+
 ## Literals
 
 **Integers** — decimal, hexadecimal (`0x`), and binary (`0b`):

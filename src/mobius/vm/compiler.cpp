@@ -636,8 +636,15 @@ ValueType Compiler::inferExprType(Expr* expr) {
         }
 
         case EXPR_INCREMENT:
-        case EXPR_DECREMENT:
-            return VAL_INT64;
+        case EXPR_DECREMENT: {
+            // ++ and -- keep the variable's numeric type (they work on
+            // floats and uint64 too), so the result is int64 only when the
+            // variable is.
+            const char* name = expr->as.increment.name.identifier;
+            int local = resolveLocal(name);
+            ValueType t = local >= 0 ? localType(local) : globalType(name);
+            return type_is_numeric(t) ? t : VAL_UNKNOWN;
+        }
 
         case EXPR_ARRAY_LITERAL:
             return VAL_ARRAY;

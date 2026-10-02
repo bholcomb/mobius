@@ -2594,54 +2594,51 @@ MOBIUS_FORCEINLINE static int vm_op_jmp(MobiusVM* vm, VMFrame& f, uint32_t inst)
 
 // ---- Increment / Decrement ----
 
-MOBIUS_FORCEINLINE static int vm_op_inc(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+// ++ and --: integers wrap like `x + 1` (they used to raise an error at
+// the int64/uint64 limits), and floats step by 1.0 (they used to be
+// rejected).
+static MOBIUS_FORCEINLINE bool step_number(const Value& v, bool up, Value* out) {
+    switch (v.type) {
+        case VAL_INT64:
+            *out = make_int64_value((int64_t)((uint64_t)v.as.i64 + (up ? 1u : ~(uint64_t)0)));
+            return true;
+        case VAL_UINT64:
+            *out = make_uint64_value(v.as.u64 + (up ? 1u : ~(uint64_t)0));
+            return true;
+        case VAL_FLOAT64:
+            *out = make_float_value(v.as.double_val + (up ? 1.0 : -1.0));
+            return true;
+        default:
+            return false;
+    }
+}
+
+MOBIUS_FORCEINLINE static int vm_op_step(MobiusVM* vm, VMFrame& f, uint32_t inst, bool up) {
     Value& dst = RA(inst);
     const Value& src = RB(inst);
+    const char* msg = up ? "Increment requires a number" : "Decrement requires a number";
     if (&dst == &src && dst.type == VAL_SHARED_CELL && dst.as.shared_cell) {
         std::lock_guard<FiberMutex> lock(dst.as.shared_cell->mutex());
-        Value current = dst.as.shared_cell->unsafeValue();
-        if (current.type != VAL_INT64 && current.type != VAL_UINT64) {
-            VM_ERROR(vm, f, "Increment requires an integer operand");
+        Value next;
+        if (!step_number(dst.as.shared_cell->unsafeValue(), up, &next)) {
+            VM_ERROR(vm, f, "%s", msg);
             return -1;
         }
-        bool success;
-        Value next = increment_integer(current, true, &success);
-        if (!success) { VM_ERROR(vm, f, "Failed to increment value"); return -1; }
         dst.as.shared_cell->unsafeValue() = next;
         return 0;
     }
 
     Value val = shared_unwrap(src);
-    if (val.type != VAL_INT64 && val.type != VAL_UINT64) { VM_ERROR(vm, f, "Increment requires an integer operand"); return -1; }
-    bool success;
-    dst = increment_integer(val, true, &success);
-    if (!success) { VM_ERROR(vm, f, "Failed to increment value"); return -1; }
+    if (!step_number(val, up, &dst)) { VM_ERROR(vm, f, "%s", msg); return -1; }
     return 0;
 }
 
-MOBIUS_FORCEINLINE static int vm_op_dec(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    Value& dst = RA(inst);
-    const Value& src = RB(inst);
-    if (&dst == &src && dst.type == VAL_SHARED_CELL && dst.as.shared_cell) {
-        std::lock_guard<FiberMutex> lock(dst.as.shared_cell->mutex());
-        Value current = dst.as.shared_cell->unsafeValue();
-        if (current.type != VAL_INT64 && current.type != VAL_UINT64) {
-            VM_ERROR(vm, f, "Decrement requires an integer operand");
-            return -1;
-        }
-        bool success;
-        Value next = increment_integer(current, false, &success);
-        if (!success) { VM_ERROR(vm, f, "Failed to decrement value"); return -1; }
-        dst.as.shared_cell->unsafeValue() = next;
-        return 0;
-    }
+MOBIUS_FORCEINLINE static int vm_op_inc(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_step(vm, f, inst, true);
+}
 
-    Value val = shared_unwrap(src);
-    if (val.type != VAL_INT64 && val.type != VAL_UINT64) { VM_ERROR(vm, f, "Decrement requires an integer operand"); return -1; }
-    bool success;
-    dst = increment_integer(val, false, &success);
-    if (!success) { VM_ERROR(vm, f, "Failed to decrement value"); return -1; }
-    return 0;
+MOBIUS_FORCEINLINE static int vm_op_dec(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_step(vm, f, inst, false);
 }
 
 // ---- Type checking ----

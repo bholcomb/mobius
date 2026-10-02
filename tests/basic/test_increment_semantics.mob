@@ -1,0 +1,59 @@
+// ++ and -- wrap at the integer limits like `x + 1` and `x - 1` (they used
+// to raise "Failed to increment value"), and work on floats (they used to
+// require an integer).
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want or typeof(got) != typeof(want)) {
+        print("FAIL: " + name + ": expected " + str(want) + " (" + typeof(want) + "), got " +
+              str(got) + " (" + typeof(got) + ")")
+        exit(1)
+    }
+}
+
+var g = 9223372036854775807
+shared var sg = -9223372036854775807 - 1
+
+func main() {
+    var a = 9223372036854775807
+    a++
+    check("int64 max ++ wraps", a, -9223372036854775807 - 1)
+    a--
+    check("int64 min -- wraps", a, 9223372036854775807)
+    check("matches + 1", opaque(9223372036854775807) + 1, -9223372036854775807 - 1)
+
+    var u = opaque(18446744073709551615)
+    u++
+    check("uint64 max ++ wraps", u, opaque(18446744073709551615) + 1)
+
+    var f = 1.5
+    f++
+    check("float ++", f, 2.5)
+    var post = f--
+    check("float postfix value", post, 2.5)
+    check("float --", f, 1.5)
+    var pre = ++f
+    check("float prefix value", pre, 2.5)
+
+    g++
+    check("global wraps", g, -9223372036854775807 - 1)
+    sg--
+    check("shared wraps", sg, 9223372036854775807)
+
+    var c = 0.25
+    var bump = func() { c++; return c }
+    check("captured float", bump(), 1.25)
+
+    var t = {n: 1.0}
+    t.n += 1
+    check("field float +=", t.n, 2.0)
+
+    var caught = ""
+    try { var s = opaque("x")
+        s++ } catch e { caught = e }
+    if (!contains(caught, "requires a number")) {
+        print("FAIL: ++ on a string: " + caught)
+        exit(1)
+    }
+}
+main()
+print("increment semantics: PASS")

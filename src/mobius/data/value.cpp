@@ -1093,27 +1093,3 @@ TypeConversionResult validate_and_convert_value(const Value& value, NumberType t
     return result;
 }
 
-Value increment_integer(Value val, bool is_increment, bool* success) {
-    *success = false;
-    if (val.type == VAL_INT64) {
-        if (is_increment) {
-            if (val.as.i64 == std::numeric_limits<int64_t>::max()) return make_nil_value();
-            *success = true;
-            return make_int64_value(val.as.i64 + 1);
-        }
-        if (val.as.i64 == std::numeric_limits<int64_t>::min()) return make_nil_value();
-        *success = true;
-        return make_int64_value(val.as.i64 - 1);
-    }
-    if (val.type == VAL_UINT64) {
-        if (is_increment) {
-            if (val.as.u64 == std::numeric_limits<uint64_t>::max()) return make_nil_value();
-            *success = true;
-            return make_uint64_value(val.as.u64 + 1u);
-        }
-        if (val.as.u64 == 0) return make_nil_value();
-        *success = true;
-        return make_uint64_value(val.as.u64 - 1u);
-    }
-    return make_nil_value();
-}
