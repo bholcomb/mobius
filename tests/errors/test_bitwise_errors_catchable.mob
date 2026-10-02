@@ -1,0 +1,25 @@
+// Errors from bitwise operators unwind to an enclosing try like any other
+// runtime error. These instructions returned straight out of the VM, so
+// the error escaped the try (and, with nothing reported, the script just
+// stopped).
+func opaque(x) { return x }
+func expect_caught(name, f) {
+    var caught = false
+    try { f() } catch e { caught = true }
+    if (!caught) {
+        print("FAIL: " + name + " was not caught")
+        exit(1)
+    }
+}
+expect_caught("&", func() { return opaque("s") & 1 })
+expect_caught("|", func() { return opaque("s") | 1 })
+expect_caught("^", func() { return opaque(1.5) ^ 1 })
+expect_caught("<<", func() { return 1 << opaque("a") })
+expect_caught(">>", func() { return opaque(nil) >> 1 })
+expect_caught("~", func() { return ~opaque("a") })
+var after = 1 | 2
+if (after != 3) {
+    print("FAIL: execution after caught errors")
+    exit(1)
+}
+print("bitwise errors are catchable: PASS")
