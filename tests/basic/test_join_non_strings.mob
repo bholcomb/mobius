@@ -1,0 +1,14 @@
+// join converts non-string elements as string concatenation does. They
+// used to be dropped, so join([1, "a"], ",") gave ",a".
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + want + ", got " + got)
+        exit(1)
+    }
+}
+check("mixed", join([1, "a", 2.5, true, nil], ","), "1,a,2.5,true,nil")
+check("numbers", join([1, 2, 3], "-"), "1-2-3")
+check("strings", join(["a", "b"], ""), "ab")
+check("empty", join([], ","), "")
+check("matches concatenation", join([7, 0.5], ""), "" + 7 + 0.5)
+print("join converts non-strings: PASS")
