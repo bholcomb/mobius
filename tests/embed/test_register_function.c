@@ -27,7 +27,7 @@ int main(void) {
     MobiusState* s = mobius_new_state(NULL);
     CHECK(s, "create state");
     mobius_init_stdlib(s);
-    mobius_register_function(s, "bump", add_one);
+    mobius_register_function(s, "bump", add_one, NULL);
 
     CHECK(mobius_exec_string(s,
         "func work(n) { return bump(n) }\n"
@@ -42,7 +42,7 @@ int main(void) {
     CHECK(mobius_exec_string(s, "bump = 5") != MOBIUS_OK, "scripts can't reassign it");
     mobius_set_error_handler(s, NULL, NULL);
 
-    mobius_register_function(s, "bump", add_two);
+    mobius_register_function(s, "bump", add_two, NULL);
     CHECK(mobius_exec_string(s, "if (bump(1) != 3) { throw \"not replaced\" }") == MOBIUS_OK,
           "registering again replaces it");
 

@@ -376,42 +376,34 @@ MOBIUS_API void mobius_set_userdata_type_metatable(MobiusState* state,
 /* ====================================================================== */
 
 /**
- * Register a C function so it can be called from Mobius scripts, as a
- * read-only global like the built-in functions: scripts can't reassign it,
- * and spawned fibers can call it. Registering the same name again replaces
- * the function.
+ * Register a C function so scripts can call it, as a read-only global like
+ * the built-in functions: scripts can't reassign it, and spawned fibers can
+ * call it. Registering the same name again replaces the function.
+ *
+ * `userdata` is handed back by mobius_function_userdata() while the
+ * function runs, so one C function can serve many registrations: a C++
+ * member function through a static trampoline, or a language binding's
+ * single dispatcher. It may be NULL. Functions with different userdata are
+ * different values to scripts.
+ *
+ * A registered function stays on its thread while it runs. If it calls
+ * back into a script, that script may sleep or do I/O (blocking the
+ * thread), but waiting for another fiber there (await, fiber.all,
+ * fiber.any, channel send/recv) raises an error.
  */
 MOBIUS_API void mobius_register_function(MobiusState* state, const char* name,
-                                        MobiusCFunction func);
-
-/* Flags for host functions (mobius_register_function_ex,
-   mobius_stack_pushFunction). */
-#define MOBIUS_FN_MAIN_THREAD 0x1u   /* run on the thread driving the state (see docs) */
+                                        MobiusCFunction func, void* userdata);
 
 /**
- * Register a host function with a `userdata` pointer, which the function
- * reads with mobius_function_userdata() while it runs. One C function can
- * then serve many registrations (a binding's dispatcher). Otherwise like
- * mobius_register_function, except that the function never moves to
- * another thread while it runs: if it calls back into a script that waits
- * (await, fiber.sleep, channels), the wait blocks the thread. Bindings for
- * runtimes that can't have their frames moved between threads (.NET, JVM)
- * must register this way.
- */
-MOBIUS_API void mobius_register_function_ex(MobiusState* state, const char* name,
-                                           MobiusCFunction func, void* userdata,
-                                           unsigned int flags);
-
-/**
- * Push a host function value (to store in a table, a module, or pass to a
- * script), as mobius_register_function_ex registers one.
+ * Push a function value (to store in a table or module, or pass to a
+ * script), as mobius_register_function registers one.
  */
 MOBIUS_API void mobius_stack_pushFunction(MobiusState* state, MobiusCFunction func,
-                                         void* userdata, unsigned int flags);
+                                         void* userdata);
 
 /**
- * The userdata of the host function currently running (NULL in a plain
- * native function or outside one).
+ * The userdata of the registered function currently running (NULL outside
+ * one, or in a built-in).
  */
 MOBIUS_API void* mobius_function_userdata(MobiusState* state);
 

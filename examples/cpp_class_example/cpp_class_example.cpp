@@ -316,18 +316,18 @@ int main() {
         return 1;
     }
     
-    mobius_register_function(state, "Vector3", vector3_new);
-    mobius_register_function(state, "vector3_length", vector3_length_fn);
-    mobius_register_function(state, "vector3_normalize", vector3_normalize_fn);
-    mobius_register_function(state, "vector3_add", vector3_add_fn);
-    mobius_register_function(state, "vector3_dot", vector3_dot_fn);
-    mobius_register_function(state, "vector3_tostring", vector3_tostring_fn);
+    mobius_register_function(state, "Vector3", vector3_new, NULL);
+    mobius_register_function(state, "vector3_length", vector3_length_fn, NULL);
+    mobius_register_function(state, "vector3_normalize", vector3_normalize_fn, NULL);
+    mobius_register_function(state, "vector3_add", vector3_add_fn, NULL);
+    mobius_register_function(state, "vector3_dot", vector3_dot_fn, NULL);
+    mobius_register_function(state, "vector3_tostring", vector3_tostring_fn, NULL);
     
-    mobius_register_function(state, "Player", player_new);
-    mobius_register_function(state, "player_get_health", player_get_health);
-    mobius_register_function(state, "player_take_damage", player_take_damage);
-    mobius_register_function(state, "player_is_alive", player_is_alive);
-    mobius_register_function(state, "player_tostring", player_tostring);
+    mobius_register_function(state, "Player", player_new, NULL);
+    mobius_register_function(state, "player_get_health", player_get_health, NULL);
+    mobius_register_function(state, "player_take_damage", player_take_damage, NULL);
+    mobius_register_function(state, "player_is_alive", player_is_alive, NULL);
+    mobius_register_function(state, "player_tostring", player_tostring, NULL);
     
     const char* test_script = R"(
         print("=== Vector3 Tests ===");

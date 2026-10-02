@@ -75,8 +75,8 @@ int vector3_length_fn(MobiusState* state, int arg_count) {
 ### 4. Registration
 
 ```cpp
-mobius_register_function(state, "Vector3", vector3_new);
-mobius_register_function(state, "vector3_length", vector3_length_fn);
+mobius_register_function(state, "Vector3", vector3_new, NULL);
+mobius_register_function(state, "vector3_length", vector3_length_fn, NULL);
 ```
 
 ## Usage in Mobius Scripts

@@ -25,7 +25,6 @@ struct GcHeap;
 struct HostFunction {
     MobiusCFunction function = nullptr;
     void* userdata = nullptr;
-    unsigned int flags = 0;
 };
 
 // Pause/abort hint for the VM's safe points (see MobiusState::runControl).
@@ -248,10 +247,10 @@ public:
     // exit(code) from a script: the host's handler, or a warning.
     void requestExit(int code);
 
-    // Host functions: an id for (function, userdata, flags), stable for the
-    // state's life (the same triple gets the same id). Lookups are
-    // lock-free: the table only grows, in fixed chunks.
-    int32_t hostFunctionId(MobiusCFunction function, void* userdata, unsigned int flags);
+    // Host functions: an id for (function, userdata), stable for the state's
+    // life (the same pair gets the same id). Lookups are lock-free: the
+    // table only grows, in fixed chunks.
+    int32_t hostFunctionId(MobiusCFunction function, void* userdata);
     const HostFunction* hostFunction(int32_t id) const {
         if (id <= 0) return nullptr;
         size_t chunk = (size_t)id >> kHostChunkBits, index = (size_t)id & (kHostChunkSize - 1);

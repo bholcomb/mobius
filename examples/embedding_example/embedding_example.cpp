@@ -165,9 +165,9 @@ void example_custom_functions(void) {
     mobius_init_stdlib(state);
     
     // Register custom functions using the public API
-    mobius_register_function(state, "c_add", custom_add);
-    mobius_register_function(state, "system_info", custom_system_info);
-    mobius_register_function(state, "double", custom_double);
+    mobius_register_function(state, "c_add", custom_add, NULL);
+    mobius_register_function(state, "system_info", custom_system_info, NULL);
+    mobius_register_function(state, "double", custom_double, NULL);
     
     // Execute script using custom functions
     const char* script = 
@@ -243,7 +243,7 @@ void example_error_handling(void) {
     mobius_init_stdlib(state);
     
     // Register a custom function that can fail
-    mobius_register_function(state, "c_add", custom_add);
+    mobius_register_function(state, "c_add", custom_add, NULL);
     
     // Execute scripts with various errors
     const char* scripts[] = {

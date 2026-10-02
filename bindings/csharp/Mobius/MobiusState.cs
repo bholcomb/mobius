@@ -303,7 +303,7 @@ public sealed unsafe class MobiusState : IDisposable
     {
         IntPtr handle = Keep(function);
         var n = new Utf8(name);
-        fixed (byte* np = n) Native.mobius_register_function_ex(S, np, &Dispatch, handle, 0);
+        fixed (byte* np = n) Native.mobius_register_function(S, np, &Dispatch, handle);
     }
 
     public void Register(string name, Action<object?[]> action) =>
@@ -451,7 +451,7 @@ public sealed unsafe class MobiusState : IDisposable
                 if (!Native.mobius_push_ref(s, f.Ref)) throw new ObjectDisposedException(nameof(MobiusFunction));
                 break;
             case Func<object?[], object?> fn:
-                Native.mobius_stack_pushFunction(s, &Dispatch, self.Keep(fn), 0);
+                Native.mobius_stack_pushFunction(s, &Dispatch, self.Keep(fn));
                 break;
             case IDictionary dict:
             {

@@ -1434,10 +1434,10 @@ int MobiusState::abortExecution() {
     return MOBIUS_OK;
 }
 
-int32_t MobiusState::hostFunctionId(MobiusCFunction function, void* userdata, unsigned int flags) {
+int32_t MobiusState::hostFunctionId(MobiusCFunction function, void* userdata) {
     std::lock_guard<std::mutex> lock(host_functions_mutex_);
     char key[64];
-    snprintf(key, sizeof(key), "%p/%p/%u", (void*)function, userdata, flags);
+    snprintf(key, sizeof(key), "%p/%p", (void*)function, userdata);
     auto it = host_function_ids_.find(key);
     if (it != host_function_ids_.end()) return it->second;
     int32_t id = next_host_function_;
@@ -1451,7 +1451,6 @@ int32_t MobiusState::hostFunctionId(MobiusCFunction function, void* userdata, un
     HostFunction& hf = entries[(size_t)id & (kHostChunkSize - 1)];
     hf.function = function;
     hf.userdata = userdata;
-    hf.flags = flags;
     // Publish the entry before any value can carry its id.
     std::atomic_thread_fence(std::memory_order_release);
     next_host_function_++;
