@@ -108,6 +108,9 @@ print(argv[2])    // "--flag"
 print(size(argv))  // 3
 ```
 
+To declare options, flags and subcommands and get generated `--help`, use the
+[`cli` module](../modules/cli.md) to parse `argv`.
+
 `argv` contains only the arguments **after** the script name; the script name
 itself is not included.
 
