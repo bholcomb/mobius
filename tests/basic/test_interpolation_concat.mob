@@ -1,0 +1,24 @@
+// An interpolated string always produces a string by concatenation. When
+// it began with ${...} the parts were joined with a plain +, so adjacent
+// numbers were added (`${1}${2}` gave 3) and `${n}` alone gave a number.
+func check(name, got, want) {
+    if (got != want or typeof(got) != "string") {
+        print("FAIL: " + name + ": expected " + want + ", got " + str(got) + " (" + typeof(got) + ")")
+        exit(1)
+    }
+}
+
+func main() {
+    var a = 1
+    var b = 2
+    check("adjacent ints", `${a}${b}`, "12")
+    check("ints then text", `${a}${b}y`, "12y")
+    check("text then ints", `x${a}${b}`, "x12")
+    check("separated", `${a}-${b}`, "1-2")
+    check("floats and ints", `${1.5}${2}`, "1.52")
+    check("single interpolation", `${a}`, "1")
+    check("expression", `${a + b}${a * b}`, "32")
+    check("bool and nil", `${true}${nil}`, "truenil")
+}
+main()
+print("interpolation concatenates: PASS")
