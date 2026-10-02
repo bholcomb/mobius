@@ -1,6 +1,7 @@
 #ifndef MOBIUS_DATA_CHANNEL_H
 #define MOBIUS_DATA_CHANNEL_H
 
+#include <atomic>
 #include "data/value.h"
 #include "internal/ref_counted.h"
 
@@ -18,9 +19,14 @@ public:
 
     bool trySend(const Value& val);
     bool tryRecv(Value& out);
+    // One locked look at the channel: 1 = received a value into `out`,
+    // 0 = empty and open, -1 = empty and closed. Checking tryRecv and then
+    // isClosed separately could miss a value sent and followed by close
+    // in between.
+    int tryRecvStatus(Value& out);
 
     void close();
-    bool isClosed() const { return closed_; }
+    bool isClosed() const { return closed_.load(std::memory_order_acquire); }
 
     // Visit buffered (queued, not yet received) values under the lock — used
     // by the GC to reach values in transit between fibers.
@@ -35,7 +41,7 @@ private:
     size_t head_ = 0;
     size_t tail_ = 0;
     size_t count_ = 0;
-    bool closed_ = false;
+    std::atomic<bool> closed_{false};   // read without the lock by isClosed
     mutable std::mutex mutex_;
     std::condition_variable not_full_;
     std::condition_variable not_empty_;

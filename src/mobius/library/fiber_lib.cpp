@@ -320,8 +320,9 @@ int channel_method_recv(MobiusState* state, int arg_count) {
     JobSystem* js = state->jobSystem();
     Value result;
     BlockingWait wait(js);
-    while (!ch->tryRecv(result)) {
-        if (ch->isClosed()) {
+    int status;
+    while ((status = ch->tryRecvStatus(result)) != 1) {
+        if (status < 0) {
             return state->error("ChannelClosedError: recv on closed and empty channel");
         }
         if (current_fiber_cancelled()) {
