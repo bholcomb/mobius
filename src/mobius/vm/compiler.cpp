@@ -1810,6 +1810,37 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
         return result_reg;
     };
 
+    // Compound assignment `a[i] op= v` / `t.k op= v`: the parser builds
+    // `a[i] = a[i] op v` sharing the target node, which compiled the
+    // container and key twice (so `arr[f()] += 5` called f twice and could
+    // read one element and write another). With the container and key
+    // already in registers, read the old value through them, apply op, and
+    // store back. Returns -2 when the assignment is not compound.
+    auto compile_compound = [&](int container_reg, uint8_t rk_key, OpCode set_op,
+                                int save_reg) -> int {
+        Expr* value = expr->value;
+        if (value->type != EXPR_BINARY || value->as.binary.left != expr->target) return -2;
+        OpCode arith;
+        switch (value->as.binary.op.type) {
+            case TOKEN_PLUS:    arith = OP_ADD; break;
+            case TOKEN_MINUS:   arith = OP_SUB; break;
+            case TOKEN_STAR:    arith = OP_MUL; break;
+            case TOKEN_SLASH:   arith = OP_DIV; break;
+            case TOKEN_PERCENT: arith = OP_MOD; break;
+            default:            return -2;
+        }
+        int old_reg = allocReg();
+        emitABC(OP_INDEX_GET, (uint8_t)old_reg, (uint8_t)container_reg, rk_key);
+        uint8_t rk_rhs;
+        if (!tryExprAsRK(value->as.binary.right, &rk_rhs)) {
+            rk_rhs = (uint8_t)compileExpr(value->as.binary.right);
+        }
+        int result_reg = allocReg();
+        emitABC(arith, (uint8_t)result_reg, (uint8_t)old_reg, rk_rhs);
+        emitABC(set_op, (uint8_t)container_reg, rk_key, (uint8_t)result_reg);
+        return finish_assignment(save_reg, result_reg);
+    };
+
     auto compile_index_assignment = [&](Expr* container_expr, Expr* index_expr, OpCode set_op) -> int {
         int save_reg = current_->free_reg;
         int container_reg = compileExpr(container_expr);
@@ -1832,6 +1863,9 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             int key_reg = compileExpr(index_expr);
             rk_key = (uint8_t)key_reg;
         }
+
+        int compound = compile_compound(container_reg, rk_key, set_op, save_reg);
+        if (compound != -2) return compound;
 
         int value_reg = compileExpr(expr->value);
         emitABC(set_op, (uint8_t)container_reg, rk_key, (uint8_t)value_reg);
@@ -1972,6 +2006,10 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             int table_reg = compileExpr(expr->target->as.table_dot.table);
             int ki = stringConstant(expr->target->as.table_dot.key.identifier);
             uint8_t rk_key = makeRK(ki);
+            int compound = compile_compound(table_reg, rk_key,
+                                            IS_CONSTANT(rk_key) ? OP_SETFIELD : OP_INDEX_SET,
+                                            save_reg);
+            if (compound != -2) return compound;
             int value_reg = compileExpr(expr->value);
             // Existing-key overwrites take the inline SETFIELD probe; new
             // keys and every non-plain-table shape fall back to INDEX_SET
