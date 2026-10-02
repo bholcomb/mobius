@@ -83,7 +83,9 @@ MobiusConfig mobius_default_config(void) {
     config.initial_fiber_pool_size = 16;
     config.max_fiber_pool_size     = 256;
     unsigned int hw = std::thread::hardware_concurrency();
-    config.max_worker_threads      = static_cast<int>(std::max(1u, hw / 2));
+    // The calling thread also runs fibers, so this many plus one run in
+    // all: half the hardware threads (one per core on SMT machines).
+    config.max_worker_threads      = static_cast<int>(std::max(2u, hw / 2) - 1);
 
     config.string_pool_buckets   = kInitialStringBucketCount;
     config.global_slot_capacity  = kGlobalSlotCapacity;

@@ -85,6 +85,25 @@ for test_file in $TEST_FILES; do
     fi
 done
 
+# C API tests: each tests/embed/test_*.c is a host program, built against
+# the core library and run like a script test (exit code 0 passes).
+EMBED_BUILD_DIR=$(mktemp -d)
+for test_file in $(find tests/embed -name "test_*.c" 2>/dev/null | sort); do
+    printf "%-50s " "$test_file"
+    exe="$EMBED_BUILD_DIR/$(basename "$test_file" .c)"
+    if cc -std=c11 -Wall -Iinclude "$test_file" -o "$exe" -Lbin -lmobius-core \
+            -Wl,-rpath,"$PWD/bin" -lpthread >/dev/null 2>&1 \
+            && timeout 10 "$exe" >/dev/null 2>&1; then
+        echo "✅ PASS"
+        ((PASSED++))
+    else
+        echo "❌ FAIL"
+        ((FAILED++))
+        FAILED_TESTS+=("$test_file")
+    fi
+done
+rm -rf "$EMBED_BUILD_DIR"
+
 echo
 echo "=== Test Summary ==="
 echo "Total Tests:  $((PASSED + FAILED))"

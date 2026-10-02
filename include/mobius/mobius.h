@@ -106,7 +106,8 @@ typedef struct {
                                        Default: 256. */
 
     int    max_worker_threads;       /* Additional OS worker threads for this state.
-                                       Default: hardware_concurrency() / 2, floor 1.
+                                       Default: hardware_concurrency() / 2 - 1,
+                                       floor 1.
                                        Set to 0 for single-threaded cooperative mode.
                                        The calling thread always participates as a
                                        worker, so total workers = this value + 1. */

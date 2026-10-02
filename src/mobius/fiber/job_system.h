@@ -97,6 +97,8 @@ public:
 private:
     void workerThreadEntry();
     MobiusFiber* dequeueReadyFiber();
+    void runFiber(MobiusFiber* fiber);
+    bool mainFiberDone();
     void wakeWaiters();
     void spawnWorkerIfNeeded();
 

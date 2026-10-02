@@ -292,6 +292,53 @@ void JobSystem::spawnWorkerIfNeeded() {
     }
 }
 
+// Run `fiber` on this thread until it yields, parks or finishes, then file
+// it accordingly. The thread must have a scheduler context (t_scheduler_ctx_).
+void JobSystem::runFiber(MobiusFiber* fiber) {
+    MobiusVM* outer_vm = MobiusVM::t_current_vm;
+    t_current_fiber_ = fiber;
+    fiber->state = FiberState::Running;
+    if (fiber->vm) MobiusVM::t_current_vm = fiber->vm;
+    fiber_context_swap(&t_scheduler_ctx_, &fiber->context);
+    t_current_fiber_ = nullptr;
+    MobiusVM::t_current_vm = outer_vm;
+
+    if (fiber->state == FiberState::Dead) {
+        metrics_->total_jobs_executed++;
+        if (fiber->peak_stack_bytes > metrics_->peak_fiber_stack_bytes)
+            metrics_->peak_fiber_stack_bytes = fiber->peak_stack_bytes;
+
+        // If this was the main fiber, signal the calling thread (which may
+        // be waiting for work on ready_cv_, or on main_done_cv_).
+        if (fiber == main_fiber_) {
+            {
+                std::lock_guard<std::mutex> lock(main_done_mutex_);
+                main_fiber_done_ = true;
+            }
+            main_done_cv_.notify_all();
+            { std::lock_guard<std::mutex> lock(ready_mutex_); }
+            ready_cv_.notify_all();
+        } else {
+            fiber_pool_->release(fiber);
+        }
+    } else if (fiber->state == FiberState::Suspended) {
+        submitFiber(fiber);
+    } else if (fiber->state == FiberState::Parked) {
+        // Off the queue until woken, unless the wake already came.
+        int expected = MobiusFiber::PARK_PARKING;
+        if (!fiber->park_state.compare_exchange_strong(expected, MobiusFiber::PARK_PARKED,
+                                                       std::memory_order_acq_rel)) {
+            fiber->park_state.store(MobiusFiber::PARK_IDLE, std::memory_order_release);
+            submitFiber(fiber);
+        }
+    }
+}
+
+bool JobSystem::mainFiberDone() {
+    std::lock_guard<std::mutex> lock(main_done_mutex_);
+    return main_fiber_done_;
+}
+
 void JobSystem::workerThreadEntry() {
     fiber_context_convert_thread(&t_scheduler_ctx_);
 
@@ -303,38 +350,7 @@ void JobSystem::workerThreadEntry() {
 
         if (fiber) {
             idle_start = std::chrono::steady_clock::now();
-
-            t_current_fiber_ = fiber;
-            fiber->state = FiberState::Running;
-            if (fiber->vm) MobiusVM::t_current_vm = fiber->vm;
-            fiber_context_swap(&t_scheduler_ctx_, &fiber->context);
-            t_current_fiber_ = nullptr;
-            MobiusVM::t_current_vm = nullptr;
-
-            if (fiber->state == FiberState::Dead) {
-                metrics_->total_jobs_executed++;
-                if (fiber->peak_stack_bytes > metrics_->peak_fiber_stack_bytes)
-                    metrics_->peak_fiber_stack_bytes = fiber->peak_stack_bytes;
-
-                // If this was the main fiber, signal the calling thread
-                if (fiber == main_fiber_) {
-                    std::lock_guard<std::mutex> lock(main_done_mutex_);
-                    main_fiber_done_ = true;
-                    main_done_cv_.notify_one();
-                } else {
-                    fiber_pool_->release(fiber);
-                }
-            } else if (fiber->state == FiberState::Suspended) {
-                submitFiber(fiber);
-            } else if (fiber->state == FiberState::Parked) {
-                // Off the queue until woken, unless the wake already came.
-                int expected = MobiusFiber::PARK_PARKING;
-                if (!fiber->park_state.compare_exchange_strong(expected, MobiusFiber::PARK_PARKED,
-                                                               std::memory_order_acq_rel)) {
-                    fiber->park_state.store(MobiusFiber::PARK_IDLE, std::memory_order_release);
-                    submitFiber(fiber);
-                }
-            }
+            runFiber(fiber);
         } else {
             std::unique_lock<std::mutex> lock(ready_mutex_);
             ready_cv_.wait_for(lock, std::chrono::milliseconds(10));
@@ -405,13 +421,24 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
     submitFiber(fiber);
     metrics_->total_fibers_spawned++;
 
-    // Ensure at least one worker thread
+    // Start a worker for spawned fibers (none with max_worker_threads = 0).
     spawnWorkerIfNeeded();
 
-    // Block the calling thread until the main fiber completes
-    {
-        std::unique_lock<std::mutex> lock(main_done_mutex_);
-        main_done_cv_.wait(lock, [this] { return main_fiber_done_; });
+    // The calling thread is a worker too: it runs ready fibers (usually the
+    // main fiber itself) until the main fiber completes. With no other
+    // workers it runs everything. Spawned fibers still unfinished when the
+    // main fiber ends continue on the workers, or with no workers, during
+    // the next call into the state.
+    fiber_context_convert_thread(&t_scheduler_ctx_);
+    while (!mainFiberDone()) {
+        MobiusFiber* next = dequeueReadyFiber();
+        if (next) {
+            runFiber(next);
+            continue;
+        }
+        std::unique_lock<std::mutex> lock(ready_mutex_);
+        if (ready_queue_.empty() && !mainFiberDone())
+            ready_cv_.wait_for(lock, std::chrono::milliseconds(10));
     }
 
     // Only pooled fallback fibers go back to the pool; the dedicated main
