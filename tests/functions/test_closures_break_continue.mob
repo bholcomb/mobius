@@ -1,0 +1,53 @@
+// Closures created in a loop body keep their captured values when the
+// iteration ends with break or continue. Those jumps skipped the CLOSE
+// that moves captured locals off the stack, so the closures later read
+// whatever reused the slot.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var fs = []
+    while (true) {
+        var v = 1
+        fs:push(func() { return v })
+        break
+    }
+    var overwrite = 99
+    check("while + break", fs[0](), 1)
+
+    var hs = []
+    for (var k = 0; k < 3; k++) {
+        var v = k * 10
+        hs:push(func() { return v })
+        continue
+    }
+    var junk = "JUNK"
+    check("for + continue", str(hs[0]()) + "," + str(hs[1]()) + "," + str(hs[2]()), "0,10,20")
+
+    var gs = []
+    for (var x in [5, 6]) {
+        var w = x
+        gs:push(func() { return w })
+        if (x == 5) { continue }
+        break
+    }
+    var junk2 = [0]
+    check("for-in + continue/break", gs[0]() + gs[1](), 11)
+
+    var ss = []
+    switch (1) {
+        case 1: {
+            var s = "kept"
+            ss:push(func() { return s })
+            break
+        }
+    }
+    var junk3 = "x"
+    check("switch + break", ss[0](), "kept")
+}
+main()
+print("closures across break/continue: PASS")
