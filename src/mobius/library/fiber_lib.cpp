@@ -58,7 +58,8 @@ int lib_fiber_cancel(MobiusState* state, int arg_count) {
 // channel operation ignored cancellation, so cancelling it never ended it.
 static bool current_fiber_cancelled() {
     MobiusVM* vm = MobiusVM::t_current_vm;
-    return vm && vm->future_ && vm->future_->isCancelled();
+    // An abort (mobius_abort) stops every wait as cancellation does.
+    return vm && ((vm->future_ && vm->future_->isCancelled()) || vm->state_->abortRequested());
 }
 
 static const char* const kCancelledMessage = "CancellationError: fiber was cancelled";

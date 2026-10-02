@@ -58,8 +58,11 @@ static int64_t now_ms() {
 struct IoWaiter;
 
 struct TimerEntry {
-    IoWaiter* waiter;
+    IoWaiter* waiter;               // a fiber's timeout, or
     JobSystem* js;
+    void (*callback)(void*);        // a host-side callback timer
+    void* callback_arg;
+    uint64_t callback_id;
 };
 
 struct Registration {
@@ -111,7 +114,7 @@ public:
             w->reg_ids.push_back(id);
         }
         if (w->deadline >= 0) {
-            w->timer = timers_.emplace(w->deadline, TimerEntry{w, w->js});
+            w->timer = timers_.emplace(w->deadline, TimerEntry{w, w->js, nullptr, nullptr, 0});
             w->has_timer = true;
         }
         if (w->future) by_future_[w->future].insert(w);
@@ -131,6 +134,34 @@ public:
         for (IoWaiter* w : it->second) completeLocked(w, MOBIUS_IO_CLOSED);
     }
 
+    // Call `cb(arg)` on the reactor thread at `deadline` (ms, monotonic),
+    // under the reactor lock: it must be quick and not call into the
+    // reactor. Returns an id for cancelTimer.
+    uint64_t addTimer(int64_t deadline, void (*cb)(void*), void* arg) {
+        std::lock_guard<std::mutex> lock(mu_);
+        uint64_t id = next_id_++;
+        auto it = timers_.emplace(deadline, TimerEntry{nullptr, nullptr, cb, arg, id});
+        callback_timers_[id] = it;
+        kick();
+        return id;
+    }
+
+    // After this returns the callback is not running and will not run.
+    void cancelTimer(uint64_t id) {
+        std::lock_guard<std::mutex> lock(mu_);
+        auto it = callback_timers_.find(id);
+        if (it == callback_timers_.end()) return;
+        timers_.erase(it->second);
+        callback_timers_.erase(it);
+    }
+
+    // Wake every fiber of `js` parked here with MOBIUS_IO_CANCELLED (abort).
+    void cancelJobSystem(JobSystem* js) {
+        std::lock_guard<std::mutex> lock(mu_);
+        for (auto& kv : regs_) if (kv.second.js == js) completeLocked(kv.second.waiter, MOBIUS_IO_CANCELLED);
+        for (auto& kv : timers_) if (kv.second.waiter && kv.second.js == js) completeLocked(kv.second.waiter, MOBIUS_IO_CANCELLED);
+    }
+
     // Drop every waiter of `js` without waking it: the job system is going
     // away with those fibers still parked. Their stacks may already be
     // freed, so the waiters themselves are never dereferenced here.
@@ -145,7 +176,7 @@ public:
             it = regs_.erase(it);
         }
         for (auto it = timers_.begin(); it != timers_.end();) {
-            if (it->second.js != js) { ++it; continue; }
+            if (!it->second.waiter || it->second.js != js) { ++it; continue; }
             doomed.insert(it->second.waiter);
             it = timers_.erase(it);
         }
@@ -244,10 +275,15 @@ private:
             }
             int64_t now = now_ms();
             while (!timers_.empty() && timers_.begin()->first <= now) {
-                IoWaiter* w = timers_.begin()->second.waiter;
+                TimerEntry entry = timers_.begin()->second;
                 timers_.erase(timers_.begin());
-                w->has_timer = false;
-                completeLocked(w, MOBIUS_IO_TIMEOUT);
+                if (entry.callback) {
+                    callback_timers_.erase(entry.callback_id);
+                    entry.callback(entry.callback_arg);
+                    continue;
+                }
+                entry.waiter->has_timer = false;
+                completeLocked(entry.waiter, MOBIUS_IO_TIMEOUT);
             }
         }
     }
@@ -260,6 +296,7 @@ private:
     std::unordered_map<int, std::unordered_set<IoWaiter*>> by_fd_;
     std::unordered_map<FutureValue*, std::unordered_set<IoWaiter*>> by_future_;
     std::multimap<int64_t, TimerEntry> timers_;
+    std::unordered_map<uint64_t, std::multimap<int64_t, TimerEntry>::iterator> callback_timers_;
 };
 
 // Blocking fallback outside a fiber.
@@ -307,7 +344,8 @@ MOBIUS_API int mobius_io_wait(MobiusState* state, const MobiusIoWait* waits, int
 
     MobiusVM* vm = MobiusVM::t_current_vm;
     FutureValue* future = vm ? vm->future_ : nullptr;
-    if (future && future->isCancelled()) return MOBIUS_IO_CANCELLED;
+    if ((future && future->isCancelled()) || (vm && vm->state_->abortRequested()))
+        return MOBIUS_IO_CANCELLED;
 
     // Already ready (or a zero timeout): no need to park.
     if (count > 0) {
@@ -335,6 +373,22 @@ MOBIUS_API int mobius_io_wait(MobiusState* state, const MobiusIoWait* waits, int
 
 MOBIUS_API void mobius_io_wake_fd(int fd) {
     IoReactor::get().wakeFd(fd);
+}
+
+int64_t mobius_io_now_ms() { return now_ms(); }
+
+uint64_t mobius_io_add_timer(int64_t deadline_ms, void (*cb)(void*), void* arg) {
+    return IoReactor::get().addTimer(deadline_ms, cb, arg);
+}
+
+void mobius_io_cancel_timer(uint64_t id) {
+    if (!id || !g_reactor_started.load(std::memory_order_acquire)) return;
+    IoReactor::get().cancelTimer(id);
+}
+
+void mobius_io_cancel_job_system(JobSystem* js) {
+    if (!g_reactor_started.load(std::memory_order_acquire)) return;
+    IoReactor::get().cancelJobSystem(js);
 }
 
 void mobius_io_forget_job_system(JobSystem* js) {
