@@ -3863,6 +3863,14 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             VM_ERROR(vm, f, "spawn: function has no bytecode prototype");
             return -1;
         }
+        // The same check as an ordinary call, raised at the spawn site. It
+        // was missing: the fiber ran with missing parameters as nil (or
+        // extra arguments dropped) and failed later, inside the fiber.
+        if ((int)mf->param_count != nargs) {
+            VM_ERROR(vm, f, "Function '%s' expects %zu arguments but got %d",
+                     mf->name ? mf->name->data : "anonymous", mf->param_count, nargs);
+            return -1;
+        }
         FutureValue* future = new FutureValue();
 
         // Arguments and captured upvalues cross into the new fiber with the

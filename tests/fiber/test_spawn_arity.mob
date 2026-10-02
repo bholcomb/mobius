@@ -1,0 +1,21 @@
+// spawn checks the argument count like an ordinary call, at the spawn
+// site. The fiber used to start anyway, with missing parameters nil.
+func two(a, b) { return a + b }
+
+func expect_error(name, f, needle) {
+    var msg = ""
+    try { f() } catch e { msg = e }
+    if (!contains(msg, needle)) {
+        print("FAIL: " + name + ": expected an error containing '" + needle + "', got '" + msg + "'")
+        exit(1)
+    }
+}
+
+expect_error("too few", func() { return spawn two(1) }, "expects 2 arguments but got 1")
+expect_error("too many", func() { return spawn two(1, 2, 3) }, "expects 2 arguments but got 3")
+var ok = await spawn two(1, 2)
+if (ok != 3) {
+    print("FAIL: correct spawn returned " + str(ok))
+    exit(1)
+}
+print("spawn argument count: PASS")
