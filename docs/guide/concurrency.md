@@ -289,8 +289,13 @@ fiber.cancel(f)
 
 A cancelled fiber throws a `CancellationError` at its next cancellation check
 point: loop back-edges, and anywhere it waits (`await`, `fiber.sleep`,
-`fiber.all`, `fiber.any`, and channel `send`/`recv`). A fiber blocked waiting is
-interrupted, not left hanging.
+`fiber.all`, `fiber.any`, channel `send`/`recv`, and stream and process waits
+in the [io](../modules/io.md#fibers) and [process](../modules/process.md#fibers)
+modules). A fiber blocked waiting is interrupted, not left hanging.
+
+`fiber.sleep` and I/O waits don't occupy a worker thread: the fiber is set
+aside until its time is up or its stream or child is ready. Thousands of fibers
+can sleep or wait on input at once.
 
 ### Array spans
 

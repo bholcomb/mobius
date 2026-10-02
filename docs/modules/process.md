@@ -125,5 +125,13 @@ stop the program.
 
 ## Fibers
 
-`run`, `wait` and `communicate` block their worker thread while they wait, like
-other blocking I/O for now.
+`run`, `wait` and `communicate` wait without holding a thread: a fiber waiting
+on a child is set aside until the child writes, reads or exits, and other
+fibers run meanwhile. Many fibers can each run and wait on their own child at
+once. Pipe streams (`child.stdout` and the others) wait the same way, as
+described in [io](io.md#fibers).
+
+`fiber.cancel` interrupts a fiber waiting in `run`, `wait` or `communicate`
+with a `CancellationError`. A child started by `run` is then killed, because
+nothing else can reach it. A child from `start` keeps running; the script still
+holds it and can `kill` it.

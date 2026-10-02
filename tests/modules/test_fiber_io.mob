@@ -1,0 +1,152 @@
+// Fiber-aware I/O: a fiber waiting on a pipe, a child process or a timer
+// parks instead of holding its worker thread, so other fibers keep running.
+import "process"
+import "io"
+import "os"
+
+var failures = 0
+func check(name, got, want) {
+    if (got != want) {
+        failures++
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+    }
+}
+func expect_error(name, f, needle) {
+    var msg = ""
+    try { f() } catch e { msg = str(e) }
+    if (!contains(msg, needle)) {
+        failures++
+        print("FAIL: " + name + ": expected error containing '" + needle + "', got '" + msg + "'")
+    }
+}
+func elapsed_ms(start) { return int((clock() - start) / 1000000) }
+
+// Far more waiting fibers than worker threads: they all wait at once.
+func nap(ms) {
+    fiber.sleep(ms)
+    return 1
+}
+var start = clock()
+var naps = []
+for (var i = 0; i < 200; i++) { naps:push(spawn nap(200)) }
+var total = 0
+for (var r in fiber.all(naps)) { total = total + r }
+check("sleepers all finished", total, 200)
+check("sleepers wait together", elapsed_ms(start) < 1000, true)
+
+func run_sleeper() {
+    return process.run(["sleep", "0.4"]).exit_code
+}
+start = clock()
+var runs = []
+for (var i = 0; i < 64; i++) { runs:push(spawn run_sleeper()) }
+var codes = 0
+for (var code in fiber.all(runs)) { codes = codes + code }
+check("children all exited", codes, 0)
+check("children waited together", elapsed_ms(start) < 1600, true)
+
+func start_and_wait() {
+    var child = process.start(["sleep", "0.4"])
+    return child:wait()
+}
+start = clock()
+var waits = []
+for (var i = 0; i < 64; i++) { waits:push(spawn start_and_wait()) }
+codes = 0
+for (var code in fiber.all(waits)) { codes = codes + code }
+check("child:wait all returned", codes, 0)
+check("child:wait waited together", elapsed_ms(start) < 1600, true)
+
+// A reader parked on a pipe while other fibers make progress.
+func read_lines(stream) {
+    var lines = []
+    for (var line in stream:lines()) { lines:push(line) }
+    return lines
+}
+var talker = process.start(["sh", "-c", "echo one; sleep 0.2; echo two; sleep 0.2; echo three"], {stdout: "pipe"})
+var reader = spawn read_lines(talker.stdout)
+func ticker() {
+    var ticks = 0
+    for (var i = 0; i < 20; i++) {
+        ticks++
+        fiber.sleep(10)
+    }
+    return ticks
+}
+var ticks = await spawn ticker()
+var got = await reader
+check("pipe lines", size(got), 3)
+check("pipe last line", got[2], "three")
+check("ticker ran while reader waited", ticks, 20)
+check("talker exit", talker:wait(), 0)
+talker.stdout:close()
+
+// Several fibers each driving their own child through communicate.
+func shout(word) {
+    return process.run(["tr", "a-z", "A-Z"], {input: word}).stdout
+}
+var shouts = []
+for (var w in ["alpha", "beta", "gamma", "delta"]) { shouts:push(spawn shout(w)) }
+var results = fiber.all(shouts)
+check("communicate in fibers", results[0] + results[1] + results[2] + results[3], "ALPHABETAGAMMADELTA")
+
+// fiber.cancel wakes a fiber parked on a read.
+var silent = process.start(["sleep", "10"], {stdout: "pipe"})
+func read_one(stream) { return stream:read_line() }
+var blocked = spawn read_one(silent.stdout)
+fiber.sleep(50)
+start = clock()
+fiber.cancel(blocked)
+expect_error("cancel wakes a parked reader", func() { return await blocked }, "CancellationError")
+check("cancel is prompt", elapsed_ms(start) < 500, true)
+
+// Closing a stream wakes a fiber parked reading it.
+var blocked2 = spawn read_one(silent.stdout)
+fiber.sleep(50)
+silent.stdout:close()
+expect_error("close wakes a parked reader", func() { return await blocked2 }, "stream is closed")
+check("close then kill", silent:kill("kill"), true)
+check("killed child", silent:wait(), -9)
+
+// fiber.cancel wakes a fiber waiting for a child, and process.run kills its
+// child when cancelled.
+func long_run() { return process.run(["sleep", "10"]) }
+var runner = spawn long_run()
+fiber.sleep(100)
+start = clock()
+fiber.cancel(runner)
+expect_error("cancel interrupts process.run", func() { return await runner }, "CancellationError")
+check("cancelled run is prompt", elapsed_ms(start) < 500, true)
+
+// A FIFO opened with io.open is waitable too.
+var dir = os.join(os.tmpdir(), "mobius_fiber_io_" + str(os.getpid()))
+os.mkdirp(dir)
+var fifo = os.join(dir, "pipe")
+process.run(["mkfifo", fifo], {check: true})
+var fifo_reader = io.open(fifo, "r+")   // r+ does not wait for a writer
+var fifo_lines = spawn read_one(fifo_reader)
+fiber.sleep(50)
+var fifo_writer = io.open(fifo, "w")
+fifo_writer:write("through the fifo\n")
+fifo_writer:close()
+check("fifo line", await fifo_lines, "through the fifo")
+expect_error("fifo cannot seek", func() { return fifo_reader:seek(0) }, "seek")
+fifo_reader:close()
+os.remove(fifo)
+os.rmdir(dir)
+
+// Standard input of a child Mobius process from a pipe.
+var mobius_bin = os.executable()
+if (os.exists(mobius_bin)) {
+    var script = "import \"io\"\nvar n = 0\nfor (var line in io.stdin:lines()) { n = n + int(line) }\nprint(n)\n"
+    var script_path = os.join(os.tmpdir(), "mobius_fiber_io_stdin_" + str(os.getpid()) + ".mob")
+    var sf = io.open(script_path, "w")
+    sf:write(script)
+    sf:close()
+    var summed = process.run([mobius_bin, script_path], {input: "1\n2\n3\n4\n"})
+    check("stdin from a pipe", summed.stdout, "10\n")
+    os.remove(script_path)
+}
+
+if (failures == 0) { print("fiber io: PASS") } else { print("fiber io: " + str(failures) + " failures") }
+if (failures != 0) { exit(1) }

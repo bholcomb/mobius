@@ -117,6 +117,16 @@ writing (or the reverse) is also an error.
 
 A stream can be shared between fibers: each call is atomic, so two fibers
 writing lines to one stream never interleave within a line. The order of calls
-from different fibers is up to the scheduler. A call that waits on the
-operating system (reading standard input, for example) blocks its worker
-thread while it waits.
+from different fibers is up to the scheduler.
+
+Streams on pipes, terminals, FIFOs and standard input wait without holding a
+thread. A fiber waiting on one is set aside until the stream is ready, and
+the worker threads run other fibers meanwhile, so any number of fibers can
+wait on input at once. Regular files are read and written directly; they are
+always ready, so there is nothing to wait for.
+
+- `fiber.cancel` interrupts a fiber waiting on a stream: the call raises a
+  `CancellationError`.
+- Closing a stream wakes any fiber waiting on it: its call fails with
+  "stream is closed".
+- Streams on pipes, terminals and FIFOs can't `seek` or `tell`.

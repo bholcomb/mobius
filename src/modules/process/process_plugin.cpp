@@ -3,9 +3,14 @@
 //
 // Linux/POSIX implementation on posix_spawn. Pipes to a child are ordinary
 // `io` streams (see io_stream.h). run() and communicate() feed stdin and
-// drain stdout and stderr in one poll() loop, so a child that fills one pipe
-// while we are writing the other can't deadlock. Calls block their worker
-// thread while they wait (fiber-aware waits are later work).
+// drain stdout and stderr in one loop, so a child that fills one pipe
+// while we are writing the other can't deadlock.
+//
+// Every wait (pipe readiness, and the child's exit through a pidfd) goes
+// through mobius_io_wait: a fiber waiting on a child parks and its worker
+// thread runs other fibers. fiber.cancel interrupts the wait with a
+// CancellationError; a child started by run() is then killed (nothing else
+// could reach it), one from start() is left running.
 
 #include <mobius/mobius_plugin.h>
 
@@ -17,12 +22,13 @@
 #include <cstring>
 #include <ctime>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
 #include <fcntl.h>
-#include <poll.h>
 #include <spawn.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -40,8 +46,9 @@ static std::mutex g_child_methods_mu;
 static const char* CHILD_METHODS[] = {"wait", "poll", "kill", "communicate"};
 
 struct ChildHandle {
-    std::mutex mu;
+    FiberMutex mu;     // held across waits: a fiber waiting for it yields
     pid_t pid = -1;
+    int pidfd = -1;    // readable once the child exits; -1 if unsupported
     bool reaped = false;
     int status = 0;
 };
@@ -55,6 +62,7 @@ static void child_destructor(void* ptr) {
         int st = 0;
         if (waitpid(c->pid, &st, WNOHANG) == c->pid) c->reaped = true;
     }
+    if (c->pidfd >= 0) close(c->pidfd);
     delete c;
 }
 
@@ -62,11 +70,6 @@ static int64_t now_ms() {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
-}
-
-static void sleep_ms(int ms) {
-    struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
-    nanosleep(&ts, nullptr);
 }
 
 // Exit status as Mobius reports it: the exit code, or -N when the child
@@ -77,33 +80,60 @@ static int64_t exit_code_of(int status) {
     return -1;
 }
 
+static void mark_reaped(ChildHandle* c, int status) {
+    c->reaped = true;
+    c->status = status;
+    if (c->pidfd >= 0) { close(c->pidfd); c->pidfd = -1; }   // no longer needed
+}
+
 // Non-blocking reap. Returns true once the child has exited.
 static bool try_reap(ChildHandle* c) {
     if (c->reaped) return true;
     int st = 0;
     pid_t r = waitpid(c->pid, &st, WNOHANG);
     if (r == c->pid) {
-        c->reaped = true;
-        c->status = st;
+        mark_reaped(c, st);
         return true;
     }
     if (r < 0 && errno == ECHILD) {   // reaped elsewhere; status unknown
-        c->reaped = true;
-        c->status = 0;
+        mark_reaped(c, 0);
         return true;
     }
     return false;
 }
 
-// Wait until exit or until deadline_ms (<0: no deadline). True if exited.
-static bool wait_until(ChildHandle* c, int64_t deadline_ms) {
+enum class WaitResult { exited, timeout, cancelled };
+
+// Wait until exit or until deadline_ms (<0: no deadline). With
+// `cancellable` false the wait ignores fiber.cancel (used to finish
+// killing a child).
+static WaitResult wait_until(MobiusState* state, ChildHandle* c, int64_t deadline_ms,
+                             bool cancellable = true) {
     int pause = 1;
     while (!try_reap(c)) {
-        if (deadline_ms >= 0 && now_ms() >= deadline_ms) return false;
-        sleep_ms(pause);
-        if (pause < 20) pause *= 2;
+        int64_t left = -1;
+        if (deadline_ms >= 0) {
+            left = deadline_ms - now_ms();
+            if (left <= 0) return WaitResult::timeout;
+        }
+        int rc;
+        if (c->pidfd >= 0) {
+            MobiusIoWait w = {c->pidfd, MOBIUS_IO_READ};
+            rc = mobius_io_wait(state, &w, 1, left);
+        } else {
+            // No pidfd (old kernel): sleep in short steps.
+            rc = mobius_io_wait(state, nullptr, 0, left >= 0 && left < pause ? left : pause);
+            if (pause < 20) pause *= 2;
+        }
+        if (rc == MOBIUS_IO_CANCELLED && cancellable) return WaitResult::cancelled;
     }
-    return true;
+    return WaitResult::exited;
+}
+
+// Kill a child nobody can reach any more and reap it.
+static void kill_and_reap(MobiusState* state, ChildHandle* c) {
+    if (!try_reap(c)) kill(c->pid, SIGKILL);
+    wait_until(state, c, -1, false);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,10 +224,13 @@ static bool parse_stdio(MobiusState* state, int opts_idx, const char* key, int t
         mobius_stack_pop(state, 1);
         spec->kind = StdioKind::file;
     } else if (IoStream* s = get_stream(state, t)) {
-        std::lock_guard<std::mutex> lock(s->mu);
-        if (s->closed || !s->fp) {
+        std::lock_guard<FiberMutex> lock(s->mu);
+        if (s->closed) {
             ok = false;
             *err = std::string(key) + ": the io stream is closed";
+        } else if (s->waitable) {
+            spec->kind = StdioKind::fd;
+            spec->fd = s->fd;
         } else {
             fflush(s->fp);   // our buffered output goes first
             spec->kind = StdioKind::fd;
@@ -228,15 +261,13 @@ static bool resolve_program(const std::string& prog, const std::string& path_env
     return false;
 }
 
+// A pipe to the child as a waitable io stream (non-blocking: we own it).
 static void push_stream_for_fd(MobiusState* state, int fd, bool for_writing, const char* name) {
-    FILE* fp = fdopen(fd, for_writing ? "wb" : "rb");
-    if (!fp) {
-        close(fd);
-        mobius_stack_pushNil(state);
-        return;
-    }
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
     IoStream* s = new IoStream();
-    s->fp = fp;
+    s->waitable = true;
+    s->fd = fd;
+    s->nonblocking = true;
     s->name = name;
     s->readable = !for_writing;
     s->writable = for_writing;
@@ -433,6 +464,10 @@ static bool do_spawn(MobiusState* state, int opts_idx, const char* fname,
 
     ChildHandle* c = new ChildHandle();
     c->pid = pid;
+#ifdef SYS_pidfd_open
+    c->pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
+    if (c->pidfd >= 0) fcntl(c->pidfd, F_SETFD, FD_CLOEXEC);
+#endif
     result->child = c;
     (void)fname;
     return true;
@@ -484,45 +519,77 @@ static int set_child_methods(MobiusState* state, int arg_count) {
 struct CommunicateResult {
     std::string out, err;
     bool timed_out = false;
+    bool cancelled = false;
 };
 
 // Take the descriptor out of a pipe stream: it is consumed by communicate.
-static int take_stream_fd(IoStream* s, bool flush) {
+// A fiber blocked reading the stream is woken (it sees "stream is closed").
+// Bytes the stream had already read but not returned go to `pending`.
+static int take_stream_fd(IoStream* s, std::string* pending) {
     if (!s) return -1;
-    std::lock_guard<std::mutex> lock(s->mu);
-    if (s->closed || !s->fp) return -1;
-    if (flush) fflush(s->fp);
-    int fd = dup(fileno(s->fp));
-    fclose(s->fp);
-    s->fp = nullptr;
+    if (s->waitable && s->fd >= 0) {
+        s->closing.store(true, std::memory_order_release);
+        mobius_io_wake_fd(s->fd);
+    }
+    std::lock_guard<FiberMutex> lock(s->mu);
+    if (s->closed || !s->waitable || s->fd < 0) return -1;
+    int fd = s->fd;
+    if (pending) pending->append(s->rbuf, s->rpos, std::string::npos);
+    s->rbuf.clear();
+    s->rpos = 0;
+    s->fd = -1;
     s->closed = true;
     return fd;
 }
 
-static void communicate(ChildHandle* c, int in_fd, int out_fd, int err_fd,
+static void communicate(MobiusState* state, ChildHandle* c, int in_fd, int out_fd, int err_fd,
                         const char* input, size_t input_len, int64_t timeout_ms,
                         CommunicateResult* res) {
     int64_t deadline = timeout_ms > 0 ? now_ms() + timeout_ms : -1;
     int64_t kill_at = -1;   // after SIGTERM, when to send SIGKILL
     size_t written = 0;
-    if (in_fd >= 0) {
-        fcntl(in_fd, F_SETFL, fcntl(in_fd, F_GETFL) | O_NONBLOCK);
-        if (input_len == 0) { close(in_fd); in_fd = -1; }
-    }
+    for (int fd : {in_fd, out_fd, err_fd})
+        if (fd >= 0) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+    if (in_fd >= 0 && input_len == 0) { close(in_fd); in_fd = -1; }
     char buf[65536];
+    // Every descriptor is non-blocking, so each pass tries all of them and
+    // then waits (parked, in a fiber) until one is ready.
+    bool try_io = true;
     while (in_fd >= 0 || out_fd >= 0 || err_fd >= 0) {
-        struct pollfd fds[3];
-        int nf = 0, idx_in = -1, idx_out = -1, idx_err = -1;
-        if (in_fd >= 0)  { idx_in = nf;  fds[nf++] = {in_fd, POLLOUT, 0}; }
-        if (out_fd >= 0) { idx_out = nf; fds[nf++] = {out_fd, POLLIN, 0}; }
-        if (err_fd >= 0) { idx_err = nf; fds[nf++] = {err_fd, POLLIN, 0}; }
+        if (try_io) {
+            if (in_fd >= 0) {
+                ssize_t w = write(in_fd, input + written, input_len - written);
+                if (w > 0) written += (size_t)w;
+                if (w < 0 && errno != EAGAIN && errno != EINTR) written = input_len;   // EPIPE: child stopped reading
+                if (written >= input_len) { close(in_fd); in_fd = -1; }
+            }
+            int* fds[2] = {&out_fd, &err_fd};
+            std::string* outs[2] = {&res->out, &res->err};
+            for (int i = 0; i < 2; i++) {
+                while (*fds[i] >= 0) {
+                    ssize_t r = read(*fds[i], buf, sizeof(buf));
+                    if (r > 0) { outs[i]->append(buf, (size_t)r); continue; }
+                    if (r < 0 && errno == EINTR) continue;
+                    if (r == 0 || (errno != EAGAIN && errno != EWOULDBLOCK)) { close(*fds[i]); *fds[i] = -1; }
+                    break;
+                }
+            }
+            if (in_fd < 0 && out_fd < 0 && err_fd < 0) break;
+        }
 
-        int wait_ms = -1;
+        MobiusIoWait waits[3];
+        int nw = 0;
+        if (in_fd >= 0)  waits[nw++] = {in_fd, MOBIUS_IO_WRITE};
+        if (out_fd >= 0) waits[nw++] = {out_fd, MOBIUS_IO_READ};
+        if (err_fd >= 0) waits[nw++] = {err_fd, MOBIUS_IO_READ};
+        int64_t wait_ms = -1;
         int64_t now = now_ms();
-        if (kill_at >= 0) wait_ms = (int)std::max<int64_t>(0, kill_at - now);
-        else if (deadline >= 0) wait_ms = (int)std::max<int64_t>(0, deadline - now);
-        int pr = poll(fds, (nfds_t)nf, wait_ms);
-        if (pr < 0 && errno != EINTR) break;
+        if (kill_at >= 0) wait_ms = std::max<int64_t>(0, kill_at - now);
+        else if (deadline >= 0) wait_ms = std::max<int64_t>(0, deadline - now);
+        int pr = mobius_io_wait(state, waits, nw, wait_ms);
+        if (pr == MOBIUS_IO_CANCELLED) { res->cancelled = true; break; }
+        if (pr == MOBIUS_IO_ERROR) break;
+        try_io = pr >= 0;
 
         now = now_ms();
         if (deadline >= 0 && now >= deadline && kill_at < 0 && !c->reaped) {
@@ -539,39 +606,23 @@ static void communicate(ChildHandle* c, int in_fd, int out_fd, int err_fd,
             if (err_fd >= 0) { close(err_fd); err_fd = -1; }
             break;
         }
-        if (pr <= 0) continue;
-
-        if (idx_in >= 0 && (fds[idx_in].revents & (POLLOUT | POLLERR | POLLHUP))) {
-            ssize_t w = write(in_fd, input + written, input_len - written);
-            if (w > 0) written += (size_t)w;
-            if (w < 0 && errno != EAGAIN && errno != EINTR) written = input_len;   // EPIPE: child stopped reading
-            if (written >= input_len) { close(in_fd); in_fd = -1; }
-        }
-        if (idx_out >= 0 && (fds[idx_out].revents & (POLLIN | POLLHUP | POLLERR))) {
-            ssize_t r = read(out_fd, buf, sizeof(buf));
-            if (r > 0) res->out.append(buf, (size_t)r);
-            else if (r == 0 || (errno != EAGAIN && errno != EINTR)) { close(out_fd); out_fd = -1; }
-        }
-        if (idx_err >= 0 && (fds[idx_err].revents & (POLLIN | POLLHUP | POLLERR))) {
-            ssize_t r = read(err_fd, buf, sizeof(buf));
-            if (r > 0) res->err.append(buf, (size_t)r);
-            else if (r == 0 || (errno != EAGAIN && errno != EINTR)) { close(err_fd); err_fd = -1; }
-        }
     }
     if (in_fd >= 0) close(in_fd);
     if (out_fd >= 0) close(out_fd);
     if (err_fd >= 0) close(err_fd);
+    if (res->cancelled) return;
 
     // Outputs are closed; now wait for the exit, still honoring the timeout.
-    while (!wait_until(c, kill_at >= 0 ? kill_at : deadline)) {
+    WaitResult wr;
+    while ((wr = wait_until(state, c, kill_at >= 0 ? kill_at : deadline)) != WaitResult::exited) {
+        if (wr == WaitResult::cancelled) { res->cancelled = true; return; }
         int64_t now = now_ms();
         if (kill_at < 0) {
             kill(c->pid, SIGTERM);
             res->timed_out = true;
             kill_at = now + TERM_GRACE_MS;
         } else {
-            kill(c->pid, SIGKILL);
-            wait_until(c, -1);
+            kill_and_reap(state, c);
             break;
         }
     }
@@ -672,9 +723,8 @@ static int process_run(MobiusState* state, int arg_count) {
     if (has_input && sr.parent_fd[0] < 0) {
         // stdin was redirected elsewhere explicitly; the input has nowhere to go.
         for (int i = 0; i < 3; i++) if (sr.parent_fd[i] >= 0) close(sr.parent_fd[i]);
-        kill(sr.child->pid, SIGKILL);
-        wait_until(sr.child, -1);
-        delete sr.child;
+        kill_and_reap(state, sr.child);
+        child_destructor(sr.child);
         return mobius_error(state, "process.run: input was given but stdin is not a pipe");
     }
     if (sr.parent_fd[0] >= 0 && !has_input) {   // stdin: "pipe" with no input means EOF
@@ -684,21 +734,26 @@ static int process_run(MobiusState* state, int arg_count) {
     bool captured_out = sr.parent_fd[1] >= 0, captured_err = sr.parent_fd[2] >= 0;
 
     CommunicateResult res;
-    communicate(sr.child, sr.parent_fd[0], sr.parent_fd[1], sr.parent_fd[2],
+    communicate(state, sr.child, sr.parent_fd[0], sr.parent_fd[1], sr.parent_fd[2],
                 input.data(), input.size(), timeout_ms, &res);
     ChildHandle* c = sr.child;
+    if (res.cancelled) {
+        kill_and_reap(state, c);   // nothing else holds this child
+        child_destructor(c);
+        return mobius_error(state, "CancellationError: fiber was cancelled");
+    }
     int64_t code = exit_code_of(c->status);
 
     if (check && (code != 0 || res.timed_out)) {
         std::string what = describe_args(state);
         std::string msg = "process.run: '" + what + "' " +
             (res.timed_out ? std::string("timed out") : "exited with status " + std::to_string(code));
-        delete c;
+        child_destructor(c);
         return mobius_error(state, msg.c_str());
     }
     mobius_stack_pop(state, arg_count);
     push_result(state, c, res, captured_out, captured_err, binary);
-    delete c;
+    child_destructor(c);
     return 1;
 }
 
@@ -736,10 +791,11 @@ static int child_wait(MobiusState* state, int arg_count) {
         if (!mobius_stack_isInteger(state, 1)) return mobius_error(state, "child:wait: timeout_ms must be an integer");
         timeout_ms = mobius_stack_getInt64(state, 1);
     }
-    std::lock_guard<std::mutex> lock(c->mu);
-    bool done = wait_until(c, timeout_ms >= 0 ? now_ms() + timeout_ms : -1);
+    std::lock_guard<FiberMutex> lock(c->mu);
+    WaitResult wr = wait_until(state, c, timeout_ms >= 0 ? now_ms() + timeout_ms : -1);
+    if (wr == WaitResult::cancelled) return mobius_error(state, "CancellationError: fiber was cancelled");
     mobius_stack_pop(state, arg_count);
-    if (done) mobius_stack_pushInt64(state, exit_code_of(c->status));
+    if (wr == WaitResult::exited) mobius_stack_pushInt64(state, exit_code_of(c->status));
     else mobius_stack_pushNil(state);
     return 1;
 }
@@ -749,7 +805,7 @@ static int child_poll(MobiusState* state, int arg_count) {
     if (arg_count != 1) return mobius_error(state, "child:poll expects no arguments");
     ChildHandle* c = child_from_self(state, 0);
     if (!c) return mobius_error(state, "child:poll: self is not a child process");
-    std::lock_guard<std::mutex> lock(c->mu);
+    std::lock_guard<FiberMutex> lock(c->mu);
     bool done = try_reap(c);
     mobius_stack_pop(state, arg_count);
     if (done) mobius_stack_pushInt64(state, exit_code_of(c->status));
@@ -773,7 +829,7 @@ static int child_kill(MobiusState* state, int arg_count) {
         else if (name == "hup") sig = SIGHUP;
         else return mobius_error(state, ("child:kill: unknown signal '" + name + "' (use term, kill, int or hup)").c_str());
     }
-    std::lock_guard<std::mutex> lock(c->mu);
+    std::lock_guard<FiberMutex> lock(c->mu);
     bool sent = !try_reap(c) && kill(c->pid, sig) == 0;
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushBool(state, sent);
@@ -802,12 +858,13 @@ static int child_communicate(MobiusState* state, int arg_count) {
     IoStream* errs = child_stream(state, 0, "stderr");
     if (has_input && (!in || in->closed)) return mobius_error(state, "child:communicate: input was given but stdin is not an open pipe");
 
-    std::lock_guard<std::mutex> lock(c->mu);
-    int in_fd = take_stream_fd(in, true);
-    int out_fd = take_stream_fd(out, false);
-    int err_fd = take_stream_fd(errs, false);
+    std::lock_guard<FiberMutex> lock(c->mu);
     CommunicateResult res;
-    communicate(c, in_fd, out_fd, err_fd, input.data(), input.size(), timeout_ms, &res);
+    int in_fd = take_stream_fd(in, nullptr);
+    int out_fd = take_stream_fd(out, &res.out);
+    int err_fd = take_stream_fd(errs, &res.err);
+    communicate(state, c, in_fd, out_fd, err_fd, input.data(), input.size(), timeout_ms, &res);
+    if (res.cancelled) return mobius_error(state, "CancellationError: fiber was cancelled");
     mobius_stack_pop(state, arg_count);
     push_result(state, c, res, out_fd >= 0, err_fd >= 0, false);
     return 1;
