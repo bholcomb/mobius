@@ -41,8 +41,9 @@ static const int TERM_GRACE_MS = 1000;   // SIGTERM, then SIGKILL after this
 
 // The child method table, registered once by process.mob
 // (__set_child_methods) and copied onto every child start() returns.
-static MobiusValueRef g_child_methods = 0;
-static std::mutex g_child_methods_mu;
+// Held per state, in a hidden global (C++ statics would be shared between
+// states, and a value reference belongs to one state).
+static const char* CHILD_METHODS_GLOBAL = "__process_child_methods";
 static const char* CHILD_METHODS[] = {"wait", "poll", "kill", "communicate"};
 
 struct ChildHandle {
@@ -489,25 +490,22 @@ static void push_spawn_table(MobiusState* state, SpawnResult& r) {
         else mobius_stack_pushNil(state);
         set_field(state, tbl, keys[i]);
     }
-    std::lock_guard<std::mutex> lock(g_child_methods_mu);
-    if (g_child_methods && mobius_push_ref(state, g_child_methods)) {
-        int methods = top(state);
+    mobius_stack_getGlobal(state, CHILD_METHODS_GLOBAL);
+    int methods = top(state);
+    if (mobius_stack_isTable(state, methods)) {
         for (const char* name : CHILD_METHODS) {
             mobius_stack_getTableField(state, methods, name);
             set_field(state, tbl, name);
         }
-        mobius_stack_pop(state, 1);
     }
+    mobius_stack_pop(state, 1);
 }
 
 // __set_child_methods(table): the methods every child gets.
 static int set_child_methods(MobiusState* state, int arg_count) {
     if (arg_count != 1 || !mobius_stack_isTable(state, 0))
         return mobius_error(state, "__set_child_methods expects a table");
-    std::lock_guard<std::mutex> lock(g_child_methods_mu);
-    if (g_child_methods) mobius_unref_value(state, g_child_methods);
-    g_child_methods = mobius_ref_value(state, 0);
-    mobius_stack_pop(state, 1);
+    mobius_stack_setGlobal(state, CHILD_METHODS_GLOBAL);   // pops the table
     mobius_stack_pushNil(state);
     return 1;
 }

@@ -364,7 +364,7 @@ MobiusState::MobiusState(MobiusConfig* config)
     metamethods_ = new (std::nothrow) Metamethods(string_pool_);
     if (!metamethods_) return;
 
-    registry_ = getGlobalRegistry();
+    registry_ = new (std::nothrow) ModuleRegistry();
     if (!registry_) return;
 
     job_system_ = new (std::nothrow) JobSystem(this);
@@ -417,12 +417,10 @@ MobiusState::~MobiusState() {
 
     delete metamethods_;
 
-    // The module registry is a global singleton freed via atexit(), which runs
-    // AFTER this state frees its string pool below. Its cached module
-    // environments hold copies of this state's global slots — i.e. this state's
-    // interned strings — so release those Values now, while the pool is alive.
-    // Otherwise the atexit teardown dereferences freed strings.
+    // Cached module environments hold copies of this state's global slots
+    // (its interned strings and tables): release them while those are alive.
     if (registry_) registry_->releaseModuleValues();
+    delete registry_;
     registry_ = nullptr;
 
     // Destroy main VM before the string pool — VM registers hold

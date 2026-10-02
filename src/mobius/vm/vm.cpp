@@ -3798,7 +3798,7 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
 
     bool is_global = (strcmp(alias_name, "_GLOBAL") == 0);
 
-    ModuleRegistry* registry = getGlobalRegistry();
+    ModuleRegistry* registry = vm->state_->registry();
     if (!registry) { VM_ERROR(vm, f, "Module registry not initialized"); return -1; }
 
     const char* caller_source = f.ci->proto->source.c_str();
