@@ -125,7 +125,7 @@ size_t hash_value_raw(const Value& value) {
         case VAL_CHAR:   hash = hash_integer((int64_t)(unsigned char)value.as.character); break;
         case VAL_ARRAY:  hash = hash_integer((int64_t)(uintptr_t)value.as.array); break;
         case VAL_FUNCTION: hash = hash_integer((int64_t)(uintptr_t)value.as.function); break;
-        case VAL_NATIVE_FUNCTION: hash = hash_integer((int64_t)(uintptr_t)value.as.native_function); break;
+        case VAL_NATIVE_FUNCTION: hash = hash_integer((int64_t)(uintptr_t)value.as.native_function ^ ((int64_t)value.aux << 48)); break;
         case VAL_TABLE:  hash = hash_integer((int64_t)(uintptr_t)value.as.table); break;
         case VAL_USERDATA:
             if (value.as.userdata) {

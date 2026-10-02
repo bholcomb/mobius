@@ -1187,6 +1187,38 @@ void mobius_set_userdata_type_metatable(MobiusState* state, const char* type_nam
 // PUBLIC API — Native function registration
 // ============================================================================
 
+// A host function value: its id (userdata, flags) in the value's aux field.
+// Unlike a plain native, it never moves to another thread while it runs.
+static Value host_function_value(MobiusState* state, MobiusCFunction func, void* userdata,
+                                 unsigned int flags) {
+    Value fval = make_native_function_value(func);
+    fval.aux = state->hostFunctionId(func, userdata, flags);
+    return fval;
+}
+
+void mobius_stack_pushFunction(MobiusState* state, MobiusCFunction func, void* userdata,
+                               unsigned int flags) {
+    if (!state || !func) return;
+    stack_push(state, host_function_value(state, func, userdata, flags));
+}
+
+void* mobius_function_userdata(MobiusState* state) {
+    if (!state) return nullptr;
+    MobiusVM* vm = state->activeVM();
+    if (!vm) vm = state->mainVM();
+    return vm ? vm->current_host_userdata_ : nullptr;
+}
+
+void mobius_register_function_ex(MobiusState* state, const char* name, MobiusCFunction func,
+                                 void* userdata, unsigned int flags) {
+    if (!state || !name || !func) return;
+    Value fval = host_function_value(state, func, userdata, flags);
+    fval.flags |= VAL_FLAG_READONLY;
+    int slot = state->assignGlobalSlot(name);
+    if (slot < 0) return;
+    state->setGlobalValue(slot, fval);
+}
+
 void mobius_register_function(MobiusState* state, const char* name,
                               MobiusCFunction func) {
     if (!state || !name || !func) return;
@@ -1261,7 +1293,7 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
         if (args != inline_args) delete[] args;
         size_t keepalive_mark = vm->native_keepalive_.size();
         vm->native_depth_++;
-        rc = func_val.as.native_function(state, nargs);
+        rc = vm->invokeNative(func_val, nargs);
         vm->native_depth_--;
         vm->trimNativeKeepalive(keepalive_mark);
         if (rc < 0) return -1;

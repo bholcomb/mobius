@@ -496,7 +496,24 @@ int MobiusVM::executeDirect(Prototype* proto) {
 // Native function bridge
 // ============================================================================
 
-int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nresults) {
+MOBIUS_NOINLINE int MobiusVM::invokeHostFunction(const Value& func, int nargs) {
+    const HostFunction* hf = state_->hostFunction(func.aux);
+    if (!hf) {
+        runtimeError("Attempt to call an unknown host function");
+        return -1;
+    }
+    void* saved_userdata = current_host_userdata_;
+    current_host_userdata_ = hf->userdata;
+    JobSystem* js = state_->jobSystem();
+    MobiusFiber* fiber = js ? js->currentFiber() : nullptr;
+    if (fiber) fiber->host_call_depth++;
+    int rc = hf->function(state_, nargs);
+    if (fiber) fiber->host_call_depth--;
+    current_host_userdata_ = saved_userdata;
+    return rc;
+}
+
+int MobiusVM::callNative(Value func, int func_reg, int nargs, int nresults) {
     int caller_base = callStackTop().base;
     int args_base = caller_base + func_reg + 1;
 
@@ -513,7 +530,7 @@ int MobiusVM::callNative(MobiusCFunction func, int func_reg, int nargs, int nres
 
     size_t keepalive_mark = native_keepalive_.size();
     native_depth_++;
-    int rc = func(state_, nargs);
+    int rc = invokeNative(func, nargs);
     native_depth_--;
     trimNativeKeepalive(keepalive_mark);   // release strings pinned for this call
 
@@ -571,7 +588,7 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
     Value& func_val = R(caller, func_reg);
 
     if (func_val.type == VAL_NATIVE_FUNCTION) {
-        return callNative(func_val.as.native_function, func_reg, nargs, nresults);
+        return callNative(func_val, func_reg, nargs, nresults);
     }
 
     if (func_val.type == VAL_TABLE && func_val.as.table) {
@@ -591,7 +608,7 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         registers_[fn + 1] = self;
         registers_[fn] = call_mm;
         if (call_mm.type == VAL_NATIVE_FUNCTION)
-            return callNative(call_mm.as.native_function, func_reg, nargs + 1, nresults);
+            return callNative(call_mm, func_reg, nargs + 1, nresults);
         return callFunction(caller, func_reg, nargs + 1, nresults);
     }
 
@@ -704,7 +721,7 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
 
         size_t keepalive_mark = native_keepalive_.size();
         native_depth_++;
-        int rc = method.as.native_function(state_, 2);
+        int rc = invokeNative(method, 2);
         native_depth_--;
         trimNativeKeepalive(keepalive_mark);
 
@@ -984,7 +1001,7 @@ int MobiusVM::callTernaryMetamethod(const Value& table_val, MobiusString* mm_nam
 
     size_t keepalive_mark = native_keepalive_.size();
     native_depth_++;
-    int rc = method.as.native_function(state_, 3);
+    int rc = invokeNative(method, 3);
     native_depth_--;
     trimNativeKeepalive(keepalive_mark);
 
@@ -4253,6 +4270,10 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
         }
         if (MOBIUS_UNLIKELY(vm->state_->abortRequested())) {
             VM_ERROR(vm, f, "%s", kAbortedMessage);
+            return -1;
+        }
+        if (MOBIUS_UNLIKELY(JobSystem::inHostFunction())) {
+            VM_ERROR(vm, f, "await: %s", JobSystem::kWaitInHostFunctionMessage);
             return -1;
         }
         if (MOBIUS_UNLIKELY(wait.deadlocked())) {

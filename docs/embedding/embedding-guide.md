@@ -401,6 +401,23 @@ print(square(9))    // 81
 Return multiple values by pushing several and returning the count; return
 nothing by returning `0`.
 
+### Host functions with userdata
+
+`mobius_register_function_ex(state, name, fn, userdata, flags)` registers a
+function together with a pointer it reads back with
+`mobius_function_userdata(state)` while it runs, so one C function can serve
+many registrations (how a language binding dispatches to its own
+callbacks). `mobius_stack_pushFunction(state, fn, userdata, flags)` pushes
+such a function as a value, to store in a table or module. Functions with
+different userdata are different values (`==`, table keys).
+
+A host function never moves to another thread while it runs. If it calls
+back into a script, that script may sleep or do I/O (the thread blocks),
+but waiting for another fiber there (`await`, `fiber.all`, `fiber.any`,
+channel `send`/`recv`) raises "cannot wait for another fiber inside a host
+function". Bindings for runtimes whose frames must stay on their thread
+(.NET, the JVM) must register this way.
+
 A registered function is a read-only global, like the built-in functions:
 scripts can't reassign it, and functions running in spawned fibers can call
 it. Registering the same name again replaces it. It may run on any worker

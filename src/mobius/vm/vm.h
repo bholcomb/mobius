@@ -180,6 +180,17 @@ struct VMFrame;
 
 class MobiusVM {
 public:
+    // Call a native function value with `nargs` arguments on the native
+    // stack. Built-in natives (aux 0) are called directly; host functions
+    // (mobius_register_function_ex / mobius_stack_pushFunction) go through
+    // invokeHostFunction for their userdata and threading.
+    MOBIUS_FORCEINLINE int invokeNative(const Value& func, int nargs) {
+        if (MOBIUS_LIKELY(func.aux == 0)) return func.as.native_function(state_, nargs);
+        return invokeHostFunction(func, nargs);
+    }
+    int invokeHostFunction(const Value& func, int nargs);
+    void* current_host_userdata_ = nullptr;   // mobius_function_userdata
+
     explicit MobiusVM(MobiusState* state);
     ~MobiusVM();
 
@@ -332,7 +343,8 @@ public:
     void growRegisters(int needed);   // rebases open upvalues on reallocation
 
 private:
-    int callNative(MobiusCFunction func, int func_reg, int nargs, int nresults);
+    int callNative(Value func, int func_reg, int nargs, int nresults);   // by value: registers may move
+
 
     inline const Value& RK(const CallInfo& ci, uint8_t field) const {
         if (IS_CONSTANT(field))

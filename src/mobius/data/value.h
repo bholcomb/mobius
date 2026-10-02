@@ -200,7 +200,7 @@ public:
             case VAL_CHAR:   return as.character == other.as.character;
             case VAL_ARRAY:  return as.array == other.as.array;
             case VAL_FUNCTION: return as.function == other.as.function;
-            case VAL_NATIVE_FUNCTION: return as.native_function == other.as.native_function;
+            case VAL_NATIVE_FUNCTION: return as.native_function == other.as.native_function && aux == other.aux;
             case VAL_TABLE:  return as.table == other.as.table;
             case VAL_USERDATA:
                 return as.userdata && other.as.userdata &&

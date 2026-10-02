@@ -1,3 +1,4 @@
+#include <string>
 #include "fiber/io_reactor.h"
 #include "library/fiber_lib.h"
 #include "data/channel.h"
@@ -116,6 +117,10 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
                 results->release();
                 return state->error(kCancelledMessage);
             }
+            if (JobSystem::inHostFunction()) {
+                results->release();
+                return state->error((std::string("fiber.all: ") + JobSystem::kWaitInHostFunctionMessage).c_str());
+            }
             if (wait.deadlocked()) {
                 results->release();
                 return state->error(js->fiberLimitDeadlockMessage().c_str());
@@ -173,6 +178,9 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
         }
         if (current_fiber_cancelled()) {
             return state->error(kCancelledMessage);
+        }
+        if (JobSystem::inHostFunction()) {
+            return state->error((std::string("fiber.any: ") + JobSystem::kWaitInHostFunctionMessage).c_str());
         }
         if (wait.deadlocked()) {
             return state->error(js->fiberLimitDeadlockMessage().c_str());
@@ -295,6 +303,9 @@ int channel_method_send(MobiusState* state, int arg_count) {
         if (current_fiber_cancelled()) {
             return state->error(kCancelledMessage);
         }
+        if (JobSystem::inHostFunction()) {
+            return state->error((std::string("ch:send: ") + JobSystem::kWaitInHostFunctionMessage).c_str());
+        }
         if (wait.deadlocked()) {
             return state->error(js->fiberLimitDeadlockMessage().c_str());
         }
@@ -324,6 +335,9 @@ int channel_method_recv(MobiusState* state, int arg_count) {
         }
         if (current_fiber_cancelled()) {
             return state->error(kCancelledMessage);
+        }
+        if (JobSystem::inHostFunction()) {
+            return state->error((std::string("ch:recv: ") + JobSystem::kWaitInHostFunctionMessage).c_str());
         }
         if (wait.deadlocked()) {
             return state->error(js->fiberLimitDeadlockMessage().c_str());

@@ -331,7 +331,9 @@ MOBIUS_API int mobius_io_wait(MobiusState* state, const MobiusIoWait* waits, int
     if (count < 0) return MOBIUS_IO_ERROR;
     JobSystem* js = state ? state->jobSystem() : nullptr;
     MobiusFiber* fiber = js ? js->currentFiber() : nullptr;
-    if (!fiber) {
+    // A fiber running a host function must not park (see host_call_depth):
+    // it waits like a thread.
+    if (!fiber || fiber->host_call_depth > 0) {
         if (count == 0) {
             if (timeout_ms > 0) {
                 struct timespec ts = {(time_t)(timeout_ms / 1000), (long)(timeout_ms % 1000) * 1000000L};
