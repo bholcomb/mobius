@@ -275,6 +275,42 @@ MOBIUS_API int mobius_call_ref(MobiusState* state, MobiusValueRef function_ref,
                                int nresults);
 
 /* ====================================================================== */
+/*  Waiting for I/O without blocking the worker thread (Linux)             */
+/* ====================================================================== */
+
+#define MOBIUS_IO_READ  1
+#define MOBIUS_IO_WRITE 2
+
+typedef struct {
+    int fd;
+    int events;   /* MOBIUS_IO_READ and/or MOBIUS_IO_WRITE */
+} MobiusIoWait;
+
+#define MOBIUS_IO_TIMEOUT   (-1)  /* timeout_ms passed */
+#define MOBIUS_IO_CANCELLED (-2)  /* the waiting fiber was cancelled (fiber.cancel) */
+#define MOBIUS_IO_CLOSED    (-3)  /* another fiber called mobius_io_wake_fd on it */
+#define MOBIUS_IO_ERROR     (-4)
+
+/**
+ * Wait until one of `count` descriptors is ready, or `timeout_ms` passes
+ * (negative: no timeout; with count 0 this is a sleep). Returns the index of
+ * a ready descriptor, or one of the MOBIUS_IO_ codes above.
+ *
+ * Inside a fiber, the fiber is parked and the worker thread runs other
+ * fibers meanwhile; outside one, the calling thread blocks in poll().
+ * Readiness can be spurious: retry the operation and wait again if it
+ * would still block.
+ */
+MOBIUS_API int mobius_io_wait(MobiusState* state, const MobiusIoWait* waits, int count,
+                              int64_t timeout_ms);
+
+/**
+ * Wake every fiber waiting on `fd` with MOBIUS_IO_CLOSED. Call it before
+ * closing a descriptor that another fiber may be waiting on.
+ */
+MOBIUS_API void mobius_io_wake_fd(int fd);
+
+/* ====================================================================== */
 /*  Table operations (on values already on the stack)                      */
 /* ====================================================================== */
 

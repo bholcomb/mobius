@@ -1,3 +1,4 @@
+#include "fiber/io_reactor.h"
 #include "fiber/job_system.h"
 #include "state/mobius_state.h"
 #include "vm/vm.h"
@@ -139,6 +140,47 @@ void JobSystem::yieldFiber() {
 
     self->state = FiberState::Suspended;
     fiber_context_swap(&self->context, &t_scheduler_ctx_);
+}
+
+void JobSystem::beginPark() {
+    MobiusFiber* self = t_current_fiber_;
+    if (self) self->park_state.store(MobiusFiber::PARK_PARKING, std::memory_order_release);
+}
+
+void JobSystem::cancelPark() {
+    MobiusFiber* self = t_current_fiber_;
+    if (self) self->park_state.store(MobiusFiber::PARK_IDLE, std::memory_order_release);
+}
+
+void JobSystem::park() {
+    MobiusFiber* self = t_current_fiber_;
+    if (!self) return;
+    self->state = FiberState::Parked;
+    fiber_context_swap(&self->context, &t_scheduler_ctx_);
+    // Resumed by wakeFiber (or the worker, if the wake came early).
+    self->park_state.store(MobiusFiber::PARK_IDLE, std::memory_order_release);
+}
+
+void JobSystem::wakeFiber(MobiusFiber* fiber) {
+    if (!fiber) return;
+    int v = fiber->park_state.load(std::memory_order_acquire);
+    while (true) {
+        if (v == MobiusFiber::PARK_PARKED) {
+            if (fiber->park_state.compare_exchange_weak(v, MobiusFiber::PARK_IDLE,
+                                                        std::memory_order_acq_rel)) {
+                submitFiber(fiber);
+                return;
+            }
+        } else if (v == MobiusFiber::PARK_PARKING) {
+            // Still switching out: the worker sees WOKEN and requeues it.
+            if (fiber->park_state.compare_exchange_weak(v, MobiusFiber::PARK_WOKEN,
+                                                        std::memory_order_acq_rel)) {
+                return;
+            }
+        } else {
+            return;   // not parked (already woken, or never parked)
+        }
+    }
 }
 
 bool JobSystem::fiberLimitDeadlock() {
@@ -284,6 +326,14 @@ void JobSystem::workerThreadEntry() {
                 }
             } else if (fiber->state == FiberState::Suspended) {
                 submitFiber(fiber);
+            } else if (fiber->state == FiberState::Parked) {
+                // Off the queue until woken, unless the wake already came.
+                int expected = MobiusFiber::PARK_PARKING;
+                if (!fiber->park_state.compare_exchange_strong(expected, MobiusFiber::PARK_PARKED,
+                                                               std::memory_order_acq_rel)) {
+                    fiber->park_state.store(MobiusFiber::PARK_IDLE, std::memory_order_release);
+                    submitFiber(fiber);
+                }
             }
         } else {
             std::unique_lock<std::mutex> lock(ready_mutex_);
@@ -395,4 +445,7 @@ void JobSystem::shutdown() {
             if (t.joinable()) t.join();
         }
     }
+    // Fibers still parked on I/O or a timer are abandoned with the job
+    // system; the reactor must not wake them into it later.
+    mobius_io_forget_job_system(this);
 }

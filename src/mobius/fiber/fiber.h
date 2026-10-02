@@ -12,6 +12,8 @@ enum class FiberState : uint8_t {
     Idle,       // in pool, not running
     Running,    // actively executing on a worker
     Suspended,  // yielded or awaiting, can be resumed
+    Parked,     // waiting for an event (I/O, timer); off the ready queue
+                // until JobSystem::wakeFiber requeues it
     Dead        // finished, will be returned to pool
 };
 
@@ -26,6 +28,12 @@ struct MobiusFiber {
     MobiusVM*    vm;               // back-pointer to the VM running on this fiber
 
     std::atomic<bool> cancel_requested;
+
+    // Parking handshake (see JobSystem::beginPark). A wake can arrive while
+    // the fiber is still switching out; PARKING -> WOKEN records it so the
+    // worker requeues the fiber instead of leaving it parked.
+    enum : int { PARK_IDLE = 0, PARK_PARKING = 1, PARK_PARKED = 2, PARK_WOKEN = 3 };
+    std::atomic<int> park_state{PARK_IDLE};
 
     size_t       peak_stack_bytes; // high-water mark for metrics
 

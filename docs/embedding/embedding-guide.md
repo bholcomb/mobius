@@ -611,6 +611,28 @@ Threading model:
 - Native functions may be invoked from any worker thread — make them
   thread-safe if they touch shared C/C++ state.
 
+### Waiting for I/O in a native function
+
+A native function that waits on a descriptor should not block in `read()` or
+`poll()`: that holds a worker thread for the whole wait. Use
+`mobius_io_wait` instead (Linux):
+
+```c
+MobiusIoWait w = { fd, MOBIUS_IO_READ };
+int r = mobius_io_wait(state, &w, 1, timeout_ms);   /* -1: no timeout */
+if (r == MOBIUS_IO_CANCELLED) return mobius_error(state, "CancellationError: fiber was cancelled");
+if (r == MOBIUS_IO_TIMEOUT)   { /* ... */ }
+/* r >= 0: index of a ready descriptor; read it (retry if it would still block) */
+```
+
+Inside a fiber the fiber is parked and its worker runs other fibers. A single
+reactor thread watches the descriptors with epoll and wakes the fiber when
+one is ready, when the timeout passes, or when `fiber.cancel` cancels it.
+Outside a fiber, the call blocks in `poll()`. Pass several descriptors to wait
+for whichever is ready first, or none to sleep. Before closing a descriptor
+another fiber may be waiting on, call `mobius_io_wake_fd(fd)`: the waiter
+returns `MOBIUS_IO_CLOSED`.
+
 ---
 
 ## Metrics
