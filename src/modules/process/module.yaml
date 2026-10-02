@@ -1,0 +1,11 @@
+name: process
+version: 0.1.0
+entry:
+  script: process.mob
+platforms:
+  linux-x86_64:
+    module_library: native/linux-x86_64/process.so
+dependencies:
+  mobius_modules: [io]
+metadata:
+  description: Run programs directly, with pipes, capture, timeouts and environment control
