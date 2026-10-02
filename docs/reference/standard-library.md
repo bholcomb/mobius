@@ -160,7 +160,7 @@ min(3, 1, 2)   // 1
 | `startswith(s, prefix)`        | bool    | Whether `s` begins with `prefix`.                    |
 | `endswith(s, suffix)`          | bool    | Whether `s` ends with `suffix`.                      |
 | `split(s, delimiter)`          | array   | Split `s` on `delimiter` into an array of strings.   |
-| `join(array, separator)`       | string  | Join array elements with `separator`.                |
+| `join(array, separator)`       | string  | Join array elements with `separator`; non-strings convert as in `+`. |
 | `trim(s)`                      | string  | Trim whitespace from both ends.                      |
 | `replace(s, old, new)`         | string  | Replace **all** occurrences of `old` with `new`.     |
 | `repeat(s, n)`                 | string  | `s` repeated `n` times.                              |

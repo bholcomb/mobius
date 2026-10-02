@@ -1,3 +1,4 @@
+#include <vector>
 #include "library/string.h"
 #include "data/value.h"
 #include "data/array.h"
@@ -397,13 +398,19 @@ int lib_join(MobiusState* state, int arg_count) {
     size_t sep_len = sep_val.as.string->length;
     size_t count = arr->length();
 
+    // Non-string elements are converted the way string concatenation
+    // converts them (`"" + 2.5`). They used to be dropped silently, so
+    // join([1, "a"], ",") gave ",a".
+    std::vector<Value> parts;
+    parts.reserve(count);
     size_t total = 0;
     for (size_t i = 0; i < count; i++) {
         Value v = arr->get(i);
-        if (v.type == VAL_STRING && v.as.string) {
-            if (!checked_add_size(total, v.as.string->length, &total)) {
-                return state->error("join result too large");
-            }
+        if (v.type != VAL_STRING || !v.as.string) v = value_to_string_value(state, v);
+        size_t len = (v.type == VAL_STRING && v.as.string) ? v.as.string->length : 0;
+        parts.push_back(v);
+        if (!checked_add_size(total, len, &total)) {
+            return state->error("join result too large");
         }
         if (i > 0 && !checked_add_size(total, sep_len, &total)) {
             return state->error("join result too large");
@@ -422,7 +429,7 @@ int lib_join(MobiusState* state, int arg_count) {
     size_t offset = 0;
     for (size_t i = 0; i < count; i++) {
         if (i > 0) { memcpy(buf + offset, sep, sep_len); offset += sep_len; }
-        Value v = arr->get(i);
+        const Value& v = parts[i];
         if (v.type == VAL_STRING && v.as.string) {
             memcpy(buf + offset, v.as.string->data, v.as.string->length);
             offset += v.as.string->length;
