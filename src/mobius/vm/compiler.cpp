@@ -3765,6 +3765,22 @@ void Compiler::compileSwitchStmt(SwitchStmt* stmt) {
 
 // --- Break ---
 
+// Before break/continue jumps out of (or back through) a loop body, close
+// any captured locals declared inside it. endScope emits these CLOSEs on
+// the normal path, but the jump skips them, which left closures pointing
+// at stack slots the loop or later code reused (they read garbage).
+void Compiler::closeLoopLocals(const LoopContext& loop) {
+    int first = -1;
+    bool any_captured = false;
+    for (int i = 0; i < (int)current_->locals.size(); i++) {
+        if (current_->locals[i].depth > loop.scope_depth) {
+            if (first < 0) first = i;
+            if (current_->locals[i].is_captured) any_captured = true;
+        }
+    }
+    if (first >= 0 && any_captured) emitABC(OP_CLOSE, (uint8_t)first, 0, 0);
+}
+
 void Compiler::compileBreakStmt() {
     if (current_->loops.empty()) {
         fprintf(stderr, "Compile error [%s:%d]: 'break' outside of loop\n",
@@ -3776,6 +3792,7 @@ void Compiler::compileBreakStmt() {
     // is jumping out of.
     for (int i = current_->loops.back().open_trys_at_entry; i < current_->open_trys; i++)
         emitABC(OP_TRY_END, 0, 0, 0);
+    closeLoopLocals(current_->loops.back());
     int jmp = emitJump();
     current_->loops.back().break_jumps.push_back(jmp);
 }
@@ -3803,6 +3820,7 @@ void Compiler::compileContinueStmt() {
     // iteration re-arms them via its own TRY_BEGIN.
     for (int i = loop.open_trys_at_entry; i < current_->open_trys; i++)
         emitABC(OP_TRY_END, 0, 0, 0);
+    closeLoopLocals(loop);
 
     if (loop.is_for_loop) {
         // For loop: the increment hasn't been emitted yet.

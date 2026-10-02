@@ -246,6 +246,7 @@ private:
     // or captured variable.
     bool constantValueOf(Expr* e, Value* out);
     bool writesDestBeforeOperands(Expr* e);
+    void closeLoopLocals(const LoopContext& loop);
     void checkSpawnedFunction(Expr* callee);
     // Prototypes of readonly global functions, by name, for resolving direct
     // calls to a global function from inside another function. Only functions
