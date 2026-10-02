@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 199309L 
 
+#include "frontend/diagnostics.h"
 #include <chrono>
 #include <mobius/mobius_plugin.h>
 #include "state/mobius_state.h"
@@ -1055,6 +1056,30 @@ int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* en
 
     clearErrorInternal();
 
+    // Parse and compile errors are collected, then reported through the
+    // error handler with their real text (they used to go straight to
+    // stderr, and the handler got only "Parse error").
+    DiagnosticScope diagnostics;
+    auto report_diagnostics = [&](int code, const char* fallback) {
+        const char* src = getSourceContext();
+        std::string message = fallback;
+        int line = 0;
+        if (!diagnostics.diagnostics.empty()) {
+            const Diagnostic& first = diagnostics.diagnostics[0];
+            message = first.message;
+            line = first.line;
+            // Further errors follow on their own lines.
+            for (size_t i = 1; i < diagnostics.diagnostics.size(); i++) {
+                const Diagnostic& d = diagnostics.diagnostics[i];
+                message += "\n";
+                if (d.line > 0) message += "line " + std::to_string(d.line) + ": ";
+                message += d.message;
+            }
+        }
+        setError(code, message.c_str(), nullptr, line, 0, nullptr, src ? src : "<string>");
+        return code;
+    };
+
     TokenArray tokens = scan_source(code, string_pool_);
     if (tokens.count == 0) {
         free_token_array(&tokens);
@@ -1066,11 +1091,8 @@ int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* en
     free_token_array(&tokens);
 
     if (parse_result.had_error) {
-        const char* src = getSourceContext();
-        setError(MOBIUS_ERROR_SYNTAX, "Parse error", 
-                 "Check syntax and structure", 0, 0, NULL, src);
         free_parse_result(&parse_result);
-        return MOBIUS_ERROR_SYNTAX;
+        return report_diagnostics(MOBIUS_ERROR_SYNTAX, "Syntax error");
     }
 
     const char* src = getSourceContext();
@@ -1081,9 +1103,7 @@ int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* en
     free_parse_result(&parse_result);
 
     if (!proto) {
-        setError(MOBIUS_ERROR_RUNTIME, "Bytecode compilation failed",
-                 nullptr, 0, 0, nullptr);
-        return MOBIUS_ERROR_RUNTIME;
+        return report_diagnostics(MOBIUS_ERROR_SYNTAX, "Compile error");
     }
 
     if (config_.debug_mode) {

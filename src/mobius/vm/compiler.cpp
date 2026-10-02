@@ -1,3 +1,4 @@
+#include "frontend/diagnostics.h"
 #include "vm/compiler.h"
 #include "vm/ast_scan.h"
 
@@ -110,13 +111,13 @@ int Compiler::allocReg() {
         // marks a constant-pool reference in B/C operand fields), so a
         // register-heavy function would silently read constants instead of
         // registers. Fail loudly instead.
-        fprintf(stderr, "Compile error [%s:%d]: function requires more than 128 registers\n",
+        compile_diag("Compile error [%s:%d]: function requires more than 128 registers\n",
                 current_->proto->source.c_str(), currentLine_);
         had_error_ = true;
         return 127;
     }
     if (reg > 255) {
-        fprintf(stderr, "Compile error: register overflow (> 255) — function uses too many locals/temporaries\n");
+        compile_diag("Compile error: register overflow (> 255) — function uses too many locals/temporaries\n");
         had_error_ = true;
     }
     return reg;
@@ -128,7 +129,7 @@ void Compiler::allocRegs(int count) {
         current_->max_reg = current_->free_reg;
     }
     if (current_->free_reg > 256) {
-        fprintf(stderr, "Compile error: register overflow (> 255) — function uses too many locals/temporaries\n");
+        compile_diag("Compile error: register overflow (> 255) — function uses too many locals/temporaries\n");
         had_error_ = true;
     }
 }
@@ -309,7 +310,7 @@ bool Compiler::checkLockedAssignment(ValueType target_t, Expr* rhs, const char* 
     if (target_t == VAL_UNKNOWN || !rhs) return true;
     ValueType rhs_t = inferExprType(rhs);
     if (rhs_t == VAL_UNKNOWN || rhs_t == VAL_NIL || rhs_t == target_t) return true;
-    fprintf(stderr, "Compile error [%s:%d]: cannot assign %s to variable '%s' "
+    compile_diag("Compile error [%s:%d]: cannot assign %s to variable '%s' "
             "locked to %s\n",
             current_->proto->source.c_str(), currentLine_,
             value_type_name(rhs_t), name, value_type_name(target_t));
@@ -327,7 +328,7 @@ bool Compiler::isIntrinsicBuiltin(const char* name) const {
 
 void Compiler::emitSetGlobal(int reg, const char* name) {
     if (override_mode_ != MOBIUS_OVERRIDE_ERROR && isIntrinsicBuiltin(name)) {
-        fprintf(stderr, "Compile error [%s:%d]: cannot override intrinsic builtin "
+        compile_diag("Compile error [%s:%d]: cannot override intrinsic builtin "
                 "'%s' (its call sites compile to dedicated instructions)\n",
                 current_->proto->source.c_str(), currentLine_, name);
         had_error_ = true;
@@ -763,7 +764,7 @@ int Compiler::compileExpr(Expr* expr, int dest) {
         case EXPR_ATOMIC:
             return compileAtomic(&expr->as.atomic, dest);
         default:
-            fprintf(stderr, "Compile error [%s]: unknown expression type %d\n",
+            compile_diag("Compile error [%s]: unknown expression type %d\n",
                     current_->proto->source.c_str(), expr->type);
             had_error_ = true;
             return -1;
@@ -1105,7 +1106,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         if (lv.type == VAL_STRING && rv.type == VAL_STRING &&
             lv.as.string && rv.as.string && expr->op.type == TOKEN_PLUS) {
             if (rv.as.string->length > std::numeric_limits<size_t>::max() - lv.as.string->length) {
-                fprintf(stderr, "Compile error [%s:%d]: string constant too large to fold\n",
+                compile_diag("Compile error [%s:%d]: string constant too large to fold\n",
                         current_->proto->source.c_str(), currentLine_);
                 had_error_ = true;
                 return -1;
@@ -1113,7 +1114,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             size_t total = lv.as.string->length + rv.as.string->length;
             char* buf = (char*)malloc(total + 1);
             if (!buf) {
-                fprintf(stderr, "Compile error [%s:%d]: out of memory folding string constant\n",
+                compile_diag("Compile error [%s:%d]: out of memory folding string constant\n",
                         current_->proto->source.c_str(), currentLine_);
                 had_error_ = true;
                 return -1;
@@ -1416,7 +1417,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             break;
         }
         default:
-            fprintf(stderr, "Compile error [%s:%d]: unknown binary operator %d\n",
+            compile_diag("Compile error [%s:%d]: unknown binary operator %d\n",
                     current_->proto->source.c_str(), currentLine_, expr->op.type);
             had_error_ = true;
             break;
@@ -1538,7 +1539,7 @@ int Compiler::compileUnary(UnaryExpr* expr, int dest) {
                 emitABC(OP_MOVE, (uint8_t)reg, (uint8_t)operand, 0);
             break;
         default:
-            fprintf(stderr, "Compile error [%s:%d]: unknown unary operator %d\n",
+            compile_diag("Compile error [%s:%d]: unknown unary operator %d\n",
                     current_->proto->source.c_str(), currentLine_, expr->op.type);
             had_error_ = true;
             break;
@@ -2062,7 +2063,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
         }
 
         default:
-            fprintf(stderr, "Compile error [%s:%d]: invalid assignment target %d\n",
+            compile_diag("Compile error [%s:%d]: invalid assignment target %d\n",
                     current_->proto->source.c_str(), currentLine_, expr->target->type);
             had_error_ = true;
             return -1;
@@ -2168,7 +2169,7 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
             if (want == VAL_UNKNOWN) continue;
             ValueType got = inferExprType(expr->arguments[i]);
             if (got == VAL_UNKNOWN || got == VAL_NIL || got == want) continue;
-            fprintf(stderr, "Compile error [%s:%d]: argument %zu of '%s' is %s, "
+            compile_diag("Compile error [%s:%d]: argument %zu of '%s' is %s, "
                     "but the parameter is annotated %s\n",
                     current_->proto->source.c_str(), currentLine_, i + 1,
                     direct_target.proto->name.empty() ? "anonymous"
@@ -2613,10 +2614,12 @@ void Compiler::compileStmt(Stmt* stmt) {
             compileSwitchStmt(&stmt->as.switch_stmt);
             break;
         case STMT_BREAK:
+            currentLine_ = stmt->as.break_stmt.keyword.line;
             compileBreakStmt();
             unreachable_ = true;
             break;
         case STMT_CONTINUE:
+            currentLine_ = stmt->as.continue_stmt.keyword.line;
             compileContinueStmt();
             unreachable_ = true;
             break;
@@ -2646,7 +2649,7 @@ void Compiler::compileStmt(Stmt* stmt) {
             emitABC(OP_YIELD, 0, 0, 0);
             break;
         default:
-            fprintf(stderr, "Compile error [%s]: unknown statement type %d\n",
+            compile_diag("Compile error [%s]: unknown statement type %d\n",
                     current_->proto->source.c_str(), stmt->type);
             had_error_ = true;
             break;
@@ -3490,7 +3493,7 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
             if (current_->proto->return_type == VAL_UNKNOWN) {
                 current_->proto->return_type = ret_t;
             } else if (current_->proto->return_type != ret_t && ret_t != VAL_NIL) {
-                fprintf(stderr, "Compile error [%s:%d]: function has inconsistent return "
+                compile_diag("Compile error [%s:%d]: function has inconsistent return "
                         "types: expected %s, got %s\n",
                         current_->proto->source.c_str(), currentLine_,
                         value_type_name(current_->proto->return_type),
@@ -3906,7 +3909,7 @@ void Compiler::closeLoopLocals(const LoopContext& loop) {
 
 void Compiler::compileBreakStmt() {
     if (current_->loops.empty()) {
-        fprintf(stderr, "Compile error [%s:%d]: 'break' outside of loop\n",
+        compile_diag("Compile error [%s:%d]: 'break' outside of loop\n",
                 current_->proto->source.c_str(), currentLine_);
         had_error_ = true;
         return;
@@ -3930,7 +3933,7 @@ void Compiler::compileContinueStmt() {
         if (!it->is_switch) { target = &*it; break; }
     }
     if (!target) {
-        fprintf(stderr, "Compile error [%s:%d]: 'continue' outside of loop\n",
+        compile_diag("Compile error [%s:%d]: 'continue' outside of loop\n",
                 current_->proto->source.c_str(), currentLine_);
         had_error_ = true;
         return;
@@ -4697,7 +4700,7 @@ void Compiler::compilePragmaStmt(PragmaStmt* stmt) {
         else if (v && strcmp(v, "warn") == 0)  override_mode_ = MOBIUS_OVERRIDE_WARN;
         else if (v && strcmp(v, "quiet") == 0) override_mode_ = MOBIUS_OVERRIDE_QUIET;
         else {
-            fprintf(stderr, "Compile error [%s:%d]: override_behavior expects "
+            compile_diag("Compile error [%s:%d]: override_behavior expects "
                     "error, warn, or quiet\n",
                     current_->proto->source.c_str(), currentLine_);
             had_error_ = true;
@@ -5132,7 +5135,7 @@ bool Compiler::rejectConstAssignment(const char* name, int line) {
     }
     if (!found) is_const = const_globals_.count(name) > 0;
     if (!is_const) return false;
-    fprintf(stderr, "Compile error [%s:%d]: cannot assign to const '%s'\n",
+    compile_diag("Compile error [%s:%d]: cannot assign to const '%s'\n",
             current_->proto->source.c_str(), line, name);
     had_error_ = true;
     return true;
@@ -5155,7 +5158,7 @@ void Compiler::checkSpawnedFunction(Expr* callee) {
         if (i > 0) via += " -> ";
         via += use.path[i];
     }
-    fprintf(stderr, "Compile error [%s:%d]: spawned function '%s' uses top-level variable '%s' "
+    compile_diag("Compile error [%s:%d]: spawned function '%s' uses top-level variable '%s' "
                     "(line %d, via %s), which is not shared; declare it `shared var %s`, "
                     "or pass the value to the fiber as an argument\n",
             current_->proto->source.c_str(), callee->as.variable.name.line, name, use.var.c_str(),
@@ -5241,7 +5244,7 @@ static Expr* findAtomicContainer(Expr* body) {
 int Compiler::compileAtomic(AtomicExpr* expr, int dest) {
     Expr* container_expr = findAtomicContainer(expr->body);
     if (!container_expr) {
-        fprintf(stderr, "Compile error [%s:%d]: atomic() requires an expression on a "
+        compile_diag("Compile error [%s:%d]: atomic() requires an expression on a "
                 "shared value or shared array/table element (e.g. atomic(counter = counter + 1))\n",
                 current_->proto->source.c_str(), currentLine_);
         had_error_ = true;
