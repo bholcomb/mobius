@@ -1713,6 +1713,19 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
                 return 0;
             }
         } else {
+            // Same order as a plain table (below): own keys and __index
+            // tables, then built-in methods, then a function __index. The
+            // built-ins used to come first here, so a shared table's own
+            // `size` method was ignored.
+            if (inner.type == VAL_TABLE && inner.as.table) {
+                Table* tbl = inner.as.table;
+                Value method = (key.type == VAL_STRING) ? tbl->getByString(key.as.string)
+                                                        : tbl->get(key);
+                if (method.type != VAL_NIL) {
+                    f.regs[a] = method;
+                    return 0;
+                }
+            }
             Table* mt = vm->state_->typeMetatable(inner.type);
             if (mt && key.type == VAL_STRING) {
                 const Value& method = mt->getByString(key.as.string);
@@ -1721,23 +1734,11 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
                     return 0;
                 }
             }
-        }
-        if (inner.type == VAL_TABLE && inner.as.table) {
-            Table* tbl = inner.as.table;
-            Value method;
-            if (MOBIUS_LIKELY(key.type == VAL_STRING))
-                method = tbl->getByString(key.as.string);
-            else
-                method = tbl->get(key);
-            if (method.type != VAL_NIL) {
-                f.regs[a] = method;
-                return 0;
-            }
-            if (tbl->getMetatable()) {
+            if (inner.type == VAL_TABLE && inner.as.table && inner.as.table->getMetatable()) {
                 f.ci->ip = f.ip;
         uint32_t* saved_ip = f.ip;
                 Value looked;
-                int rc = vm_index_function_fallback(vm, inner, tbl, key, &looked);
+                int rc = vm_index_function_fallback(vm, inner, inner.as.table, key, &looked);
                 vm->refreshFrame(f);
                 f.ip = saved_ip;
                 f.ci->ip = saved_ip;
