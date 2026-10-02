@@ -847,6 +847,7 @@ Expr* parse_unary(Parser* parser) {
     }
 
     if (parser_match(parser, TOKEN_SPAWN)) {
+        int spawn_line = parser_previous(parser).line;
         Expr* callee = parse_call(parser);
         if (!callee) return NULL;
 
@@ -863,13 +864,17 @@ Expr* parse_unary(Parser* parser) {
         callee->as.call.arguments = NULL;
         callee->as.call.arg_count = 0;
         ast_release_expr(callee);
+        if (spawn) spawn->as.spawn.line = spawn_line;
         return spawn;
     }
 
     if (parser_match(parser, TOKEN_AWAIT)) {
+        int await_line = parser_previous(parser).line;
         Expr* operand = parse_unary(parser);
         if (!operand) return NULL;
-        return make_await_expr(operand);
+        Expr* await = make_await_expr(operand);
+        if (await) await->as.await.line = await_line;
+        return await;
     }
 
     if (parser_match(parser, TOKEN_ATOMIC)) {

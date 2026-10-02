@@ -1,0 +1,16 @@
+// An error at an await or spawn reports the line of that await or spawn.
+// The instruction carried the previous statement's line.
+import "os"
+var dir = os.join(os.tmpdir(), "mobius_await_line_" + str(os.getpid()))
+os.mkdirp(dir)
+var script = os.join(dir, "child.mob")
+var err_file = os.join(dir, "err.txt")
+writefile(script, "func w() {\n    throw \"boom\"\n}\nvar a = 1\nvar b = 2\nawait spawn w()\n")
+os.system("\"" + os.join(os.getcwd(), "bin", "mobius") + "\" \"" + script + "\" > /dev/null 2> \"" + err_file + "\"")
+var err = readfile(err_file)
+os.system("rm -rf \"" + dir + "\"")
+if (!contains(err, "child.mob:6:")) {
+    print("FAIL: expected line 6 in: " + err)
+    exit(1)
+}
+print("await error line: PASS")
