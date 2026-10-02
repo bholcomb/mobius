@@ -165,6 +165,10 @@ static int vm_index_function_fallback(MobiusVM* vm, const Value& receiver, Table
     Value key_copy = key;
     Table* cur = start;
     for (int guard = 0; cur && guard < 1000; guard++) {
+        // A key that is present, even with a nil value, is not missing:
+        // __index is only for absent keys (as Table::get stops there too).
+        // `t["a"]` on {a: nil} used to call __index while `t.a` didn't.
+        if (cur->hasKey(key_copy)) return 0;
         Table* mt = cur->getMetatable();
         if (!mt) return 0;
         Value idx = mt->getByString(index_name);

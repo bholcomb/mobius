@@ -1,0 +1,32 @@
+// Tables keep keys whose value is nil; remove() deletes. __index runs only
+// for absent keys, however the key is written (`t["a"]` used to call it for
+// a present nil-valued key while `t.a` did not).
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var t = {a: nil}
+    t.b = nil
+    t["c"] = nil
+    check("size counts nil values", t:size(), 3)
+    check("has_key", t:has_key("b"), true)
+    var n = 0
+    for (var k, v in t) { n++ }
+    check("iteration", n, 3)
+    t:remove("b")
+    check("remove deletes", t:has_key("b"), false)
+
+    var key = "a"
+    var obj = setmetatable({a: nil}, {__index: func(tbl, k) { return "fallback" }})
+    check("dot on present nil", obj.a, nil)
+    check("bracket literal on present nil", obj["a"], nil)
+    check("bracket variable on present nil", obj[key], nil)
+    check("absent key uses __index", obj.zzz, "fallback")
+    check("absent key via bracket", obj["zzz"], "fallback")
+}
+main()
+print("nil-valued keys: PASS")

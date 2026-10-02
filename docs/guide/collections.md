@@ -148,6 +148,21 @@ print(person["age"])     // 30
 person.city = "Boston"
 ```
 
+### Nil values and removing keys
+
+Assigning `nil` stores `nil`: the key stays in the table. **Unlike Lua,
+`t.x = nil` does not delete `x`**; use `t:remove("x")`. A key whose value is
+`nil` counts in `size()`, `has_key` and iteration, and `__index` (see
+[Metatables](#metatables)) is consulted only for keys that are absent.
+
+```mobius
+var opts = {verbose: true}
+opts.verbose = nil
+print(opts:has_key("verbose"), opts:size())   // true 1
+opts:remove("verbose")
+print(opts:has_key("verbose"), opts:size())   // false 0
+```
+
 ### Table methods
 
 | Method             | Description                              |
