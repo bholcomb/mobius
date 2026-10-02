@@ -1,0 +1,26 @@
+// An assignment used as a value keeps its value while the rest of the
+// expression runs. For captured and global variables the result register
+// was freed early, so a following call overwrote it.
+var g = 0
+func h(x) { return x }
+
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var u = 0
+    var f = func() { return (u = 5) + h(7) }
+    check("captured variable", f(), 12)
+    check("captured variable was set", u, 5)
+    var r = (g = 5) + h(7)
+    check("global", r, 12)
+    check("global was set", g, 5)
+    var local = 0
+    check("local", (local = 2) + h(3), 5)
+}
+main()
+print("assignment as a value: PASS")

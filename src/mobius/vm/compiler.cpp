@@ -1951,8 +1951,11 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                 if (target_maybe_shared) {
                     emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
                 }
-                setFreeReg(save_reg);
-                return reg;
+                // finish_assignment, not `setFreeReg(save_reg); return reg`:
+                // with no dest, reg sits above save_reg, so that freed the
+                // register holding the result and the next expression
+                // (`(u = 5) + h(7)`) overwrote it.
+                return finish_assignment(save_reg, reg);
             }
 
             int save_reg = current_->free_reg;
@@ -1984,8 +1987,7 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
             if (target_maybe_shared) {
                 emitABC(OP_UNLOCK_SHARED, (uint8_t)lock_reg, 0, 0);
             }
-            setFreeReg(save_reg);
-            return reg;
+            return finish_assignment(save_reg, reg);   // see the upvalue case
         }
 
         case EXPR_ARRAY_INDEX: {
