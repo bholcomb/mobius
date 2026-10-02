@@ -1,0 +1,31 @@
+// Built-in table methods work on tables whose __index is a function. The
+// function answered every missing name, including "size", so obj:size()
+// called its result. Own keys and __index tables still take precedence.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var obj = setmetatable({x: 1}, {__index: func(tbl, k) { return "default" }})
+    check("size", obj:size(), 1)
+    check("has_key", obj:has_key("x"), true)
+    check("missing field still uses __index", obj.missing, "default")
+
+    // A method the object defines itself wins over the built-in.
+    var own = setmetatable({size: func(self) { return 99 }}, {__index: func(t, k) { return nil }})
+    check("own method", own:size(), 99)
+
+    // So does one found through an __index table (class-style objects).
+    var Class = {size: func(self) { return 42 }}
+    var inst = setmetatable({}, {__index: Class})
+    check("class method", inst:size(), 42)
+
+    // A function __index still supplies methods the built-ins don't have.
+    var dyn = setmetatable({}, {__index: func(t, k) { return func(self) { return "dyn:" + k } }})
+    check("dynamic method", dyn:greet(), "dyn:greet")
+}
+main()
+print("built-in methods with function __index: PASS")
