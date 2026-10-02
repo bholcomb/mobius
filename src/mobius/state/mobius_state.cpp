@@ -66,6 +66,12 @@ MobiusConfig mobius_default_config(void) {
     config.main_fiber_stack_size   = 8 * 1024 * 1024;  // 8 MiB — the top-level
                                                    // script fiber behaves like a
                                                    // normal thread stack.
+#if defined(__SANITIZE_ADDRESS__)
+    // AddressSanitizer's redzones make frames several times larger; give
+    // fibers proportionally more stack so the same programs fit.
+    config.fiber_stack_size      *= 4;
+    config.main_fiber_stack_size *= 4;
+#endif
     config.initial_fiber_pool_size = 16;
     config.max_fiber_pool_size     = 256;
     unsigned int hw = std::thread::hardware_concurrency();

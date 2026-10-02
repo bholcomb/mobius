@@ -286,19 +286,28 @@ MobiusVM::MobiusVM(MobiusState* state)
 
 // Keep this much of a fiber's C stack free: room for one more nested
 // run(), the natives it calls, and building the overflow error itself.
+#if defined(__SANITIZE_ADDRESS__)
+// AddressSanitizer pads every frame with redzones, so the chain of frames
+// between two nested run() calls (metamethods, callbacks) is several times
+// larger, and 128 KiB was not enough to reach the next check.
+static const size_t C_STACK_RESERVE = 256 * 1024;
+#else
 static const size_t C_STACK_RESERVE = 128 * 1024;
+#endif
 // Fallback nesting cap when not running on a known fiber stack.
 static const int MAX_NATIVE_NESTING = 200;
 
 bool MobiusVM::cStackExhausted() const {
-    char probe;
     JobSystem* js = state_->jobSystem();
     MobiusFiber* fiber = js ? js->currentFiber() : nullptr;
     if (fiber && fiber->stack_memory) {
         // Stacks grow down toward stack_memory (guard page first, then the
-        // usable stack), so the distance from it is the space left.
+        // usable stack), so the distance from it is the space left. The
+        // frame address is the real stack position; the address of a local
+        // isn't under AddressSanitizer, which can move locals to a heap
+        // "fake stack", so the check never fired there.
         char* low = (char*)fiber->stack_memory;
-        char* here = &probe;
+        char* here = (char*)__builtin_frame_address(0);
         if (here > low && (size_t)(here - low) <= fiber->stack_size + 2 * 65536) {
             return (size_t)(here - low) < C_STACK_RESERVE;
         }
