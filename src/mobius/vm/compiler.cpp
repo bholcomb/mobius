@@ -3097,6 +3097,39 @@ static bool isNumericForLoop(ForStmt* stmt, const char** var_name,
     return (*count_up == (sv > 0));
 }
 
+// Whether a numeric for loop's limit has the same value on every iteration,
+// so evaluating it once (as the IFOR fast path does) matches the general
+// loop, which re-evaluates the condition each time: constants, and locals
+// the body never assigns and no closure captures, combined with arithmetic.
+// Calls (`size(a)`), globals and fields can change, so they don't qualify.
+bool Compiler::loopLimitIsStable(Expr* e, const AstNameScan& body) {
+    if (!e) return false;
+    Value v;
+    if (constantValueOf(e, &v)) return true;
+    switch (e->type) {
+        case EXPR_VARIABLE: {
+            const char* name = e->as.variable.name.identifier;
+            int local = resolveLocal(name);
+            return local >= 0 && !current_->locals[local].is_captured &&
+                   !body.assigned.count(name);
+        }
+        case EXPR_GROUPING:
+            return loopLimitIsStable(e->as.grouping.expression, body);
+        case EXPR_UNARY:
+            return e->as.unary.op.type == TOKEN_MINUS &&
+                   loopLimitIsStable(e->as.unary.right, body);
+        case EXPR_BINARY: {
+            TokenType op = e->as.binary.op.type;
+            return (op == TOKEN_PLUS || op == TOKEN_MINUS || op == TOKEN_STAR ||
+                    op == TOKEN_SLASH || op == TOKEN_PERCENT) &&
+                   loopLimitIsStable(e->as.binary.left, body) &&
+                   loopLimitIsStable(e->as.binary.right, body);
+        }
+        default:
+            return false;
+    }
+}
+
 void Compiler::compileForStmt(ForStmt* stmt) {
     // Try numeric for-loop optimization: FORPREP/FORLOOP
     const char* var_name = nullptr;
@@ -3109,10 +3142,24 @@ void Compiler::compileForStmt(ForStmt* stmt) {
     // vm_op_iforprep/iforloop operate on raw i64 register contents, and the
     // `<` to `<= limit-1` rewrite is wrong for fractional limits. Gate on
     // statically-proven int64; anything else takes the generic loop below.
-    if (isNumericForLoop(stmt, &var_name, &start_expr, &limit_expr,
-                         &step_val, &count_up) &&
-        inferExprType(start_expr) == VAL_INT64 &&
-        inferExprType(limit_expr) == VAL_INT64) {
+    //
+    // It also keeps its own counter and evaluates the limit once, so it is
+    // used only when that gives the same results as the general loop: the
+    // body doesn't assign the loop variable or capture it in a closure (the
+    // general loop has one variable that closures share), and the limit is
+    // stable (loopLimitIsStable).
+    bool numeric = isNumericForLoop(stmt, &var_name, &start_expr, &limit_expr,
+                                    &step_val, &count_up) &&
+                   inferExprType(start_expr) == VAL_INT64 &&
+                   inferExprType(limit_expr) == VAL_INT64;
+    if (numeric) {
+        AstNameScan body_scan;
+        body_scan.stmt(stmt->body);
+        numeric = !body_scan.assigned.count(var_name) &&
+                  !body_scan.used_in_closures.count(var_name) &&
+                  loopLimitIsStable(limit_expr, body_scan);
+    }
+    if (numeric) {
         beginScope();
 
         int hoisted = hoistLoopGlobals(stmt->body);

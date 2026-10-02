@@ -16,6 +16,11 @@ struct AstNameScan {
     std::unordered_set<std::string> declared;
     std::vector<std::pair<std::string, int>> referenced;
     std::unordered_set<std::string> seen_refs;
+    // Names assigned (`x = ...`, `x op= ...`, `x++`, `x--`), and names
+    // referenced from inside a nested function or closure.
+    std::unordered_set<std::string> assigned;
+    std::unordered_set<std::string> used_in_closures;
+    int function_depth = 0;
 
     void declare(const Token& t);
     void declare(const char* name);

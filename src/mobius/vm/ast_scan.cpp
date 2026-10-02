@@ -7,7 +7,9 @@ void AstNameScan::declare(const char* name) {
     if (name) declared.insert(name);
 }
 void AstNameScan::reference(const Token& t) {
-    if (t.identifier && seen_refs.insert(t.identifier).second)
+    if (!t.identifier) return;
+    if (function_depth > 0) used_in_closures.insert(t.identifier);
+    if (seen_refs.insert(t.identifier).second)
         referenced.emplace_back(t.identifier, t.line);
 }
 
@@ -79,7 +81,9 @@ void AstNameScan::stmt(Stmt* s) {
             const FunctionStmt& fn = s->as.function;
             declare(fn.name);
             for (size_t i = 0; i < fn.param_count; i++) declare(fn.params[i]);
+            function_depth++;
             stmts(fn.body, fn.body_count);
+            function_depth--;
             break;
         }
         case STMT_RETURN:     expr(s->as.return_stmt.value); break;
@@ -114,13 +118,19 @@ void AstNameScan::expr(Expr* e) {
     switch (e->type) {
         case EXPR_VARIABLE:   reference(e->as.variable.name); break;
         case EXPR_INCREMENT:
-        case EXPR_DECREMENT:  reference(e->as.increment.name); break;
+        case EXPR_DECREMENT:
+            reference(e->as.increment.name);
+            if (e->as.increment.name.identifier) assigned.insert(e->as.increment.name.identifier);
+            break;
         case EXPR_BINARY:
             expr(e->as.binary.left);
             expr(e->as.binary.right);
             break;
         case EXPR_UNARY:      expr(e->as.unary.right); break;
         case EXPR_ASSIGNMENT:
+            if (e->as.assignment.target && e->as.assignment.target->type == EXPR_VARIABLE &&
+                e->as.assignment.target->as.variable.name.identifier)
+                assigned.insert(e->as.assignment.target->as.variable.name.identifier);
             expr(e->as.assignment.target);
             expr(e->as.assignment.value);
             break;
@@ -159,7 +169,9 @@ void AstNameScan::expr(Expr* e) {
             const FunctionExpr& fn = e->as.function_expr;
             declare(fn.name);
             for (size_t i = 0; i < fn.param_count; i++) declare(fn.params[i]);
+            function_depth++;
             stmts(fn.body, fn.body_count);
+            function_depth--;
             break;
         }
         case EXPR_SPAWN:

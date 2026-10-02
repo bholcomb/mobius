@@ -1,0 +1,62 @@
+// The integer for-loop fast path gives the same results as the general
+// loop: assigning the loop variable in the body, changing the limit, and
+// closures over the loop variable all behave the same whichever path the
+// compiler picks.
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    // Assigning the loop variable in the body.
+    var out = []
+    for (var i = 0; i < 10; i++) {
+        out:push(i)
+        i = i + 3
+    }
+    check("body assigns loop variable", str(out[0]) + "," + str(out[1]) + "," + str(out[2]) + "/" + str(size(out)), "0,4,8/3")
+    var out2 = []
+    for (var i = opaque(0); i < 10; i++) {
+        out2:push(i)
+        i = i + 3
+    }
+    check("same on the general path", str(out2[0]) + "," + str(out2[1]) + "," + str(out2[2]) + "/" + str(size(out2)), "0,4,8/3")
+
+    // Changing the limit in the body.
+    var n = 3
+    var count = 0
+    for (var j = 0; j < n; j++) {
+        count++
+        if (j == 0) { n = 6 }
+    }
+    check("limit changed in the body", count, 6)
+
+    // A limit that is a call is re-evaluated each iteration.
+    var items = [1, 2]
+    var seen = 0
+    for (var k = 0; k < size(items); k++) {
+        seen++
+        if (k == 0) { items:push(3) }
+    }
+    check("call limit re-evaluated", seen, 3)
+
+    // Closures share the loop variable, as on the general path.
+    var fs = []
+    for (var m = 0; m < 3; m++) { fs:push(func() { return m }) }
+    var gs = []
+    for (var m = opaque(0); m < 3; m++) { gs:push(func() { return m }) }
+    check("closures over the loop variable", str(fs[0]()) + str(fs[2]()), str(gs[0]()) + str(gs[2]()))
+
+    // Plain loops are unaffected.
+    var total = 0
+    for (var p = 0; p < 100; p++) { total += p }
+    check("plain loop", total, 4950)
+    var down = 0
+    for (var q = 10; q > 0; q--) { down += q }
+    check("counting down", down, 55)
+}
+main()
+print("numeric for semantics: PASS")
