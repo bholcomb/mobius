@@ -1379,6 +1379,14 @@ MOBIUS_NOINLINE static int table_newindex_call(MobiusVM* vm, const Value& obj,
     return vm->callTernaryMetamethod(obj_c, name, obj_c, key_c, val_c) < 0 ? -1 : 1;
 }
 
+// nil and NaN cannot be table keys (Table::set refuses them). Out of line
+// and without a VMFrame& (see fiber_global_error); the caller syncs the ip.
+MOBIUS_NOINLINE static int invalid_table_key_error(MobiusVM* vm, const Value& key) {
+    vm->runtimeError(key.type == VAL_NIL ? "Table key cannot be nil"
+                                         : "Table key cannot be NaN");
+    return -1;
+}
+
 MOBIUS_NOINLINE static int frozen_write_error(MobiusVM* vm, const Value& obj) {
     vm->runtimeError("cannot modify a const %s", obj.type == VAL_ARRAY ? "array" : "table");
     return -1;
@@ -1413,6 +1421,10 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
                 arr->set((size_t)idx, val);
             }
         } else if (inner.type == VAL_TABLE && inner.as.table) {
+            if (MOBIUS_UNLIKELY(!Table::isValidKey(key))) {
+                f.ci->ip = f.ip;
+                return invalid_table_key_error(vm, key);
+            }
             if (MOBIUS_LIKELY(key.type == VAL_STRING))
                 inner.as.table->setByString(key.as.string, val);
             else
@@ -1502,10 +1514,15 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
                 return rc < 0 ? -1 : 0;
             }
         }
-        if (MOBIUS_LIKELY(key.type == VAL_STRING))
+        if (MOBIUS_LIKELY(key.type == VAL_STRING)) {
             tbl->setByString(key.as.string, val);
-        else
+        } else {
+            if (MOBIUS_UNLIKELY(!Table::isValidKey(key))) {
+                f.ci->ip = f.ip;
+                return invalid_table_key_error(vm, key);
+            }
             tbl->set(key, val);
+        }
     } else if (obj.type == VAL_ARRAY_SLICE && obj.as.array_slice) {
         int64_t idx = vm_index_or_neg1(key);
         if (idx >= 0 && idx < (int64_t)obj.as.array_slice->length()) {

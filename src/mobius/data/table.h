@@ -81,6 +81,21 @@ public:
     // Live entries carry a tag with the high bit set (tagFromHash).
     static MOBIUS_FORCEINLINE bool isLive(uint8_t tag) { return (tag & 0x80) != 0; }
 
+    // Keys follow ==: a float with an integer value (1.0, -0.0) and a uint64
+    // that fits in int64 are the same key as the equal int64. Returns the
+    // key to use; `tmp` holds a converted one.
+    static MOBIUS_FORCEINLINE const Value& canonicalKey(const Value& key, Value& tmp) {
+        if (MOBIUS_LIKELY(key.type != VAL_FLOAT64 && key.type != VAL_UINT64)) return key;
+        return canonicalKeySlow(key, tmp);
+    }
+    static const Value& canonicalKeySlow(const Value& key, Value& tmp);
+    // nil and NaN cannot be keys: storing with one is an error (set returns
+    // false), and looking one up finds nothing.
+    static MOBIUS_FORCEINLINE bool isValidKey(const Value& key) {
+        return key.type != VAL_NIL &&
+               !(key.type == VAL_FLOAT64 && key.as.double_val != key.as.double_val);
+    }
+
     // Inline-capacity storage: a table at the default capacity (8 slots)
     // performs no heap allocation beyond the pooled Table object itself.
     using EntryStorage = SmallVec<TableEntry, INITIAL_TABLE_CAPACITY>;

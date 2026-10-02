@@ -298,8 +298,28 @@ static const Table* index_parent(const Table* t, MobiusState* state) {
     return index_method.type == VAL_TABLE ? index_method.as.table : nullptr;
 }
 
-const Value* Table::findRaw(const Value& key) const {
+const Value& Table::canonicalKeySlow(const Value& key, Value& tmp) {
+    if (key.type == VAL_FLOAT64) {
+        double d = key.as.double_val;
+        // In range and integral: -2^63 <= d < 2^63 and no fractional part.
+        if (d >= -9223372036854775808.0 && d < 9223372036854775808.0 &&
+            d == (double)(int64_t)d) {
+            tmp = make_int64_value((int64_t)d);
+            return tmp;
+        }
+        return key;
+    }
+    if (key.type == VAL_UINT64 && key.as.u64 <= (uint64_t)INT64_MAX) {
+        tmp = make_int64_value((int64_t)key.as.u64);
+        return tmp;
+    }
+    return key;
+}
+
+const Value* Table::findRaw(const Value& key_in) const {
     if (size_ == 0) return nullptr;
+    Value tmp;
+    const Value& key = canonicalKey(key_in, tmp);
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
     if (isLive(tags_[index]) && entries_[index].key.exactlyEqual(key)) {
@@ -355,11 +375,14 @@ bool Table::set(const Value& key, const Value& value) {
     return setUnlocked(key, value);
 }
 
-bool Table::setUnlocked(const Value& key, const Value& value) {
+bool Table::setUnlocked(const Value& key_in, const Value& value) {
+    if (MOBIUS_UNLIKELY(!isValidKey(key_in))) return false;
     if (MOBIUS_UNLIKELY(owner_cell_ != nullptr)) {
         Value shared = share_for_cell(value);   // shared all the way down
-        if (shared.type != value.type) return setUnlocked(key, shared);
+        if (shared.type != value.type) return setUnlocked(key_in, shared);
     }
+    Value tmp;
+    const Value& key = canonicalKey(key_in, tmp);
     mm_cache_name_ = nullptr;   // this table may be someone's metatable
     growForInsert();
 
@@ -452,8 +475,10 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
     return true;
 }
 
-bool Table::hasKey(const Value& key) const {
+bool Table::hasKey(const Value& key_in) const {
     if (size_ == 0) return false;
+    Value tmp;
+    const Value& key = canonicalKey(key_in, tmp);
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
     return isLive(tags_[index]) && entries_[index].key.exactlyEqual(key);
@@ -463,9 +488,11 @@ bool Table::remove(const Value& key) {
     return removeUnlocked(key);
 }
 
-bool Table::removeUnlocked(const Value& key) {
+bool Table::removeUnlocked(const Value& key_in) {
     mm_cache_name_ = nullptr;   // this table may be someone's metatable
     if (size_ == 0) return false;
+    Value tmp;
+    const Value& key = canonicalKey(key_in, tmp);
 
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
