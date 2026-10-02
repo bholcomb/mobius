@@ -292,7 +292,9 @@ enum OpCode : uint8_t {
 
     // -- Type locking --
     OP_TYPELOCK,    // A         lock R[A]'s type on first non-nil value
-    OP_TYPECHECK_LOCKED, // A    verify R[A] matches locked type (or is nil); error on mismatch
+    OP_TYPECHECK_LOCKED, // A B  verify R[A] matches its locked type (or is nil); error on
+                         //      mismatch. B = 0: the type the register's runtime tag
+                         //      records; B > 0: the compile-time type B - 1
 
     // -- Debug / sentinel --
     OP_NOP,         //           no operation (padding / breakpoint target)

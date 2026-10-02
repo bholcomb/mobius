@@ -1919,7 +1919,16 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                 }
 
                 if (target_t != VAL_UNKNOWN && rhs_t == VAL_UNKNOWN) {
-                    emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, 0, 0);
+                    // The compiler typed this local (and compiles its uses
+                    // with that type), so check against that type directly.
+                    // The runtime tag is only set by TYPELOCK, which a local
+                    // with an inferred type never gets: the tag was either
+                    // unset (any type passed, so `x = 1.5` into an int64
+                    // local slipped through to the integer fast paths) or
+                    // left over from an earlier local in the same register
+                    // (a false "cannot assign bool to variable of type
+                    // table").
+                    emitABC(OP_TYPECHECK_LOCKED, (uint8_t)local, (uint8_t)(target_t + 1), 0);
                     current_->proto->has_type_locks = true;
                 }
                 if (target_t == VAL_UNKNOWN) {
