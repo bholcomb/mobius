@@ -344,6 +344,11 @@ shared  spawn   struct   switch   throw    true     try       union
 var     when    while    yield
 ```
 
+Keywords can't be variable or function names, but they can be **property
+names**: after `.` and as keys in table literals, `t.default`, `opts.if` and
+`{default: 1, return: 2}` are ordinary fields. (`{true: 1}` and `{nil: 1}`
+have the string keys `"true"` and `"nil"`.)
+
 ## Operator Precedence (low to high)
 
 | Precedence | Operators                                | Associativity |

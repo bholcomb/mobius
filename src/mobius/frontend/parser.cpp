@@ -91,6 +91,28 @@ bool parser_match_any(Parser* parser, size_t count, ...) {
 }
 
 // Error handling
+// A property name: an identifier, or a keyword used as a name. Keywords
+// are only reserved where a statement or expression starts, so `t.default`
+// and `{default: 1}` are fine (as in JavaScript); they used to be parse
+// errors, which ruled out natural names like `default` for table fields.
+static bool parser_check_property_name(Parser* parser) {
+    return parser_check(parser, TOKEN_IDENTIFIER) ||
+           keyword_spelling(parser_peek(parser).type) != NULL;
+}
+
+static Token parser_property_name(Parser* parser) {
+    Token tok = parser_advance(parser);
+    if (tok.type != TOKEN_IDENTIFIER) {
+        const char* word = keyword_spelling(tok.type);
+        MobiusString* s = parser->state->stringPool()->intern(word);
+        tok.type = TOKEN_IDENTIFIER;
+        tok.interned = s;
+        tok.identifier = s->data;
+        tok.length = (int)s->length;
+    }
+    return tok;
+}
+
 // Default parameter values, collected while parsing a parameter list.
 // Released on any parse-error return unless handed to the AST (take()).
 struct ParamDefaults {
@@ -681,9 +703,12 @@ Expr* parse_table_literal(Parser* parser) {
             consume(parser, TOKEN_EQUAL, "Expect '=' after computed key");
             current_pair->value = parse_expression(parser);
         }
-        // Check for identifier key: value
-        else if (parser_check(parser, TOKEN_IDENTIFIER)) {
-            Token key_token = parser_advance(parser);
+        // Check for identifier key: value (a keyword may be a key too)
+        else if (parser_check(parser, TOKEN_IDENTIFIER) ||
+                 (keyword_spelling(parser_peek(parser).type) != NULL &&
+                  parser->current + 1 < parser->token_count &&
+                  parser->tokens[parser->current + 1].type == TOKEN_COLON)) {
+            Token key_token = parser_property_name(parser);
             // `{ obj:method() }` is a value (a method call); `{ key: f() }`
             // is a key. Spacing decides, as everywhere else.
             bool tight_method = parser_check(parser, TOKEN_COLON) &&
@@ -823,7 +848,11 @@ Expr* parse_call(Parser* parser) {
             consume(parser, TOKEN_RIGHT_BRACKET, "Expect ']' after index");
             expr = make_array_index_expr(expr, index);
         } else if (parser_match(parser, TOKEN_DOT)) {
-            Token key = consume(parser, TOKEN_IDENTIFIER, "Expect property name after '.'");
+            if (!parser_check_property_name(parser)) {
+                parser_error_at_current(parser, "Expect property name after '.'");
+                return expr;
+            }
+            Token key = parser_property_name(parser);
             expr = make_table_dot_expr(expr, key);
         } else if (!parser->suppress_method_colon &&
                    parser_check(parser, TOKEN_COLON) &&

@@ -27,6 +27,8 @@ TokenArray scan_source(const char* source, StringInternPool* pool = nullptr);
 // Scanner utility functions
 void init_scanner(Scanner* scanner, const char* source, StringInternPool* pool = nullptr);
 Token scan_token(Scanner* scanner);
+// The source text of a keyword token type ("default"), or NULL.
+const char* keyword_spelling(TokenType type);
 void free_token_array(TokenArray* array);
 
 // Character classification helpers

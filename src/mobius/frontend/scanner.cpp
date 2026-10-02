@@ -63,6 +63,12 @@ static const Keyword keywords[] = {
 
 static const size_t keyword_count = sizeof(keywords) / sizeof(keywords[0]);
 
+const char* keyword_spelling(TokenType type) {
+    for (size_t i = 0; i < keyword_count; i++)
+        if (keywords[i].token_type == type) return keywords[i].keyword;
+    return nullptr;
+}
+
 // Initialize scanner state
 void init_scanner(Scanner* scanner, const char* source, StringInternPool* pool) {
     scanner->start = source;

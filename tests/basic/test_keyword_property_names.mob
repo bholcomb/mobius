@@ -1,0 +1,34 @@
+// Keywords can be used as property names: after `.` and as keys in table
+// literals. They used to be parse errors, ruling out natural field names
+// like `default`, `if` or `return`. Elsewhere keywords keep their meaning.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+var t = {default: 1, if: 2, return: 3, true: 4, nil: 5, in: 6, int64: 7}
+check("default", t.default, 1)
+check("if", t.if, 2)
+check("return", t["return"], 3)
+check("true is the string key", t["true"], 4)
+check("nil is the string key", t["nil"], 5)
+check("in", t.in, 6)
+check("type keyword", t.int64, 7)
+t.while = 8
+check("assign", t.while, 8)
+t.default += 1
+check("compound assign", t.default, 2)
+var opts = {default: nil}
+check("nested", ({inner: {default: "x"}}).inner.default, "x")
+
+// Keywords still work as keywords.
+var flag = true
+var r = flag ? "yes" : "no"
+check("true literal value", {v: true}.v, true)
+switch (2) {
+    case 1: check("switch", 1, 0)
+    default: r = "default branch"
+}
+check("switch default", r, "default branch")
+print("keyword property names: PASS")
