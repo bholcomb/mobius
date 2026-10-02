@@ -826,6 +826,17 @@ MOBIUS_FORCEINLINE void MobiusVM::refreshFrame(VMFrame& f) {
 #define VM_ERROR(vm, f, ...) do { f.ci->ip = f.ip; vm->runtimeError(__VA_ARGS__); } while(0)
 
 // Accessors matching the old macros, now operating on VMFrame
+// For handlers that write a scalar result field by field (dst.as.i64 = ...;
+// dst.type = ...): release whatever the register held from an earlier use
+// first. Without this, a refcounted value left in a reused register leaked
+// one reference (a span stayed alive and kept its parent array from
+// growing). The operands are numbers on these paths, so the destination
+// can't be one of them when it holds a reference.
+static MOBIUS_FORCEINLINE Value& scalar_dst(Value& dst) {
+    if (MOBIUS_UNLIKELY(dst.type >= VAL_FIRST_REFCOUNTED)) dst = Value();
+    return dst;
+}
+
 #define RA(inst)  f.regs[DECODE_A(inst)]
 #define RB(inst)  f.regs[DECODE_B(inst)]
 #define RC(inst)  f.regs[DECODE_C(inst)]
@@ -1909,11 +1920,11 @@ MOBIUS_FORCEINLINE static int vm_arith_generic(
     const Value& lhs = shared_peek(RKB(inst), lhs_s);
     const Value& rhs = shared_peek(RKC(inst), rhs_s);
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.i64 = int_op(lhs.as.i64, rhs.as.i64);
         dst.type = VAL_INT64; dst.flags = 0;
     } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.double_val = float_op(lhs.as.double_val, rhs.as.double_val);
         dst.type = VAL_FLOAT64; dst.flags = 0;
     } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
@@ -1930,7 +1941,7 @@ MOBIUS_FORCEINLINE static int vm_arith_generic(
         // Mixed float arithmetic requires BOTH operands numeric. This branch
         // used to fire on `3.5 + "x"`, extracting 0.0 from the string and
         // returning 3.5 instead of falling through to concatenation.
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.double_val = float_op(MobiusVM::vm_extract_double(lhs),
                                      MobiusVM::vm_extract_double(rhs));
         dst.type = VAL_FLOAT64; dst.flags = 0;
@@ -2038,7 +2049,7 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.i64 = mobius_div_i64(lhs.as.i64, rv);
         dst.type = VAL_INT64; dst.flags = 0;
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
@@ -2066,7 +2077,7 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
         double lv = MobiusVM::vm_extract_double(lhs);
         double rv = MobiusVM::vm_extract_double(rhs);
         if (rv == 0.0) { VM_ERROR(vm, f, "Division by zero"); return -1; }
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.double_val = lv / rv;
         dst.type = VAL_FLOAT64; dst.flags = 0;
     }
@@ -2080,7 +2091,7 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
     if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
         int64_t rv = rhs.as.i64;
         if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.i64 = mobius_mod_i64(lhs.as.i64, rv);
         dst.type = VAL_INT64; dst.flags = 0;
     } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
@@ -2102,14 +2113,14 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
     } else if (lhs.type == VAL_FLOAT64 && rhs.type == VAL_FLOAT64) {
         double rv = rhs.as.double_val;
         if (rv == 0.0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.double_val = fmod(lhs.as.double_val, rv);
         dst.type = VAL_FLOAT64; dst.flags = 0;
     } else if (lhs.type == VAL_FLOAT64 || rhs.type == VAL_FLOAT64) {
         double lv = MobiusVM::vm_extract_double(lhs);
         double rv = MobiusVM::vm_extract_double(rhs);
         if (rv == 0.0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-        Value& dst = RA(inst);
+        Value& dst = scalar_dst(RA(inst));
         dst.as.double_val = fmod(lv, rv);
         dst.type = VAL_FLOAT64; dst.flags = 0;
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
@@ -2482,56 +2493,56 @@ MOBIUS_FORCEINLINE static int vm_op_testset(MobiusVM* vm, VMFrame& f, uint32_t i
 
 MOBIUS_FORCEINLINE static int vm_op_add_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 + RKC(inst).as.i64;
+    Value& dst = scalar_dst(RA(inst)); dst.as.i64 = RKB(inst).as.i64 + RKC(inst).as.i64;
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_add_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value& dst = RA(inst); dst.as.double_val = RKB(inst).as.double_val + RKC(inst).as.double_val;
+    Value& dst = scalar_dst(RA(inst)); dst.as.double_val = RKB(inst).as.double_val + RKC(inst).as.double_val;
     dst.type = VAL_FLOAT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_sub_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 - RKC(inst).as.i64;
+    Value& dst = scalar_dst(RA(inst)); dst.as.i64 = RKB(inst).as.i64 - RKC(inst).as.i64;
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_sub_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value& dst = RA(inst); dst.as.double_val = RKB(inst).as.double_val - RKC(inst).as.double_val;
+    Value& dst = scalar_dst(RA(inst)); dst.as.double_val = RKB(inst).as.double_val - RKC(inst).as.double_val;
     dst.type = VAL_FLOAT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_mul_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value& dst = RA(inst); dst.as.i64 = RKB(inst).as.i64 * RKC(inst).as.i64;
+    Value& dst = scalar_dst(RA(inst)); dst.as.i64 = RKB(inst).as.i64 * RKC(inst).as.i64;
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_mul_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     (void)vm;
-    Value& dst = RA(inst); dst.as.double_val = RKB(inst).as.double_val * RKC(inst).as.double_val;
+    Value& dst = scalar_dst(RA(inst)); dst.as.double_val = RKB(inst).as.double_val * RKC(inst).as.double_val;
     dst.type = VAL_FLOAT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_mod_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int64_t rv = RKC(inst).as.i64;
     if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-    Value& dst = RA(inst); dst.as.i64 = mobius_mod_i64(RKB(inst).as.i64, rv);
+    Value& dst = scalar_dst(RA(inst)); dst.as.i64 = mobius_mod_i64(RKB(inst).as.i64, rv);
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_div_ii(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int64_t rv = RKC(inst).as.i64;
     if (MOBIUS_UNLIKELY(rv == 0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
-    Value& dst = RA(inst); dst.as.i64 = mobius_div_i64(RKB(inst).as.i64, rv);
+    Value& dst = scalar_dst(RA(inst)); dst.as.i64 = mobius_div_i64(RKB(inst).as.i64, rv);
     dst.type = VAL_INT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_div_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     double rv = RKC(inst).as.double_val;
     if (MOBIUS_UNLIKELY(rv == 0.0)) { VM_ERROR(vm, f, "Division by zero"); return -1; }
-    Value& dst = RA(inst); dst.as.double_val = RKB(inst).as.double_val / rv;
+    Value& dst = scalar_dst(RA(inst)); dst.as.double_val = RKB(inst).as.double_val / rv;
     dst.type = VAL_FLOAT64; dst.flags = 0; return 0;
 }
 MOBIUS_FORCEINLINE static int vm_op_mod_ff(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     double rv = RKC(inst).as.double_val;
     if (MOBIUS_UNLIKELY(rv == 0.0)) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
-    Value& dst = RA(inst); dst.as.double_val = fmod(RKB(inst).as.double_val, rv);
+    Value& dst = scalar_dst(RA(inst)); dst.as.double_val = fmod(RKB(inst).as.double_val, rv);
     dst.type = VAL_FLOAT64; dst.flags = 0; return 0;
 }
 
@@ -2543,7 +2554,7 @@ MOBIUS_FORCEINLINE static int vm_op_mod_ff(MobiusVM* vm, VMFrame& f, uint32_t in
 MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     uint8_t tag = DECODE_C(inst); \
     uint64_t raw = READ_INLINE64(f); \
-    Value& dst = RA(inst); \
+    Value& dst = scalar_dst(RA(inst)); \
     const Value& src = f.regs[DECODE_B(inst)]; \
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) { \
         int64_t k; memcpy(&k, &raw, 8); \
@@ -2575,7 +2586,7 @@ VM_INLINE_ARITH(vm_op_mulk, *, false)
 MOBIUS_FORCEINLINE static int vm_op_divk(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t tag = DECODE_C(inst);
     uint64_t raw = READ_INLINE64(f);
-    Value& dst = RA(inst);
+    Value& dst = scalar_dst(RA(inst));
     const Value& src = f.regs[DECODE_B(inst)];
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
@@ -2597,7 +2608,7 @@ MOBIUS_FORCEINLINE static int vm_op_divk(MobiusVM* vm, VMFrame& f, uint32_t inst
 MOBIUS_FORCEINLINE static int vm_op_modk(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t tag = DECODE_C(inst);
     uint64_t raw = READ_INLINE64(f);
-    Value& dst = RA(inst);
+    Value& dst = scalar_dst(RA(inst));
     const Value& src = f.regs[DECODE_B(inst)];
     if (MOBIUS_LIKELY(tag == VAL_INT64 && src.type == VAL_INT64)) {
         int64_t k; memcpy(&k, &raw, 8);
@@ -3006,6 +3017,9 @@ MOBIUS_FORCEINLINE static int vm_op_iforprep(MobiusVM* vm, VMFrame& f, uint32_t 
     // Unsigned arithmetic: integer overflow wraps in Mobius, and signed
     // overflow is undefined behavior in C++.
     f.regs[a].as.i64 = (int64_t)((uint64_t)f.regs[a].as.i64 - (uint64_t)f.regs[a + 2].as.i64);
+    // IFORLOOP writes the loop variable field by field; clear whatever the
+    // register held from an earlier use once, here, so it isn't leaked.
+    scalar_dst(f.regs[a + 3]);
     f.ip += DECODE_sBx(inst);
     return 0;
 }
