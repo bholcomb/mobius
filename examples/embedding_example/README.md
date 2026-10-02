@@ -74,7 +74,7 @@ int custom_add(MobiusState* state, int arg_count) {
 | `mobius_init_stdlib(state)` | Load standard library |
 | `mobius_exec_string(state, code)` | Execute a script string |
 | `mobius_exec_file(state, path)` | Execute a script file |
-| `mobius_register_function(state, name, fn)` | Register a native C function |
+| `mobius_register_function(state, name, fn, userdata)` | Register a native C function |
 | `mobius_stack_push*(state, val)` | Push values onto the stack |
 | `mobius_stack_as*(state, idx)` | Read values from the stack |
 | `mobius_stack_setGlobal(state, name)` | Pop top value into a global |

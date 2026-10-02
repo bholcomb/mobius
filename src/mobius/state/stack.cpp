@@ -1187,19 +1187,18 @@ void mobius_set_userdata_type_metatable(MobiusState* state, const char* type_nam
 // PUBLIC API — Native function registration
 // ============================================================================
 
-// A host function value: its id (userdata, flags) in the value's aux field.
-// Unlike a plain native, it never moves to another thread while it runs.
-static Value host_function_value(MobiusState* state, MobiusCFunction func, void* userdata,
-                                 unsigned int flags) {
+// A host function value: the id of (func, userdata) in the value's aux
+// field. Unlike a built-in native, it never moves to another thread while
+// it runs.
+static Value host_function_value(MobiusState* state, MobiusCFunction func, void* userdata) {
     Value fval = make_native_function_value(func);
-    fval.aux = state->hostFunctionId(func, userdata, flags);
+    fval.aux = state->hostFunctionId(func, userdata);
     return fval;
 }
 
-void mobius_stack_pushFunction(MobiusState* state, MobiusCFunction func, void* userdata,
-                               unsigned int flags) {
+void mobius_stack_pushFunction(MobiusState* state, MobiusCFunction func, void* userdata) {
     if (!state || !func) return;
-    stack_push(state, host_function_value(state, func, userdata, flags));
+    stack_push(state, host_function_value(state, func, userdata));
 }
 
 void* mobius_function_userdata(MobiusState* state) {
@@ -1209,20 +1208,10 @@ void* mobius_function_userdata(MobiusState* state) {
     return vm ? vm->current_host_userdata_ : nullptr;
 }
 
-void mobius_register_function_ex(MobiusState* state, const char* name, MobiusCFunction func,
-                                 void* userdata, unsigned int flags) {
-    if (!state || !name || !func) return;
-    Value fval = host_function_value(state, func, userdata, flags);
-    fval.flags |= VAL_FLAG_READONLY;
-    int slot = state->assignGlobalSlot(name);
-    if (slot < 0) return;
-    state->setGlobalValue(slot, fval);
-}
-
 void mobius_register_function(MobiusState* state, const char* name,
-                              MobiusCFunction func) {
+                              MobiusCFunction func, void* userdata) {
     if (!state || !name || !func) return;
-    Value fval = make_native_function_value(func);
+    Value fval = host_function_value(state, func, userdata);
     // Read-only like the built-in functions: scripts can't reassign it, and
     // spawned fibers may call it (they can't use writable top-level globals).
     // Registering the name again replaces it.

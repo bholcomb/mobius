@@ -294,15 +294,15 @@ void init_game_engine(GameEngine* game) {
     }
     
     // Register game API functions using the public API
-    mobius_register_function(game->script_state, "get_player_pos", game_get_player_pos);
-    mobius_register_function(game->script_state, "set_player_pos", game_set_player_pos);
-    mobius_register_function(game->script_state, "get_player_health", game_get_player_health);
-    mobius_register_function(game->script_state, "set_player_health", game_set_player_health);
-    mobius_register_function(game->script_state, "get_score", game_get_score);
-    mobius_register_function(game->script_state, "add_score", game_add_score);
-    mobius_register_function(game->script_state, "spawn_enemy", game_spawn_enemy);
-    mobius_register_function(game->script_state, "get_level", game_get_level);
-    mobius_register_function(game->script_state, "game_log", game_log);
+    mobius_register_function(game->script_state, "get_player_pos", game_get_player_pos, NULL);
+    mobius_register_function(game->script_state, "set_player_pos", game_set_player_pos, NULL);
+    mobius_register_function(game->script_state, "get_player_health", game_get_player_health, NULL);
+    mobius_register_function(game->script_state, "set_player_health", game_set_player_health, NULL);
+    mobius_register_function(game->script_state, "get_score", game_get_score, NULL);
+    mobius_register_function(game->script_state, "add_score", game_add_score, NULL);
+    mobius_register_function(game->script_state, "spawn_enemy", game_spawn_enemy, NULL);
+    mobius_register_function(game->script_state, "get_level", game_get_level, NULL);
+    mobius_register_function(game->script_state, "game_log", game_log, NULL);
     
     printf("🎮 Game engine initialized (Mobius stdlib plus 9 game API functions)\n");
 }

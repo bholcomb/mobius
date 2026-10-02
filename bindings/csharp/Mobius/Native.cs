@@ -131,8 +131,8 @@ internal static unsafe class Native
 
     // Host functions and modules
     [DllImport(Lib)] public static extern int mobius_error(IntPtr state, byte* message);
-    [DllImport(Lib)] public static extern void mobius_register_function_ex(IntPtr state, byte* name, delegate* unmanaged<IntPtr, int, int> func, IntPtr userdata, uint flags);
-    [DllImport(Lib)] public static extern void mobius_stack_pushFunction(IntPtr state, delegate* unmanaged<IntPtr, int, int> func, IntPtr userdata, uint flags);
+    [DllImport(Lib)] public static extern void mobius_register_function(IntPtr state, byte* name, delegate* unmanaged<IntPtr, int, int> func, IntPtr userdata);
+    [DllImport(Lib)] public static extern void mobius_stack_pushFunction(IntPtr state, delegate* unmanaged<IntPtr, int, int> func, IntPtr userdata);
     [DllImport(Lib)] public static extern IntPtr mobius_function_userdata(IntPtr state);
     [DllImport(Lib)] public static extern int mobius_register_module(IntPtr state, byte* name);
 }

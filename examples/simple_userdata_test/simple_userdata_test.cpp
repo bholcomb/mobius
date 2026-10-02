@@ -90,10 +90,10 @@ int main() {
         return 1;
     }
 
-    mobius_register_function(state, "test_object_describe", test_object_describe);
-    mobius_register_function(state, "test_object_kind", test_object_kind);
-    mobius_register_function(state, "test_object_id", test_object_id);
-    mobius_register_function(state, "generic_userdata_kind", generic_userdata_kind);
+    mobius_register_function(state, "test_object_describe", test_object_describe, NULL);
+    mobius_register_function(state, "test_object_kind", test_object_kind, NULL);
+    mobius_register_function(state, "test_object_id", test_object_id, NULL);
+    mobius_register_function(state, "generic_userdata_kind", generic_userdata_kind, NULL);
 
     printf("1. Creating test objects...\n");
 

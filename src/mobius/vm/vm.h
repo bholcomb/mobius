@@ -182,7 +182,7 @@ class MobiusVM {
 public:
     // Call a native function value with `nargs` arguments on the native
     // stack. Built-in natives (aux 0) are called directly; host functions
-    // (mobius_register_function_ex / mobius_stack_pushFunction) go through
+    // (mobius_register_function / mobius_stack_pushFunction) go through
     // invokeHostFunction for their userdata and threading.
     MOBIUS_FORCEINLINE int invokeNative(const Value& func, int nargs) {
         if (MOBIUS_LIKELY(func.aux == 0)) return func.as.native_function(state_, nargs);

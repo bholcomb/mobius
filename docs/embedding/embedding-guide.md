@@ -391,7 +391,7 @@ int native_square(MobiusState* state, int arg_count) {
 }
 
 // ... after mobius_init_stdlib():
-mobius_register_function(state, "square", native_square);
+mobius_register_function(state, "square", native_square, NULL);
 ```
 
 ```mobius
@@ -401,22 +401,39 @@ print(square(9))    // 81
 Return multiple values by pushing several and returning the count; return
 nothing by returning `0`.
 
-### Host functions with userdata
+### Userdata: calling C++ member functions
 
-`mobius_register_function_ex(state, name, fn, userdata, flags)` registers a
-function together with a pointer it reads back with
-`mobius_function_userdata(state)` while it runs, so one C function can serve
-many registrations (how a language binding dispatches to its own
-callbacks). `mobius_stack_pushFunction(state, fn, userdata, flags)` pushes
-such a function as a value, to store in a table or module. Functions with
+The last argument of `mobius_register_function` is a pointer the function
+gets back from `mobius_function_userdata(state)` while it runs (it may be
+`NULL`). Use it to reach an object, for example a C++ member function
+through a static trampoline:
+
+```cpp
+class World {
+public:
+    int spawnEnemy(MobiusState* state, int argc);   // reads args, pushes results
+};
+
+static int SpawnEnemy(MobiusState* state, int argc) {
+    auto* world = static_cast<World*>(mobius_function_userdata(state));
+    return world->spawnEnemy(state, argc);
+}
+
+mobius_register_function(state, "spawn_enemy", SpawnEnemy, &world);
+```
+
+One C function can serve many registrations this way; a language binding
+uses a single dispatcher and passes a handle to each callback as the
+userdata. `mobius_stack_pushFunction(state, fn, userdata)` pushes such a
+function as a value, to store in a table or module. Functions with
 different userdata are different values (`==`, table keys).
 
-A host function never moves to another thread while it runs. If it calls
-back into a script, that script may sleep or do I/O (the thread blocks),
-but waiting for another fiber there (`await`, `fiber.all`, `fiber.any`,
-channel `send`/`recv`) raises "cannot wait for another fiber inside a host
-function". Bindings for runtimes whose frames must stay on their thread
-(.NET, the JVM) must register this way.
+A registered function never moves to another thread while it runs. If it
+calls back into a script, that script may sleep or do I/O (the thread
+blocks), but waiting for another fiber there (`await`, `fiber.all`,
+`fiber.any`, channel `send`/`recv`) raises "cannot wait for another fiber
+inside a host function". This keeps the frames of C++ code (and of runtimes
+such as .NET) on the thread they started on.
 
 A registered function is a read-only global, like the built-in functions:
 scripts can't reassign it, and functions running in spawned fibers can call
@@ -689,7 +706,7 @@ add metatables for other types.
 mobius_push_type_metatable(state, MOBIUS_VAL_ARRAY);
 
 // Add a method to it, then re-install
-mobius_register_function(state, "__temp_sum", native_array_sum);
+mobius_register_function(state, "__temp_sum", native_array_sum, NULL);
 mobius_stack_getGlobal(state, "__temp_sum");
 mobius_stack_setTableField(state, -2, "sum");
 mobius_remove_global(state, "__temp_sum");

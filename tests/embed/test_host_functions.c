@@ -46,8 +46,8 @@ int main(void) {
     CHECK(s, "create state");
     mobius_init_stdlib(s);
 
-    mobius_register_function_ex(s, "one", dispatcher, (void*)(intptr_t)1, 0);
-    mobius_register_function_ex(s, "two", dispatcher, (void*)(intptr_t)2, 0);
+    mobius_register_function(s, "one", dispatcher, (void*)(intptr_t)1);
+    mobius_register_function(s, "two", dispatcher, (void*)(intptr_t)2);
     CHECK(mobius_exec_string(s,
         "if (one(5) != 1005 || two(5) != 2005) { throw \"userdata\" }\n"
         "if (one == two) { throw \"different userdata compare equal\" }\n"
@@ -58,9 +58,9 @@ int main(void) {
 
     /* Pushed into a module table; the same triple is the same function. */
     mobius_stack_pushNewTable(s, 4);
-    mobius_stack_pushFunction(s, dispatcher, (void*)(intptr_t)3, 0);
+    mobius_stack_pushFunction(s, dispatcher, (void*)(intptr_t)3);
     mobius_stack_setTableField(s, -2, "three");
-    mobius_stack_pushFunction(s, dispatcher, (void*)(intptr_t)1, 0);
+    mobius_stack_pushFunction(s, dispatcher, (void*)(intptr_t)1);
     mobius_stack_setTableField(s, -2, "also_one");
     CHECK(mobius_register_module(s, "api") == MOBIUS_OK, "register module");
     CHECK(mobius_exec_string(s,
@@ -72,7 +72,7 @@ int main(void) {
         "pushed functions");
 
     /* A callback may sleep: the thread blocks, the fiber doesn't move. */
-    mobius_register_function_ex(s, "hold", hold, NULL, 0);
+    mobius_register_function(s, "hold", hold, NULL);
     CHECK(mobius_exec_string(s,
         "func napper() {\n"
         "    fiber.sleep(5)\n"

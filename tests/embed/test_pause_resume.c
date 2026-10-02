@@ -55,7 +55,7 @@ int main(void) {
     mobius_init_stdlib(s);
     mobius_set_output_handler(s, on_output, NULL);
     mobius_set_error_handler(s, on_error, NULL);
-    mobius_register_function(s, "tick", tick);
+    mobius_register_function(s, "tick", tick, NULL);
     mobius_exec_string(s, "var __probe = 0\nvar progress = 0\n");
 
     /* A runaway loop pauses at the time limit, with a warning. */
