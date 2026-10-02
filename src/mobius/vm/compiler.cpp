@@ -843,6 +843,14 @@ int Compiler::compileVariable(VariableExpr* expr, int dest) {
 
     // Global — use flat slot index when state is available
     int reg = (dest >= 0) ? dest : allocReg();
+    auto cit = const_values_.find(name);
+    if (cit != const_values_.end()) {   // locals/upvalues were resolved above
+        int ki = current_->proto->addConstant(cit->second);
+        if (ki >= 0) {
+            emitLoadK(reg, ki);
+            return reg;
+        }
+    }
     if (emitReadonlyGlobalConstant(reg, name)) {
         return reg;
     }
@@ -866,8 +874,9 @@ int Compiler::compileUnwrappedExpr(Expr* expr, int dest) {
 // pool (index < 128). Sets *rk to the RK-encoded value. If false, the caller
 // should compile normally to a register.
 bool Compiler::tryExprAsRK(Expr* e, uint8_t* rk) {
-    if (e->type != EXPR_LITERAL) return false;
-    const Value& v = e->as.literal.value;
+    Value cv;
+    if (!constantValueOf(e, &cv)) return false;
+    const Value& v = cv;
     int ki = -1;
     if (v.type == VAL_INT64)
         ki = current_->proto->addIntConstant(v.as.i64);
@@ -918,9 +927,10 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     }
 
     // Constant folding: evaluate operations on two literal operands at compile time
-    if (expr->left->type == EXPR_LITERAL && expr->right->type == EXPR_LITERAL) {
-        const Value& lv = expr->left->as.literal.value;
-        const Value& rv = expr->right->as.literal.value;
+    Value fold_lv, fold_rv;
+    if (constantValueOf(expr->left, &fold_lv) && constantValueOf(expr->right, &fold_rv)) {
+        const Value& lv = fold_lv;
+        const Value& rv = fold_rv;
         bool l_int = (lv.type == VAL_INT64 || lv.type == VAL_UINT64);
         bool r_int = (rv.type == VAL_INT64 || rv.type == VAL_UINT64);
         bool l_flt = (lv.type == VAL_FLOAT64);
@@ -1427,8 +1437,9 @@ int Compiler::compileUnary(UnaryExpr* expr, int dest) {
     currentLine_ = expr->op.line;
 
     // Unary constant folding
-    if (expr->right->type == EXPR_LITERAL) {
-        const Value& v = expr->right->as.literal.value;
+    Value fold_v;
+    if (constantValueOf(expr->right, &fold_v)) {
+        const Value& v = fold_v;
         bool folded = false;
         Value result;
 
@@ -1803,11 +1814,12 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
         int container_reg = compileExpr(container_expr);
 
         uint8_t rk_key;
-        if (index_expr->type == EXPR_LITERAL) {
+        Value index_const;
+        if (constantValueOf(index_expr, &index_const)) {
             // Deduplicated: addConstant() has no dedup, so every `a[0] = ...`
             // statement used to append a fresh pool entry, pushing RK indices
             // past the 127 limit in key-heavy functions.
-            const Value& kv = index_expr->as.literal.value;
+            const Value& kv = index_const;
             int ki;
             if (kv.type == VAL_INT64)        ki = current_->proto->addIntConstant(kv.as.i64);
             else if (kv.type == VAL_FLOAT64) ki = current_->proto->addFloatConstant(kv.as.double_val);
@@ -2621,6 +2633,16 @@ void Compiler::compileVarStmt(VarStmt* stmt) {
             // Read-only like functions: reassignment fails at runtime too, and
             // spawned fibers may use it.
             const_globals_.insert(name);
+            // A literal value is inlined into later uses: `i < LIMIT`
+            // compiles like `i < 100` (no global load, constant folding,
+            // immediate compares, the integer for-loop fast path).
+            Value cv;
+            if (constantValueOf(stmt->initializer, &cv) &&
+                (cv.type == VAL_NIL || cv.type == VAL_BOOL || cv.type == VAL_INT64 ||
+                 cv.type == VAL_FLOAT64 || cv.type == VAL_STRING)) {
+                const_values_[name] = cv;
+                global_types_[name] = cv.type;
+            }
             int slot = state_ ? state_->assignGlobalSlot(name, globals_) : -1;
             if (slot >= 0) emitABx(OP_GLOBAL_READONLY, 1, (uint16_t)slot);
         }
@@ -2660,9 +2682,11 @@ void Compiler::compileBlockStmt(BlockStmt* stmt) {
 void Compiler::compileConditionJumps(Expr* cond, std::vector<int>& false_jumps) {
     while (cond->type == EXPR_GROUPING) cond = cond->as.grouping.expression;
 
-    if (cond->type == EXPR_LITERAL) {
-        // Constant condition: `while (true)` emits no per-iteration test.
-        if (!is_truthy(cond->as.literal.value))
+    Value cond_const;
+    if (constantValueOf(cond, &cond_const)) {
+        // Constant condition: `while (true)` (or `if (DEBUG)` with a const
+        // DEBUG) emits no test.
+        if (!is_truthy(cond_const))
             false_jumps.push_back(emitJump());
         return;
     }
@@ -2714,9 +2738,9 @@ int Compiler::compileConditionJump(Expr* condition) {
             bool right_maybe_shared = exprMayBeShared(bin->right);
 
             // Try compare-with-immediate: RHS is an integer literal in sBx range
-            if (bin->right->type == EXPR_LITERAL &&
-                bin->right->as.literal.value.type == VAL_INT64) {
-                int64_t iv = bin->right->as.literal.value.as.i64;
+            Value rimm;
+            if (constantValueOf(bin->right, &rimm) && rimm.type == VAL_INT64) {
+                int64_t iv = rimm.as.i64;
                 if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                     int save = current_->free_reg;
                     int left = compileUnwrappedExpr(bin->left);
@@ -2745,9 +2769,9 @@ int Compiler::compileConditionJump(Expr* condition) {
             }
 
             // Try compare-with-immediate: LHS is an integer literal in sBx range (swap operands)
-            if (bin->left->type == EXPR_LITERAL &&
-                bin->left->as.literal.value.type == VAL_INT64) {
-                int64_t iv = bin->left->as.literal.value.as.i64;
+            Value limm;
+            if (constantValueOf(bin->left, &limm) && limm.type == VAL_INT64) {
+                int64_t iv = limm.as.i64;
                 if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                     int save = current_->free_reg;
                     int right = compileUnwrappedExpr(bin->right);
@@ -4691,6 +4715,46 @@ void Compiler::compileThrowStmt(ThrowStmt* stmt) {
 }
 
 // OP_SPAWN A B C -- spawn function R[B] with C-1 args; result (future) into R[A]
+bool Compiler::constantValueOf(Expr* e, Value* out) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_LITERAL:
+            *out = e->as.literal.value;
+            return true;
+        case EXPR_GROUPING:
+            return constantValueOf(e->as.grouping.expression, out);
+        case EXPR_UNARY: {
+            Value v;
+            if (e->as.unary.op.type != TOKEN_MINUS || !constantValueOf(e->as.unary.right, &v))
+                return false;
+            if (v.type == VAL_INT64) {
+                *out = make_int64_value((int64_t)(0 - (uint64_t)v.as.i64));   // wraps
+                return true;
+            }
+            if (v.type == VAL_FLOAT64) {
+                *out = make_float_value(-v.as.double_val);
+                return true;
+            }
+            return false;
+        }
+        case EXPR_VARIABLE: {
+            const char* name = e->as.variable.name.identifier;
+            if (!name) return false;
+            auto it = const_values_.find(name);
+            if (it == const_values_.end()) return false;
+            // A local or captured variable of the same name shadows it.
+            for (FunctionState* fs = current_; fs; fs = fs->enclosing) {
+                for (const Local& l : fs->locals)
+                    if (l.name == name) return false;
+            }
+            *out = it->second;
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
 // Assigning to a const is a compile error. The nearest binding of `name`
 // decides: a local of this or an enclosing function (a captured const), or
 // a top-level const of this chunk. Returns true (after reporting) when the

@@ -1,0 +1,48 @@
+// Top-level consts with literal values are inlined into later uses. The
+// results must be the same as reading the global, including when a local
+// or parameter shadows the name.
+func check(name, got, want) {
+    if (got != want or typeof(got) != typeof(want)) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+const LIMIT = 100
+const NEG = -5
+const RATE = 1.5
+const NAME = "key"
+const DEBUG = false
+const NOTHING = nil
+
+func loop_total() {
+    var total = 0
+    for (var i = 0; i < LIMIT; i++) { total += i }
+    return total
+}
+check("loop limit", loop_total(), 4950)
+check("arithmetic", LIMIT * 2 + NEG, 195)
+check("float", RATE * 2, 3.0)
+check("negative literal", NEG, -5)
+var t = {}
+t[NAME] = 1
+check("string key", t.key, 1)
+var reached = false
+if (DEBUG) { reached = true }
+check("constant condition", reached, false)
+check("nil", NOTHING, nil)
+check("comparison", LIMIT > 50 ? "big" : "small", "big")
+
+// Shadowing: locals, parameters and captured variables win.
+func shadow_local() { var LIMIT = 3
+    return LIMIT }
+check("local shadows", shadow_local(), 3)
+func shadow_param(LIMIT) { return LIMIT + 1 }
+check("parameter shadows", shadow_param(7), 8)
+func outer() {
+    var NAME = "inner"
+    func inner() { return NAME }
+    return inner()
+}
+check("captured shadows", outer(), "inner")
+print("const inlining: PASS")

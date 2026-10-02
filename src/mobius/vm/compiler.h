@@ -237,6 +237,14 @@ private:
     // const binding (local, captured, or top-level) at compile time.
     std::unordered_set<std::string> const_globals_;
     bool rejectConstAssignment(const char* name, int line);
+
+    // Values of top-level consts with a literal initializer, inlined into
+    // later uses (see constantValueOf).
+    std::unordered_map<std::string, Value> const_values_;
+    // The compile-time value of e: a literal (or a negated numeric
+    // literal), or a reference to an inlined const not shadowed by a local
+    // or captured variable.
+    bool constantValueOf(Expr* e, Value* out);
     void checkSpawnedFunction(Expr* callee);
     // Prototypes of readonly global functions, by name, for resolving direct
     // calls to a global function from inside another function. Only functions

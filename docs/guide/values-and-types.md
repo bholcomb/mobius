@@ -47,6 +47,10 @@ CONFIG.hosts[0] = "c"     // error: cannot modify a const array
 - `const` works anywhere `var` does, at the top level or inside functions.
   Top-level constants can be used from spawned fibers (see
   [Concurrency](concurrency.md#top-level-variables)).
+- A top-level `const` whose value is a literal (a number, string, boolean or
+  `nil`) is compiled into the code that uses it after its declaration, so
+  `for (var i = 0; i < LIMIT; i++)` runs exactly as fast as with `100` written
+  in place. Constants computed from expressions are read from the global.
 
 ## Type locking
 
