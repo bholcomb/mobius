@@ -61,6 +61,10 @@ static inline bool global_slot_in_bounds(const GlobalEnvironment* globals, int i
 // CONFIGURATION
 // ============================================================================
 
+void mobius_default_config_into(MobiusConfig* out) {
+    if (out) *out = mobius_default_config();
+}
+
 MobiusConfig mobius_default_config(void) {
     MobiusConfig config;
     config.initial_stack_size = INITIAL_STACK_CAPACITY;
@@ -1724,6 +1728,19 @@ int mobius_init_stdlib(MobiusState* state) {
 int mobius_exec_string(MobiusState* state, const char* code) {
     if (!state) return MOBIUS_ERROR_ARGUMENT;
     return state->execString(code);
+}
+
+int mobius_exec_string_named(MobiusState* state, const char* code, const char* name) {
+    if (!state) return MOBIUS_ERROR_ARGUMENT;
+    if (!name) return state->execString(code);
+    // The name labels errors and the compiled chunk (it is copied there);
+    // the context is restored before returning.
+    std::string chunk_name(name);
+    const char* saved = state->getSourceContext();
+    state->setSourceContext(chunk_name.c_str());
+    int rc = state->execString(code);
+    state->setSourceContext(saved);
+    return rc;
 }
 
 int mobius_exec_file(MobiusState* state, const char* filename) {

@@ -136,6 +136,12 @@ typedef struct {
  */
 MOBIUS_API MobiusConfig mobius_default_config(void);
 
+/**
+ * The same defaults, written to *out: for bindings that can't receive a
+ * struct returned by value (P/Invoke and other FFIs).
+ */
+MOBIUS_API void mobius_default_config_into(MobiusConfig* out);
+
 /* ====================================================================== */
 /*  Runtime Metrics                                                        */
 /* ====================================================================== */
@@ -411,6 +417,13 @@ MOBIUS_API int mobius_exec_string(MobiusState* state, const char* code);
  * @return MOBIUS_OK on success, or an error code.
  */
 MOBIUS_API int mobius_exec_file(MobiusState* state, const char* filename);
+
+/**
+ * Execute source code under a name (e.g. its file path in the game's
+ * archive), which errors and stack traces report instead of "<string>".
+ */
+MOBIUS_API int mobius_exec_string_named(MobiusState* state, const char* code,
+                                        const char* name);
 
 /* ====================================================================== */
 /*  Module / plugin management                                             */
