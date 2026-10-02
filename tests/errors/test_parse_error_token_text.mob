@@ -1,0 +1,32 @@
+// Parse errors show the offending token as written. Only identifiers kept
+// their text, so keywords, symbols and literals all showed as 'unknown'.
+import "os"
+
+var dir = os.join(os.tmpdir(), "mobius_parse_text_" + str(os.getpid()))
+os.mkdirp(dir)
+var script = os.join(dir, "bad.mob")
+var err_file = os.join(dir, "err.txt")
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+
+func error_for(source) {
+    writefile(script, source)
+    os.system("\"" + mobius_bin + "\" \"" + script + "\" > /dev/null 2> \"" + err_file + "\"")
+    return readfile(err_file)
+}
+func expect(source, needle) {
+    var err = error_for(source)
+    if (!contains(err, needle)) {
+        os.system("rm -rf \"" + dir + "\"")
+        print("FAIL: for " + source + " expected " + needle + " in: " + err)
+        exit(1)
+    }
+}
+
+expect("else { }\n", "at 'else'")
+expect("var x = 1 2\n", "at '2'")
+expect("var = 3\n", "at '='")
+expect("print(\"a\" \"b\")\n", "at '\"b\"'")
+expect("var y = (1 +)\n", "at ')'")
+expect("var z = 1.5 while\n", "at 'while'")
+os.system("rm -rf \"" + dir + "\"")
+print("parse errors name the token: PASS")
