@@ -4069,7 +4069,8 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
                 if (fiber_vm.error_value_.type != VAL_NIL) {
                     err = deep_copy_value_for_spawn(fiber_vm.error_value_);
                 } else if (fiber_vm.last_error_ && fiber_vm.last_error_->message) {
-                    err = make_string_value_from_cstr(state, fiber_vm.last_error_->message);
+                    err = make_heap_string_value(fiber_vm.last_error_->message,
+                                                 strlen(fiber_vm.last_error_->message));
                 } else {
                     err = make_string_value_from_cstr(state, "spawn: fiber execution failed");
                 }

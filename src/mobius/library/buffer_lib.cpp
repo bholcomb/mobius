@@ -315,7 +315,7 @@ int buffer_method_to_string(MobiusState* state, int arg_count) {
     if (!buffer) return -1;
     state->npop();
     const char* data = buffer->size() > 0 ? (const char*)buffer->data() : "";
-    state->npush(make_string_value(state->stringPool()->intern(data, buffer->size())));
+    state->npush(make_heap_string_value(data, buffer->size()));   // not interned: runtime data
     return 1;
 }
 
