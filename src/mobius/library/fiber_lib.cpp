@@ -160,6 +160,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
                     state->npush(copy_for_awaiter(future->result()));
                     return 1;
                 }
+                future->markErrorObserved();   // fiber.any handles failures itself
                 failed++;
             }
         }

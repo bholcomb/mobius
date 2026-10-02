@@ -414,6 +414,7 @@ void MobiusVM::runtimeError(const char* fmt, ...) {
 }
 
 void MobiusVM::rethrowFutureError(FutureValue* future) {
+    future->markErrorObserved();   // the awaiter now owns reporting it
     const Value& err = future->error();
     Value thrown = copy_for_awaiter(err);
     if (err.type == VAL_STRING && err.as.string) {
@@ -4104,6 +4105,26 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
                     err = make_string_value_from_cstr(state, "spawn: fiber execution failed");
                 }
                 future->reject(err);
+
+                // Nobody has been told yet: errors leaving a fiber aren't
+                // reported when raised, since an awaiter may catch them.
+                // If the script no longer holds the future (the job's is
+                // the only reference), nobody ever can, so report now;
+                // otherwise report if it is freed with the error unseen.
+                InternalError* info = state->getLastError();   // a copy
+                if (info && !info->reported) {
+                    if (((RefCounted*)future)->refCount() == 1) {
+                        MobiusState::reportFiberError(state, info);
+                        free_internal_error(info);
+                    } else {
+                        std::shared_ptr<InternalError> held(info, free_internal_error);
+                        future->setUnobservedReport([state, held]() {
+                            MobiusState::reportFiberError(state, held.get());
+                        });
+                    }
+                } else if (info) {
+                    free_internal_error(info);
+                }
             }
 
             for (Upvalue* uv : fiber_upvalues) uv->release();
