@@ -22,6 +22,20 @@ if (x > 0) {
 `elif` chains as far as you like; `else` is optional. The body of a branch may be
 a single statement without braces, but braces are recommended.
 
+`elif` and `else` may start the line after a closing brace, and a short `if`
+fits on one line:
+
+```mobius
+if (x > 0) {
+    print("positive")
+}
+else {
+    print("not positive")
+}
+
+if (ready) start() else wait()
+```
+
 ## while
 
 ```mobius

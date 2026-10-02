@@ -157,6 +157,12 @@ bool consume_statement_terminator(Parser* parser, const char* message) {
     if (parser_check(parser, TOKEN_RIGHT_BRACE)) {
         return true;
     }
+
+    // `else` and `elif` can only continue an if, so they end the statement
+    // before them: `if (c) print(1) else print(2)` on one line.
+    if (parser_check(parser, TOKEN_ELSE) || parser_check(parser, TOKEN_ELIF)) {
+        return true;
+    }
     
     // Check if there's more content on the same line that would require a semicolon
     Token current = parser_peek(parser);
@@ -1316,12 +1322,24 @@ Stmt* parse_if_statement(Parser* parser) {
     
     Stmt* then_branch = parse_statement(parser);
     Stmt* else_branch = NULL;
-    
+
+    // `else`/`elif` may start the next line, as `catch` and `finally` may:
+    //     }
+    //     else {
+    // Look past newlines for one; if neither follows, back up so the
+    // newlines still end the if statement.
+    size_t before_newlines = parser->current;
+    while (parser_check(parser, TOKEN_NEWLINE)) parser_advance(parser);
+    if (!parser_check(parser, TOKEN_ELIF) && !parser_check(parser, TOKEN_ELSE)) {
+        parser->current = before_newlines;
+    }
+
     // Handle elif as chained if-else statements
     if (parser_match(parser, TOKEN_ELIF)) {
         // Recursively parse the elif as another if statement
         else_branch = parse_if_statement(parser);
     } else if (parser_match(parser, TOKEN_ELSE)) {
+        while (parser_check(parser, TOKEN_NEWLINE)) parser_advance(parser);
         else_branch = parse_statement(parser);
     }
     
@@ -1452,6 +1470,14 @@ Stmt* parse_statement(Parser* parser) {
 
     if (parser_match(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
+    }
+
+    if (parser_check(parser, TOKEN_ELSE) || parser_check(parser, TOKEN_ELIF)) {
+        parser_error_at_current(parser, parser_check(parser, TOKEN_ELSE)
+                                            ? "'else' without a matching 'if'"
+                                            : "'elif' without a matching 'if'");
+        parser_advance(parser);
+        return NULL;
     }
     
     if (parser_match(parser, TOKEN_WHILE)) {

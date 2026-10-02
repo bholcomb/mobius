@@ -1,0 +1,47 @@
+// if/elif/else accept two layouts that used to be parse errors:
+// a one-line `if (c) stmt else stmt`, and `elif`/`else` on the line after
+// a closing brace (as `catch` and `finally` already could).
+var log = []
+func note(s) { log:push(s) }
+
+var c = true
+if (c) note("a") else note("b")
+if (!c) note("c") else note("d")
+if (!c) note("e") elif (c) note("f") else note("g")
+
+if (false) {
+    note("h")
+}
+else {
+    note("i")
+}
+
+if (false) {
+    note("j")
+}
+
+// a comment between the brace and elif
+elif (true) {
+    note("k")
+}
+else
+{
+    note("l")
+}
+
+// An if without else still ends at the newline.
+if (false) { note("m") }
+note("n")
+
+var want = ["a", "d", "f", "i", "k", "n"]
+if (size(log) != size(want)) {
+    print("FAIL: got " + str(size(log)) + " entries")
+    exit(1)
+}
+for (var i = 0; i < size(want); i++) {
+    if (log[i] != want[i]) {
+        print("FAIL: entry " + str(i) + " is " + log[i])
+        exit(1)
+    }
+}
+print("if/else layouts: PASS")

@@ -127,6 +127,9 @@ block               ::= "{" { NEWLINE | declaration } "}"
 if_stmt             ::= "if" "(" expression ")" statement
                         { "elif" "(" expression ")" statement }
                         [ "else" statement ]
+                      // newlines may come before "elif"/"else", and a
+                      // statement before them needs no terminator:
+                      // if (c) f() else g()
 
 while_stmt          ::= "while" "(" expression ")" statement
 
