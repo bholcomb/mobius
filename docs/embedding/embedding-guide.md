@@ -38,11 +38,13 @@ g++ -o my_app my_app.cpp -lmobius-core -ldl
 10. [Rooted value handles](#rooted-value-handles)
 11. [Error handling](#error-handling)
 12. [Output and exit](#output-and-exit)
-13. [Loading plugins](#loading-plugins)
-14. [Type metatables](#type-metatables)
-15. [Multiple interpreters](#multiple-interpreters)
-16. [Concurrency and fibers](#concurrency-and-fibers)
-17. [Metrics](#metrics)
+13. [Files](#files)
+14. [Sandboxing](#sandboxing)
+15. [Loading plugins](#loading-plugins)
+16. [Type metatables](#type-metatables)
+17. [Multiple interpreters](#multiple-interpreters)
+18. [Concurrency and fibers](#concurrency-and-fibers)
+19. [Metrics](#metrics)
 
 ---
 
@@ -510,6 +512,87 @@ void on_exit(MobiusState* state, int code, void* userdata) {
 
 mobius_set_exit_handler(state, on_exit, mod);
 ```
+
+---
+
+## Files
+
+Scripts reach files through `readfile`, `readlines`, `writefile`,
+`appendfile`, `file_exists`, `load(path)` and `import` of `.mob` modules. A
+host can serve all of them itself, for example from the game's archives or
+a per-mod save directory:
+
+```c
+int pak_read(MobiusState* state, const char* path, MobiusFileRequest* request,
+             void* userdata) {
+    PakFile* f = pak_open((Pak*)userdata, path);
+    if (!f) {
+        mobius_file_set_error(request, "no such file");
+        return 1;                       // anything but MOBIUS_OK is a failure
+    }
+    mobius_file_set_data(request, f->data, f->size);   // copied
+    pak_close(f);
+    return MOBIUS_OK;
+}
+
+int pak_exists(MobiusState* state, const char* path, void* userdata) {
+    return pak_contains((Pak*)userdata, path);
+}
+
+MobiusFileSystem fs = { pak_read, NULL /* write */, pak_exists };
+mobius_set_file_system(state, &fs, pak);
+mobius_add_plugin_directory(state, "scripts");   // import "util" finds scripts/util.mob
+```
+
+A `NULL` callback makes that operation unavailable (here, writing fails
+with "file access is not available"). Paths arrive exactly as the script
+wrote them; the host decides what they mean. The callbacks may run on any
+worker thread, concurrently. With a file system set, `import` looks for
+`NAME.mob` next to the importing script and in the plugin directories,
+through `exists` and `read`; native plugins are not loaded. The host's own
+`mobius_exec_file` also reads through it.
+
+---
+
+## Sandboxing
+
+To run scripts the host doesn't fully trust (mods), sandbox the state
+before running them:
+
+```c
+MobiusState* state = mobius_new_state(NULL);
+mobius_init_stdlib(state);
+mobius_sandbox(state, 0);                       // nothing built in allowed
+mobius_set_output_handler(state, on_output, NULL);
+mobius_set_file_system(state, &mod_fs, mod);
+```
+
+In a sandbox, native plugins are never loaded, and everything a script
+could use to reach outside goes to the host's handlers. Where the host
+installed none, the built-in behavior is used only if `allow` includes its
+flag:
+
+| Capability | Script functions | Host handler | Flag for the built-in | Neither |
+|---|---|---|---|---|
+| Output | `print`, error and warning text | `mobius_set_output_handler` | `MOBIUS_CAP_OUTPUT` | discarded |
+| Files | `readfile`, `readlines`, `writefile`, `appendfile`, `file_exists`, `load`, `import` of `.mob` files | `mobius_set_file_system` | `MOBIUS_CAP_FILES` | catchable "file access is not available" error |
+| Exit | `exit` | `mobius_set_exit_handler` | (none) | a warning |
+
+Modules the host registers with `mobius_register_module`, and `fiber`, can
+always be imported. In a sandbox, a module name with a `..` segment or an
+absolute path is rejected. Calling `mobius_sandbox` again changes `allow`.
+
+Registered modules are the way to hand a sandboxed script the game's API
+as `import "game"`:
+
+```c
+mobius_stack_pushNewTable(state, 8);
+// ... set fields: functions, constants
+mobius_register_module(state, "game");
+```
+
+Limits on what a script may consume (CPU time, memory) are separate from
+the sandbox.
 
 ---
 

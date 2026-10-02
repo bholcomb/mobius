@@ -259,6 +259,74 @@ MOBIUS_API void mobius_set_exit_handler(MobiusState* state,
                                         void* userdata);
 
 /* ====================================================================== */
+/*  Files                                                                  */
+/* ====================================================================== */
+
+/** Passed to a file-system callback to hand back data or an error. */
+typedef struct MobiusFileRequest MobiusFileRequest;
+
+/**
+ * Host implementation of the files scripts can reach: readfile,
+ * readlines, writefile, appendfile, file_exists, load(), and import of
+ * .mob modules all go through it when it is set (a game can serve scripts
+ * from its own archives). Paths are passed exactly as scripts wrote them.
+ * Any member may be NULL: that operation is then not available.
+ * Callbacks may run on any worker thread, concurrently.
+ */
+typedef struct {
+    /* Read a whole file: call mobius_file_set_data(request, ...) and
+       return MOBIUS_OK, or mobius_file_set_error(request, ...) and return
+       any other value. */
+    int (*read)(MobiusState* state, const char* path,
+                MobiusFileRequest* request, void* userdata);
+    /* Write (append = 0) or append (append = 1) `length` bytes. Return
+       MOBIUS_OK, or an error as for read. */
+    int (*write)(MobiusState* state, const char* path,
+                 const char* data, size_t length, int append,
+                 MobiusFileRequest* request, void* userdata);
+    /* 1 if the file exists, 0 if not. */
+    int (*exists)(MobiusState* state, const char* path, void* userdata);
+} MobiusFileSystem;
+
+/**
+ * Use `fs` (copied) for this state's file access; NULL restores the
+ * default (the real file system, unless the state is sandboxed).
+ */
+MOBIUS_API void mobius_set_file_system(MobiusState* state,
+                                       const MobiusFileSystem* fs,
+                                       void* userdata);
+
+/** From a read callback: the file's contents (copied). */
+MOBIUS_API void mobius_file_set_data(MobiusFileRequest* request,
+                                     const char* data, size_t length);
+
+/** From a read or write callback: why it failed (copied). */
+MOBIUS_API void mobius_file_set_error(MobiusFileRequest* request,
+                                      const char* message);
+
+/* ====================================================================== */
+/*  Sandbox                                                                */
+/* ====================================================================== */
+
+#define MOBIUS_CAP_OUTPUT 0x1u   /* print and error text to stdout/stderr */
+#define MOBIUS_CAP_FILES  0x2u   /* the real file system (files, load, import) */
+
+/**
+ * Sandbox the state, before running untrusted scripts. Native plugins are
+ * never loaded. Everything a script could use to reach outside goes to
+ * the host's handlers (mobius_set_output_handler, mobius_set_exit_handler,
+ * mobius_set_file_system); where the host set none, the built-in behavior
+ * is used only if `allow` includes its MOBIUS_CAP_ flag. Otherwise:
+ *   - file functions, load() and imports of .mob files raise a catchable
+ *     "not available" error (modules the host registered, and fiber, can
+ *     still be imported);
+ *   - print output and error text are discarded;
+ *   - exit() only warns (as without a sandbox).
+ * Calling it again changes `allow`.
+ */
+MOBIUS_API void mobius_sandbox(MobiusState* state, unsigned int allow);
+
+/* ====================================================================== */
 /*  Lifecycle                                                              */
 /* ====================================================================== */
 

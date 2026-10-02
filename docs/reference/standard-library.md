@@ -198,6 +198,11 @@ files, incremental reads and writes, standard input and standard error, use
 streams from the [`io` module](../modules/io.md). For richer filesystem and path
 operations, see the [`os` module](../modules/os.md).
 
+In a program that embeds Mobius, the host may serve these files itself (from
+its own archives, for example) or, in a sandbox, not allow file access: the
+functions then raise a "file access is not available" error, which a script
+can catch. See the [embedding guide](../embedding/embedding-guide.md#files).
+
 | Function                   | Returns | Description                                            |
 |----------------------------|---------|--------------------------------------------------------|
 | `readfile(path)`           | string  | Read an entire file as a string.                       |

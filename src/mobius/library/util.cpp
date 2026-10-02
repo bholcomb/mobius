@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <chrono>
+#include <string>
 
 // =============================================================================
 // UNIFIED UTILITY FUNCTION IMPLEMENTATIONS
@@ -94,22 +95,22 @@ int lib_load(MobiusState* state, int arg_count) {
         return state->error("load filename cannot be empty");
     }
     
-    // Check if file exists
-    if (!file_exists(filename)) {
+    // Through the host's file system, the real one, or not available.
+    std::string err;
+    int exists = state->fileExists(filename, err);
+    if (exists < 0) return state->error(("load: " + err).c_str());
+    if (exists == 0) {
         return state->error("File does not exist");
     }
-    
-    // Read file content
-    FileResult file_result = read_file(filename);
-    if (!file_result.success) {
+    std::string content;
+    if (!state->readFile(filename, content, err)) {
         return state->error("Failed to read file");
     }
-    
+
     const char* saved_source = state->getSourceContext();
     state->setSourceContext(filename);
-    int exec_result = state->execString(file_result.content);
+    int exec_result = state->execString(content.c_str());
     state->setSourceContext(saved_source);
-    free_file_result(&file_result);
 
     if (exec_result != MOBIUS_OK) {
         return state->error("error in loaded script");

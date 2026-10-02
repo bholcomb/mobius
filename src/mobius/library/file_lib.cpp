@@ -10,6 +10,10 @@
 #include <sys/stat.h>
 #include <string>
 
+// Every function goes through the state's file access: the host's file
+// system (mobius_set_file_system), the real one, or - in a sandbox that
+// doesn't allow it - a "file access is not available" error.
+
 int lib_readfile(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
         return state->error("readfile expects 1 argument (path)");
@@ -19,25 +23,10 @@ int lib_readfile(MobiusState* state, int arg_count) {
         return state->error("readfile argument must be a string");
     }
 
-    FILE* f = fopen(path_val.as.string->data, "rb");
-    if (!f) {
-        return state->error("readfile: could not open file");
+    std::string data, err;
+    if (!state->readFile(path_val.as.string->data, data, err)) {
+        return state->error(("readfile: " + err).c_str());
     }
-
-    // Read until end of file rather than trusting the reported size:
-    // files under /proc and pipes report 0 and read back empty otherwise.
-    // The size is only a first guess at the buffer.
-    std::string data;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz > 0) data.reserve((size_t)sz);
-    char chunk[65536];
-    size_t n;
-    while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) data.append(chunk, n);
-    bool failed = ferror(f) != 0;
-    fclose(f);
-    if (failed) return state->error("readfile: read error");
 
     // A string of the data's length: going through a C string cut the
     // contents off at the first NUL byte.
@@ -50,58 +39,39 @@ int lib_readfile(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_writefile(MobiusState* state, int arg_count) {
+// writefile/appendfile: true when written, false on a write error; an error
+// when the file can't be opened (or file access is not available).
+static int write_or_append(MobiusState* state, int arg_count, bool append) {
+    const char* name = append ? "appendfile" : "writefile";
     if (arg_count != 2) {
-        return state->error("writefile expects 2 arguments (path, content)");
+        return state->error((std::string(name) + " expects 2 arguments (path, content)").c_str());
     }
     Value content_val = state->npop();
     Value path_val = state->npop();
 
     if (path_val.type != VAL_STRING || !path_val.as.string) {
-        return state->error("writefile: path must be a string");
+        return state->error((std::string(name) + ": path must be a string").c_str());
     }
     if (content_val.type != VAL_STRING || !content_val.as.string) {
-        return state->error("writefile: content must be a string");
+        return state->error((std::string(name) + ": content must be a string").c_str());
     }
 
-    FILE* f = fopen(path_val.as.string->data, "w");
-    if (!f) {
-        return state->error("writefile: could not open file for writing");
+    std::string err;
+    bool ok = state->writeFile(path_val.as.string->data, content_val.as.string->data,
+                               content_val.as.string->length, append, err);
+    if (!ok && err != "write error") {
+        return state->error((std::string(name) + ": " + err).c_str());
     }
-
-    size_t len = content_val.as.string->length;
-    size_t written = fwrite(content_val.as.string->data, 1, len, f);
-    fclose(f);
-
-    state->npush(make_bool_value(written == len));
+    state->npush(make_bool_value(ok));
     return 1;
 }
 
+int lib_writefile(MobiusState* state, int arg_count) {
+    return write_or_append(state, arg_count, false);
+}
+
 int lib_appendfile(MobiusState* state, int arg_count) {
-    if (arg_count != 2) {
-        return state->error("appendfile expects 2 arguments (path, content)");
-    }
-    Value content_val = state->npop();
-    Value path_val = state->npop();
-
-    if (path_val.type != VAL_STRING || !path_val.as.string) {
-        return state->error("appendfile: path must be a string");
-    }
-    if (content_val.type != VAL_STRING || !content_val.as.string) {
-        return state->error("appendfile: content must be a string");
-    }
-
-    FILE* f = fopen(path_val.as.string->data, "a");
-    if (!f) {
-        return state->error("appendfile: could not open file for appending");
-    }
-
-    size_t len = content_val.as.string->length;
-    size_t written = fwrite(content_val.as.string->data, 1, len, f);
-    fclose(f);
-
-    state->npush(make_bool_value(written == len));
-    return 1;
+    return write_or_append(state, arg_count, true);
 }
 
 int lib_file_exists(MobiusState* state, int arg_count) {
@@ -113,9 +83,10 @@ int lib_file_exists(MobiusState* state, int arg_count) {
         return state->error("file_exists: argument must be a string");
     }
 
-    struct stat st;
-    bool exists = (stat(path_val.as.string->data, &st) == 0);
-    state->npush(make_bool_value(exists));
+    std::string err;
+    int exists = state->fileExists(path_val.as.string->data, err);
+    if (exists < 0) return state->error(("file_exists: " + err).c_str());
+    state->npush(make_bool_value(exists == 1));
     return 1;
 }
 
@@ -128,20 +99,10 @@ int lib_readlines(MobiusState* state, int arg_count) {
         return state->error("readlines: argument must be a string");
     }
 
-    FILE* f = fopen(path_val.as.string->data, "rb");
-    if (!f) {
-        return state->error("readlines: could not open file");
+    std::string data, err;
+    if (!state->readFile(path_val.as.string->data, data, err)) {
+        return state->error(("readlines: " + err).c_str());
     }
-    // Read everything, then split on '\n' (dropping a '\r' before it). The
-    // lines are heap strings of their full length: fgets/strlen cut lines at
-    // a NUL byte, and interning every line leaked (the pool never frees).
-    std::string data;
-    char chunk[65536];
-    size_t n;
-    while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) data.append(chunk, n);
-    bool failed = ferror(f) != 0;
-    fclose(f);
-    if (failed) return state->error("readlines: error while reading file");
 
     ArrayValue* arr = new (std::nothrow) ArrayValue(state->gcHeap());
     if (!arr) return state->error("readlines: failed to allocate result array");

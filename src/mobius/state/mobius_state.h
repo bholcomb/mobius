@@ -189,7 +189,9 @@ public:
     int execString(const char* code);
     int execStringInEnvironment(const char* code, GlobalEnvironment* env);
     int execFile(const char* filename);
-    int execFileInEnvironment(const char* filename, GlobalEnvironment* env);
+    // `host_call`: the host asked (mobius_exec_file), so a sandbox does not
+    // restrict reading the file; script-initiated loads (import) pass false.
+    int execFileInEnvironment(const char* filename, GlobalEnvironment* env, bool host_call = false);
 
     // Error handling
     InternalError* getLastError() const;
@@ -232,6 +234,24 @@ public:
     }
     // exit(code) from a script: the host's handler, or a warning.
     void requestExit(int code);
+
+    // Sandbox (mobius_sandbox) and the host's file system.
+    void setSandbox(unsigned int allow) { sandboxed_ = true; sandbox_allow_ = allow; }
+    bool sandboxed() const { return sandboxed_; }
+    // The built-in behavior for `cap` may be used (no sandbox, or allowed).
+    bool allowsDefault(unsigned int cap) const { return !sandboxed_ || (sandbox_allow_ & cap); }
+    void setFileSystem(const MobiusFileSystem* fs, void* userdata);
+    bool hasFileSystem() const { return has_file_system_; }
+
+    // File access for scripts (and script loading): the host's file system,
+    // the real one, or "not available" in a sandbox. On failure, `error`
+    // says why (without an operation prefix). `host_call` marks an access
+    // the host itself asked for (mobius_exec_file), which the sandbox
+    // does not restrict.
+    bool readFile(const char* path, std::string& out, std::string& error, bool host_call = false);
+    bool writeFile(const char* path, const char* data, size_t length, bool append, std::string& error);
+    // 1 exists, 0 not, -1 not available (`error` set).
+    int fileExists(const char* path, std::string& error);
     void seedRandom(uint64_t seed);
     StringInternPool* stringPool() const { return string_pool_; }
     const CommonInternedStrings& commonStrings() const { return common_strings_; }
@@ -374,6 +394,11 @@ private:
 
     MobiusErrorHandler error_handler_;
     void* error_handler_userdata_;
+    bool sandboxed_ = false;
+    unsigned int sandbox_allow_ = 0;
+    bool has_file_system_ = false;
+    MobiusFileSystem file_system_{};
+    void* file_system_userdata_ = nullptr;
     MobiusOutputHandler output_handler_ = nullptr;
     void* output_handler_userdata_ = nullptr;
     MobiusExitHandler exit_handler_ = nullptr;
