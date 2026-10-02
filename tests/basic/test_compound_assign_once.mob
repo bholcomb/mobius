@@ -1,0 +1,37 @@
+// `a[i] op= v` evaluates the container and the key once. It was compiled
+// as `a[i] = a[i] op v`, so side effects ran twice and the read and the
+// write could use different elements.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+var calls = 0
+func next_index() { calls = calls + 1; return calls - 1 }
+
+var arr = [10, 20, 30]
+arr[next_index()] += 5
+check("index evaluated once", calls, 1)
+check("same element read and written", arr[0], 15)
+check("other elements untouched", arr[1], 20)
+
+var table_calls = 0
+var t = {a: {n: 1}}
+func get_t() { table_calls = table_calls + 1; return t.a }
+get_t().n += 10
+check("container evaluated once", table_calls, 1)
+check("field updated", t.a.n, 11)
+
+var m = {k: 6}
+m["k"] -= 1
+m.k *= 4
+m.k /= 2
+m.k %= 7
+check("all operators", m.k, 3.0)
+var s = {text: "a"}
+s.text += "b"
+check("string +=", s.text, "ab")
+check("result of the expression", (arr[2] += 1), 31)
+print("compound assignment evaluates once: PASS")
