@@ -387,11 +387,12 @@ inline Value make_channel_value(Channel* ch) {
     return value;
 }
 
+// Adopts the caller's reference (see make_channel_value). Taking another
+// leaked every span, and a leaked span kept its parent array from growing.
 inline Value make_array_slice_value(ArraySlice* slice) {
     Value value;
     value.type = VAL_ARRAY_SLICE;
     value.as.array_slice = slice;
-    if (slice) ((RefCounted*)slice)->retain();
     return value;
 }
 

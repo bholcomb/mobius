@@ -1,0 +1,32 @@
+// A span is freed when its last reference goes away, so its parent array
+// can grow again. Creating a span took an extra reference, so spans
+// leaked and the parent stayed locked against push forever ("cannot
+// resize array while slices are alive").
+var a = [1, 2, 3, 4]
+func first_two_sum() {
+    var s = a:span(0, 2)
+    return [s[0], s[1]]
+}
+var pair = first_two_sum()
+if (pair[0] != 1 or pair[1] != 2) {
+    print("FAIL: span contents")
+    exit(1)
+}
+a:push(5)
+for (var i = 0; i < 1000; i++) {
+    first_two_sum()
+    a:push(i)
+}
+if (a:size() != 1005) {
+    print("FAIL: size " + str(a:size()))
+    exit(1)
+}
+// While a span is alive, resizing is still refused.
+var live = a:span(0, 1)
+var refused = false
+try { a:push(0) } catch e { refused = true }
+if (!refused) {
+    print("FAIL: push allowed while a span is alive")
+    exit(1)
+}
+print("spans release their parent: PASS")
