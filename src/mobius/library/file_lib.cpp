@@ -1,5 +1,6 @@
 #include "library/file_lib.h"
 #include "data/value.h"
+#include "internal/string_intern.h"
 #include "data/array.h"
 #include "state/mobius_state.h"
 
@@ -18,7 +19,7 @@ int lib_readfile(MobiusState* state, int arg_count) {
         return state->error("readfile argument must be a string");
     }
 
-    FILE* f = fopen(path_val.as.string->data, "r");
+    FILE* f = fopen(path_val.as.string->data, "rb");
     if (!f) {
         return state->error("readfile: could not open file");
     }
@@ -29,16 +30,15 @@ int lib_readfile(MobiusState* state, int arg_count) {
 
     if (sz < 0) { fclose(f); return state->error("readfile: could not determine file size"); }
 
-    char* buf = (char*)malloc(sz + 1);
-    if (!buf) { fclose(f); return state->error("readfile: memory allocation failed"); }
-
-    size_t nread = fread(buf, 1, sz, f);
+    // Read into a string of the file's length. Going through a C string
+    // cut the contents off at the first NUL byte.
+    MobiusString* str = StringInternPool::allocHeap((size_t)sz);
+    if (!str) { fclose(f); return state->error("readfile: memory allocation failed"); }
+    size_t nread = fread(str->mutableData(), 1, (size_t)sz, f);
     fclose(f);
-    buf[nread] = '\0';
+    StringInternPool::finishHeap(str, nread);
 
-    Value result = make_string_value_from_cstr(state, buf);
-    free(buf);
-    state->npush(result);
+    state->npush(make_string_value_adopt(str));
     return 1;
 }
 

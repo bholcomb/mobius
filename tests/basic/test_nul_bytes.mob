@@ -1,0 +1,30 @@
+// Strings with embedded NUL bytes keep their full length through the
+// string functions and readfile. readfile built its result from a C
+// string, cutting the contents off at the first NUL.
+import "os"
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+var s = "ab\0cd\0ef"
+check("length", size(s), 8)
+check("find after NUL", find(s, "cd"), 3)
+check("find NUL", find(s, "\0"), 2)
+check("split on NUL", size(split(s, "\0")), 3)
+check("replace keeps the tail", replace(s, "cd", "XY"), "ab\0XY\0ef")
+check("replace NUL", replace(s, "\0", "-"), "ab-cd-ef")
+
+var dir = os.join(os.tmpdir(), "mobius_nul_" + str(os.getpid()))
+os.mkdirp(dir)
+var path = os.join(dir, "data.bin")
+writefile(path, s)
+var back = readfile(path)
+check("readfile length", size(back), 8)
+check("readfile round trip", back == s, true)
+writefile(path, "")
+check("empty file", readfile(path), "")
+os.system("rm -rf \"" + dir + "\"")
+print("NUL bytes in strings: PASS")
