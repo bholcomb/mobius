@@ -221,6 +221,44 @@ MOBIUS_API MobiusErrorHandler mobius_set_error_handler(MobiusState* state,
 MOBIUS_API void mobius_clear_error(MobiusState* state);
 
 /* ====================================================================== */
+/*  Output and exit                                                        */
+/* ====================================================================== */
+
+#define MOBIUS_STDOUT 1
+#define MOBIUS_STDERR 2
+
+/**
+ * Receives text the interpreter writes: print() output on MOBIUS_STDOUT
+ * (one call per print, including its newline), and on MOBIUS_STDERR
+ * errors from the default error handler and warnings. `data` is valid
+ * only during the call and is not NUL-terminated. May be called from any
+ * worker thread running the state's fibers, concurrently.
+ */
+typedef void (*MobiusOutputHandler)(MobiusState* state, int stream,
+                                    const char* data, size_t length,
+                                    void* userdata);
+
+/**
+ * Route this state's output to `handler`; NULL restores the default
+ * (the process's stdout and stderr).
+ */
+MOBIUS_API void mobius_set_output_handler(MobiusState* state,
+                                          MobiusOutputHandler handler,
+                                          void* userdata);
+
+/**
+ * Called when a script calls exit(code). The handler decides what that
+ * means (the mobius command-line tool ends the process). When it returns,
+ * the script continues after the exit() call. Without a handler, exit()
+ * does nothing but write a warning to MOBIUS_STDERR.
+ */
+typedef void (*MobiusExitHandler)(MobiusState* state, int code, void* userdata);
+
+MOBIUS_API void mobius_set_exit_handler(MobiusState* state,
+                                        MobiusExitHandler handler,
+                                        void* userdata);
+
+/* ====================================================================== */
 /*  Lifecycle                                                              */
 /* ====================================================================== */
 

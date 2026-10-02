@@ -218,6 +218,20 @@ public:
     // This state's random number generator (random/randomseed):
     // xoshiro256**, the same sequence for a seed on every platform.
     uint64_t nextRandom();
+
+    // Output (print, errors, warnings) through the host's handler, or to
+    // stdout/stderr. `stream` is MOBIUS_STDOUT or MOBIUS_STDERR.
+    void writeOutput(int stream, const char* data, size_t length);
+    void setOutputHandler(MobiusOutputHandler handler, void* userdata) {
+        output_handler_ = handler;
+        output_handler_userdata_ = userdata;
+    }
+    void setExitHandler(MobiusExitHandler handler, void* userdata) {
+        exit_handler_ = handler;
+        exit_handler_userdata_ = userdata;
+    }
+    // exit(code) from a script: the host's handler, or a warning.
+    void requestExit(int code);
     void seedRandom(uint64_t seed);
     StringInternPool* stringPool() const { return string_pool_; }
     const CommonInternedStrings& commonStrings() const { return common_strings_; }
@@ -360,6 +374,10 @@ private:
 
     MobiusErrorHandler error_handler_;
     void* error_handler_userdata_;
+    MobiusOutputHandler output_handler_ = nullptr;
+    void* output_handler_userdata_ = nullptr;
+    MobiusExitHandler exit_handler_ = nullptr;
+    void* exit_handler_userdata_ = nullptr;
 
     MobiusConfig config_;
     MobiusOverrideBehavior compile_override_behavior_ = MOBIUS_OVERRIDE_ERROR;

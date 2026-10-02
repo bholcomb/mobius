@@ -134,6 +134,12 @@ int main(int argc, char *argv[]) {
     }
     
     register_module_directories(state);
+    // exit(code) in a script ends the mobius process.
+    mobius_set_exit_handler(state, [](MobiusState*, int code, void*) {
+        fflush(stdout);
+        fflush(stderr);
+        exit(code);
+    }, nullptr);
 
     if (mobius_init_stdlib(state) != MOBIUS_OK) {
         fprintf(stderr, "Failed to initialize standard library\n");

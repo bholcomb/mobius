@@ -124,7 +124,6 @@ void ExecutionContext::pushFrame(const char* function_name, const char* filename
                                  int line, int column, FunctionType type,
                                  void* function_ptr) {
     if (call_frames_.size() >= max_depth_) {
-        fprintf(stderr, "Stack overflow: call depth exceeds maximum %zu\n", max_depth_);
         if (state) {
             state->setError(MOBIUS_ERROR_RUNTIME,
                             "Stack overflow: call depth exceeded maximum",
@@ -1234,23 +1233,58 @@ MobiusErrorHandler MobiusState::setErrorHandler(MobiusErrorHandler handler, void
 }
 
 static void default_error_handler(MobiusState* state, const MobiusError* error, void* userdata) {
-    (void)state;
     (void)userdata;
-    fprintf(stderr, "Error");
+    std::string text = "Error";
+    char buf[64];
     if (error->filename && error->line > 0) {
-        fprintf(stderr, " [%s:%d:%d]", error->filename, error->line, error->column);
+        snprintf(buf, sizeof(buf), ":%d:%d]", error->line, error->column);
+        text += std::string(" [") + error->filename + buf;
     } else if (error->filename) {
-        fprintf(stderr, " [%s]", error->filename);
+        text += std::string(" [") + error->filename + "]";
     } else if (error->line > 0) {
-        fprintf(stderr, " [line %d:%d]", error->line, error->column);
+        snprintf(buf, sizeof(buf), " [line %d:%d]", error->line, error->column);
+        text += buf;
     }
     if (error->function_name) {
-        fprintf(stderr, " in %s", error->function_name);
+        text += std::string(" in ") + error->function_name;
     }
-    fprintf(stderr, ": %s\n", error->message ? error->message : "Unknown error");
+    text += std::string(": ") + (error->message ? error->message : "Unknown error") + "\n";
     if (error->suggestion) {
-        fprintf(stderr, "  suggestion: %s\n", error->suggestion);
+        text += std::string("  suggestion: ") + error->suggestion + "\n";
     }
+    state->writeOutput(MOBIUS_STDERR, text.data(), text.size());
+}
+
+void MobiusState::writeOutput(int stream, const char* data, size_t length) {
+    if (output_handler_) {
+        output_handler_(this, stream, data, length, output_handler_userdata_);
+        return;
+    }
+    FILE* f = stream == MOBIUS_STDERR ? stderr : stdout;
+    if (stream == MOBIUS_STDERR) fflush(stdout);   // keep the two in order on a terminal
+    fwrite(data, 1, length, f);
+}
+
+void MobiusState::requestExit(int code) {
+    if (exit_handler_) {
+        exit_handler_(this, code, exit_handler_userdata_);
+        return;
+    }
+    char msg[96];
+    int n = snprintf(msg, sizeof(msg), "Warning: exit(%d) ignored: the host set no exit handler\n", code);
+    if (n > 0) writeOutput(MOBIUS_STDERR, msg, (size_t)n);
+}
+
+extern "C" {
+
+void mobius_set_output_handler(MobiusState* state, MobiusOutputHandler handler, void* userdata) {
+    if (state) state->setOutputHandler(handler, userdata);
+}
+
+void mobius_set_exit_handler(MobiusState* state, MobiusExitHandler handler, void* userdata) {
+    if (state) state->setExitHandler(handler, userdata);
+}
+
 }
 
 // ============================================================================
