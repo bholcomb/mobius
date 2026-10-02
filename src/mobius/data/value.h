@@ -42,6 +42,16 @@ class MobiusState;
 typedef int (*MobiusCFunction)(MobiusState* ctx, int arg_count);
 typedef void (*UserdataDestructor)(void* ptr);
 
+class BufferValue;
+struct UserdataObject;
+// Maps a buffer to the receiving fiber's copy of it (retained for the
+// caller). One spawn copies each buffer once, so views keep sharing.
+typedef BufferValue* (*FiberBufferCopy)(BufferValue* buffer, void* ctx);
+// Copies a userdata value for another fiber (spawn arguments, captures,
+// channel sends). Userdata without one crosses by reference.
+typedef Value (*UserdataFiberCopy)(const UserdataObject* src,
+                                   FiberBufferCopy copy_buffer, void* ctx);
+
 struct UserdataObject {
     std::atomic<int> ref_count;
     void*        ptr;
@@ -49,6 +59,7 @@ struct UserdataObject {
     MobiusString* type_tag;
     const char*  type_name;
     size_t       size;
+    UserdataFiberCopy fiber_copy = nullptr;
 };
 
 // Value flags — stored in the int8_t `flags` field of Value.

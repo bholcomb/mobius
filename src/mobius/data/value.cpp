@@ -302,6 +302,16 @@ bool Value::operator==(const Value& other) const {
 }
 
 namespace {
+Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, Value>& memo);
+
+BufferValue* copy_buffer_for_fiber(BufferValue* buffer, void* ctx) {
+    auto& memo = *static_cast<std::unordered_map<const void*, Value>*>(ctx);
+    Value copy = deep_copy_value_impl(make_buffer_value(buffer->retain()), memo);
+    if (copy.type != VAL_BUFFER || !copy.as.buffer) return nullptr;
+    copy.as.buffer->retain();
+    return copy.as.buffer;
+}
+
 Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, Value>& memo) {
     switch (value.type) {
         case VAL_ARRAY: {
@@ -411,10 +421,26 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
         }
         case VAL_BUFFER: {
             if (!value.as.buffer) return make_nil_value();
+            auto it = memo.find(value.as.buffer);
+            if (it != memo.end()) return it->second;
             BufferValue* clone = value.as.buffer->clone();
             Value copy = make_buffer_value(clone);
             copy.flags = value.flags;
+            memo.emplace(value.as.buffer, copy);
             return copy;
+        }
+        case VAL_USERDATA: {
+            // Views over a buffer copy their buffer: a struct view passed to
+            // a fiber used to write into the parent's buffer.
+            UserdataObject* ud = value.as.userdata;
+            if (ud && ud->fiber_copy) {
+                auto it = memo.find(ud);
+                if (it != memo.end()) return it->second;
+                Value copy = ud->fiber_copy(ud, copy_buffer_for_fiber, &memo);
+                memo.emplace(ud, copy);
+                return copy;
+            }
+            return value;
         }
         default: {
             Value copy = value;
@@ -441,7 +467,8 @@ bool value_needs_fiber_copy(const Value& v) {
     bool container = (v.type == VAL_ARRAY && v.as.array) ||
                      (v.type == VAL_TABLE && v.as.table) ||
                      (v.type == VAL_BUFFER && v.as.buffer) ||
-                     (v.type == VAL_FUNCTION && v.as.function);
+                     (v.type == VAL_FUNCTION && v.as.function) ||
+                     (v.type == VAL_USERDATA && v.as.userdata && v.as.userdata->fiber_copy);
     // Frozen (const) values cannot change, so fibers share them as-is.
     return container && (v.flags & VAL_FLAG_SHARED) == 0 && !value_is_frozen(v);
 }

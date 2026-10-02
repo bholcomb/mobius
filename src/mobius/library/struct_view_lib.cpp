@@ -293,6 +293,56 @@ static void destroy_struct_layout_userdata(void* ptr);
 static void destroy_struct_view_userdata(void* ptr);
 static void destroy_struct_array_view_userdata(void* ptr);
 
+// A view copied for another fiber views that fiber's copy of the buffer.
+// It used to keep pointing at the parent's buffer, so the fiber's writes
+// landed there.
+static Value userdata_like(const UserdataObject* src, void* ptr) {
+    UserdataObject* ud = new UserdataObject();
+    ud->ref_count.store(1, std::memory_order_relaxed);
+    ud->ptr = ptr;
+    ud->destructor = src->destructor;
+    ud->type_tag = src->type_tag;     // interned
+    ud->type_name = src->type_name;
+    ud->size = src->size;
+    ud->fiber_copy = src->fiber_copy;
+    Value value;
+    value.type = VAL_USERDATA;
+    value.as.userdata = ud;
+    return value;
+}
+
+static Value copy_struct_view_for_fiber(const UserdataObject* src,
+                                        FiberBufferCopy copy_buffer, void* ctx) {
+    const StructView* from = static_cast<const StructView*>(src->ptr);
+    BufferValue* buffer = copy_buffer(from->buffer, ctx);   // retained for us
+    StructView* view = new (std::nothrow) StructView();
+    if (!view || !buffer) {
+        delete view;
+        if (buffer) buffer->release();
+        return make_nil_value();
+    }
+    *view = *from;
+    view->layout->retain();
+    view->buffer = buffer;
+    return userdata_like(src, view);
+}
+
+static Value copy_struct_array_view_for_fiber(const UserdataObject* src,
+                                              FiberBufferCopy copy_buffer, void* ctx) {
+    const StructArrayView* from = static_cast<const StructArrayView*>(src->ptr);
+    BufferValue* buffer = copy_buffer(from->buffer, ctx);
+    StructArrayView* view = new (std::nothrow) StructArrayView();
+    if (!view || !buffer) {
+        delete view;
+        if (buffer) buffer->release();
+        return make_nil_value();
+    }
+    *view = *from;
+    if (view->nested_layout) view->nested_layout->retain();
+    view->buffer = buffer;
+    return userdata_like(src, view);
+}
+
 static bool make_struct_view_value(MobiusState* state, StructLayout* layout,
                                    BufferValue* buffer, size_t base_offset, Value* out);
 static bool make_struct_array_view_value(MobiusState* state, const StructFieldDesc& field,
@@ -647,6 +697,7 @@ static bool make_struct_view_value(MobiusState* state, StructLayout* layout,
     layout->retain();
     buffer->retain();
     *out = make_userdata_value(state, view, destroy_struct_view_userdata, STRUCT_VIEW_TYPE, sizeof(StructView));
+    out->as.userdata->fiber_copy = copy_struct_view_for_fiber;
     return true;
 }
 
@@ -668,6 +719,7 @@ static bool make_struct_array_view_value(MobiusState* state, const StructFieldDe
     buffer->retain();
     *out = make_userdata_value(state, view, destroy_struct_array_view_userdata,
                                STRUCT_ARRAY_VIEW_TYPE, sizeof(StructArrayView));
+    out->as.userdata->fiber_copy = copy_struct_array_view_for_fiber;
     return true;
 }
 

@@ -56,6 +56,9 @@ Mobius value semantics as they cross the fiber boundary:
 - Non-shared arrays, tables, buffers and closures are **deep-copied**: each
   spawn gets its own independent copy. A container passed in more than one
   argument stays one container in the copy.
+- Struct views (`buf:view_as(T)`, `buf:array_view_as(T)`) are copied with
+  their buffer: the fiber's view reads and writes the fiber's copy. A view and
+  its buffer passed together still view the same (copied) bytes.
 - `shared` values are passed by reference to the same synchronized cell.
 - Array spans (`arr:span(...)`) stay aliased to their parent array, even across
   `spawn`.
