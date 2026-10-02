@@ -1075,7 +1075,13 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     err_slot->column = column;
     err_slot->function_name = function_name ? mobius_strdup(function_name) : NULL;
 
-    if (error_handler_) {
+    // Report only errors that will not be caught. While a try block is
+    // active in the running VM, the error unwinds to it (natives return the
+    // error to the VM), so reporting it here printed an "Error [...]" line
+    // for every error the script handled itself.
+    bool will_be_caught = vm && !vm->try_stack_.empty();
+
+    if (error_handler_ && !will_be_caught) {
         MobiusError pub_err;
         pub_err.code = code;
         pub_err.message = message;
