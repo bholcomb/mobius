@@ -1,3 +1,5 @@
+#include <cctype>
+#include <cerrno>
 #include "library/core.h"
 #include "internal/gc.h"
 #include "vm/vm.h"
@@ -84,6 +86,14 @@ int lib_typeof(MobiusState* state, int arg_count) {
     return 1;
 }
 
+// The string's full text must be the number: no leading whitespace (strtoll
+// and strtod skip it), nothing after it (including past an embedded NUL),
+// and not empty (int("") used to give 0).
+static bool whole_string_number(const MobiusString* s, const char* end) {
+    return s->length > 0 && !isspace((unsigned char)s->data[0]) &&
+           end == s->data + s->length;
+}
+
 int lib_int(MobiusState* state, int arg_count) {
     if (arg_count != 1) {
         return state->error("int expects 1 argument");
@@ -91,27 +101,48 @@ int lib_int(MobiusState* state, int arg_count) {
 
     Value arg = state->npop();
     Value result;
-    
+    char msg[128];
+
     switch (arg.type) {
         case VAL_INT64:
             result = arg;  // Already an integer
             break;
-        case VAL_FLOAT64:
-            result = make_int64_value((int64_t)arg.as.double_val);
-            break;
-        case VAL_STRING: {
-            if (arg.as.string) {
-                const char* str = arg.as.string->data;
-                char* endptr;
-                long long val = strtoll(str, &endptr, 10);
-                if (*endptr == '\0') {
-                    result = make_int64_value((int64_t)val);
-                } else {
-                    return state->error("Cannot convert string to integer");
-                }
-            } else {
-                return state->error("Cannot convert null string to integer");
+        case VAL_UINT64:
+            // Converts when the value fits (it used to be refused for every
+            // uint64).
+            if (arg.as.u64 > (uint64_t)INT64_MAX) {
+                snprintf(msg, sizeof(msg), "Cannot convert %llu to int64: out of range",
+                         (unsigned long long)arg.as.u64);
+                return state->error(msg);
             }
+            result = make_int64_value((int64_t)arg.as.u64);
+            break;
+        case VAL_FLOAT64: {
+            // Truncates toward zero. Out-of-range values, NaN and infinity
+            // are errors: the C++ conversion is undefined there, and x86 gave
+            // INT64_MIN for int(1e300).
+            double d = arg.as.double_val;
+            if (d != d) return state->error("Cannot convert NaN to int64");
+            if (!(d >= -9223372036854775808.0 && d < 9223372036854775808.0)) {   // [-2^63, 2^63)
+                snprintf(msg, sizeof(msg), "Cannot convert %g to int64: out of range", d);
+                return state->error(msg);
+            }
+            result = make_int64_value((int64_t)d);
+            break;
+        }
+        case VAL_STRING: {
+            if (!arg.as.string) return state->error("Cannot convert null string to integer");
+            const MobiusString* str = arg.as.string;
+            char* endptr;
+            errno = 0;
+            long long val = strtoll(str->data, &endptr, 10);
+            if (!whole_string_number(str, endptr)) {
+                return state->error("Cannot convert string to integer");
+            }
+            if (errno == ERANGE) {   // used to clamp silently to INT64_MIN/MAX
+                return state->error("Cannot convert string to integer: out of int64 range");
+            }
+            result = make_int64_value((int64_t)val);
             break;
         }
         case VAL_BOOL:
@@ -120,10 +151,8 @@ int lib_int(MobiusState* state, int arg_count) {
         default:
             return state->error("Cannot convert value to integer");
     }
-       
-    // Push result onto stack
+
     state->npush(result);
-    
     return 1;
 }
 
@@ -134,40 +163,34 @@ int lib_float(MobiusState* state, int arg_count) {
 
     Value arg = state->npeek(0);
     Value result;
-    
+
     switch (arg.type) {
         case VAL_FLOAT64:
             result = arg;  // Already a float
             break;
-        case VAL_INT64: {
+        case VAL_INT64:
             result = make_float_value((double)arg.as.i64);
             break;
-        }
+        case VAL_UINT64:
+            result = make_float_value((double)arg.as.u64);
+            break;
         case VAL_STRING: {
-            if (arg.as.string) {
-                const char* str = arg.as.string->data;
-                char* endptr;
-                double val = strtod(str, &endptr);
-                if (*endptr == '\0') {
-                    result = make_float_value(val);
-                } else {
-                    return state->error("Cannot convert string to float");
-                }
-            } else {
-                return state->error("Cannot convert null string to float");
+            if (!arg.as.string) return state->error("Cannot convert null string to float");
+            const MobiusString* str = arg.as.string;
+            char* endptr;
+            double val = strtod(str->data, &endptr);
+            if (!whole_string_number(str, endptr)) {   // float("") used to give 0.0
+                return state->error("Cannot convert string to float");
             }
+            result = make_float_value(val);
             break;
         }
         default:
             return state->error("Cannot convert value to float");
     }
-    
-    // Pop argument from stack
+
     state->npop();
-    
-    // Push result onto stack
     state->npush(result);
-    
     return 1;
 }
 

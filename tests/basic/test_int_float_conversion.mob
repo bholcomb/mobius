@@ -1,0 +1,47 @@
+// int() and float() convert only what they can represent exactly in their
+// result type, and are errors otherwise: no silent garbage (int(1e300) gave
+// INT64_MIN), clamping (int("99999999999999999999") gave INT64_MAX) or
+// zero (int("") gave 0). int() of a uint64 that fits converts (it used to
+// be refused for every uint64).
+func opaque(x) { return x }
+func u64(n) { return opaque(18446744073709551615) - opaque(18446744073709551615) + n }
+func check(name, got, want) {
+    if (got != want or typeof(got) != typeof(want)) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+func expect_error(name, f) {
+    var failed = false
+    try { f() } catch e { failed = true }
+    if (!failed) {
+        print("FAIL: " + name + " did not raise an error")
+        exit(1)
+    }
+}
+
+check("truncates toward zero", int(opaque(2.9)), 2)
+check("negative truncation", int(opaque(-2.9)), -2)
+check("int64 minimum", int(opaque(-9223372036854775808.0)), -9223372036854775807 - 1)
+check("uint64 that fits", int(u64(5)), 5)
+check("decimal string", int(opaque("-42")), -42)
+check("int64 max string", int(opaque("9223372036854775807")), 9223372036854775807)
+expect_error("float too large", func() { return int(opaque(1e300)) })
+expect_error("float too small", func() { return int(opaque(-1e300)) })
+expect_error("2^63", func() { return int(opaque(9223372036854775808.0)) })
+var infinity_value = opaque(1e308) * 10.0
+expect_error("infinity", func() { return int(infinity_value) })
+expect_error("NaN", func() { return int(infinity_value - infinity_value) })
+expect_error("uint64 above int64", func() { return int(opaque(18446744073709551615)) })
+expect_error("empty string", func() { return int(opaque("")) })
+expect_error("digits out of range", func() { return int(opaque("99999999999999999999")) })
+expect_error("leading space", func() { return int(opaque(" 42")) })
+expect_error("trailing text", func() { return int(opaque("12abc")) })
+expect_error("text after NUL", func() { return int(opaque("12\0x")) })
+
+check("float of uint64", float(u64(5)), 5.0)
+check("float of string", float(opaque("1.5")), 1.5)
+expect_error("float of empty string", func() { return float(opaque("")) })
+expect_error("float of leading space", func() { return float(opaque(" 1.5")) })
+expect_error("float trailing text", func() { return float(opaque("1.5x")) })
+print("int and float conversion: PASS")
