@@ -439,8 +439,11 @@ handy for invoking stored callbacks from arbitrary C code.
 
 ## Error handling
 
-By default, errors print to `stderr` with line/column info. Install a callback
-to intercept them:
+By default, errors print to `stderr` with line/column info. Only errors that
+will not be caught are reported: an error raised while a `try` block is active
+in the running script unwinds to its `catch` without calling the handler. (An
+error that escapes a spawned fiber is reported by that fiber; awaiting the fiber
+rethrows it in the awaiter.) Install a callback to intercept them:
 
 ```c
 void my_error_handler(MobiusState* state, const MobiusError* error, void* userdata) {

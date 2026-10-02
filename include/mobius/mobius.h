@@ -202,6 +202,9 @@ typedef void (*MobiusErrorHandler)(MobiusState* state, const MobiusError* error,
  * A default handler that prints errors to stderr is installed automatically
  * by mobius_new_state().  Pass NULL to restore the default handler.
  *
+ * The handler is not called for errors raised while a script `try` block
+ * is active: those unwind to the script's `catch`.
+ *
  * @param handler   New error handler, or NULL to restore the default.
  * @param userdata  Opaque pointer forwarded to the handler (may be NULL).
  * @return The previous handler, or NULL if it was the default.

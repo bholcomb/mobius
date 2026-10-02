@@ -1,0 +1,45 @@
+// Errors caught by try/catch are not reported. The error handler (by
+// default, a line on stderr) used to run as soon as an error was raised,
+// so every handled error printed "Error [...]" anyway. Uncaught errors are
+// still reported.
+import "os"
+
+var dir = os.join(os.tmpdir(), "mobius_caught_errors_" + str(os.getpid()))
+os.mkdirp(dir)
+var script = os.join(dir, "child.mob")
+var err_file = os.join(dir, "stderr.txt")
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+
+func run_child(source) {
+    writefile(script, source)
+    var code = os.system("\"" + mobius_bin + "\" \"" + script + "\" > /dev/null 2> \"" + err_file + "\"")
+    return [code, readfile(err_file)]
+}
+
+func fail(message) {
+    print("FAIL: " + message)
+    os.system("rm -rf \"" + dir + "\"")
+    exit(1)
+}
+
+var caught = run_child("func opaque(x) { return x }\n" +
+    "func f() {\n" +
+    "    var t = nil\n" +
+    "    try { var y = t.x } catch e { }\n" +
+    "    var n = 1\n" +
+    "    try { n = opaque(1.5) } catch e { }\n" +
+    "    try { throw \"thrown\" } catch e { }\n" +
+    "    try { opaque(nil)() } catch e { }\n" +
+    "}\n" +
+    "f()\n")
+if (caught[0] != 0) { fail("child with caught errors exited with " + str(caught[0])) }
+if (caught[1] != "") { fail("caught errors were reported: " + caught[1]) }
+
+var uncaught = run_child("var t = nil\nprint(t.x)\n")
+if (uncaught[0] == 0) { fail("uncaught error did not fail the script") }
+if (!contains(uncaught[1], "Attempt to index a nil value")) {
+    fail("uncaught error was not reported: " + uncaught[1])
+}
+
+os.system("rm -rf \"" + dir + "\"")
+print("caught errors are not reported: PASS")
