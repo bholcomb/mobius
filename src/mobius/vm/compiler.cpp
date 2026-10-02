@@ -2447,6 +2447,34 @@ int Compiler::compileIncrement(IncrementExpr* expr, int dest) {
         }
     }
 
+    // Captured variable (upvalue): load, modify, store through the upvalue.
+    // This case was missing, so `c++` on a captured `c` fell through to the
+    // global path: it incremented a global of the same name (or failed with
+    // "Undefined variable") and left the captured value unchanged.
+    int upvalue = resolveUpvalue(current_, name);
+    if (upvalue >= 0) {
+        int save = current_->free_reg;
+        int reg = (dest >= 0) ? dest : allocReg();
+        int cell_reg = allocReg();
+        int work_reg = allocReg();
+        bool shared = current_->proto->upvalues[upvalue].maybe_shared;
+        emitABC(OP_GETUPVAL, (uint8_t)cell_reg, (uint8_t)upvalue, 0);
+        if (shared) emitABC(OP_LOCK_SHARED, (uint8_t)cell_reg, 0, 0);
+        emitABC(OP_SHARED_LOAD, (uint8_t)reg, (uint8_t)cell_reg, 0);   // the old value
+        if (expr->is_prefix) {
+            emitABC(op, (uint8_t)reg, (uint8_t)reg, 0);
+            emitABC(OP_SETUPVAL, (uint8_t)reg, (uint8_t)upvalue, 0);
+        } else {
+            emitABC(OP_MOVE, (uint8_t)work_reg, (uint8_t)reg, 0);
+            emitABC(op, (uint8_t)work_reg, (uint8_t)work_reg, 0);
+            emitABC(OP_SETUPVAL, (uint8_t)work_reg, (uint8_t)upvalue, 0);
+        }
+        if (shared) emitABC(OP_UNLOCK_SHARED, (uint8_t)cell_reg, 0, 0);
+        if (dest < 0) setFreeReg(reg + 1);
+        else setFreeReg(save);
+        return reg;
+    }
+
     // Global increment: load, modify, store
     int save = current_->free_reg;
     int reg = (dest >= 0) ? dest : allocReg();
