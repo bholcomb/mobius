@@ -3318,6 +3318,11 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     unreachable_ = false;
     FunctionState* enclosing = current_;
     FunctionState child_fs;
+    // Hoisted globals live in the enclosing function's registers; the
+    // child must not resolve names to them (a closure in a loop that
+    // called a hoisted global function read its own register instead).
+    std::vector<HoistedGlobals> enclosing_hoisted;
+    enclosing_hoisted.swap(hoisted_globals_stack_);
     child_fs.proto = new Prototype();
     child_fs.proto->globals = globals_;
     child_fs.proto->name = name ? name : "";
@@ -3377,6 +3382,7 @@ void Compiler::compileFunctionStmt(FunctionStmt* stmt) {
     // Restore enclosing state
     current_ = enclosing;
     unreachable_ = saved_unreachable;
+    hoisted_globals_stack_.swap(enclosing_hoisted);
 
     // Add child prototype to parent and emit CLOSURE
     int proto_idx = (int)current_->proto->protos.size();
@@ -4702,6 +4708,11 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
     unreachable_ = false;
     FunctionState* enclosing = current_;
     FunctionState child_fs;
+    // Hoisted globals live in the enclosing function's registers; the
+    // child must not resolve names to them (a closure in a loop that
+    // called a hoisted global function read its own register instead).
+    std::vector<HoistedGlobals> enclosing_hoisted;
+    enclosing_hoisted.swap(hoisted_globals_stack_);
     child_fs.proto = new Prototype();
     child_fs.proto->globals = globals_;
     child_fs.proto->name = name;
@@ -4755,6 +4766,7 @@ int Compiler::compileFunctionExpr(FunctionExpr* expr, int dest) {
 
     current_ = enclosing;
     unreachable_ = saved_unreachable;
+    hoisted_globals_stack_.swap(enclosing_hoisted);
 
     int proto_idx = (int)current_->proto->protos.size();
     current_->proto->protos.push_back(child_proto);
