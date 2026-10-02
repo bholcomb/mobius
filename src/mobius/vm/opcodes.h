@@ -125,7 +125,7 @@ enum OpCode : uint8_t {
                     //          flag (permissive override_behavior chunks).
                     //          B... A carries the value reg; C=1 emits a
                     //          warning when an actual override happens.
-    OP_GLOBAL_READONLY, // A Bx  set readonly flag on global slot Bx when A!=0
+    OP_GLOBAL_READONLY, // A Bx  global slot Bx: A=0 writable, A=1 read-only, A=2 constant
 
     // -- Table and array operations --
     OP_NEWTABLE,    // A B C     R[A] = new Table(B array slots, C hash slots)
