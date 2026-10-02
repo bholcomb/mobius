@@ -1,0 +1,24 @@
+// Method calls on a table held in a shared value look names up in the same
+// order as on a plain table: own keys and __index tables, then built-in
+// table methods, then a function __index. The built-ins came first, so a
+// shared table's own `size` method was ignored.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+shared var custom = {items: [1, 2, 3], size: func(self) { return 99 }}
+check("own method wins", custom:size(), 99)
+
+shared var plain = {a: 1, b: 2}
+check("built-in when not overridden", plain:size(), 2)
+
+var Class = {size: func(self) { return 42 }}
+shared var inst = setmetatable({}, {__index: Class})
+check("__index table method", inst:size(), 42)
+
+shared var dyn = setmetatable({x: 1}, {__index: func(t, k) { return func(self) { return "dyn:" + k } }})
+check("built-in before function __index", dyn:has_key("x"), true)
+check("function __index for other names", dyn:greet(), "dyn:greet")
+print("shared method lookup: PASS")
