@@ -66,6 +66,17 @@ bool Channel::tryRecv(Value& out) {
     return true;
 }
 
+int Channel::tryRecvStatus(Value& out) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (count_ == 0) return closed_.load(std::memory_order_relaxed) ? -1 : 0;
+    out = std::move(buffer_[head_]);
+    buffer_[head_] = Value();
+    head_ = (head_ + 1) % capacity_;
+    count_--;
+    not_full_.notify_one();
+    return 1;
+}
+
 void Channel::close() {
     std::lock_guard<std::mutex> lock(mutex_);
     closed_ = true;

@@ -1,0 +1,28 @@
+// recv never loses a value that was sent before the channel closed. It
+// checked "empty" and "closed" separately, so a send followed by close
+// between the two checks made recv report a closed, empty channel while a
+// value was still buffered.
+func producer(ch, n) {
+    for (var i = 0; i < n; i++) { ch:send(i) }
+    ch:close()
+    return 0
+}
+func drain(ch) {
+    var got = 0
+    while (true) {
+        try { ch:recv() } catch e { break }
+        got++
+    }
+    return got
+}
+for (var trial = 0; trial < 300; trial++) {
+    var ch = fiber.channel(1)
+    var p = spawn producer(ch, 3)
+    var got = await spawn drain(ch)
+    await p
+    if (got != 3) {
+        print("FAIL: trial " + str(trial) + " received " + str(got) + " of 3")
+        exit(1)
+    }
+}
+print("recv/close race: PASS")
