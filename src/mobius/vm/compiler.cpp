@@ -4769,7 +4769,13 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
 
     current_->open_trys++;
     unreachable_ = false;
+    // The try and catch bodies are scopes of their own. Without them a
+    // local declared in the try body stayed visible in catch and finally,
+    // where its register held whatever was there when the exception hit
+    // (typically the thrown value).
+    beginScope();
     compileBlock(stmt->try_body, stmt->try_body_count);
+    endScope();
     bool try_unreachable = unreachable_;
 
     emitABC(OP_TRY_END, 0, 0, 0);
@@ -4781,7 +4787,9 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
     current_->proto->code[try_begin_pc] = ENCODE_AsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, offset);
 
     unreachable_ = false;
+    beginScope();
     compileBlock(stmt->catch_body, stmt->catch_body_count);
+    endScope();
     bool catch_unreachable = unreachable_;
 
     patchJump(jmp_past_catch);
