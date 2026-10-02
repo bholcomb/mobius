@@ -47,6 +47,7 @@ typedef struct InternalError {
     int line;
     int column;
     char* function_name;
+    bool reported;   // passed to the error handler already
 } InternalError;
 
 #define INITIAL_STACK_CAPACITY 256
@@ -373,6 +374,10 @@ private:
     GlobalEnvironment* current_compile_env_ = nullptr;
 
     void clearErrorInternal();
+    void reportError(InternalError* err);
+    // Report the current error if it reached the host without having been
+    // reported (it was raised inside a try but escaped anyway).
+    void reportEscapedError();
 };
 
 // ============================================================================

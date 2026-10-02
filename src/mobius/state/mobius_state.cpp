@@ -999,6 +999,7 @@ int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* en
     int rc = main_vm_->execute(proto);
 
     if (rc != 0) {
+        reportEscapedError();
         return MOBIUS_ERROR_RUNTIME;
     }
     return MOBIUS_OK;
@@ -1047,6 +1048,7 @@ InternalError* MobiusState::getLastError() const {
     copy->line = err->line;
     copy->column = err->column;
     copy->function_name = err->function_name ? mobius_strdup(err->function_name) : NULL;
+    copy->reported = err->reported;
 
     return copy;
 }
@@ -1074,26 +1076,39 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     err_slot->line = line;
     err_slot->column = column;
     err_slot->function_name = function_name ? mobius_strdup(function_name) : NULL;
+    err_slot->reported = false;
 
     // Report only errors that will not be caught. While a try block is
     // active in the running VM, the error unwinds to it (natives return the
     // error to the VM), so reporting it here printed an "Error [...]" line
     // for every error the script handled itself.
+    // If it escapes anyway, reportEscapedError reports it when it reaches
+    // the host.
     bool will_be_caught = vm && !vm->try_stack_.empty();
-
-    if (error_handler_ && !will_be_caught) {
-        MobiusError pub_err;
-        pub_err.code = code;
-        pub_err.message = message;
-        pub_err.suggestion = suggestion;
-        pub_err.filename = filename;
-        pub_err.line = line;
-        pub_err.column = column;
-        pub_err.function_name = function_name;
-        error_handler_(this, &pub_err, error_handler_userdata_);
-    }
+    if (!will_be_caught) reportError(err_slot);
 
     return code;
+}
+
+void MobiusState::reportError(InternalError* err) {
+    if (!err || err->reported) return;
+    err->reported = true;
+    if (!error_handler_) return;
+    MobiusError pub_err;
+    pub_err.code = err->code;
+    pub_err.message = err->message;
+    pub_err.suggestion = err->suggestion;
+    pub_err.filename = err->filename;
+    pub_err.line = err->line;
+    pub_err.column = err->column;
+    pub_err.function_name = err->function_name;
+    error_handler_(this, &pub_err, error_handler_userdata_);
+}
+
+void MobiusState::reportEscapedError() {
+    MobiusVM* vm = boundVM();
+    if (vm && !vm->try_stack_.empty()) return;   // still inside a try: not escaped
+    reportError(vm ? vm->last_error_ : fallback_last_error_);
 }
 
 int MobiusState::error(const char* message) {
