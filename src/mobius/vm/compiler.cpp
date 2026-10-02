@@ -1,5 +1,9 @@
 #include "vm/compiler.h"
 #include "vm/ast_scan.h"
+
+static inline bool type_is_numeric(ValueType t) {
+    return t == VAL_INT64 || t == VAL_UINT64 || t == VAL_FLOAT64;
+}
 #include "state/mobius_state.h"
 #include "library/library.h"
 
@@ -1132,6 +1136,14 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
         (inferExprType(expr->left) == VAL_STRING ||
          inferExprType(expr->right) == VAL_STRING);
 
+    // The immediate (ADDI ...) and inline-constant (ADDK ...) forms only
+    // implement numeric arithmetic. On anything else they errored ("ADDI
+    // requires numeric operand") or returned the constant (`s + 1.5` gave
+    // 1.5), where the generic op concatenates strings and calls table
+    // metamethods. Use them only when the other operand is provably numeric.
+    bool left_numeric = type_is_numeric(inferExprType(expr->left));
+    bool right_numeric = type_is_numeric(inferExprType(expr->right));
+
     // Try arithmetic-with-immediate (AsBx format): R[A] = R[A] op sBx
     // sBx range is -SBX16_BIAS..SBX16_BIAS (±32767)
     if (!provably_string_concat) {
@@ -1158,7 +1170,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
 
             int imm;
             // Right operand is immediate: R[dest] = R[left] op imm
-            if (try_imm(expr->right, &imm)) {
+            if (left_numeric && try_imm(expr->right, &imm)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
                 int left_reg = compileUnwrappedExpr(expr->left, reg);
@@ -1174,7 +1186,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 return reg;
             }
             // Left operand is immediate (commutative ops only: + and *)
-            if ((imm_op == OP_ADDI || imm_op == OP_MULI) && try_imm(expr->left, &imm)) {
+            if ((imm_op == OP_ADDI || imm_op == OP_MULI) && right_numeric &&
+                try_imm(expr->left, &imm)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
                 int right_reg = compileUnwrappedExpr(expr->right, reg);
@@ -1230,7 +1243,7 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
             uint64_t raw;
             uint8_t tag;
 
-            if (try_literal(expr->right, &raw, &tag)) {
+            if (left_numeric && try_literal(expr->right, &raw, &tag)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
                 int src_reg = compileUnwrappedExpr(expr->left, reg);
@@ -1244,7 +1257,8 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
                 return reg;
             }
 
-            if ((k_op == OP_ADDK || k_op == OP_MULK) && try_literal(expr->left, &raw, &tag)) {
+            if ((k_op == OP_ADDK || k_op == OP_MULK) && right_numeric &&
+                try_literal(expr->left, &raw, &tag)) {
                 int reg = (dest >= 0) ? dest : allocReg();
                 int save_reg = current_->free_reg;
                 int src_reg = compileUnwrappedExpr(expr->right, reg);
@@ -2830,7 +2844,11 @@ int Compiler::compileConditionJump(Expr* condition) {
 
             // Try compare-with-immediate: RHS is an integer literal in sBx range
             Value rimm;
-            if (constantValueOf(bin->right, &rimm) && rimm.type == VAL_INT64) {
+            // Only for a provably numeric operand: the immediate compares
+            // have no fallback to metamethods (`t < 5` on a table with __lt
+            // raised "LTI requires numeric operand").
+            if (type_is_numeric(inferExprType(bin->left)) &&
+                constantValueOf(bin->right, &rimm) && rimm.type == VAL_INT64) {
                 int64_t iv = rimm.as.i64;
                 if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                     int save = current_->free_reg;
@@ -2861,7 +2879,8 @@ int Compiler::compileConditionJump(Expr* condition) {
 
             // Try compare-with-immediate: LHS is an integer literal in sBx range (swap operands)
             Value limm;
-            if (constantValueOf(bin->left, &limm) && limm.type == VAL_INT64) {
+            if (type_is_numeric(inferExprType(bin->right)) &&
+                constantValueOf(bin->left, &limm) && limm.type == VAL_INT64) {
                 int64_t iv = limm.as.i64;
                 if (iv >= -SBX16_BIAS && iv <= SBX16_BIAS) {
                     int save = current_->free_reg;
