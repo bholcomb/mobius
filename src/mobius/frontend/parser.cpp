@@ -1,3 +1,5 @@
+#include "frontend/diagnostics.h"
+#include <string>
 #include <vector>
 #include <string>
 #include <cctype>
@@ -212,26 +214,21 @@ void parser_error(Parser* parser, Token token, const char* message) {
 
     parser->panic_mode = true;
     parser->had_error = true;
-    
-    if (parser->source_name) {
-        fprintf(stderr, "[%s:%d] Error", parser->source_name, token.line);
-    } else {
-        fprintf(stderr, "[line %d] Error", token.line);
-    }
-    
+
+    std::string text = "Syntax error";
     if (token.type == TOKEN_EOF) {
-        fprintf(stderr, " at end");
+        text += " at end";
     } else if (token.type == TOKEN_ERROR) {
         // Nothing
     } else if (token.type == TOKEN_NEWLINE) {
-        fprintf(stderr, " at end of line");
+        text += " at end of line";
     } else {
         char shown[64];
         token_display(token, shown, sizeof(shown));
-        fprintf(stderr, " at '%s'", shown);
+        text += std::string(" at '") + shown + "'";
     }
-    
-    fprintf(stderr, ": %s\n", final_message ? final_message : "Unknown parse error");
+    text += std::string(": ") + (final_message ? final_message : "Unknown parse error");
+    report_diagnostic(parser->source_name, token.line, text);
 }
 
 void parser_error_at_current(Parser* parser, const char* message) {
