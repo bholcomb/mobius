@@ -20,6 +20,14 @@
 
 struct GcHeap;
 
+// A function the host registered with userdata and flags. Native function
+// values refer to one through their aux field (0: a plain C function).
+struct HostFunction {
+    MobiusCFunction function = nullptr;
+    void* userdata = nullptr;
+    unsigned int flags = 0;
+};
+
 // Pause/abort hint for the VM's safe points (see MobiusState::runControl).
 extern volatile bool g_vm_interrupt;
 // The error message of an execution stopped by mobius_abort.
@@ -240,6 +248,18 @@ public:
     // exit(code) from a script: the host's handler, or a warning.
     void requestExit(int code);
 
+    // Host functions: an id for (function, userdata, flags), stable for the
+    // state's life (the same triple gets the same id). Lookups are
+    // lock-free: the table only grows, in fixed chunks.
+    int32_t hostFunctionId(MobiusCFunction function, void* userdata, unsigned int flags);
+    const HostFunction* hostFunction(int32_t id) const {
+        if (id <= 0) return nullptr;
+        size_t chunk = (size_t)id >> kHostChunkBits, index = (size_t)id & (kHostChunkSize - 1);
+        if (chunk >= kHostChunks) return nullptr;
+        HostFunction* entries = host_function_chunks_[chunk].load(std::memory_order_acquire);
+        return entries ? &entries[index] : nullptr;
+    }
+
     // Pause / abort control (mobius_pause, mobius_abort, time limits).
     // Set flags make every VM safe point of this state take the slow path
     // (vm_interrupt_point) through the process-wide hint g_vm_interrupt.
@@ -338,6 +358,7 @@ public:
     // Active VM — returns the currently executing VM for this state, or nullptr
     // if this state is not currently executing on the thread.
     class MobiusVM* activeVM() const;
+    class MobiusVM* mainVM() const { return main_vm_; }
 
     // Native call context — resolved from the active VM for this state, falling
     // back to the state's persistent main VM for host-side stack operations.
@@ -414,6 +435,11 @@ private:
 
     MobiusErrorHandler error_handler_;
     void* error_handler_userdata_;
+    static constexpr size_t kHostChunkBits = 10, kHostChunkSize = 1u << kHostChunkBits, kHostChunks = 1024;
+    std::atomic<HostFunction*> host_function_chunks_[kHostChunks] = {};
+    std::mutex host_functions_mutex_;
+    int32_t next_host_function_ = 1;
+    std::unordered_map<std::string, int32_t> host_function_ids_;
     std::atomic<int> run_control_{0};
     unsigned int time_limit_ms_ = 0;
     uint64_t time_limit_timer_ = 0;

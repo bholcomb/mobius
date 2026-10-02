@@ -37,6 +37,12 @@ struct MobiusFiber {
 
     size_t       peak_stack_bytes; // high-water mark for metrics
 
+    // > 0 while a host function runs on this fiber's stack. The fiber must
+    // then not switch out (it could resume on another thread with the
+    // host's frames on its stack): waiting for another fiber is an error,
+    // and sleeps and I/O block the thread.
+    int          host_call_depth = 0;
+
     MobiusFiber()
         : id(0), state(FiberState::Idle),
           stack_memory(nullptr), stack_size(0),

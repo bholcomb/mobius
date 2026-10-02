@@ -384,6 +384,37 @@ MOBIUS_API void mobius_set_userdata_type_metatable(MobiusState* state,
 MOBIUS_API void mobius_register_function(MobiusState* state, const char* name,
                                         MobiusCFunction func);
 
+/* Flags for host functions (mobius_register_function_ex,
+   mobius_stack_pushFunction). */
+#define MOBIUS_FN_MAIN_THREAD 0x1u   /* run on the thread driving the state (see docs) */
+
+/**
+ * Register a host function with a `userdata` pointer, which the function
+ * reads with mobius_function_userdata() while it runs. One C function can
+ * then serve many registrations (a binding's dispatcher). Otherwise like
+ * mobius_register_function, except that the function never moves to
+ * another thread while it runs: if it calls back into a script that waits
+ * (await, fiber.sleep, channels), the wait blocks the thread. Bindings for
+ * runtimes that can't have their frames moved between threads (.NET, JVM)
+ * must register this way.
+ */
+MOBIUS_API void mobius_register_function_ex(MobiusState* state, const char* name,
+                                           MobiusCFunction func, void* userdata,
+                                           unsigned int flags);
+
+/**
+ * Push a host function value (to store in a table, a module, or pass to a
+ * script), as mobius_register_function_ex registers one.
+ */
+MOBIUS_API void mobius_stack_pushFunction(MobiusState* state, MobiusCFunction func,
+                                         void* userdata, unsigned int flags);
+
+/**
+ * The userdata of the host function currently running (NULL in a plain
+ * native function or outside one).
+ */
+MOBIUS_API void* mobius_function_userdata(MobiusState* state);
+
 /**
  * Pop the table on top of the stack and make it importable as `name`
  * (`import "name"`), also in a sandbox. Registering a name again replaces

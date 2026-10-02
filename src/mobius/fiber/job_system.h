@@ -59,6 +59,14 @@ public:
     void waitForCounter(AtomicCounter* counter, int32_t target_value);
     void yieldFiber();
 
+    // True on a fiber that is running a host function (see
+    // MobiusFiber::host_call_depth): it must not wait for other fibers.
+    static bool inHostFunction() {
+        return t_current_fiber_ && t_current_fiber_->host_call_depth > 0;
+    }
+    static constexpr const char* kWaitInHostFunctionMessage =
+        "cannot wait for another fiber inside a host function";
+
     // Parking: a fiber that must wait for an event leaves the ready queue
     // instead of being polled. beginPark() before registering the wake
     // source (so a wake that arrives during registration is not lost),

@@ -479,6 +479,8 @@ MobiusState::~MobiusState() {
 
     delete string_pool_;
 
+    for (auto& chunk : host_function_chunks_) delete[] chunk.load(std::memory_order_relaxed);
+
     if (fallback_last_error_) {
         free_internal_error(fallback_last_error_);
     }
@@ -622,7 +624,7 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
         nctx->base = scratch;
         nctx->top = scratch + nargs;
 
-        int rc = function.as.native_function(this, nargs);
+        int rc = vm->invokeNative(function, nargs);
         int result_top = nctx->top;
 
         nctx->registers = saved_registers;
@@ -1426,6 +1428,31 @@ int MobiusState::abortExecution() {
     if (!job_system_ || job_system_->mainFiberPending()) return MOBIUS_OK;
     drainAbortedFibers();
     return MOBIUS_OK;
+}
+
+int32_t MobiusState::hostFunctionId(MobiusCFunction function, void* userdata, unsigned int flags) {
+    std::lock_guard<std::mutex> lock(host_functions_mutex_);
+    char key[64];
+    snprintf(key, sizeof(key), "%p/%p/%u", (void*)function, userdata, flags);
+    auto it = host_function_ids_.find(key);
+    if (it != host_function_ids_.end()) return it->second;
+    int32_t id = next_host_function_;
+    size_t chunk = (size_t)id >> kHostChunkBits;
+    if (chunk >= kHostChunks) return 0;
+    HostFunction* entries = host_function_chunks_[chunk].load(std::memory_order_relaxed);
+    if (!entries) {
+        entries = new HostFunction[kHostChunkSize];
+        host_function_chunks_[chunk].store(entries, std::memory_order_release);
+    }
+    HostFunction& hf = entries[(size_t)id & (kHostChunkSize - 1)];
+    hf.function = function;
+    hf.userdata = userdata;
+    hf.flags = flags;
+    // Publish the entry before any value can carry its id.
+    std::atomic_thread_fence(std::memory_order_release);
+    next_host_function_++;
+    host_function_ids_[key] = id;
+    return id;
 }
 
 struct MobiusFileRequest {

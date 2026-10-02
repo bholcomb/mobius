@@ -137,6 +137,10 @@ void JobSystem::waitForCounter(AtomicCounter* counter, int32_t target_value) {
 void JobSystem::yieldFiber() {
     MobiusFiber* self = t_current_fiber_;
     if (!self) return;
+    if (self->host_call_depth > 0) {   // a host function is on this stack: stay put
+        std::this_thread::yield();
+        return;
+    }
 
     self->state = FiberState::Suspended;
     fiber_context_swap(&self->context, &t_scheduler_ctx_);
