@@ -1,0 +1,45 @@
+// A function __newindex is called for assignments to keys the table does
+// not have, instead of storing them. It used to be ignored. Existing keys
+// are assigned directly, and a table __newindex still receives the store.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var log = []
+    var t = setmetatable({existing: 1}, {
+        __newindex: func(tbl, k, v) { log:push(str(k) + "=" + str(v)) }
+    })
+    t.a = 1
+    t["b"] = 2
+    t[3] = "x"
+    t.existing = 5
+    check("calls logged", size(log), 3)
+    check("first call", log[0], "a=1")
+    check("integer key", log[2], "3=x")
+    check("new keys not stored", t:has_key("a"), false)
+    check("existing key assigned", t.existing, 5)
+
+    // The function can store with rawset-style access through another table.
+    var backing = {}
+    var proxy = setmetatable({}, {__newindex: func(tbl, k, v) { backing[k] = v * 2 }})
+    proxy.n = 21
+    check("proxy store", backing.n, 42)
+
+    // A table __newindex is unchanged.
+    var target = {}
+    var redirect = setmetatable({}, {__newindex: target})
+    redirect.z = 9
+    check("table __newindex", target.z, 9)
+
+    // Errors in __newindex propagate.
+    var bad = setmetatable({}, {__newindex: func(tbl, k, v) { throw "read-only" }})
+    var caught = ""
+    try { bad.x = 1 } catch e { caught = e }
+    check("error propagates", caught, "read-only")
+}
+main()
+print("function __newindex: PASS")

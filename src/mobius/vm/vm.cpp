@@ -894,8 +894,13 @@ int MobiusVM::callTernaryMetamethod(const Value& table_val, MobiusString* mm_nam
     }
     if (method.type == VAL_NIL) return 0;
 
+    if (method.type == VAL_FUNCTION && method.as.function) {
+        Value args[3] = {a, b, c};
+        Value ignored;
+        return callScriptMetamethod(method, mm_name, args, 3, &ignored);
+    }
     if (method.type != VAL_NATIVE_FUNCTION) {
-        runtimeError("Metamethod '%s' must be native", mm_name->data);
+        runtimeError("'%s' metamethod must be a function", mm_name->data);
         return -1;
     }
 
@@ -1354,6 +1359,22 @@ MOBIUS_FORCEINLINE static int vm_op_index_get(MobiusVM* vm, VMFrame& f, uint32_t
 
 // Writing into part of a const value. Out of line, and without a VMFrame&
 // (see fiber_global_error); the caller syncs the ip.
+// A store of a new key into a table whose __newindex is a function calls
+// that function instead of storing (Table::set handles a __newindex table).
+// It used to be ignored and the key stored directly. Returns 1 when the
+// function handled the store, 0 to store normally, -1 on error. Out of line
+// and without a VMFrame& (see fiber_global_error); the caller syncs the ip.
+MOBIUS_NOINLINE static int table_newindex_call(MobiusVM* vm, const Value& obj,
+                                               const Value& key, const Value& val) {
+    Table* tbl = obj.as.table;
+    MobiusString* name = vm->state_->metamethods()->newindex();
+    ValueType mt = tbl->getMetamethod(name).type;
+    if (mt != VAL_FUNCTION && mt != VAL_NATIVE_FUNCTION) return 0;
+    if (tbl->hasKey(key)) return 0;
+    Value obj_c = obj, key_c = key, val_c = val;   // the call may move registers
+    return vm->callTernaryMetamethod(obj_c, name, obj_c, key_c, val_c) < 0 ? -1 : 1;
+}
+
 MOBIUS_NOINLINE static int frozen_write_error(MobiusVM* vm, const Value& obj) {
     vm->runtimeError("cannot modify a const %s", obj.type == VAL_ARRAY ? "array" : "table");
     return -1;
@@ -1468,10 +1489,19 @@ MOBIUS_FORCEINLINE static int vm_op_index_set(MobiusVM* vm, VMFrame& f, uint32_t
             arr->set((size_t)idx, val);
         }
     } else if (obj.type == VAL_TABLE && obj.as.table) {
+        Table* tbl = obj.as.table;
+        if (MOBIUS_UNLIKELY(tbl->getMetatable() != nullptr)) {
+            f.ci->ip = f.ip;
+            int rc = table_newindex_call(vm, obj, key, val);
+            if (rc != 0) {
+                vm->refreshFrame(f);
+                return rc < 0 ? -1 : 0;
+            }
+        }
         if (MOBIUS_LIKELY(key.type == VAL_STRING))
-            obj.as.table->setByString(key.as.string, val);
+            tbl->setByString(key.as.string, val);
         else
-            obj.as.table->set(key, val);
+            tbl->set(key, val);
     } else if (obj.type == VAL_ARRAY_SLICE && obj.as.array_slice) {
         int64_t idx = vm_index_or_neg1(key);
         if (idx >= 0 && idx < (int64_t)obj.as.array_slice->length()) {
