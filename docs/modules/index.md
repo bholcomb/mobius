@@ -26,6 +26,7 @@ resolves modules and how packages are installed.
 | [`json`](json.md)               | JSON parsing and serialization |
 | [`math`](math.md)               | Trigonometry, logarithms, and number-theory functions and constants |
 | [`os`](os.md)                   | Filesystem, paths, environment, processes, and time conversion |
+| [`process`](process.md)         | Run programs directly: argument arrays, pipes, capture, timeouts, environment |
 | [`regex`](regex.md)             | Regular-expression match, search, find-all, replace, and split |
 | [`socket`](socket.md)           | Plain TCP and UDP sockets with buffer-first I/O |
 | [`toml`](toml.md)               | TOML parsing and serialization |

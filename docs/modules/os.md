@@ -36,8 +36,10 @@ Function groups:
 Notes:
 
 - `os.join(...)` accepts one or more string path segments.
-- `os.exec(...)` captures stdout as a string.
-- `os.system(...)` returns the subprocess exit code.
+- `os.exec(...)` runs a shell command and captures stdout as a string.
+- `os.system(...)` runs a shell command and returns its exit code.
+- For anything more (argument arrays without a shell, stderr, input, exit
+  codes with output, timeouts, pipes), use the [`process` module](process.md).
 - `os.stat(path)` returns a table with portable fields including `path`, `type`,
   `size`, `mtime`, `atime`, `ctime`, `mode`, `is_file`, `is_dir`, `is_link`,
   `is_other`, and `readonly`.

@@ -1,0 +1,12 @@
+// process: run programs with control over their standard streams. The
+// native plugin does the work; this script makes sure `io` is loaded (pipes
+// to a child are io streams, whose methods io installs) and registers the
+// methods of the child objects that process.start() returns.
+import "io" as __io
+
+__set_child_methods({
+    wait: __wait,
+    poll: __poll,
+    kill: __kill,
+    communicate: __communicate
+})

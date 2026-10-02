@@ -29,6 +29,19 @@ targets:
       depends_on:
         targets: ["mobius-core"]
 
+    - name: process
+      language: cpp
+      output_prefix: ""
+      sources: ["process/process_plugin.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src"
+        - "${workspace}/src/mobius"
+        - "${workspace}/src/modules"
+      libs: ["mobius-core", "dl"]
+      depends_on:
+        targets: ["mobius-core"]
+
     - name: math
       language: cpp
       output_prefix: ""

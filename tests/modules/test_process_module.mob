@@ -1,0 +1,158 @@
+// process module: running programs directly, with pipes and capture.
+import "process"
+import "io"
+import "os"
+
+var failures = 0
+func check(name, got, want) {
+    if (got != want) {
+        failures++
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+    }
+}
+func expect_error(name, f, needle) {
+    var msg = ""
+    try { f() } catch e { msg = str(e) }
+    if (!contains(msg, needle)) {
+        failures++
+        print("FAIL: " + name + ": expected error containing '" + needle + "', got '" + msg + "'")
+    }
+}
+func open_fds() {
+    if (!os.exists("/proc/self/fd")) { return -1 }
+    return size(os.listdir("/proc/self/fd"))
+}
+
+var dir = os.join(os.tmpdir(), "mobius_process_" + str(os.getpid()))
+os.mkdirp(dir)
+var fds_before = open_fds()
+
+// Arguments pass through exactly: spaces, quotes, empty strings, no shell.
+var args = process.run(["printf", "[%s]", "a b", "it's \"quoted\"", "", "$HOME", "*"])
+check("arguments verbatim", args.stdout, "[a b][it's \"quoted\"][][$HOME][*]")
+check("exit code 0", args.exit_code, 0)
+check("stderr captured empty", args.stderr, "")
+
+// Nonzero exits are results, not errors; check: true makes them errors.
+var fail = process.run(["sh", "-c", "echo partial; exit 7"])
+check("nonzero exit code", fail.exit_code, 7)
+check("output before nonzero exit", fail.stdout, "partial\n")
+expect_error("check", func() { return process.run(["sh", "-c", "exit 2"], {check: true}) }, "exited with status 2")
+
+// Launch errors.
+expect_error("missing program", func() { return process.run(["no-such-program-xyz"]) }, "not found in PATH")
+expect_error("missing path", func() { return process.run(["/no/such/program"]) }, "cannot run")
+expect_error("empty args", func() { return process.run([]) }, "must not be empty")
+expect_error("non-string arg", func() { return process.run(["echo", 5]) }, "args[1] must be a string")
+expect_error("bad stdio word", func() { return process.run(["true"], {stdout: "nowhere"}) }, "unknown setting")
+
+// Binary input and output, with NUL bytes.
+var bin = process.run(["cat"], {input: "a\0b\0c", binary: true})
+check("binary output is a buffer", typeof(bin.stdout), "buffer")
+check("binary round trip", bin.stdout:to_string(), "a\0b\0c")
+var text = process.run(["cat"], {input: buffer_from_string("buffer input")})
+check("buffer input", text.stdout, "buffer input")
+
+// Large stdout and stderr at the same time, plus large input: a child that
+// fills one pipe while we write the other would deadlock without draining
+// them together.
+var big_input = "0123456789"
+for (var i = 0; i < 18; i++) { big_input = big_input + big_input }   // 2,621,440 bytes
+var big = process.run(["sh", "-c", "cat; head -c 2000000 /dev/zero | tr '\\0' e 1>&2"], {input: big_input})
+check("large stdout", size(big.stdout), 2621440)
+check("large stderr", size(big.stderr), 2000000)
+
+// Environment: added to the parent's by default, nil removes, env_clear
+// starts empty.
+var env1 = process.run(["sh", "-c", "echo \"$MOBIUS_T1:$HOME_SET\""], {env: {MOBIUS_T1: "one", HOME_SET: "x"}})
+check("env added", env1.stdout, "one:x\n")
+check("parent env kept", process.run(["sh", "-c", "echo $PATH"]).stdout != "\n", true)
+var env2 = process.run(["/usr/bin/env"], {env_clear: true, env: {ONLY: "this"}})
+check("env_clear", env2.stdout, "ONLY=this\n")
+os.setenv("MOBIUS_T2", "inherited")
+var env3 = process.run(["sh", "-c", "echo [$MOBIUS_T2]"], {env: {MOBIUS_T2: nil}})
+check("nil removes a variable", env3.stdout, "[]\n")
+
+// Working directory.
+check("cwd", process.run(["pwd"], {cwd: dir}).stdout, os.realpath(dir) + "\n")
+expect_error("missing cwd", func() { return process.run(["pwd"], {cwd: os.join(dir, "nope")}) }, "cannot run")
+
+// Redirection: files, null, merging, io streams, inheriting.
+var out_path = os.join(dir, "out.txt")
+process.run(["echo", "first"], {stdout: {file: out_path}})
+process.run(["echo", "second"], {stdout: {file: out_path, append: true}})
+check("file and append", readfile(out_path), "first\nsecond\n")
+writefile(os.join(dir, "in.txt"), "from file\n")
+check("stdin from file", process.run(["cat"], {stdin: {file: os.join(dir, "in.txt")}}).stdout, "from file\n")
+var merged = process.run(["sh", "-c", "echo out; echo err 1>&2"], {stderr: "stdout"})
+check("merged stderr", merged.stdout, "out\nerr\n")
+check("merged stderr field", merged.stderr, nil)
+var quiet = process.run(["sh", "-c", "echo hidden"], {stdout: "null"})
+check("null output", quiet.stdout, nil)
+var log = io.open(os.join(dir, "stream.txt"), "w")
+log:write("before\n")
+process.run(["echo", "from child"], {stdout: log})
+log:write("after\n")
+log:close()
+check("io stream target keeps order", readfile(os.join(dir, "stream.txt")), "before\nfrom child\nafter\n")
+expect_error("input without a stdin pipe", func() {
+    return process.run(["cat"], {input: "x", stdin: "null"})
+}, "stdin is not a pipe")
+
+// Shell, only when asked.
+check("shell", process.run("echo $((6*7)) | tr 4 X", {shell: true}).stdout, "X2\n")
+expect_error("shell needs a string", func() { return process.run(["echo"], {shell: true}) }, "must be a string")
+
+// Timeouts stop the child and keep the output so far.
+var slow = process.run(["sh", "-c", "echo started; sleep 5; echo never"], {timeout_ms: 300})
+check("timed out", slow.timed_out, true)
+check("partial output", slow.stdout, "started\n")
+check("terminated by signal", slow.exit_code, -15)
+var stubborn = process.run(["sh", "-c", "trap '' TERM; echo going; sleep 5"], {timeout_ms: 200})
+check("SIGKILL after grace", stubborn.exit_code, -9)
+expect_error("check reports timeout", func() {
+    return process.run(["sleep", "5"], {timeout_ms: 100, check: true})
+}, "timed out")
+
+// start(): pipes are io streams.
+var cat = process.start(["cat"], {stdin: "pipe", stdout: "pipe"})
+check("pid", cat.pid > 0, true)
+cat.stdin:write("one\ntwo\n")
+cat.stdin:close()
+var got = []
+for (var line in cat.stdout:lines()) { got:push(line) }
+check("lines through pipes", size(got), 2)
+cat.stdout:close()
+check("wait", cat:wait(), 0)
+check("poll after exit", cat:poll(), 0)
+check("unpiped stream is nil", process.start(["true"]).stdout, nil)
+
+var both = process.start(["sh", "-c", "cat; echo e 1>&2; exit 4"], {stdin: "pipe", stdout: "pipe", stderr: "pipe"})
+var res = both:communicate("data")
+check("communicate stdout", res.stdout, "data")
+check("communicate stderr", res.stderr, "e\n")
+check("communicate exit", res.exit_code, 4)
+check("streams consumed", both.stdout:is_closed(), true)
+
+var sleeper = process.start(["sleep", "10"])
+check("poll while running", sleeper:poll(), nil)
+check("wait with timeout", sleeper:wait(50), nil)
+check("kill", sleeper:kill(), true)
+check("killed exit code", sleeper:wait(), -15)
+check("kill after exit", sleeper:kill(), false)
+expect_error("bad signal", func() { return sleeper:kill("stop") }, "unknown signal")
+
+var slow_child = process.start(["sh", "-c", "echo hi; sleep 5"], {stdout: "pipe"})
+var partial = slow_child:communicate(nil, 200)
+check("communicate timeout", partial.timed_out, true)
+check("communicate partial", partial.stdout, "hi\n")
+
+// No descriptors leak.
+if (fds_before >= 0) { check("no leaked descriptors", open_fds(), fds_before) }
+
+os.system("rm -rf \"" + dir + "\"")
+if (failures > 0) {
+    print("process module: " + str(failures) + " failures")
+    exit(1)
+}
+print("process module: PASS")
