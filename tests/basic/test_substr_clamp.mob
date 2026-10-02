@@ -1,0 +1,15 @@
+// substr clamps a length that runs past the end of the string, however
+// large. A huge length overflowed start + length and failed with "Memory
+// allocation failed".
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected [" + want + "], got [" + got + "]")
+        exit(1)
+    }
+}
+check("normal", substr("hello", 1, 2), "el")
+check("past the end", substr("hello", 1, 100), "ello")
+check("huge length", substr("hello", 1, 9223372036854775807), "ello")
+check("negative start", substr("hello", -3, 9223372036854775807), "llo")
+check("start at end", substr("hello", 5, 1), "")
+print("substr clamping: PASS")
