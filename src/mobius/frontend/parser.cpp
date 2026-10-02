@@ -1,3 +1,4 @@
+#include <cctype>
 #include "parser.h"
 #include "util/utility.h"
 #include "frontend/scanner.h"
@@ -88,6 +89,58 @@ bool parser_match_any(Parser* parser, size_t count, ...) {
 }
 
 // Error handling
+// The token as it appears in the source, for error messages. Only
+// identifiers carry their text, so keywords, symbols and literals all used
+// to show as 'unknown'.
+static void token_display(const Token& token, char* buf, size_t size) {
+    const char* sym = nullptr;
+    switch (token.type) {
+        case TOKEN_LEFT_PAREN: sym = "("; break;      case TOKEN_RIGHT_PAREN: sym = ")"; break;
+        case TOKEN_LEFT_BRACKET: sym = "["; break;    case TOKEN_RIGHT_BRACKET: sym = "]"; break;
+        case TOKEN_LEFT_BRACE: sym = "{"; break;      case TOKEN_RIGHT_BRACE: sym = "}"; break;
+        case TOKEN_COMMA: sym = ","; break;           case TOKEN_DOT: sym = "."; break;
+        case TOKEN_MINUS: sym = "-"; break;           case TOKEN_PLUS: sym = "+"; break;
+        case TOKEN_SEMICOLON: sym = ";"; break;       case TOKEN_COLON: sym = ":"; break;
+        case TOKEN_SLASH: sym = "/"; break;           case TOKEN_STAR: sym = "*"; break;
+        case TOKEN_PERCENT: sym = "%"; break;         case TOKEN_QUESTION: sym = "?"; break;
+        case TOKEN_AMPERSAND: sym = "&"; break;       case TOKEN_PIPE: sym = "|"; break;
+        case TOKEN_CARET: sym = "^"; break;           case TOKEN_TILDE: sym = "~"; break;
+        case TOKEN_HASH: sym = "#"; break;            case TOKEN_BANG: sym = "!"; break;
+        case TOKEN_BANG_EQUAL: sym = "!="; break;     case TOKEN_EQUAL: sym = "="; break;
+        case TOKEN_EQUAL_EQUAL: sym = "=="; break;    case TOKEN_GREATER: sym = ">"; break;
+        case TOKEN_GREATER_EQUAL: sym = ">="; break;  case TOKEN_LESS: sym = "<"; break;
+        case TOKEN_LESS_EQUAL: sym = "<="; break;     case TOKEN_PLUS_PLUS: sym = "++"; break;
+        case TOKEN_MINUS_MINUS: sym = "--"; break;    case TOKEN_PLUS_EQUAL: sym = "+="; break;
+        case TOKEN_MINUS_EQUAL: sym = "-="; break;    case TOKEN_STAR_EQUAL: sym = "*="; break;
+        case TOKEN_SLASH_EQUAL: sym = "/="; break;    case TOKEN_PERCENT_EQUAL: sym = "%="; break;
+        case TOKEN_AND_AND: sym = "&&"; break;        case TOKEN_OR_OR: sym = "||"; break;
+        case TOKEN_LEFT_SHIFT: sym = "<<"; break;     case TOKEN_RIGHT_SHIFT: sym = ">>"; break;
+        case TOKEN_DOT_DOT: sym = ".."; break;        case TOKEN_DOT_DOT_DOT: sym = "..."; break;
+        default: break;
+    }
+    if (sym) { snprintf(buf, size, "%s", sym); return; }
+    if (token.identifier) { snprintf(buf, size, "%s", token.identifier); return; }
+    switch (token.type) {
+        case TOKEN_INTEGER:
+            snprintf(buf, size, "%lld", (long long)token.literal.integer.value); return;
+        case TOKEN_FLOAT:
+            snprintf(buf, size, "%g", token.literal.float_val); return;
+        case TOKEN_STRING: case TOKEN_INTERP_STRING:
+            snprintf(buf, size, "\"%.40s%s\"", token.literal.string ? token.literal.string : "",
+                     token.literal.string && strlen(token.literal.string) > 40 ? "..." : "");
+            return;
+        case TOKEN_CHAR:
+            snprintf(buf, size, "'%c'", token.literal.character); return;
+        default: break;
+    }
+    // Keywords and type names: their token name, lowercased, is the word.
+    const char* name = token_type_name(token.type);
+    if (strncmp(name, "TYPE_", 5) == 0) name += 5;
+    size_t i = 0;
+    for (; name[i] && i + 1 < size; i++) buf[i] = (char)tolower((unsigned char)name[i]);
+    buf[i] = '\0';
+}
+
 void parser_error(Parser* parser, Token token, const char* message) {
     if (parser->panic_mode) return;
 
@@ -109,8 +162,12 @@ void parser_error(Parser* parser, Token token, const char* message) {
         fprintf(stderr, " at end");
     } else if (token.type == TOKEN_ERROR) {
         // Nothing
+    } else if (token.type == TOKEN_NEWLINE) {
+        fprintf(stderr, " at end of line");
     } else {
-        fprintf(stderr, " at '%s'", token.identifier ? token.identifier : "unknown");
+        char shown[64];
+        token_display(token, shown, sizeof(shown));
+        fprintf(stderr, " at '%s'", shown);
     }
     
     fprintf(stderr, ": %s\n", final_message ? final_message : "Unknown parse error");
