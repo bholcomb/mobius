@@ -17,15 +17,14 @@
 // =============================================================================
 
 int lib_print(MobiusState* state, int arg_count) {
+    // The whole line is built first and written in one piece: through the
+    // host's output handler if it set one, and never interleaved with
+    // another fiber's print.
+    std::string line;
     for (int i = 0; i < arg_count; i++) {
         Value arg = state->npeek(arg_count - 1 - i);
-        
-        if (arg.type == VAL_STRING && arg.as.string) {
-            const char* str_data = arg.as.string->data;
-            if (str_data) {
-                fwrite(str_data, 1, arg.as.string->length, stdout);
-            }
-        } else if (arg.type == VAL_TABLE && arg.as.table) {
+
+        if (arg.type == VAL_TABLE && arg.as.table) {
             Value tostr = arg.as.table->getMetamethod(state->metamethods()->tostring());
             if (tostr.type != VAL_NIL) {
                 state->npush(tostr);
@@ -36,29 +35,25 @@ int lib_print(MobiusState* state, int arg_count) {
                     // table and returning success left the VM holding the
                     // error, and the next call failed ("Attempt to call a
                     // non-function value").
-                    fflush(stdout);
                     return -1;
                 }
                 Value s = state->npop();
-                if (s.type == VAL_STRING && s.as.string)
-                    fwrite(s.as.string->data, 1, s.as.string->length, stdout);
-                else
-                    print_value(s);
+                format_value(line, s);
             } else {
-                print_value(arg);
+                format_value(line, arg);
             }
         } else {
-            print_value(arg);
+            format_value(line, arg);
         }
-        
-        if (i < arg_count - 1) printf(" ");
+
+        if (i < arg_count - 1) line += " ";
     }
-    printf("\n");
-    
+    line += "\n";
+    state->writeOutput(MOBIUS_STDOUT, line.data(), line.size());
+
     for (int i = 0; i < arg_count; i++) {
         state->npop();
     }
-    
     return 0;
 }
 
@@ -209,8 +204,11 @@ int lib_exit(MobiusState* state, int arg_count) {
             exit_code = 1;
         }
     }
-    ::exit(exit_code);
-    return 0;
+    // What exiting means is the host's decision (the command-line tool ends
+    // the process); without an exit handler this only warns.
+    state->requestExit(exit_code);
+    state->npush(make_nil_value());
+    return 1;
 }
 
 int lib_str(MobiusState* state, int arg_count) {

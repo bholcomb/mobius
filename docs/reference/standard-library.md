@@ -115,8 +115,12 @@ text are errors.
 
 ### exit([code])
 
-Stop the script immediately with an optional integer exit code (default `0`).
-Unlike [`throw`](../guide/error-handling.md), this is not catchable.
+Ask the host program to exit, with an optional integer exit code (default
+`0`). Under the `mobius` command this ends the process immediately; unlike
+[`throw`](../guide/error-handling.md), it is not catchable. A program that
+embeds Mobius decides what exit means (see the
+[embedding guide](../embedding/embedding-guide.md#output-and-exit)); if it
+doesn't, `exit` only prints a warning and the script continues.
 
 ```mobius
 if (!ok) { exit(1) }

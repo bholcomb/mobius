@@ -37,11 +37,12 @@ g++ -o my_app my_app.cpp -lmobius-core -ldl
 9. [Calling Mobius functions from C](#calling-mobius-functions-from-c)
 10. [Rooted value handles](#rooted-value-handles)
 11. [Error handling](#error-handling)
-12. [Loading plugins](#loading-plugins)
-13. [Type metatables](#type-metatables)
-14. [Multiple interpreters](#multiple-interpreters)
-15. [Concurrency and fibers](#concurrency-and-fibers)
-16. [Metrics](#metrics)
+12. [Output and exit](#output-and-exit)
+13. [Loading plugins](#loading-plugins)
+14. [Type metatables](#type-metatables)
+15. [Multiple interpreters](#multiple-interpreters)
+16. [Concurrency and fibers](#concurrency-and-fibers)
+17. [Metrics](#metrics)
 
 ---
 
@@ -444,7 +445,8 @@ handy for invoking stored callbacks from arbitrary C code.
 
 ## Error handling
 
-By default, errors print to `stderr` with line/column info. Only errors that
+By default, errors are written to the state's error output (`stderr`, or the
+[output handler](#output-and-exit)) with line/column info. Only errors that
 will not be caught are reported: an error raised while a `try` block is active
 in the running script unwinds to its `catch` without calling the handler. An
 error that escapes a spawned fiber is reported once: by the code that awaits the
@@ -472,6 +474,42 @@ you need to keep them.
 After handling an error, call `mobius_clear_error(state)` so execution can
 continue. From inside a native function, report errors with
 `mobius_error(state, "message")` and return its result.
+
+---
+
+## Output and exit
+
+Everything the interpreter writes goes through one output handler per state:
+`print` output on `MOBIUS_STDOUT` (one call per `print`, newline included, so
+lines from different fibers never interleave), and the default error
+handler's messages and warnings on `MOBIUS_STDERR`. Without a handler they go
+to the process's stdout and stderr. A game typically routes them to its
+console or log:
+
+```c
+void on_output(MobiusState* state, int stream, const char* data, size_t length,
+               void* userdata) {
+    game_log(stream == MOBIUS_STDERR ? LOG_ERROR : LOG_INFO, data, length);
+}
+
+mobius_set_output_handler(state, on_output, NULL);
+```
+
+`data` is not NUL-terminated and is valid only during the call. The handler
+may run on any worker thread, concurrently with itself.
+
+A script's `exit(code)` calls the state's exit handler; what exiting means is
+up to the host (the `mobius` command ends the process). When the handler
+returns, the script continues after the `exit` call. Without a handler,
+`exit` only writes a warning.
+
+```c
+void on_exit(MobiusState* state, int code, void* userdata) {
+    request_mod_unload((Mod*)userdata, code);
+}
+
+mobius_set_exit_handler(state, on_exit, mod);
+```
 
 ---
 

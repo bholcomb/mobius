@@ -559,12 +559,12 @@ const Value& Table::getMetamethod(MobiusString* method_name) const {
 // Print
 // ============================================================================
 
-static void print_table_contents(const Table* table) {
-    printf("{");
+static void format_table_contents(std::string& out, const Table* table) {
+    out += "{";
     bool first = true;
 
     table->forEach([&](const Value& key, const Value& val) {
-        if (!first) printf(", ");
+        if (!first) out += ", ";
         first = false;
 
         if (key.type == VAL_STRING) {
@@ -575,28 +575,39 @@ static void print_table_contents(const Table* table) {
                     if (!isalnum(*c) && *c != '_') { is_ident = false; break; }
                 }
             }
-            if (is_ident) printf("%s", key_str);
-            else printf("[%s]", key_str);
+            if (is_ident) {
+                out += key_str;
+            } else {
+                out += "[";
+                if (key_str) out += key_str;
+                out += "]";
+            }
         } else {
-            printf("[");
-            print_value(key);
-            printf("]");
+            out += "[";
+            format_value(out, key);
+            out += "]";
         }
 
-        printf(": ");
-        print_value(val);
+        out += ": ";
+        format_value(out, val);
     });
 
-    printf("}");
+    out += "}";
 }
 
-// Nested tables and arrays go through print_value, which shares one cycle
+// Nested tables and arrays go through format_value, which shares one cycle
 // guard (print_container_enter) between both container kinds. The old
 // guard tracked only tables, so a cycle through an array never ended.
-void Table::print() const {
-    if (!print_container_enter(this, true)) return;
-    print_table_contents(this);
+void Table::formatTo(std::string& out) const {
+    if (!print_container_enter(out, this, true)) return;
+    format_table_contents(out, this);
     print_container_leave();
+}
+
+void Table::print() const {
+    std::string out;
+    formatTo(out);
+    fwrite(out.data(), 1, out.size(), stdout);
 }
 
 void Table::printDebug() const {

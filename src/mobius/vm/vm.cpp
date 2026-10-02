@@ -1169,9 +1169,11 @@ MOBIUS_FORCEINLINE static int vm_op_setglobal_force(MobiusVM* vm, VMFrame& f, ui
     }
     if (MOBIUS_UNLIKELY(warn && was_readonly)) {
         f.ci->ip = f.ip;   // sync so currentLine() reads this instruction
-        fprintf(stderr, "Warning [%s:%d]: overriding read-only global '%s'\n",
-                f.proto && !f.proto->source.empty() ? f.proto->source.c_str() : "?",
-                vm->currentLine(), vm->state_->globalSlotName(slot, globals));
+        char msg[512];
+        int n = snprintf(msg, sizeof(msg), "Warning [%s:%d]: overriding read-only global '%s'\n",
+                         f.proto && !f.proto->source.empty() ? f.proto->source.c_str() : "?",
+                         vm->currentLine(), vm->state_->globalSlotName(slot, globals));
+        if (n > 0) vm->state_->writeOutput(MOBIUS_STDERR, msg, (size_t)n < sizeof(msg) ? (size_t)n : sizeof(msg) - 1);
     }
     vm->state_->setGlobalValue(slot, gv, globals, false);
     return 0;
@@ -2780,7 +2782,9 @@ MOBIUS_FORCEINLINE static int vm_op_typecheck(MobiusVM* vm, VMFrame& f, uint32_t
         return -1;
     }
     if (conv.was_converted && vm->warn_on_conversion_) {
-        fprintf(stderr, "Warning: Implicit type conversion at line %d\n", vm->currentLine());
+        char msg[96];
+        int n = snprintf(msg, sizeof(msg), "Warning: Implicit type conversion at line %d\n", vm->currentLine());
+        if (n > 0) vm->state_->writeOutput(MOBIUS_STDERR, msg, (size_t)n);
     }
     if (!shared_store(RA(inst), conv.converted_value)) {
         RA(inst) = conv.converted_value;

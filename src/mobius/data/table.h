@@ -67,6 +67,7 @@ public:
     void forEach(const std::function<void(const Value& key, const Value& value)>& fn) const;
 
     void print() const;
+    void formatTo(std::string& out) const;   // the text print() shows
     void printDebug() const;
 
     MobiusState* getState() const { return state_; }

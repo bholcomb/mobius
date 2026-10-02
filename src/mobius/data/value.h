@@ -1,6 +1,7 @@
 #ifndef MOBIUS_VALUE_H
 #define MOBIUS_VALUE_H
 
+#include <string>
 #include "internal/string_intern.h"
 #include "internal/ref_counted.h"
 #include "data/number.h"
@@ -423,13 +424,15 @@ inline Value make_future_value(FutureValue* future) {
 }
 
 MOBIUS_API void print_value(const Value& value);
+// Append the text print() shows for a value (without __tostring).
+MOBIUS_API void format_value(std::string& out, const Value& value);
 
 // Cycle and depth guard shared by array and table printing. A container
 // that contains itself, directly or through other arrays and tables,
 // prints as `[...circular...]` / `{...circular...}` instead of recursing
-// until the stack overflows. print_container_enter prints the marker and
+// until the stack overflows. print_container_enter appends the marker and
 // returns false when the container must not be printed again.
-MOBIUS_API bool print_container_enter(const void* container, bool is_table);
+MOBIUS_API bool print_container_enter(std::string& out, const void* container, bool is_table);
 MOBIUS_API void print_container_leave();
 MOBIUS_API char* value_to_string(const Value& value);
 MOBIUS_API const char* value_type_name(ValueType type);

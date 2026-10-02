@@ -1,3 +1,4 @@
+#include <cstdarg>
 #include <cmath>
 #include "data/value.h"
 #include "data/channel.h"
@@ -569,15 +570,15 @@ void deep_copy_values_for_spawn(std::vector<Value>& values) {
 static const size_t MAX_PRINT_DEPTH = 100;
 static thread_local std::vector<const void*> t_print_path;
 
-bool print_container_enter(const void* container, bool is_table) {
+bool print_container_enter(std::string& out, const void* container, bool is_table) {
     for (const void* p : t_print_path) {
         if (p == container) {
-            printf(is_table ? "{...circular...}" : "[...circular...]");
+            out += is_table ? "{...circular...}" : "[...circular...]";
             return false;
         }
     }
     if (t_print_path.size() >= MAX_PRINT_DEPTH) {
-        printf(is_table ? "{...depth limit...}" : "[...depth limit...]");
+        out += is_table ? "{...depth limit...}" : "[...depth limit...]";
         return false;
     }
     t_print_path.push_back(container);
@@ -588,113 +589,134 @@ void print_container_leave() {
     if (!t_print_path.empty()) t_print_path.pop_back();
 }
 
-void print_value(const Value& value) {
+static void appendf(std::string& out, const char* fmt, ...) {
+    char buf[256];
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    if (n > 0) out.append(buf, (size_t)n < sizeof(buf) ? (size_t)n : sizeof(buf) - 1);
+}
+
+// The text print() shows for a value (no __tostring: print handles that).
+void format_value(std::string& out, const Value& value) {
     switch (value.type) {
         case VAL_NIL:
-            printf("nil");
+            out += "nil";
             break;
         case VAL_BOOL:
-            printf(value.as.boolean ? "true" : "false");
+            out += value.as.boolean ? "true" : "false";
             break;
         case VAL_INT64:
-            printf("%ld", value.as.i64);
+            appendf(out, "%lld", (long long)value.as.i64);
             break;
         case VAL_UINT64:
-            printf("%lu", value.as.u64);
+            appendf(out, "%llu", (unsigned long long)value.as.u64);
             break;
         case VAL_FLOAT64: {
             char fb[40];
             format_float(value.as.double_val, fb, sizeof(fb));
-            fputs(fb, stdout);
+            out += fb;
             break;
         }
         case VAL_STRING:
-            printf("%s", value.as.string ? value.as.string->data : "(null)");
+            if (value.as.string) out.append(value.as.string->data, value.as.string->length);
+            else out += "(null)";
             break;
         case VAL_CHAR:
-            printf("'%c'", value.as.character);
+            appendf(out, "'%c'", value.as.character);
             break;
         case VAL_ARRAY:
             if (value.as.array) {
-                if (!print_container_enter(value.as.array, false)) break;
-                printf("[");
+                if (!print_container_enter(out, value.as.array, false)) break;
+                out += "[";
                 for (size_t i = 0; i < value.as.array->length(); i++) {
-                    if (i > 0) printf(", ");
-                    print_value((*value.as.array)[i]);
+                    if (i > 0) out += ", ";
+                    format_value(out, (*value.as.array)[i]);
                 }
-                printf("]");
+                out += "]";
                 print_container_leave();
             } else {
-                printf("<array (null)>");
+                out += "<array (null)>";
             }
             break;
         case VAL_FUNCTION:
             if (value.as.function) {
-                printf("<func %s>", value.as.function->name ? value.as.function->name->data : "anonymous");
+                out += "<func ";
+                out += value.as.function->name ? value.as.function->name->data : "anonymous";
+                out += ">";
             } else {
-                printf("<func (null)>");
+                out += "<func (null)>";
             }
             break;
         case VAL_NATIVE_FUNCTION:
-            printf("<native function>");
+            out += "<native function>";
             break;
         case VAL_TABLE:
             if (value.as.table) {
-                value.as.table->print();
+                value.as.table->formatTo(out);
             } else {
-                printf("<table (null)>");
+                out += "<table (null)>";
             }
             break;
         case VAL_USERDATA:
             if (value.as.userdata && value.as.userdata->ptr) {
-                printf("<%s userdata %p>",
-                       value.as.userdata->type_name ? value.as.userdata->type_name : "unknown",
-                       value.as.userdata->ptr);
+                appendf(out, "<%s userdata %p>",
+                        value.as.userdata->type_name ? value.as.userdata->type_name : "unknown",
+                        value.as.userdata->ptr);
             } else {
-                printf("<userdata (null)>");
+                out += "<userdata (null)>";
             }
             break;
         case VAL_ENUM: {
             const char* member_name = enum_value_name(value);
+            out += value.as.enum_def->name();
             if (member_name) {
-                printf("%s.%s", value.as.enum_def->name().c_str(), member_name);
+                out += ".";
+                out += member_name;
             } else {
-                printf("%s(%d)", value.as.enum_def->name().c_str(), value.aux);
+                appendf(out, "(%d)", value.aux);
             }
             break;
         }
         case VAL_FUTURE:
-            printf("<future %p>", (void*)value.as.future);
+            appendf(out, "<future %p>", (void*)value.as.future);
             break;
         case VAL_ARRAY_SLICE:
             if (value.as.array_slice) {
-                printf("<slice len=%zu>", value.as.array_slice->length());
+                appendf(out, "<slice len=%zu>", value.as.array_slice->length());
             } else {
-                printf("<slice (null)>");
+                out += "<slice (null)>";
             }
             break;
         case VAL_CHANNEL:
-            printf("<channel %p>", (void*)value.as.channel);
+            appendf(out, "<channel %p>", (void*)value.as.channel);
             break;
         case VAL_SHARED_CELL:
             if (value.as.shared_cell) {
-                print_value(value.as.shared_cell->load());
+                format_value(out, value.as.shared_cell->load());
             } else {
-                printf("<shared (null)>");
+                out += "<shared (null)>";
             }
             break;
         case VAL_BUFFER:
             if (value.as.buffer) {
-                printf("<buffer len=%zu%s>", value.as.buffer->size(),
-                       value.as.buffer->isFixed() ? " fixed" : "");
+                appendf(out, "<buffer len=%zu%s>", value.as.buffer->size(),
+                        value.as.buffer->isFixed() ? " fixed" : "");
             } else {
-                printf("<buffer (null)>");
+                out += "<buffer (null)>";
             }
             break;
         default:
-            printf("unknown_value");
+            out += "unknown_value";
             break;
     }
+}
+
+void print_value(const Value& value) {
+    std::string out;
+    format_value(out, value);
+    fwrite(out.data(), 1, out.size(), stdout);
 }
 
 char* value_to_string(const Value& value) {
