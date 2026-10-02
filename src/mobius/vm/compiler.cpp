@@ -893,7 +893,9 @@ bool Compiler::tryExprAsRK(Expr* e, uint8_t* rk) {
     if (v.type == VAL_INT64)
         ki = current_->proto->addIntConstant(v.as.i64);
     else if (v.type == VAL_UINT64)
-        ki = current_->proto->addIntConstant((int64_t)v.as.u64);
+        ki = current_->proto->addConstant(v);   // keep the type: as an int64
+                                                 // 2^64-1 became -1
+
     else if (v.type == VAL_FLOAT64)
         ki = current_->proto->addFloatConstant(v.as.double_val);
     else
