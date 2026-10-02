@@ -1,0 +1,47 @@
+// Integer / and % with a uint64 operand are exact. Division went through
+// double, which is inexact above 2^53 ((2^64-1) / 3 came out as
+// 6148914691236516864.0). Mixing a uint64 with a negative int64 in / or %
+// is an error instead of a surprising answer (C reads -1 as 2^64 - 1).
+func opaque(x) { return x }
+// A uint64 holding the small value n (uint64 - uint64 + int64 stays uint64).
+func u64(n) { return opaque(18446744073709551615) - opaque(18446744073709551615) + n }
+func check(name, got, want) {
+    if (got != want or typeof(got) != typeof(want)) {
+        print("FAIL: " + name + ": expected " + str(want) + " (" + typeof(want) + "), got " +
+              str(got) + " (" + typeof(got) + ")")
+        exit(1)
+    }
+}
+func expect_error(name, f) {
+    var msg = ""
+    try { f() } catch e { msg = e }
+    if (!contains(msg, "negative int64")) {
+        print("FAIL: " + name + ": expected the mixed-sign error, got '" + msg + "'")
+        exit(1)
+    }
+}
+
+func main() {
+    var max = opaque(18446744073709551615)
+    check("max / 3 exact", max / opaque(3), u64(6148914691236517205))
+    check("max / literal 3", max / 3, u64(6148914691236517205))
+    check("max % 10", max % opaque(10), u64(5))
+    check("uint / uint", max / max, u64(1))
+    check("int / uint", opaque(10) / u64(4), u64(2))
+
+    expect_error("uint / negative", func() { return max / opaque(-1) })
+    expect_error("uint / negative literal", func() { return max / -2 })
+    expect_error("negative / uint", func() { return opaque(-6) / max })
+    expect_error("uint % negative", func() { return max % opaque(-3) })
+
+    var zero_msg = ""
+    try { var z = max / u64(0) } catch e { zero_msg = e }
+    check("division by zero", zero_msg, "Division by zero")
+
+    // Plain int64 division is unchanged.
+    check("int64 division", opaque(7) / opaque(2), 3)
+    check("int64 negative division", opaque(-7) / 2, -3)
+    check("int64 modulo", opaque(-7) % 3, -1)
+}
+main()
+print("uint64 division: PASS")
