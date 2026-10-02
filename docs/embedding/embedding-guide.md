@@ -397,6 +397,11 @@ print(square(9))    // 81
 Return multiple values by pushing several and returning the count; return
 nothing by returning `0`.
 
+A registered function is a read-only global, like the built-in functions:
+scripts can't reassign it, and functions running in spawned fibers can call
+it. Registering the same name again replaces it. It may run on any worker
+thread (see [Concurrency and fibers](#concurrency-and-fibers)).
+
 ---
 
 ## Calling Mobius functions from C

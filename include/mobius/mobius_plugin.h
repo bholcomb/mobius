@@ -376,8 +376,10 @@ MOBIUS_API void mobius_set_userdata_type_metatable(MobiusState* state,
 /* ====================================================================== */
 
 /**
- * Register a C function so it can be called from Mobius scripts.
- * Equivalent to assigning a native-function value to a global variable.
+ * Register a C function so it can be called from Mobius scripts, as a
+ * read-only global like the built-in functions: scripts can't reassign it,
+ * and spawned fibers can call it. Registering the same name again replaces
+ * the function.
  */
 MOBIUS_API void mobius_register_function(MobiusState* state, const char* name,
                                         MobiusCFunction func);
