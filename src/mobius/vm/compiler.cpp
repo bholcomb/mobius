@@ -1,4 +1,5 @@
 #include "vm/compiler.h"
+#include "vm/ast_scan.h"
 #include "state/mobius_state.h"
 #include "library/library.h"
 
@@ -1864,6 +1865,19 @@ int Compiler::compileAssignment(AssignmentExpr* expr, int dest) {
                     value_reg = compileExpr(expr->value);
                     emitABC(OP_SHARED_STORE, (uint8_t)local, (uint8_t)value_reg, 0);
                     emitABC(OP_UNLOCK_SHARED, (uint8_t)local, 0, 0);
+                } else if (writesDestBeforeOperands(expr->value) &&
+                           expr_mentions_name(expr->value, name)) {
+                    // This right side writes its destination before reading
+                    // all its operands, and it reads this variable, so it
+                    // can't be built in the variable's own register
+                    // (`a = [a[1], a[0]]` gave [nil, nil], `best = cand or
+                    // best` lost `best`). Evaluate into a temporary, then
+                    // move. Arithmetic and calls read operands first and keep
+                    // the direct, fusable form.
+                    int tmp = keep_plain ? compileUnwrappedExpr(expr->value)
+                                         : compileExpr(expr->value);
+                    if (tmp != local) emitABC(OP_MOVE, (uint8_t)local, (uint8_t)tmp, 0);
+                    value_reg = local;
                 } else if (keep_plain) {
                     value_reg = compileUnwrappedExpr(expr->value, local);
                 } else {
@@ -4715,6 +4729,30 @@ void Compiler::compileThrowStmt(ThrowStmt* stmt) {
 }
 
 // OP_SPAWN A B C -- spawn function R[B] with C-1 args; result (future) into R[A]
+// Expressions that store into their destination register before they have
+// read all of their operands: array and table literals (the new container
+// goes into dest first), and/or (the left value goes into dest first), and
+// a ternary or grouping that yields one of those.
+bool Compiler::writesDestBeforeOperands(Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_ARRAY_LITERAL:
+        case EXPR_TABLE_LITERAL:
+            return true;
+        case EXPR_BINARY: {
+            TokenType op = e->as.binary.op.type;
+            return op == TOKEN_AND || op == TOKEN_AND_AND || op == TOKEN_OR || op == TOKEN_OR_OR;
+        }
+        case EXPR_GROUPING:
+            return writesDestBeforeOperands(e->as.grouping.expression);
+        case EXPR_TERNARY:
+            return writesDestBeforeOperands(e->as.ternary.then_expr) ||
+                   writesDestBeforeOperands(e->as.ternary.else_expr);
+        default:
+            return false;
+    }
+}
+
 bool Compiler::constantValueOf(Expr* e, Value* out) {
     if (!e) return false;
     switch (e->type) {

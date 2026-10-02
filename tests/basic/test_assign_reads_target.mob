@@ -1,0 +1,42 @@
+// An assignment whose right side reads the variable being assigned uses
+// the old value. The right side was built in the variable's own register,
+// and array/table literals and and/or write their destination before
+// reading their operands, so these lost the old value.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var a = [1, 2]
+    a = [a[1], a[0]]
+    check("array literal swap", str(a[0]) + "," + str(a[1]), "2,1")
+
+    var t = {x: 5}
+    t = {x: t.x + 1, old: t.x}
+    check("table literal", t.x, 6)
+    check("table literal reads old", t.old, 5)
+
+    var x = 7
+    var y = 3
+    x = y and x
+    check("and", x, 7)
+
+    var s = "a"
+    var n = nil
+    s = n or s
+    check("or", s, "a")
+
+    var best = 4
+    var cand = nil
+    best = cand or best
+    check("best = cand or best", best, 4)
+
+    var c = [1]
+    c = c[0] > 0 ? [c[0], c[0] + 1] : [0]
+    check("ternary with literal", c[1], 2)
+}
+main()
+print("assignment reading its target: PASS")
