@@ -540,16 +540,23 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
 
     if (func_val.type == VAL_TABLE && func_val.as.table) {
         Value call_mm = func_val.as.table->getMetamethod(state_->metamethods()->call());
-        if (call_mm.type == VAL_NATIVE_FUNCTION) {
-            registers_[caller.base + func_reg] = call_mm;
-            return callNative(call_mm.as.native_function, func_reg, nargs, nresults);
-        }
-        if (call_mm.type == VAL_FUNCTION && call_mm.as.function) {
-            func_val = call_mm;
-        } else {
+        if (call_mm.type != VAL_NATIVE_FUNCTION &&
+            (call_mm.type != VAL_FUNCTION || !call_mm.as.function)) {
             runtimeError("Attempt to call a table value (no __call metamethod)");
             return -1;
         }
+        // __call receives the table as its first argument (as in Lua):
+        // shift the arguments up one register and put the table first. It
+        // used to get only the call's arguments.
+        Value self = func_val;
+        int fn = caller.base + func_reg;
+        ensureRegisters(fn + nargs + 2);   // may move registers_: index afresh
+        for (int i = nargs; i >= 1; i--) registers_[fn + 1 + i] = registers_[fn + i];
+        registers_[fn + 1] = self;
+        registers_[fn] = call_mm;
+        if (call_mm.type == VAL_NATIVE_FUNCTION)
+            return callNative(call_mm.as.native_function, func_reg, nargs + 1, nresults);
+        return callFunction(caller, func_reg, nargs + 1, nresults);
     }
 
     if (func_val.type != VAL_FUNCTION || !func_val.as.function) {

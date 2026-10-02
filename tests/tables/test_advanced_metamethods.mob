@@ -13,9 +13,9 @@ var neg_v = -v
 if (neg_v.x != -3) { print("FAIL: __unm x, got", neg_v.x); exit(1) }
 if (neg_v.y != -4) { print("FAIL: __unm y, got", neg_v.y); exit(1) }
 
-// __call — make a table callable
+// __call — make a table callable. It receives the table first.
 var callable_meta = {
-    ["__call"] = func(a, b) {
+    ["__call"] = func(self, a, b) {
         return a + b
     }
 }
@@ -27,7 +27,7 @@ if (sum != 30) { print("FAIL: __call, got", sum); exit(1) }
 // __call with state in closure
 func make_multiplier(factor) {
     var meta = {
-        ["__call"] = func(x) {
+        ["__call"] = func(self, x) {
             return x * factor
         }
     }
