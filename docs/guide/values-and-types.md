@@ -169,6 +169,11 @@ count is an error.
 Comparisons between `int64` and `uint64` use the mathematical values: every
 `uint64` is greater than every negative `int64`.
 
+`/` and `%` with a `uint64` operand are exact integer operations, and the
+result is a `uint64`. Combining a `uint64` with a negative `int64` in `/` or `%`
+is an error, since neither type can hold every answer; convert one operand
+explicitly.
+
 ## Literals
 
 **Integers** — decimal, hexadecimal (`0x`), and binary (`0b`):

@@ -1152,6 +1152,13 @@ int Compiler::compileBinary(BinaryExpr* expr, int dest) {
     // metamethods. Use them only when the other operand is provably numeric.
     bool left_numeric = type_is_numeric(inferExprType(expr->left));
     bool right_numeric = type_is_numeric(inferExprType(expr->right));
+    // The immediate / and % forms do int64 or float arithmetic; a uint64
+    // operand takes the generic instruction (exact, and it rejects a
+    // negative int64 operand).
+    if ((expr->op.type == TOKEN_SLASH || expr->op.type == TOKEN_PERCENT) &&
+        (inferExprType(expr->left) == VAL_UINT64 || inferExprType(expr->right) == VAL_UINT64)) {
+        left_numeric = right_numeric = false;
+    }
 
     // Try arithmetic-with-immediate (AsBx format): R[A] = R[A] op sBx
     // sBx range is -SBX16_BIAS..SBX16_BIAS (±32767)

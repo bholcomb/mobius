@@ -2018,6 +2018,19 @@ MOBIUS_FORCEINLINE static int64_t mobius_mod_i64(int64_t a, int64_t b) {
     return a % b;
 }
 
+// / and % with a uint64 operand and an int64 one. When the int64 is
+// non-negative both are exact in uint64. A negative int64 has no meaning
+// next to a uint64 here (C would read -1 as 2^64 - 1), so that is an error
+// rather than a surprising answer. Returns the error message, or nullptr.
+static MOBIUS_FORCEINLINE const char* unsigned_divmod_operands(const Value& l, const Value& r,
+                                                               uint64_t* lv, uint64_t* rv) {
+    if ((l.type == VAL_INT64 && l.as.i64 < 0) || (r.type == VAL_INT64 && r.as.i64 < 0))
+        return "Cannot divide with a uint64 and a negative int64; convert one explicitly";
+    *lv = l.type == VAL_UINT64 ? l.as.u64 : (uint64_t)l.as.i64;
+    *rv = r.type == VAL_UINT64 ? r.as.u64 : (uint64_t)r.as.i64;
+    return nullptr;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value lhs_s, rhs_s;
     const Value& lhs = shared_peek(RKB(inst), lhs_s);
@@ -2038,6 +2051,17 @@ MOBIUS_FORCEINLINE static int vm_op_div(MobiusVM* vm, VMFrame& f, uint32_t inst)
         if (rc < 0) return -1;
         if (rc == 0) { VM_ERROR(vm, f, "Cannot divide: no __div metamethod on table"); return -1; }
         RA(inst) = out;
+    } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
+               (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
+        // Integer division with a uint64 operand. It used to go through
+        // double, which is inexact above 2^53.
+        uint64_t lv, rv;
+        if (const char* err = unsigned_divmod_operands(lhs, rhs, &lv, &rv)) {
+            VM_ERROR(vm, f, "%s", err);
+            return -1;
+        }
+        if (rv == 0) { VM_ERROR(vm, f, "Division by zero"); return -1; }
+        RA(inst) = make_uint64_value(lv / rv);
     } else {
         double lv = MobiusVM::vm_extract_double(lhs);
         double rv = MobiusVM::vm_extract_double(rhs);
@@ -2062,8 +2086,11 @@ MOBIUS_FORCEINLINE static int vm_op_mod(MobiusVM* vm, VMFrame& f, uint32_t inst)
     } else if ((lhs.type == VAL_INT64 || lhs.type == VAL_UINT64) &&
                (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64)) {
         if (MobiusVM::vm_use_unsigned(lhs, rhs)) {
-            uint64_t lv = MobiusVM::vm_extract_uint64(lhs);
-            uint64_t rv = MobiusVM::vm_extract_uint64(rhs);
+            uint64_t lv, rv;
+            if (const char* err = unsigned_divmod_operands(lhs, rhs, &lv, &rv)) {
+                VM_ERROR(vm, f, "%s", err);
+                return -1;
+            }
             if (rv == 0) { VM_ERROR(vm, f, "Modulo by zero"); return -1; }
             RA(inst) = make_uint64_value(lv % rv);
         } else {
