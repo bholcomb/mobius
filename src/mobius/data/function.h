@@ -25,7 +25,8 @@ typedef struct MobiusFunction {
     int upvalue_count;            // Number of upvalues
     GcHeader gc_;                 // tracing-GC registry link
 
-    MobiusFunction() { gc_track(&gc_, GC_FUNCTION, this); }
+    // `heap`: the owning state's (state->gcHeap()).
+    explicit MobiusFunction(GcHeap* heap) { gc_track(heap, &gc_, GC_FUNCTION, this); }
     ~MobiusFunction() { gc_untrack(&gc_); }
 
     // Pool-backed allocation; definitions in value.cpp (core).

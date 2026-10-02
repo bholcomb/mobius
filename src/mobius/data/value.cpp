@@ -322,7 +322,7 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
             auto it = memo.find(value.as.array);
             if (it != memo.end()) return it->second;
 
-            ArrayValue* clone = new ArrayValue(value.as.array->length());
+            ArrayValue* clone = new ArrayValue(gc_heap_of(value.as.array->gcHeader()), value.as.array->length());
             Value copy = make_array_value(clone);
             copy.flags = (int8_t)(value.flags & ~VAL_FLAG_SHARED);
             copy.aux = value.aux;
@@ -385,7 +385,7 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
             auto it = memo.find(src);
             if (it != memo.end()) return it->second;
 
-            MobiusFunction* clone = new (std::nothrow) MobiusFunction();
+            MobiusFunction* clone = new (std::nothrow) MobiusFunction(gc_heap_of(&src->gc_));
             if (!clone) return make_nil_value();
             clone->name = src->name;
             clone->param_count = src->param_count;
@@ -408,7 +408,7 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
             if (clone->upvalues) {
                 for (int i = 0; i < src->upvalue_count; i++) {
                     Upvalue* suv = src->upvalues[i];
-                    Upvalue* duv = new (std::nothrow) Upvalue();
+                    Upvalue* duv = new (std::nothrow) Upvalue(gc_heap_of(&clone->gc_));
                     if (!duv) break;
                     duv->is_open = false;
                     const Value& cur = (suv && suv->is_open && suv->location)
@@ -485,7 +485,7 @@ bool freeze_impl(const Value& v, Value* out, const char** error,
             if (src->isFrozen()) { *out = v; return true; }
             auto it = memo.find(src);
             if (it != memo.end()) { *out = it->second; return true; }
-            ArrayValue* copy = new (std::nothrow) ArrayValue(src->length());
+            ArrayValue* copy = new (std::nothrow) ArrayValue(gc_heap_of(src->gcHeader()), src->length());
             if (!copy) { *error = "out of memory"; return false; }
             Value cv = make_array_value(copy);
             memo.emplace(src, cv);

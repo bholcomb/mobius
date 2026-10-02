@@ -348,7 +348,7 @@ int lib_split(MobiusState* state, int arg_count) {
     const char* delim = delim_val.as.string->data;
     size_t delim_len = delim_val.as.string->length;
 
-    ArrayValue* arr = new (std::nothrow) ArrayValue();
+    ArrayValue* arr = new (std::nothrow) ArrayValue(state->gcHeap());
     if (!arr) {
         return state->error("Memory allocation failed");
     }

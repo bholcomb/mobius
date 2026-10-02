@@ -143,7 +143,7 @@ int lib_readlines(MobiusState* state, int arg_count) {
     fclose(f);
     if (failed) return state->error("readlines: error while reading file");
 
-    ArrayValue* arr = new (std::nothrow) ArrayValue();
+    ArrayValue* arr = new (std::nothrow) ArrayValue(state->gcHeap());
     if (!arr) return state->error("readlines: failed to allocate result array");
     size_t start = 0;
     while (start < data.size()) {

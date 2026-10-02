@@ -64,7 +64,7 @@ static Value shared_snapshot(const Value& cell_value) {
     const Value& inner = cell->unsafeValue();
     if (inner.type == VAL_ARRAY && inner.as.array) {
         ArrayValue* arr = inner.as.array;
-        ArrayValue* copy = new (std::nothrow) ArrayValue(arr->length());
+        ArrayValue* copy = new (std::nothrow) ArrayValue(gc_heap_of(arr->gcHeader()), arr->length());
         if (!copy) return inner;
         for (size_t i = 0; i < arr->length(); i++) copy->push(arr->get(i));
         return make_array_value(copy);
@@ -675,7 +675,7 @@ void mobius_stack_pushNewTable(MobiusState* state, size_t capacity) {
 }
 
 void mobius_stack_pushNewArray(MobiusState* state, size_t capacity) {
-    ArrayValue* array = new (std::nothrow) ArrayValue(capacity == 0 ? 8 : capacity);
+    ArrayValue* array = new (std::nothrow) ArrayValue(state->gcHeap(), capacity == 0 ? 8 : capacity);
     if (!array) {
         state->setError(MOBIUS_ERROR_MEMORY, "Failed to create array",
                         nullptr, 0, 0, nullptr);

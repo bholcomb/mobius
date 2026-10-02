@@ -35,8 +35,9 @@ struct Upvalue {
     std::atomic<int> refcount;
     GcHeader gc_;   // tracing-GC registry link
 
-    Upvalue() : location(nullptr), is_open(true), refcount(1) {
-        gc_track(&gc_, GC_UPVALUE, this);
+    // `heap`: the owning state's (state->gcHeap()).
+    explicit Upvalue(GcHeap* heap) : location(nullptr), is_open(true), refcount(1) {
+        gc_track(heap, &gc_, GC_UPVALUE, this);
     }
     ~Upvalue() { gc_untrack(&gc_); }
 

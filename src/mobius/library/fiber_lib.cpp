@@ -104,7 +104,7 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
     if (!snapshot_futures(state, "fiber.all", held)) return -1;
     size_t count = held.size();
 
-    ArrayValue* results = new ArrayValue(count);
+    ArrayValue* results = new ArrayValue(state->gcHeap(), count);
     JobSystem* js = state->jobSystem();
     BlockingWait wait(js);
 

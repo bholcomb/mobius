@@ -26,12 +26,15 @@
 // ============================================================================
 // Per-thread registry segments + object pools.
 //
-// Every thread that allocates traced objects gets a GcThread: a registry
-// segment (circular list with sentinel) plus per-type fixed-size chunk pools
-// (slab-backed free lists). The owning thread links and unlinks its segment
-// with plain stores — no locks, no atomics. The collector walks all segments
-// only at quiescent safepoints (no other script thread is running), so the
-// walks need no synchronization either.
+// Every MobiusState owns a GcHeap. Every thread that allocates traced
+// objects for a heap gets a GcSegment of it: a registry list (circular, with
+// sentinel). Separately, every thread has a GcThread holding per-type
+// fixed-size chunk pools (slab-backed free lists), shared by all heaps. The
+// owning thread links and unlinks its segment with plain stores — no locks,
+// no atomics. The collector walks one heap's segments, only at that state's
+// quiescent safepoints (no other script thread of the state is running), so
+// the walks need no synchronization either. Other states keep running: their
+// objects are in other heaps.
 //
 // The one cross-thread case is an object allocated on thread A whose last
 // reference is dropped on thread B (channel/future transfer holders). B may
@@ -44,8 +47,9 @@
 //
 // Slabs are carved from malloc in 64KB blocks and never returned (chunks
 // recycle forever; trimming is future work). GcThread records are
-// intentionally leaked on thread exit — dead threads' segments may still
-// hold live objects, and the sweeper keeps servicing them.
+// intentionally leaked on thread exit. Segments live as long as their heap:
+// a dead thread's segment may still hold live objects, and the sweeper keeps
+// servicing it.
 // ============================================================================
 
 // MOBIUS_GC_NO_POOL=1: route chunks through the global heap (diagnostics —
@@ -71,11 +75,9 @@ struct GcPool {
     char* end = nullptr;
 };
 
+// Per OS thread: chunk pools (shared by every heap: a chunk is just memory)
+// and the in-flight cross-thread frees.
 struct GcThread {
-    GcHeader sentinel;                            // segment list head
-    std::atomic<GcPending*> pending{nullptr};     // cross-thread deferred unlinks
-    size_t count = 0;                             // linked headers (owner-written)
-    size_t allocs_since_gc = 0;
     GcPool pools[GC_TYPE_COUNT];
     // In-flight cross-thread frees on THIS thread (LIFO: an inner delete
     // completes — destructor AND operator delete — before the outer
@@ -83,41 +85,98 @@ struct GcThread {
     // records the corpse here; gc_object_free hands it to the owner.
     struct DeferredFree { void* obj; GcHeader* h; };
     std::vector<DeferredFree> defer_stack;
-    GcThread* next_thread = nullptr;              // directory linkage
-    GcThread() {
+};
+
+} // namespace
+
+// Per (heap, thread): the registry segment linking the objects this thread
+// allocated for that heap.
+struct GcSegment {
+    GcHeader sentinel;                            // segment list head
+    std::atomic<GcPending*> pending{nullptr};     // cross-thread deferred unlinks
+    size_t count = 0;                             // linked headers (owner-written)
+    size_t allocs_since_gc = 0;
+    size_t budget = 0;                            // copy of the heap's, for gc_track
+    GcThread* thread = nullptr;                   // the owning thread
+    GcHeap* heap = nullptr;
+    GcSegment* next_segment = nullptr;            // heap linkage
+    GcSegment() {
         sentinel.prev = &sentinel;
         sentinel.next = &sentinel;
     }
 };
 
-struct GcDirectory {
-    std::mutex mutex;            // guards the thread list only (cold paths)
-    GcThread* head = nullptr;
+// One per MobiusState.
+struct GcHeap {
+    std::mutex mutex;              // guards the segment list only (cold paths)
+    GcSegment* head = nullptr;
+    uint64_t id = 0;               // unique for the process lifetime
+    size_t budget = 0;             // allocations between collections
+    std::atomic<bool> pending{false};
 };
-GcDirectory& directory() { static GcDirectory d; return d; }
 
-// Effective allocation budget between collections; written only by the
-// (quiescent) sweeper, read racily by allocating threads. 0 = uninitialized.
-volatile size_t g_gc_budget = 0;
+namespace {
+
+// Heaps alive now, by id: lets a thread drop its cached segments of heaps
+// that have been destroyed.
+std::mutex g_heaps_mutex;
+std::unordered_set<uint64_t> g_live_heap_ids;
+uint64_t g_next_heap_id = 1;
+
+// Heaps over budget; g_gc_pending is set while this is non-zero.
+std::atomic<int> g_pending_heaps{0};
 
 thread_local GcThread* tl_gc = nullptr;
 
-size_t gc_threshold_base_fwd();
-
-GcThread* gc_thread_slow() {
-    GcThread* t = new GcThread();     // leaked deliberately (see file comment)
-    GcDirectory& d = directory();
-    std::lock_guard<std::mutex> lock(d.mutex);
-    t->next_thread = d.head;
-    d.head = t;
-    if (g_gc_budget == 0) g_gc_budget = gc_threshold_base_fwd();
+GcThread* gc_thread() {
+    GcThread* t = tl_gc;
+    if (MOBIUS_LIKELY(t != nullptr)) return t;
+    t = new GcThread();   // leaked deliberately: its pools hold live chunks
     tl_gc = t;
     return t;
 }
 
-inline GcThread* gc_thread() {
-    GcThread* t = tl_gc;
-    return t ? t : gc_thread_slow();
+// This thread's segment of a heap: the last one used is cached; the rest
+// are in a small per-thread list.
+struct SegmentRef { uint64_t heap_id; GcSegment* seg; };
+thread_local uint64_t tl_seg_heap_id = 0;
+thread_local GcSegment* tl_seg = nullptr;
+thread_local std::vector<SegmentRef>* tl_segments = nullptr;
+
+size_t gc_threshold_base_fwd();
+
+GcSegment* gc_segment_slow(GcHeap* heap) {
+    if (!tl_segments) tl_segments = new std::vector<SegmentRef>();   // leaked with the thread
+    GcSegment* seg = nullptr;
+    for (const SegmentRef& r : *tl_segments)
+        if (r.heap_id == heap->id) { seg = r.seg; break; }
+    if (!seg) {
+        {
+            // Forget segments of destroyed heaps (their memory is gone).
+            std::lock_guard<std::mutex> lock(g_heaps_mutex);
+            auto& v = *tl_segments;
+            for (size_t i = 0; i < v.size();) {
+                if (!g_live_heap_ids.count(v[i].heap_id)) { v[i] = v.back(); v.pop_back(); }
+                else i++;
+            }
+        }
+        seg = new GcSegment();
+        seg->thread = gc_thread();
+        seg->heap = heap;
+        std::lock_guard<std::mutex> lock(heap->mutex);
+        seg->budget = heap->budget;
+        seg->next_segment = heap->head;
+        heap->head = seg;
+        tl_segments->push_back({heap->id, seg});
+    }
+    tl_seg_heap_id = heap->id;
+    tl_seg = seg;
+    return seg;
+}
+
+inline GcSegment* gc_segment(GcHeap* heap) {
+    if (MOBIUS_LIKELY(tl_seg_heap_id == heap->id)) return tl_seg;
+    return gc_segment_slow(heap);
 }
 
 inline void segment_unlink(GcHeader* h) {
@@ -132,19 +191,14 @@ inline void pool_push(GcThread* t, GcObjectType type, void* chunk) {
     p.free_head = chunk;            // GcHeader member is elsewhere and stays
 }
 
-// Drain a thread's pending queue: unlink each corpse from ITS segment and
-// take the chunk into `self`'s pool. Callers are the queue's owner (from
-// gc_track, self == owner) or the collector at quiescence — never
-// concurrent. `self` must be resolved by the CALLER: resolving it here via
-// gc_thread() can call gc_thread_slow(), which takes the directory mutex —
-// and gc_drain_all_pending already holds it (observed as a self-deadlock
-// when the script fiber migrated to a fresh worker thread and its first
-// safepoint there collected).
-void gc_drain_pending(GcThread* owner, GcThread* self) {
-    GcPending* rec = owner->pending.exchange(nullptr, std::memory_order_acquire);
+// Drain a segment's pending queue: unlink each corpse from the segment and
+// take the chunk into `self`'s pool. Callers are the segment's owner thread
+// (from gc_track) or the collector at quiescence — never concurrent.
+void gc_drain_pending(GcSegment* seg, GcThread* self) {
+    GcPending* rec = seg->pending.exchange(nullptr, std::memory_order_acquire);
     while (rec) {
         GcHeader* h = rec->h;
-        if (h->prev) { segment_unlink(h); owner->count--; }
+        if (h->prev) { segment_unlink(h); seg->count--; }
         if (MOBIUS_UNLIKELY(g_gc_no_pool)) free(h->obj);
         else pool_push(self, h->type(), h->obj);
         GcPending* next = rec->next;
@@ -153,20 +207,22 @@ void gc_drain_pending(GcThread* owner, GcThread* self) {
     }
 }
 
-// Quiescent contexts only: drain every thread's queue so whole-registry
-// walks never see a destructed corpse still linked.
-void gc_drain_all_pending() {
-    GcThread* self = gc_thread();   // BEFORE the lock — may register a thread
-    GcDirectory& d = directory();
-    std::lock_guard<std::mutex> lock(d.mutex);
-    for (GcThread* t = d.head; t; t = t->next_thread)
-        if (t->pending.load(std::memory_order_relaxed)) gc_drain_pending(t, self);
+// Quiescent contexts only: drain every segment's queue so whole-heap walks
+// never see a destructed corpse still linked.
+void gc_drain_all_pending(GcHeap* heap) {
+    GcThread* self = gc_thread();
+    std::lock_guard<std::mutex> lock(heap->mutex);
+    for (GcSegment* s = heap->head; s; s = s->next_segment)
+        if (s->pending.load(std::memory_order_relaxed)) gc_drain_pending(s, self);
 }
+
+void gc_mark_heap_pending(GcHeap* heap);
 
 } // namespace
 
-// Set when allocations since the last collection exceed the threshold;
-// checked (cheaply) at VM safepoints. Benign race: worst case a collection
+// Set while some heap's allocations since its last collection exceed its
+// budget; checked (cheaply) at VM safepoints, which then collect their own
+// heap if it is the one over budget. Benign race: worst case a collection
 // happens one safepoint later. Starts armed under MOBIUS_GC_STRESS so the
 // first safepoint already collects.
 volatile bool g_gc_pending = []() {
@@ -188,7 +244,58 @@ static size_t gc_threshold_base() {
     return t;
 }
 
-namespace { size_t gc_threshold_base_fwd() { return gc_threshold_base(); } }
+namespace {
+
+size_t gc_threshold_base_fwd() { return gc_threshold_base(); }
+
+void gc_mark_heap_pending(GcHeap* heap) {
+    if (heap->pending.load(std::memory_order_relaxed)) return;
+    if (!heap->pending.exchange(true, std::memory_order_acq_rel)) {
+        g_pending_heaps.fetch_add(1, std::memory_order_acq_rel);
+        g_gc_pending = true;
+    }
+}
+
+// The heap has just been collected (or is going away).
+void gc_clear_heap_pending(GcHeap* heap) {
+    if (heap->pending.exchange(false, std::memory_order_acq_rel)) {
+        if (g_pending_heaps.fetch_sub(1, std::memory_order_acq_rel) == 1)
+            g_gc_pending = false;
+    }
+}
+
+} // namespace
+
+GcHeap* gc_heap_create() {
+    GcHeap* heap = new GcHeap();
+    heap->budget = gc_threshold_base();
+    std::lock_guard<std::mutex> lock(g_heaps_mutex);
+    heap->id = g_next_heap_id++;
+    g_live_heap_ids.insert(heap->id);
+    return heap;
+}
+
+void gc_heap_destroy(GcHeap* heap) {
+    if (!heap) return;
+    {
+        std::lock_guard<std::mutex> lock(g_heaps_mutex);
+        g_live_heap_ids.erase(heap->id);
+    }
+    gc_clear_heap_pending(heap);
+    // This thread's cache; other threads drop theirs on their next miss.
+    if (tl_seg_heap_id == heap->id) { tl_seg_heap_id = 0; tl_seg = nullptr; }
+    GcSegment* s = heap->head;
+    while (s) {
+        GcSegment* next = s->next_segment;
+        delete s;
+        s = next;
+    }
+    delete heap;
+}
+
+GcHeap* gc_heap_of(const GcHeader* h) {
+    return h && h->owner ? static_cast<GcSegment*>(h->owner)->heap : nullptr;
+}
 
 void* gc_object_alloc(GcObjectType type, size_t sz) {
     if (MOBIUS_UNLIKELY(g_gc_no_pool)) return malloc(sz);
@@ -218,7 +325,7 @@ void gc_object_free(GcObjectType type, void* ptr) {
         GcHeader* h = t->defer_stack.back().h;
         t->defer_stack.pop_back();
         GcPending* rec = (GcPending*)malloc(sizeof(GcPending));
-        GcThread* owner = (GcThread*)h->owner;
+        GcSegment* owner = (GcSegment*)h->owner;
         rec->h = h;
         rec->next = owner->pending.load(std::memory_order_relaxed);
         while (!owner->pending.compare_exchange_weak(rec->next, rec,
@@ -231,27 +338,27 @@ void gc_object_free(GcObjectType type, void* ptr) {
     pool_push(t, type, ptr);
 }
 
-void gc_track(GcHeader* h, GcObjectType type, void* obj) {
-    GcThread* t = gc_thread();
-    if (MOBIUS_UNLIKELY(t->pending.load(std::memory_order_relaxed) != nullptr))
-        gc_drain_pending(t, t);
+void gc_track(GcHeap* heap, GcHeader* h, GcObjectType type, void* obj) {
+    GcSegment* s = gc_segment(heap);
+    if (MOBIUS_UNLIKELY(s->pending.load(std::memory_order_relaxed) != nullptr))
+        gc_drain_pending(s, s->thread);
     h->flags = (uint32_t)type;
     h->obj = obj;
-    h->owner = t;
-    h->prev = t->sentinel.prev;
-    h->next = &t->sentinel;
-    t->sentinel.prev->next = h;
-    t->sentinel.prev = h;
-    t->count++;
-    if (++t->allocs_since_gc >= g_gc_budget) g_gc_pending = true;
+    h->owner = s;
+    h->prev = s->sentinel.prev;
+    h->next = &s->sentinel;
+    s->sentinel.prev->next = h;
+    s->sentinel.prev = h;
+    s->count++;
+    if (MOBIUS_UNLIKELY(++s->allocs_since_gc >= s->budget)) gc_mark_heap_pending(heap);
 }
 
 void gc_untrack(GcHeader* h) {
     if (!h->prev) return;   // already unlinked by the sweep
-    GcThread* t = gc_thread();
-    if (MOBIUS_LIKELY(h->owner == t)) {
+    GcSegment* s = static_cast<GcSegment*>(h->owner);
+    if (MOBIUS_LIKELY(s->thread == tl_gc)) {
         segment_unlink(h);
-        t->count--;
+        s->count--;
         return;
     }
     // Foreign thread: the owner must do the unlink, but NOT YET — this call
@@ -263,30 +370,29 @@ void gc_untrack(GcHeader* h) {
     // handoff. Until then the header stays linked in the owner's segment,
     // which is safe: segment walks happen only at quiescence, and this
     // thread destructing means we are not quiescent.
-    t->defer_stack.push_back({h->obj, h});
+    gc_thread()->defer_stack.push_back({h->obj, h});
 }
 
-size_t gc_tracked_count() {
+size_t gc_tracked_count(GcHeap* heap) {
     // Sums per-segment counters rather than walking the lists: owner threads
     // may be linking concurrently, and chasing their pointers would race.
     // Reading the integers races too, but only approximately (introspection).
-    GcDirectory& d = directory();
-    std::lock_guard<std::mutex> lock(d.mutex);
+    std::lock_guard<std::mutex> lock(heap->mutex);
     size_t n = 0;
-    for (GcThread* t = d.head; t; t = t->next_thread) n += t->count;
+    for (GcSegment* s = heap->head; s; s = s->next_segment) n += s->count;
     return n;
 }
 
 // QUIESCENT CALLERS ONLY (collector, shadow verifier, tests at settle
 // points): walks every segment's raw links, which owner threads mutate
 // lock-free — concurrent script execution would race the traversal.
-void gc_for_each_tracked(GcVisitFn cb, void* ud) {
-    GcDirectory& d = directory();
-    std::lock_guard<std::mutex> lock(d.mutex);
-    for (GcThread* t = d.head; t; t = t->next_thread)
-        for (GcHeader* h = t->sentinel.next; h != &t->sentinel; h = h->next)
+void gc_for_each_tracked(GcHeap* heap, GcVisitFn cb, void* ud) {
+    std::lock_guard<std::mutex> lock(heap->mutex);
+    for (GcSegment* s = heap->head; s; s = s->next_segment)
+        for (GcHeader* h = s->sentinel.next; h != &s->sentinel; h = h->next)
             cb(h, ud);
 }
+
 
 // ============================================================================
 // Traversal
@@ -504,15 +610,16 @@ void gc_shadow_verify_now(MobiusVM* vm) {
     // counts, so the rc oracle is gone — this is now a reachability report.
     // The load-bearing successor is MOBIUS_GC_STRESS=1 (collect at every
     // safepoint) run under ASan: a missed root becomes a use-after-free there.
-    gc_drain_all_pending();
+    GcHeap* heap = vm->state_->gcHeap();
+    gc_drain_all_pending(heap);
     gc_mark_from_roots(vm);
 
     CheckCtx check;
-    gc_for_each_tracked(collect_unmarked_cb, &check);
+    gc_for_each_tracked(heap, collect_unmarked_cb, &check);
     if (!check.unmarked.empty() && g_gc_shadow_mode >= 1)
         fprintf(stderr, "[gc-shadow] %zu unreachable object(s) pending collection\n",
                 check.unmarked.size());
-    gc_for_each_tracked(clear_mark_cb, nullptr);   // restore the all-clear invariant
+    gc_for_each_tracked(heap, clear_mark_cb, nullptr);   // restore the all-clear invariant
 }
 
 
@@ -560,7 +667,9 @@ static void gc_destruct(GcHeader* h) {
     }
 }
 
-static volatile bool g_gc_in_sweep = false;
+// Per thread: a sweep runs every destructor on its own thread, and other
+// states keep running (and freeing) on theirs.
+static thread_local bool g_gc_in_sweep = false;
 
 bool gc_is_sweeping() { return g_gc_in_sweep; }
 
@@ -587,17 +696,17 @@ static int g_gc_log = []() {
 static std::atomic<uint64_t> g_gc_collections{0}, g_gc_freed{0}, g_gc_mark_ns{0}, g_gc_sweep_ns{0};
 
 size_t gc_collect(MobiusVM* vm) {
+    GcHeap* heap = vm->state_->gcHeap();
     auto t0 = std::chrono::steady_clock::now();
-    gc_drain_all_pending();   // corpses must be unlinked before any walk
+    gc_drain_all_pending(heap);   // corpses must be unlinked before any walk
     gc_mark_from_roots(vm);
     auto t1 = std::chrono::steady_clock::now();
 
     SweepCtx sweep;
     size_t live = 0, allocs = 0;
     {
-        GcDirectory& d = directory();
-        std::lock_guard<std::mutex> lock(d.mutex);
-        for (GcThread* t = d.head; t; t = t->next_thread) {
+        std::lock_guard<std::mutex> lock(heap->mutex);
+        for (GcSegment* t = heap->head; t; t = t->next_segment) {
             GcHeader* h = t->sentinel.next;
             while (h != &t->sentinel) {
                 GcHeader* next = h->next;
@@ -620,13 +729,15 @@ size_t gc_collect(MobiusVM* vm) {
         if (sweep.dead.size() * 8 < allocs) {
             // Mostly acyclic churn already reclaimed by refcounting: this
             // collection was wasted work, so wait longer next time.
-            size_t doubled = g_gc_budget * 2;
-            g_gc_budget = doubled > floor_ ? doubled : floor_;
+            size_t doubled = heap->budget * 2;
+            heap->budget = doubled > floor_ ? doubled : floor_;
         } else {
-            g_gc_budget = floor_;
+            heap->budget = floor_;
         }
+        for (GcSegment* t = heap->head; t; t = t->next_segment) t->budget = heap->budget;
     }
-    g_gc_pending = (bool)g_gc_stress;   // stress mode keeps the hooks hot
+    gc_clear_heap_pending(heap);
+    if (g_gc_stress) g_gc_pending = true;   // stress mode keeps the hooks hot
 
     gc_free_dead(sweep.dead);
     if (g_gc_log) {
@@ -642,18 +753,17 @@ size_t gc_collect(MobiusVM* vm) {
 // Free every remaining tracked object regardless of reachability — state
 // teardown, after roots have been cleared and before the string pool dies
 // (destructors release string references).
-size_t gc_collect_all_for_teardown() {
+size_t gc_collect_all_for_teardown(GcHeap* heap) {
     if (g_gc_log && g_gc_collections.load())
         fprintf(stderr, "[gc] %llu collections, %llu freed, mark %.1fms, sweep %.1fms\n",
                 (unsigned long long)g_gc_collections.load(),
                 (unsigned long long)g_gc_freed.load(),
                 g_gc_mark_ns.load() / 1e6, g_gc_sweep_ns.load() / 1e6);
-    gc_drain_all_pending();
+    gc_drain_all_pending(heap);
     SweepCtx sweep;
     {
-        GcDirectory& d = directory();
-        std::lock_guard<std::mutex> lock(d.mutex);
-        for (GcThread* t = d.head; t; t = t->next_thread) {
+        std::lock_guard<std::mutex> lock(heap->mutex);
+        for (GcSegment* t = heap->head; t; t = t->next_segment) {
             GcHeader* h = t->sentinel.next;
             while (h != &t->sentinel) {
                 GcHeader* next = h->next;
@@ -677,7 +787,9 @@ void gc_safepoint(MobiusVM* vm) {
     JobSystem* js = vm->state_->jobSystem();
     if (js && js->outstandingJobs() != 0) return;
 
-    if (g_gc_pending | g_gc_stress) gc_collect(vm);
+    // g_gc_pending says some heap is over budget; collect if it is ours.
+    if (vm->state_->gcHeap()->pending.load(std::memory_order_relaxed) | g_gc_stress)
+        gc_collect(vm);
 
     if (g_gc_shadow_mode) {
         static thread_local uint32_t countdown = 0;

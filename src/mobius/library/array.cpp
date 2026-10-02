@@ -95,7 +95,7 @@ int lib_array_create(MobiusState* state, int arg_count) {
     size_t count = (size_t)cap_arg.as.i64;
     size_t capacity = count == 0 ? 8 : count;
 
-    ArrayValue* array = new (std::nothrow) ArrayValue();
+    ArrayValue* array = new (std::nothrow) ArrayValue(state->gcHeap());
     if (!array) {
         return state->error("Failed to create array");
     }
@@ -242,12 +242,12 @@ int array_method_slice(MobiusState* state, int arg_count) {
     if (start < 0) start = 0;
     if (end > (int64_t)arr->length()) end = (int64_t)arr->length();
     if (start >= end) {
-        state->npush(make_array_value(new ArrayValue(8)));
+        state->npush(make_array_value(new ArrayValue(state->gcHeap(), 8)));
         return 1;
     }
 
     size_t slice_length = (size_t)(end - start);
-    ArrayValue* slice_array = new ArrayValue(slice_length);
+    ArrayValue* slice_array = new ArrayValue(state->gcHeap(), slice_length);
     for (size_t i = 0; i < slice_length; i++) {
         slice_array->push((*arr)[start + i]);
     }
@@ -309,7 +309,7 @@ int array_method_concat(MobiusState* state, int arg_count) {
         total_length += arg.as.array->length();
     }
 
-    ArrayValue* result = new ArrayValue(total_length);
+    ArrayValue* result = new ArrayValue(state->gcHeap(), total_length);
 
     for (size_t j = 0; j < self_arr->length(); j++) {
         result->push((*self_arr)[j]);
@@ -473,7 +473,7 @@ int array_method_map(MobiusState* state, int arg_count) {
     }
 
     size_t len = arr->length();
-    ArrayValue* result = new ArrayValue(len);
+    ArrayValue* result = new ArrayValue(state->gcHeap(), len);
 
     for (size_t i = 0; i < len; i++) {
         mobius_stack_pushNil(state);
@@ -504,7 +504,7 @@ int array_method_filter(MobiusState* state, int arg_count) {
     }
 
     size_t len = arr->length();
-    ArrayValue* result = new ArrayValue(len);
+    ArrayValue* result = new ArrayValue(state->gcHeap(), len);
 
     for (size_t i = 0; i < len; i++) {
         mobius_stack_pushNil(state);

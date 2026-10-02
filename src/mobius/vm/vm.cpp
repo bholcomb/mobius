@@ -1225,7 +1225,7 @@ MOBIUS_FORCEINLINE static int vm_op_newtable(MobiusVM* vm, VMFrame& f, uint32_t 
 
 MOBIUS_FORCEINLINE static int vm_op_newarray(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     if (MOBIUS_UNLIKELY(g_gc_pending)) gc_safepoint(vm);
-    ArrayValue* arr = new (std::nothrow) ArrayValue(DECODE_B(inst));
+    ArrayValue* arr = new (std::nothrow) ArrayValue(vm->state_->gcHeap(), DECODE_B(inst));
     if (!arr) { VM_ERROR(vm, f, "Failed to allocate array"); return -1; }
     RA(inst) = make_array_value(arr);
     return 0;
@@ -3478,7 +3478,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
         return -1;
     }
     Prototype* child_proto = f.proto->protos[bx];
-    MobiusFunction* mf = new (std::nothrow) MobiusFunction();
+    MobiusFunction* mf = new (std::nothrow) MobiusFunction(vm->state_->gcHeap());
     if (!mf) {
         VM_ERROR(vm, f, "Failed to allocate function closure");
         return -1;
@@ -3538,7 +3538,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                     existing->retain();              // mf's own reference
                     mf->upvalues[u] = existing;
                 } else {
-                    Upvalue* uv = new (std::nothrow) Upvalue();
+                    Upvalue* uv = new (std::nothrow) Upvalue(vm->state_->gcHeap());
                     if (!uv) {
                         cleanup_function();
                         VM_ERROR(vm, f, "Failed to allocate open upvalue");
@@ -3561,7 +3561,7 @@ MOBIUS_FORCEINLINE static int vm_op_closure(MobiusVM* vm, VMFrame& f, uint32_t i
                     f.ci->upvalues[desc.index]->retain();   // mf's own reference
                     mf->upvalues[u] = f.ci->upvalues[desc.index];
                 } else {
-                    mf->upvalues[u] = new (std::nothrow) Upvalue();
+                    mf->upvalues[u] = new (std::nothrow) Upvalue(vm->state_->gcHeap());
                     if (!mf->upvalues[u]) {
                         cleanup_function();
                         VM_ERROR(vm, f, "Failed to allocate closed upvalue");
@@ -3602,7 +3602,7 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
         Value snapshot = inner;
         if (inner.type == VAL_ARRAY && inner.as.array) {
             ArrayValue* arr = inner.as.array;
-            ArrayValue* copy = new (std::nothrow) ArrayValue(arr->length());
+            ArrayValue* copy = new (std::nothrow) ArrayValue(gc_heap_of(arr->gcHeader()), arr->length());
             if (!copy) { VM_ERROR(vm, f, "for-in: out of memory"); return -1; }
             for (size_t i = 0; i < arr->length(); i++) copy->push(arr->get(i));
             snapshot = make_array_value(copy);
@@ -4101,7 +4101,7 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
             if (!upvals.empty()) {
                 fiber_upvalues.reserve(upvals.size());
                 for (Value& v : upvals) {
-                    Upvalue* uv = new (std::nothrow) Upvalue();
+                    Upvalue* uv = new (std::nothrow) Upvalue(state->gcHeap());
                     if (!uv) break;
                     uv->closed = v;
                     uv->location = &uv->closed;
