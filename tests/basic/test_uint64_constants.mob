@@ -1,0 +1,18 @@
+// A uint64 literal used directly as an operand keeps its type. It was put
+// in the constant pool as an int64, so 18446744073709551615 became -1:
+// `x == 18446744073709551615` was false for that very value.
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+var big = opaque(18446744073709551615)
+check("== literal", big == 18446744073709551615, true)
+check("!= literal", big != 18446744073709551615, false)
+check("> literal", big > 18446744073709551614, true)
+check("literal - literal", 18446744073709551615 - big, opaque(18446744073709551615) - big)
+check("not -1", big == -1, false)
+check("stays uint64", typeof(18446744073709551615 + opaque(0)), "uint64")
+print("uint64 constants: PASS")
