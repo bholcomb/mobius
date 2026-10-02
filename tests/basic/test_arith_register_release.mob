@@ -1,0 +1,30 @@
+// Arithmetic results release what their register held before. The fast
+// paths wrote the number field by field, so a reference left in a reused
+// register (here the span returned by a:span) leaked: the span stayed
+// alive and its parent array could never grow again.
+var a = [1, 2, 3, 4]
+func sum_ints() {
+    var s = a:span(0, 2)
+    return s[0] + s[1]
+}
+func sum_floats() {
+    var s = a:span(0, 2)
+    return s[0] * 1.5 + s[1] / 2.0
+}
+func mixed() {
+    var s = a:span(0, 2)
+    var t = s[0] - 1
+    t = t % 3
+    return t
+}
+for (var i = 0; i < 100; i++) {
+    sum_ints()
+    sum_floats()
+    mixed()
+    a:push(i)    // fails if any span is still alive
+}
+if (a:size() != 104) {
+    print("FAIL: size " + str(a:size()))
+    exit(1)
+}
+print("arithmetic releases reused registers: PASS")
