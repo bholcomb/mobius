@@ -1441,63 +1441,15 @@ Stmt* parse_for_statement(Parser* parser) {
 Stmt* parse_statement(Parser* parser) {
     NestingGuard guard(parser);
     if (!guard.ok) return NULL;
-    // Special handling for { to distinguish table literals from block statements
-    if (parser_check(parser, TOKEN_LEFT_BRACE)) {
-        // Look ahead to distinguish table literal from block statement
-        // Table literals typically have identifier:value or [key]:value patterns
-        // Block statements have statements (declarations, expressions, etc.)
-        
-        // Save current position
-        size_t saved_current = parser->current;
-        
-        // Advance past the {
-        parser_advance(parser);
-        
-        bool is_table_literal = false;
-        
-        // Skip newlines
-        while (parser_check(parser, TOKEN_NEWLINE)) {
-            parser_advance(parser);
-        }
-        
-        // Check for table literal patterns:
-        // 1. identifier : (key-value pair)
-        // 2. [ (computed key)
-        // 3. } (empty table)
-        //
-        // Disambiguation: `{ id : id ( }` could be a table literal
-        // `{ key: func() }` or a block with a method call `{ obj:method() }`.
-        // Spacing decides: method calls are written without spaces around
-        // the ':', so `{ obj:method() }` is a block and `{ key: f() }` is a
-        // table literal.
-        if (parser_check(parser, TOKEN_RIGHT_BRACE) ||
-            parser_check(parser, TOKEN_LEFT_BRACKET) ||
-            (parser_check(parser, TOKEN_IDENTIFIER) && 
-             parser->current + 1 < parser->token_count && 
-             parser->tokens[parser->current + 1].type == TOKEN_COLON &&
-             !(parser->current + 3 < parser->token_count &&
-               parser->tokens[parser->current + 2].type == TOKEN_IDENTIFIER &&
-               parser->tokens[parser->current + 3].type == TOKEN_LEFT_PAREN &&
-               tokens_adjacent(parser->tokens[parser->current],
-                               parser->tokens[parser->current + 1]) &&
-               tokens_adjacent(parser->tokens[parser->current + 1],
-                               parser->tokens[parser->current + 2])))) {
-            is_table_literal = true;
-        }
-        
-        // Restore position
-        parser->current = saved_current;
-        
-        if (is_table_literal) {
-            // Parse as expression statement with table literal
-            return parse_expression_statement(parser);
-        } else {
-            // Parse as block statement
-            parser_advance(parser);  // consume the {
-            return parse_block_statement(parser);
-        }
+    // A statement that starts with `{` is always a block, as in C and JS. A
+    // table literal on its own would do nothing as a statement. The old
+    // lookahead guessed from the first tokens and took `{}`, `{ [` and
+    // `{ name:` for tables, so `if (c) {} else ...` and a block starting
+    // with an array literal failed to parse.
+    if (parser_match(parser, TOKEN_LEFT_BRACE)) {
+        return parse_block_statement(parser);
     }
-    
+
     if (parser_match(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
     }
