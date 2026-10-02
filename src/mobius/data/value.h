@@ -378,11 +378,12 @@ inline bool is_truthy(const Value& value) {
     }
 }
 
+// Adopts the caller's reference, like the other make_*_value functions. It
+// used to take another one, so every channel (and its buffer) leaked.
 inline Value make_channel_value(Channel* ch) {
     Value value;
     value.type = VAL_CHANNEL;
     value.as.channel = ch;
-    if (ch) ((RefCounted*)ch)->retain();
     return value;
 }
 
