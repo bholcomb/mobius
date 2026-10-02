@@ -1,0 +1,29 @@
+// A closure created in a loop can call a global function the loop body
+// also calls. The loop hoists such globals into registers of the
+// enclosing function, and the closure body resolved the name to that
+// register number in its own frame ("call a non-function value").
+func times_ten(x) { return x * 10 }
+
+func main() {
+    var results = []
+    for (var i = 0; i < 2; i++) {
+        times_ten(i)
+        var g = func(a, b, c) { return times_ten(a) }
+        results:push(g(i + 1, 0, 0))
+    }
+    var n = 0
+    while (n < 2) {
+        times_ten(n)
+        func named(v) { return times_ten(v) + 1 }
+        results:push(named(n))
+        n++
+    }
+    var got = ""
+    for (var r in results) { got = got + str(r) + " " }
+    if (got != "10 20 1 11 ") {
+        print("FAIL: expected 10 20 1 11, got " + got)
+        exit(1)
+    }
+}
+main()
+print("closures calling hoisted globals: PASS")
