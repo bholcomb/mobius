@@ -2156,6 +2156,26 @@ MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t i
         VM_ERROR(vm, f, "Bitwise operations require integer operands");
         return -1;
     }
+    if (op == '<' || op == '>') {
+        // Shift counts of 64 or more shift every bit out: << gives 0, >>
+        // gives 0 or, for a negative int64, -1 (sign fill). (C++ leaves
+        // these undefined; x86 masked the count, so 1 << 64 gave 1.) A
+        // negative count is an error.
+        if (rhs.type == VAL_INT64 && rhs.as.i64 < 0) {
+            VM_ERROR(vm, f, "Shift count cannot be negative");
+            return -1;
+        }
+        uint64_t count = rhs.type == VAL_INT64 ? (uint64_t)rhs.as.i64 : rhs.as.u64;
+        if (count >= 64) {
+            bool fill = op == '>' && lhs.type == VAL_INT64 && lhs.as.i64 < 0 &&
+                        !MobiusVM::vm_use_unsigned(lhs, rhs);
+            if (MobiusVM::vm_use_unsigned(lhs, rhs))
+                RA(inst) = make_uint64_value(0);
+            else
+                RA(inst) = make_int64_value(fill ? -1 : 0);
+            return 0;
+        }
+    }
     if (MobiusVM::vm_use_unsigned(lhs, rhs)) {
         uint64_t l = MobiusVM::vm_extract_uint64(lhs);
         uint64_t r = MobiusVM::vm_extract_uint64(rhs);
@@ -2177,8 +2197,8 @@ MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t i
             case '&': res = l & r; break;
             case '|': res = l | r; break;
             case '^': res = l ^ r; break;
-            case '<': res = l << r; break;
-            case '>': res = l >> r; break;
+            case '<': res = (int64_t)((uint64_t)l << r); break;   // no signed-overflow UB
+            case '>': res = l >> r; break;                        // arithmetic shift
             default:  res = 0; break;
         }
         RA(inst) = make_int64_value(res);
