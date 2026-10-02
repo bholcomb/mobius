@@ -1190,6 +1190,10 @@ void mobius_register_function(MobiusState* state, const char* name,
                               MobiusCFunction func) {
     if (!state || !name || !func) return;
     Value fval = make_native_function_value(func);
+    // Read-only like the built-in functions: scripts can't reassign it, and
+    // spawned fibers may call it (they can't use writable top-level globals).
+    // Registering the name again replaces it.
+    fval.flags |= VAL_FLAG_READONLY;
     int slot = state->assignGlobalSlot(name);
     if (slot < 0) return;
     state->setGlobalValue(slot, fval);
