@@ -24,19 +24,27 @@ int lib_readfile(MobiusState* state, int arg_count) {
         return state->error("readfile: could not open file");
     }
 
+    // Read until end of file rather than trusting the reported size:
+    // files under /proc and pipes report 0 and read back empty otherwise.
+    // The size is only a first guess at the buffer.
+    std::string data;
     fseek(f, 0, SEEK_END);
     long sz = ftell(f);
     fseek(f, 0, SEEK_SET);
-
-    if (sz < 0) { fclose(f); return state->error("readfile: could not determine file size"); }
-
-    // Read into a string of the file's length. Going through a C string
-    // cut the contents off at the first NUL byte.
-    MobiusString* str = StringInternPool::allocHeap((size_t)sz);
-    if (!str) { fclose(f); return state->error("readfile: memory allocation failed"); }
-    size_t nread = fread(str->mutableData(), 1, (size_t)sz, f);
+    if (sz > 0) data.reserve((size_t)sz);
+    char chunk[65536];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) data.append(chunk, n);
+    bool failed = ferror(f) != 0;
     fclose(f);
-    StringInternPool::finishHeap(str, nread);
+    if (failed) return state->error("readfile: read error");
+
+    // A string of the data's length: going through a C string cut the
+    // contents off at the first NUL byte.
+    MobiusString* str = StringInternPool::allocHeap(data.size());
+    if (!str) return state->error("readfile: memory allocation failed");
+    if (!data.empty()) memcpy(str->mutableData(), data.data(), data.size());
+    StringInternPool::finishHeap(str, data.size());
 
     state->npush(make_string_value_adopt(str));
     return 1;
