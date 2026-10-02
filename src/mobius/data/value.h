@@ -235,7 +235,10 @@ private:
         }
         switch (type) {
             case VAL_ARRAY:    if (as.array) ((RefCounted*)as.array)->retain(); break;
-            case VAL_FUNCTION: if (as.function) as.function->ref_count.fetch_add(1, std::memory_order_relaxed); break;
+            case VAL_FUNCTION:
+                if (as.function && !as.function->immortal.load(std::memory_order_relaxed))
+                    as.function->ref_count.fetch_add(1, std::memory_order_relaxed);
+                break;
             case VAL_TABLE:    if (as.table) ((RefCounted*)as.table)->retain(); break;
             case VAL_USERDATA: if (as.userdata) as.userdata->ref_count.fetch_add(1, std::memory_order_relaxed); break;
             case VAL_ENUM:     if (as.enum_def) ((RefCounted*)as.enum_def)->retain(); break;
@@ -318,6 +321,10 @@ MOBIUS_API Value make_string_value_from_cstr(MobiusState* state, const char* cst
 // unboundedly many distinct strings leaks. make_string_value_from_cstr
 // interns and is meant for names and other bounded sets.
 MOBIUS_API Value make_heap_string_value(const char* data, size_t len);
+// Make the tables, arrays and capture-less functions reachable from `v`
+// immortal (RefCounted::setImmortal). For a top-level constant's deep-frozen
+// value and top-level functions.
+MOBIUS_API void make_value_immortal(const Value& v);
 // Format a float the way str() and print show it: the shortest digits that
 // read back as the same double, fixed notation for exponents -4..15 and
 // scientific otherwise, with ".0" on integral values (Python's repr):

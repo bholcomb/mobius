@@ -19,6 +19,7 @@ typedef struct MobiusFunction {
     struct Stmt** body;           // AST statements (tree-walker path)
     size_t body_count;            // Number of statements in body
     std::atomic<int> ref_count;   // Reference counter for memory management
+    std::atomic<bool> immortal{false};   // see RefCounted::setImmortal
     struct Prototype* proto;      // Bytecode prototype (VM path, nullptr for AST functions)
     struct Upvalue** upvalues;    // Captured upvalues (VM closures)
     int upvalue_count;            // Number of upvalues

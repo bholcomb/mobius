@@ -782,9 +782,12 @@ void MobiusState::setGlobalReadonly(const char* name, bool readonly) {
     auto it = globals->slot_map.find(name);
     if (it == globals->slot_map.end()) return;
     int slot = it->second;
-    if (readonly)
+    if (readonly) {
         globals->slots[slot].flags |= VAL_FLAG_READONLY;
-    else if (!(globals->constant && globals->constant[slot].load(std::memory_order_relaxed)))
+        // A top-level function: every fiber calling it through the global
+        // copies a reference, so stop counting them (see make_value_immortal).
+        if (globals->slots[slot].type == VAL_FUNCTION) make_value_immortal(globals->slots[slot]);
+    } else if (!(globals->constant && globals->constant[slot].load(std::memory_order_relaxed)))
         globals->slots[slot].flags &= ~VAL_FLAG_READONLY;   // constants stay read-only
 }
 
@@ -793,9 +796,12 @@ void MobiusState::setGlobalReadonly(int slot, bool readonly, GlobalEnvironment* 
     std::lock_guard<std::mutex> lock(globals->mutex);
     int count = globals->count.load(std::memory_order_acquire);
     if (!global_slot_in_bounds(globals, slot, count)) return;
-    if (readonly)
+    if (readonly) {
         globals->slots[slot].flags |= VAL_FLAG_READONLY;
-    else if (!(globals->constant && globals->constant[slot].load(std::memory_order_relaxed)))
+        // A top-level function: every fiber calling it through the global
+        // copies a reference, so stop counting them (see make_value_immortal).
+        if (globals->slots[slot].type == VAL_FUNCTION) make_value_immortal(globals->slots[slot]);
+    } else if (!(globals->constant && globals->constant[slot].load(std::memory_order_relaxed)))
         globals->slots[slot].flags &= ~VAL_FLAG_READONLY;   // constants stay read-only
 }
 
@@ -805,6 +811,9 @@ void MobiusState::setGlobalConstant(int slot, GlobalEnvironment* env) {
     int count = globals->count.load(std::memory_order_acquire);
     if (!global_slot_in_bounds(globals, slot, count) || !globals->constant) return;
     globals->slots[slot].flags |= VAL_FLAG_READONLY;
+    // The constant's (deep-frozen) value lives as long as the program and
+    // every fiber may copy references to it: stop counting them.
+    make_value_immortal(globals->slots[slot]);
     // Release: a reader that sees the flag also sees the slot's value.
     globals->constant[slot].store(1, std::memory_order_release);
 }

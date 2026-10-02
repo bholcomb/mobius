@@ -85,6 +85,7 @@ void Value::releaseRefSlow() {
         case VAL_FUNCTION:
             if (as.function) {
                 MobiusFunction* func = as.function;
+                if (func->immortal.load(std::memory_order_relaxed)) break;
                 if (func->ref_count.fetch_sub(1, std::memory_order_acq_rel) <= 1 &&
                     !gc_is_sweeping()) {
                     // Acyclic zero: free now. During a sweep the collector
@@ -879,6 +880,39 @@ int format_float(double d, char* buf, size_t size) {
     }
     buf[len] = '\0';
     return len;
+}
+
+void make_value_immortal(const Value& v) {
+    switch (v.type) {
+        case VAL_TABLE: {
+            Table* t = v.as.table;
+            if (!t || t->isImmortal()) return;
+            t->setImmortal();
+            const auto& entries = t->entries();
+            const auto& tags = t->tags();
+            for (size_t i = 0; i < entries.size(); i++) {
+                if (!Table::isLive(tags[i])) continue;
+                make_value_immortal(entries[i].key);
+                make_value_immortal(entries[i].value);
+            }
+            return;
+        }
+        case VAL_ARRAY: {
+            ArrayValue* a = v.as.array;
+            if (!a || a->isImmortal()) return;
+            a->setImmortal();
+            for (size_t i = 0; i < a->length(); i++) make_value_immortal((*a)[i]);
+            return;
+        }
+        case VAL_FUNCTION:
+            // Only closures without captures: their upvalues would otherwise
+            // need the same treatment.
+            if (v.as.function && v.as.function->upvalue_count == 0)
+                v.as.function->immortal.store(true, std::memory_order_relaxed);
+            return;
+        default:
+            return;   // strings, numbers, ... (interned strings are immortal already)
+    }
 }
 
 Value make_heap_string_value(const char* data, size_t len) {
