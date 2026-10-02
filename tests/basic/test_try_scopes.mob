@@ -1,0 +1,42 @@
+// Variables declared in a try body (or a catch body) are local to it. A
+// try-body local used to stay visible in catch and finally, holding
+// whatever its register contained when the exception hit (the thrown
+// value).
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+var seen = ""
+func probe() {
+    var n = 1
+    try {
+        if (n == 1) { throw "boom" }
+        var hidden = 5
+    } catch e {
+        var in_catch = 7
+        try { seen = str(hidden) } catch inner { seen = "out of scope" }
+    } finally {
+        try { seen = seen + "," + str(in_catch) } catch inner2 { seen = seen + ",out of scope" }
+    }
+}
+probe()
+check("try and catch locals are scoped", seen == "out of scope,out of scope")
+
+// Locals in try and catch still work, and the catch variable is bound.
+func normal() {
+    var out = ""
+    try {
+        var a = "x"
+        out = a
+        throw "e1"
+    } catch e {
+        var b = "y"
+        out = out + b + e
+    }
+    return out
+}
+check("locals inside try and catch", normal() == "xye1")
+print("try scopes: PASS")
