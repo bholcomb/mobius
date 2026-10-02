@@ -214,8 +214,11 @@ int lib_substr(MobiusState* state, int arg_count) {
         return 1;
     }
     
+    // Clamp to the end of the string. Compared against the remaining length:
+    // `start + length` overflowed for a huge length, skipping the clamp and
+    // failing the allocation.
     size_t actual_length = (size_t)length;
-    if (start + length > (int64_t)input_len) {
+    if (length > (int64_t)input_len - start) {
         actual_length = input_len - (size_t)start;
     }
     
