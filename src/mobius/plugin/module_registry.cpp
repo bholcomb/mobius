@@ -23,23 +23,37 @@
 #include <sys/stat.h>
 
 // ============================================================================
-// Global singleton
+// Loaded native libraries: process-wide
+//
+// Each state has its own ModuleRegistry (module tables, environments,
+// errors), but a shared library is loaded once per process: dlopen is
+// process-wide, and a plugin's cleanup_plugin takes no state, so it can
+// only run once every state is done with the library, at exit. Each state
+// still runs the plugin's init_plugin(state) for itself.
 // ============================================================================
 
-static ModuleRegistry* global_registry = nullptr;
-static std::once_flag registry_init_flag;
+static std::mutex g_libraries_mutex;
+static std::vector<std::unique_ptr<LoadedModule>>* g_libraries = nullptr;
 
-static void cleanup_global_registry() {
-    delete global_registry;
-    global_registry = nullptr;
+static void unload_libraries() {
+    std::lock_guard<std::mutex> lock(g_libraries_mutex);
+    if (!g_libraries) return;
+    for (auto& mod : *g_libraries) {
+        if (mod && mod->plugin && mod->plugin->cleanup_plugin) mod->plugin->cleanup_plugin();
+        if (mod && mod->handle) dlclose(mod->handle);
+        if (mod) for (void* extra : mod->extra_handles) if (extra) dlclose(extra);
+    }
+    delete g_libraries;
+    g_libraries = nullptr;
 }
 
-ModuleRegistry* getGlobalRegistry() {
-    std::call_once(registry_init_flag, []() {
-        global_registry = new ModuleRegistry();
-        atexit(cleanup_global_registry);
-    });
-    return global_registry;
+// Caller holds g_libraries_mutex.
+static std::vector<std::unique_ptr<LoadedModule>>& libraries() {
+    if (!g_libraries) {
+        g_libraries = new std::vector<std::unique_ptr<LoadedModule>>();
+        atexit(unload_libraries);
+    }
+    return *g_libraries;
 }
 
 // ============================================================================
@@ -499,32 +513,7 @@ void ModuleRegistry::releaseModuleValues() {
     }
 }
 
-ModuleRegistry::~ModuleRegistry() {
-    for (auto& mod : modules_) {
-        if (mod && mod->plugin && mod->plugin->cleanup_plugin) {
-            mod->plugin->cleanup_plugin();
-        }
-        if (mod && mod->handle) {
-            dlclose(mod->handle);
-        }
-        if (mod) {
-            for (void* extra : mod->extra_handles) {
-                if (extra) dlclose(extra);
-            }
-        }
-    }
-}
-
-LoadedModule* ModuleRegistry::findModule(const char* name) {
-    if (!name) return nullptr;
-    std::shared_lock<std::shared_mutex> lock(registry_mutex_);
-    for (auto& mod : modules_) {
-        if (mod && mod->name == name) {
-            return mod.get();
-        }
-    }
-    return nullptr;
-}
+ModuleRegistry::~ModuleRegistry() = default;   // libraries stay loaded (see above)
 
 void ModuleRegistry::registerBuiltinModule(const char* name, Table* module_table) {
     if (!name || !module_table) return;
@@ -542,93 +531,24 @@ void ModuleRegistry::registerBuiltinModule(const char* name, Table* module_table
 PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state,
                                             const std::vector<std::string>* preload_paths) {
     PluginLoadResult result = {PLUGIN_STATUS_ERROR, nullptr, nullptr};
-    std::vector<void*> extra_handles;
 
     if (!path) {
         result.error_message = "Invalid path";
         return result;
     }
 
-    if (debug_mode_) {
-        printf("Loading plugin: %s\n", path);
-    }
+    LoadedModule* lm = loadLibrary(path, preload_paths, &result);
+    if (!lm) return result;
+    Plugin* plugin = lm->plugin;
 
-    if (preload_paths) {
-        for (const std::string& preload_path : *preload_paths) {
-            void* extra = dlopen(preload_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
-            if (!extra) {
-                for (void* handle : extra_handles) {
-                    if (handle) dlclose(handle);
-                }
-                last_error_ = std::string("Failed to preload runtime library: ") + dlerror();
-                result.error_message = last_error_.c_str();
-                return result;
-            }
-            extra_handles.push_back(extra);
-        }
-    }
-
-    void* handle = dlopen(path, RTLD_LAZY);
-    if (!handle) {
-        for (void* extra : extra_handles) {
-            if (extra) dlclose(extra);
-        }
-        last_error_ = std::string("Failed to load library: ") + dlerror();
-        result.error_message = last_error_.c_str();
-        return result;
-    }
-
-    union { void* obj; PluginInfoFunc func; } plugin_info_ptr;
-    plugin_info_ptr.obj = dlsym(handle, "mobius_plugin_info");
-    PluginInfoFunc get_plugin_info = plugin_info_ptr.func;
-    if (!get_plugin_info) {
-        for (void* extra : extra_handles) {
-            if (extra) dlclose(extra);
-        }
-        dlclose(handle);
-        last_error_ = "Plugin does not export mobius_plugin_info function";
-        result.error_message = last_error_.c_str();
-        return result;
-    }
-
-    Plugin* plugin = get_plugin_info();
-    if (!plugin) {
-        for (void* extra : extra_handles) {
-            if (extra) dlclose(extra);
-        }
-        dlclose(handle);
-        last_error_ = "Plugin returned NULL from mobius_plugin_info";
-        result.error_message = last_error_.c_str();
-        return result;
-    }
-
-    if (plugin->metadata.api_version != MOBIUS_PLUGIN_API_VERSION) {
-        for (void* extra : extra_handles) {
-            if (extra) dlclose(extra);
-        }
-        dlclose(handle);
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "Plugin API version mismatch: expected %d, got %zu",
-                 MOBIUS_PLUGIN_API_VERSION, plugin->metadata.api_version);
-        last_error_ = buf;
-        result.status = PLUGIN_STATUS_INCOMPATIBLE;
-        result.error_message = last_error_.c_str();
-        return result;
-    }
-
+    // Per state: dependencies and init_plugin, once.
     {
         std::shared_lock<std::shared_mutex> lock(registry_mutex_);
-        for (const auto& mod : modules_) {
-            if (mod && mod->name == plugin->metadata.name) {
-                for (void* extra : extra_handles) {
-                    if (extra) dlclose(extra);
-                }
-                dlclose(handle);
-                last_error_ = std::string("Module '") + plugin->metadata.name + "' is already loaded";
-                result.error_message = last_error_.c_str();
-                return result;
-            }
+        if (initialized_plugins_.count(plugin)) {
+            result.status = PLUGIN_STATUS_LOADED;
+            result.plugin = plugin;
+            last_error_.clear();
+            return result;
         }
     }
 
@@ -636,10 +556,6 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         const char* dep_name = plugin->metadata.depends_on ? plugin->metadata.depends_on[i] : nullptr;
         if (!dep_name || dep_name[0] == '\0') continue;
         if (strcmp(dep_name, plugin->metadata.name) == 0) {
-            for (void* extra : extra_handles) {
-                if (extra) dlclose(extra);
-            }
-            dlclose(handle);
             last_error_ = std::string("Module '") + plugin->metadata.name + "' cannot depend on itself";
             result.error_message = last_error_.c_str();
             return result;
@@ -647,10 +563,6 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
         Table* dep_table = resolveModule(dep_name, path, state);
         if (!dep_table) {
             std::string dep_error = last_error_;
-            for (void* extra : extra_handles) {
-                if (extra) dlclose(extra);
-            }
-            dlclose(handle);
             last_error_ = std::string("Failed to load dependency '") + dep_name +
                           "' for module '" + plugin->metadata.name + "'" +
                           (dep_error.empty() ? "" : std::string(": ") + dep_error);
@@ -660,25 +572,13 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
     }
 
     if (plugin->init_plugin && plugin->init_plugin(state) != 0) {
-        for (void* extra : extra_handles) {
-            if (extra) dlclose(extra);
-        }
-        dlclose(handle);
         last_error_ = "Plugin initialization failed";
         result.error_message = last_error_.c_str();
         return result;
     }
-
-    auto mod = std::make_unique<LoadedModule>();
-    mod->name = plugin->metadata.name;
-    mod->path = path;
-    mod->handle = handle;
-    mod->extra_handles = std::move(extra_handles);
-    mod->plugin = plugin;
-    mod->status = PLUGIN_STATUS_LOADED;
     {
         std::unique_lock<std::shared_mutex> lock(registry_mutex_);
-        modules_.push_back(std::move(mod));
+        initialized_plugins_.insert(plugin);
     }
 
     if (debug_mode_) {
@@ -691,6 +591,76 @@ PluginLoadResult ModuleRegistry::loadPlugin(const char* path, MobiusState* state
     result.plugin = plugin;
     last_error_.clear();
     return result;
+}
+
+// The process-wide library for `path`: already loaded, or dlopen'd now.
+// On failure sets last_error_ and `result` and returns null.
+LoadedModule* ModuleRegistry::loadLibrary(const char* path,
+                                          const std::vector<std::string>* preload_paths,
+                                          PluginLoadResult* result) {
+    std::lock_guard<std::mutex> libs_lock(g_libraries_mutex);
+    for (auto& mod : libraries()) {
+        if (mod && mod->path == path) return mod.get();
+    }
+
+    if (debug_mode_) {
+        printf("Loading plugin: %s\n", path);
+    }
+
+    std::vector<void*> extra_handles;
+    auto fail = [&](void* handle, const std::string& message) -> LoadedModule* {
+        for (void* extra : extra_handles) if (extra) dlclose(extra);
+        if (handle) dlclose(handle);
+        last_error_ = message;
+        result->error_message = last_error_.c_str();
+        return nullptr;
+    };
+
+    if (preload_paths) {
+        for (const std::string& preload_path : *preload_paths) {
+            void* extra = dlopen(preload_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
+            if (!extra) return fail(nullptr, std::string("Failed to preload runtime library: ") + dlerror());
+            extra_handles.push_back(extra);
+        }
+    }
+
+    void* handle = dlopen(path, RTLD_LAZY);
+    if (!handle) return fail(nullptr, std::string("Failed to load library: ") + dlerror());
+
+    union { void* obj; PluginInfoFunc func; } plugin_info_ptr;
+    plugin_info_ptr.obj = dlsym(handle, "mobius_plugin_info");
+    PluginInfoFunc get_plugin_info = plugin_info_ptr.func;
+    if (!get_plugin_info) return fail(handle, "Plugin does not export mobius_plugin_info function");
+
+    Plugin* plugin = get_plugin_info();
+    if (!plugin) return fail(handle, "Plugin returned NULL from mobius_plugin_info");
+
+    if (plugin->metadata.api_version != MOBIUS_PLUGIN_API_VERSION) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "Plugin API version mismatch: expected %d, got %zu",
+                 MOBIUS_PLUGIN_API_VERSION, plugin->metadata.api_version);
+        result->status = PLUGIN_STATUS_INCOMPATIBLE;
+        return fail(handle, buf);
+    }
+
+    for (const auto& mod : libraries()) {
+        if (mod && mod->name == plugin->metadata.name) {
+            return fail(handle, std::string("Module '") + plugin->metadata.name +
+                                "' is already loaded from " + mod->path);
+        }
+    }
+
+    auto mod = std::make_unique<LoadedModule>();
+    mod->name = plugin->metadata.name;
+    mod->path = path;
+    mod->handle = handle;
+    mod->extra_handles = std::move(extra_handles);
+    mod->plugin = plugin;
+    mod->status = PLUGIN_STATUS_LOADED;
+    LoadedModule* raw = mod.get();
+    libraries().push_back(std::move(mod));
+    return raw;
 }
 
 // ============================================================================
@@ -776,31 +746,29 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
         std::string error_message;
 
         if (paths.has_so) {
-            LoadedModule* lm = findModule(name);
-            if (!lm) {
-                PluginLoadResult result = loadPlugin(paths.so_path.c_str(), state,
-                                                     paths.runtime_library_paths.empty() ? nullptr : &paths.runtime_library_paths);
-                if (result.status == PLUGIN_STATUS_LOADED && result.plugin) {
-                    lm = findModule(result.plugin->metadata.name);
-                } else if (result.error_message) {
-                    ok = false;
-                    error_message = result.error_message;
-                } else {
-                    ok = false;
-                    error_message = "Plugin load failed";
-                }
+            Plugin* plugin = nullptr;
+            PluginLoadResult result = loadPlugin(paths.so_path.c_str(), state,
+                                                 paths.runtime_library_paths.empty() ? nullptr : &paths.runtime_library_paths);
+            if (result.status == PLUGIN_STATUS_LOADED && result.plugin) {
+                plugin = result.plugin;
+            } else if (result.error_message) {
+                ok = false;
+                error_message = result.error_message;
+            } else {
+                ok = false;
+                error_message = "Plugin load failed";
             }
 
-            if (ok && lm && lm->plugin) {
-                for (size_t i = 0; i < lm->plugin->function_count; i++) {
-                    PluginFunction* func = &lm->plugin->functions[i];
+            if (ok && plugin) {
+                for (size_t i = 0; i < plugin->function_count; i++) {
+                    PluginFunction* func = &plugin->functions[i];
                     if (!func || !func->name || !func->function) continue;
                     Value func_key = make_string_value_from_cstr(state, func->name);
                     Value func_val = make_native_function_value(func->function);
                     mod_table->set(func_key, func_val);
                 }
                 state->seedGlobalEnvironmentFromTable(module_globals, mod_table);
-                run_plugin_post_init(lm->plugin, mod_table, state);
+                run_plugin_post_init(plugin, mod_table, state);
                 state->seedGlobalEnvironmentFromTable(module_globals, mod_table);
             }
         }

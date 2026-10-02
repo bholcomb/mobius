@@ -592,8 +592,8 @@ static void gc_mark_from_roots(MobiusVM* vm) {
     }
     // 3. State-held roots: globals, C-API refs, type/userdata metatables.
     state->gcVisitRoots(mark_value, mark_table, &ctx);
-    // 4. Module environments in the global registry.
-    getGlobalRegistry()->forEachGlobalValue(mark_value, &ctx);
+    // 4. Module environments of this state.
+    if (state->registry()) state->registry()->forEachGlobalValue(mark_value, &ctx);
 
     // Drain.
     while (!ctx.worklist.empty()) {

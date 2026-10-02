@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <shared_mutex>
 #include <condition_variable>
 #include <thread>
@@ -42,6 +43,8 @@ struct ModuleRecord {
     std::unique_ptr<GlobalEnvironment> globals;
 };
 
+// One per MobiusState: the state's imported modules (tables and
+// environments). Loaded native libraries are shared process-wide.
 class MOBIUS_API ModuleRegistry {
 public:
     ModuleRegistry() = default;
@@ -53,15 +56,13 @@ public:
     Table* resolveModule(const char* name, const char* caller_source, MobiusState* state);
     void registerBuiltinModule(const char* name, Table* module_table);
 
-    // Release every Value held by cached module environments. Module records
-    // live in this process-lifetime singleton (destroyed at atexit), but the
-    // strings and tables in their global slots are owned by a MobiusState's
-    // string pool. A MobiusState must call this before it frees that pool, or
-    // the atexit teardown dereferences freed strings. Safe to call repeatedly.
+    // Release every Value held by cached module environments. The strings
+    // and tables in their global slots belong to the owning state, which
+    // calls this before freeing its string pool. Safe to call repeatedly.
     void releaseModuleValues();
 
     // Visit every Value held by cached module environments (global slots and
-    // module tables) — GC roots that live outside any MobiusState.
+    // module tables): GC roots of the owning state.
     void forEachGlobalValue(void (*cb)(const Value&, void*), void* ud);
 
     bool debugMode() const { return debug_mode_; }
@@ -69,18 +70,18 @@ public:
     const std::string& lastError() const { return last_error_; }
 
 private:
-    LoadedModule* findModule(const char* name);
     PluginLoadResult loadPlugin(const char* path, MobiusState* state,
                                 const std::vector<std::string>* preload_paths = nullptr);
+    LoadedModule* loadLibrary(const char* path, const std::vector<std::string>* preload_paths,
+                              PluginLoadResult* result);
 
     mutable std::shared_mutex registry_mutex_;
     std::condition_variable_any module_cv_;
-    std::vector<std::unique_ptr<LoadedModule>> modules_;
+    std::unordered_set<Plugin*> initialized_plugins_;   // init_plugin ran for this state
     std::unordered_map<std::string, ModuleRecord> module_records_;
     bool debug_mode_ = false;
     std::string last_error_;
 };
 
-MOBIUS_API ModuleRegistry* getGlobalRegistry();
 
 #endif // MOBIUS_MODULE_REGISTRY_H
