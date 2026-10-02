@@ -72,6 +72,14 @@ public:
     MobiusState* getState() const { return state_; }
 
     static constexpr uint8_t TAG_EMPTY = 0x00;
+    // A removed entry. Probes continue past it (it was part of a probe
+    // chain) and inserts may reuse it; like an empty slot its memory is
+    // uninitialized. Removing marks the slot instead of re-inserting the
+    // rest of the chain, which moved entries behind a running iteration
+    // (for-in skipped keys when the body removed the current one).
+    static constexpr uint8_t TAG_DELETED = 0x01;
+    // Live entries carry a tag with the high bit set (tagFromHash).
+    static MOBIUS_FORCEINLINE bool isLive(uint8_t tag) { return (tag & 0x80) != 0; }
 
     // Inline-capacity storage: a table at the default capacity (8 slots)
     // performs no heap allocation beyond the pooled Table object itself.
@@ -153,8 +161,9 @@ private:
     bool removeUnlocked(const Value& key);
 
     void resize(size_t new_capacity);
+    void rehash(size_t new_capacity);
+    void growForInsert();
     size_t findIndex(const Value& key, size_t hash) const;
-    void insertEntry(const Value& key, const Value& value, size_t hash);
 
     // One-entry metamethod lookup cache, used when THIS table serves as a
     // metatable: getMetamethod probes the same interned name (__index, __eq,
@@ -169,6 +178,7 @@ private:
     EntryStorage entries_;
     TagStorage tags_;
     size_t size_;
+    size_t deleted_ = 0;   // TAG_DELETED slots; they count toward the load factor
     Table* metatable_;
     MobiusState* state_;
 };

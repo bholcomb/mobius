@@ -188,7 +188,7 @@ Table::~Table() {
     // (see the constructor). The tag scan touches 1 byte per slot instead of
     // letting the storage destructor walk 32.
     for (size_t i = 0; i < entries_.size(); i++) {
-        if (tags_[i] != TAG_EMPTY) {
+        if (isLive(tags_[i])) {
             entries_[i].key.~Value();
             entries_[i].value.~Value();
         }
@@ -211,53 +211,45 @@ void Table::setMetatable(Table* mt) {
     metatable_ = mt;
 }
 
+// The slot holding `key`, or else the slot an insert of it should use: the
+// first deleted slot on its probe path, or the empty slot that ends it.
+// Callers tell the cases apart with isLive().
 size_t Table::findIndex(const Value& key, size_t hash) const {
     size_t mask = entries_.size() - 1;
     size_t index = hash & mask;
     uint8_t tag = tagFromHash(hash);
     size_t start = index;
+    size_t first_deleted = SIZE_MAX;
 
     do {
         uint8_t t = tags_[index];
         if (t == TAG_EMPTY)
+            return first_deleted != SIZE_MAX ? first_deleted : index;
+        if (t == TAG_DELETED) {
+            if (first_deleted == SIZE_MAX) first_deleted = index;
+        } else if (t == tag && entries_[index].key.exactlyEqual(key)) {
             return index;
-        if (t == tag && entries_[index].key.exactlyEqual(key))
-            return index;
-        index = (index + 1) & mask;
-    } while (index != start);
-
-    return start;
-}
-
-void Table::insertEntry(const Value& key, const Value& value, size_t hash) {
-    size_t mask = entries_.size() - 1;
-    size_t index = hash & mask;
-    uint8_t tag = tagFromHash(hash);
-    size_t start = index;
-
-    do {
-        uint8_t t = tags_[index];
-        if (t == TAG_EMPTY) {
-            new (&entries_[index].key) Value(key);     // slot was uninitialized
-            new (&entries_[index].value) Value(value);
-            tags_[index] = tag;
-            return;
-        }
-        if (t == tag && entries_[index].key.exactlyEqual(key)) {
-            entries_[index].value = value;
-            return;
         }
         index = (index + 1) & mask;
     } while (index != start);
 
-    entries_[start].key = key;
-    entries_[start].value = value;
-    tags_[start] = tag;
+    return first_deleted != SIZE_MAX ? first_deleted : start;
 }
 
 void Table::resize(size_t new_capacity) {
     if (new_capacity <= entries_.size()) return;
-    new_capacity = next_power_of_2(new_capacity);
+    rehash(next_power_of_2(new_capacity));
+}
+
+// Make room for one more entry: grow, or when deleted slots rather than
+// live entries fill the table, rebuild it at the same size to drop them.
+void Table::growForInsert() {
+    if ((size_ + deleted_) * 4 < entries_.size() * 3) return;
+    if (size_ * 2 < entries_.size()) rehash(entries_.size());
+    else rehash(entries_.size() * 2);
+}
+
+void Table::rehash(size_t new_capacity) {
 
     // Relocating rehash: every occupied entry is memcpy'd into its new slot
     // (Value is trivially relocatable — the same contract SmallVec growth
@@ -271,7 +263,7 @@ void Table::resize(size_t new_capacity) {
 
     size_t mask = new_capacity - 1;
     for (size_t i = 0; i < entries_.size(); i++) {
-        if (tags_[i] == TAG_EMPTY) continue;
+        if (!isLive(tags_[i])) continue;
         size_t h = hash_value_raw(entries_[i].key);
         size_t index = h & mask;
         while (new_tags[index] != TAG_EMPTY) index = (index + 1) & mask;
@@ -283,7 +275,9 @@ void Table::resize(size_t new_capacity) {
     entries_.clearNoDestroy();          // contents live on in new_entries
     entries_ = std::move(new_entries);
     tags_ = std::move(new_tags);
-    // size_ unchanged: relocation neither adds nor drops entries.
+    // size_ unchanged: relocation neither adds nor drops entries. Deleted
+    // slots were not carried over.
+    deleted_ = 0;
 }
 
 const Value& Table::get(const Value& key) const {
@@ -308,7 +302,7 @@ const Value* Table::findRaw(const Value& key) const {
     if (size_ == 0) return nullptr;
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
-    if (tags_[index] != TAG_EMPTY && entries_[index].key.exactlyEqual(key)) {
+    if (isLive(tags_[index]) && entries_[index].key.exactlyEqual(key)) {
         return &entries_[index].value;
     }
     return nullptr;
@@ -367,13 +361,11 @@ bool Table::setUnlocked(const Value& key, const Value& value) {
         if (shared.type != value.type) return setUnlocked(key, shared);
     }
     mm_cache_name_ = nullptr;   // this table may be someone's metatable
-    if (size_ * 4 >= entries_.size() * 3) {
-        resize(entries_.size() * 2);
-    }
+    growForInsert();
 
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
-    bool is_new = (tags_[index] == TAG_EMPTY);
+    bool is_new = !isLive(tags_[index]);
 
     if (is_new) {
         if (metatable_) {
@@ -385,6 +377,7 @@ bool Table::setUnlocked(const Value& key, const Value& value) {
 
         new (&entries_[index].key) Value(key);     // slot was uninitialized
         new (&entries_[index].value) Value(value);
+        if (tags_[index] == TAG_DELETED) deleted_--;
         tags_[index] = tagFromHash(h);
         size_++;
         return true;
@@ -406,19 +399,20 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
     mm_cache_name_ = nullptr;   // this table may be someone's metatable
     if (!key) return false;
 
-    if (size_ * 4 >= entries_.size() * 3) {
-        resize(entries_.size() * 2);
-    }
+    growForInsert();
 
     size_t h = (size_t)key->hash;
     size_t mask = entries_.size() - 1;
     size_t index = h & mask;
     uint8_t tag = tagFromHash(h);
     size_t start = index;
+    size_t first_deleted = SIZE_MAX;
 
     do {
         uint8_t t = tags_[index];
-        if (t == TAG_EMPTY) {
+        if (t == TAG_DELETED) {
+            if (first_deleted == SIZE_MAX) first_deleted = index;
+        } else if (t == TAG_EMPTY) {
             if (metatable_) {
                 const Value& newindex_method = getMetamethod(state_->metamethods()->newindex());
                 if (newindex_method.type == VAL_TABLE) {
@@ -427,14 +421,17 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
                 }
             }
 
+            if (first_deleted != SIZE_MAX) {   // reuse the first deleted slot
+                index = first_deleted;
+                deleted_--;
+            }
             TableEntry& e = entries_[index];
             new (&e.key) Value(make_string_value(key));   // retains; slot was uninitialized
             new (&e.value) Value(value);
             tags_[index] = tag;
             size_++;
             return true;
-        }
-        if (t == tag) {
+        } else if (t == tag) {
             if (string_key_equals(entries_[index].key, key)) {
                 entries_[index].value = value;
                 return true;
@@ -443,10 +440,14 @@ bool Table::setByStringUnlocked(MobiusString* key, const Value& value) {
         index = (index + 1) & mask;
     } while (index != start);
 
-    TableEntry& e = entries_[start];
-    e.key = make_string_value(key);   // retains: the table owns its key
-    e.value = value;
-    tags_[start] = tag;
+    // No empty slot on the whole probe path: growForInsert keeps the load
+    // under 3/4, so a deleted slot was seen.
+    index = first_deleted;
+    deleted_--;
+    TableEntry& e = entries_[index];
+    new (&e.key) Value(make_string_value(key));
+    new (&e.value) Value(value);
+    tags_[index] = tag;
     size_++;
     return true;
 }
@@ -455,7 +456,7 @@ bool Table::hasKey(const Value& key) const {
     if (size_ == 0) return false;
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
-    return tags_[index] != TAG_EMPTY && entries_[index].key.exactlyEqual(key);
+    return isLive(tags_[index]) && entries_[index].key.exactlyEqual(key);
 }
 
 bool Table::remove(const Value& key) {
@@ -468,32 +469,22 @@ bool Table::removeUnlocked(const Value& key) {
 
     size_t h = hash_value_raw(key);
     size_t index = findIndex(key, h);
-    if (tags_[index] == TAG_EMPTY || !entries_[index].key.exactlyEqual(key))
+    if (!isLive(tags_[index]) || !entries_[index].key.exactlyEqual(key))
         return false;
 
-    tags_[index] = TAG_EMPTY;
-    entries_[index].key = make_nil_value();
-    entries_[index].value = make_nil_value();
+    entries_[index].key.~Value();     // the slot becomes uninitialized memory
+    entries_[index].value.~Value();
     size_--;
-
+    // Mark the slot deleted so the probe chains through it still reach the
+    // entries after it; no entry moves. If the next slot is empty, no chain
+    // continues past this one, so it can be empty too.
     size_t mask = entries_.size() - 1;
-    for (;;) {
-        index = (index + 1) & mask;
-        if (tags_[index] == TAG_EMPTY) break;
-
-        Value k = std::move(entries_[index].key);
-        Value v = std::move(entries_[index].value);
+    if (tags_[(index + 1) & mask] == TAG_EMPTY) {
         tags_[index] = TAG_EMPTY;
-        size_--;
-        // Raw re-insert: this is probe-cluster repair, not a user-level set.
-        // Going through setUnlocked() would treat each displaced neighbor as a
-        // brand-new insert and divert it into a `__newindex` metamethod —
-        // silently teleporting unrelated entries out of the table on remove().
-        // No resize can be needed here (occupancy only decreased).
-        insertEntry(k, v, hash_value_raw(k));
-        size_++;
+    } else {
+        tags_[index] = TAG_DELETED;
+        deleted_++;
     }
-
     return true;
 }
 
@@ -501,7 +492,7 @@ Table* Table::copy() const {
     Table* c = new (std::nothrow) Table(state_, entries_.size());
     if (!c) return nullptr;
     for (size_t i = 0; i < entries_.size(); i++) {
-        if (tags_[i] != TAG_EMPTY) {
+        if (isLive(tags_[i])) {
             c->set(entries_[i].key, entries_[i].value);
         }
     }
@@ -511,7 +502,7 @@ Table* Table::copy() const {
 
 void Table::forEach(const std::function<void(const Value& key, const Value& value)>& fn) const {
     for (size_t i = 0; i < entries_.size(); i++) {
-        if (tags_[i] != TAG_EMPTY) {
+        if (isLive(tags_[i])) {
             fn(entries_[i].key, entries_[i].value);
         }
     }
@@ -587,7 +578,7 @@ void Table::printDebug() const {
 
     for (size_t i = 0; i < entries_.size(); i++) {
         printf("[%zu] ", i);
-        if (tags_[i] != TAG_EMPTY) {
+        if (isLive(tags_[i])) {
             printf("Key: ");
             print_value(entries_[i].key);
             printf(" => Value: ");
