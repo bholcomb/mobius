@@ -249,6 +249,12 @@ runtime follows table `__index` links and calls the first function `__index` it
 encounters. A direct field always shadows `__index`. This works identically for
 tables and for [userdata type metatables](../embedding/embedding-guide.md#type-metatables).
 
+Method calls (`obj:name()`) look up `name` in this order: the table's own keys
+and its `__index` tables, then the built-in table methods (`size`, `has_key`,
+`remove`, ...), then a function `__index`. So a catch-all `__index` function
+does not hide the built-in methods; define a method on the table or an `__index`
+table to override one.
+
 ### Operator metamethods
 
 Define `__add`, `__sub`, `__mul`, `__div` (and similar) to overload operators:

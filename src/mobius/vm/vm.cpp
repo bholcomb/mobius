@@ -1722,6 +1722,20 @@ MOBIUS_FORCEINLINE static int vm_op_self(MobiusVM* vm, VMFrame& f, uint32_t inst
             f.regs[a] = method;
             return 0;
         }
+        // Built-in table methods come before a function __index: a
+        // catch-all __index (defaults, proxies) answered every name, so
+        // obj:size() called whatever it returned. Own keys and __index
+        // tables (checked above) still take precedence.
+        if (key.type == VAL_STRING) {
+            Table* type_mt = vm->state_->typeMetatable(VAL_TABLE);
+            if (type_mt) {
+                const Value& builtin = type_mt->getByString(key.as.string);
+                if (builtin.type != VAL_NIL) {
+                    f.regs[a] = builtin;
+                    return 0;
+                }
+            }
+        }
         // On a miss, follow a *function* __index up the metatable chain.
         if (tbl->getMetatable()) {
             f.ci->ip = f.ip;
