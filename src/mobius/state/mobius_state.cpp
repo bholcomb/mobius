@@ -1122,26 +1122,27 @@ int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* en
 }
 
 int MobiusState::execFile(const char* filename) {
-    return execFileInEnvironment(filename, nullptr);
+    return execFileInEnvironment(filename, nullptr, true);
 }
 
-int MobiusState::execFileInEnvironment(const char* filename, GlobalEnvironment* env) {
+int MobiusState::execFileInEnvironment(const char* filename, GlobalEnvironment* env, bool host_call) {
     if (!filename) return MOBIUS_ERROR_ARGUMENT;
 
-    FileResult file_result = read_file(filename);
-    if (!file_result.success) {
-        setError(MOBIUS_ERROR_RUNTIME, 
-                 file_result.error ? file_result.error : "Failed to read file", 
-                 "Check that file exists and is readable", 
+    // The host's file system if it set one, else the real file system
+    // (for a script's load in a sandbox: only if allowed).
+    std::string content, read_error;
+    if (!readFile(filename, content, read_error, host_call)) {
+        std::string message = std::string(filename) + ": " + read_error;
+        setError(MOBIUS_ERROR_FILE, message.c_str(),
+                 "Check that file exists and is readable",
                  0, 0, NULL);
-        return MOBIUS_ERROR_RUNTIME;
+        return MOBIUS_ERROR_FILE;
     }
 
     const char* saved_source = getSourceContext();
     setSourceContext(filename);
-    int result = execStringInEnvironment(file_result.content, env);
+    int result = execStringInEnvironment(content.c_str(), env);
     setSourceContext(saved_source);
-    free_file_result(&file_result);
     return result;
 }
 
@@ -1280,9 +1281,79 @@ void MobiusState::writeOutput(int stream, const char* data, size_t length) {
         output_handler_(this, stream, data, length, output_handler_userdata_);
         return;
     }
+    if (!allowsDefault(MOBIUS_CAP_OUTPUT)) return;   // sandboxed: discarded
     FILE* f = stream == MOBIUS_STDERR ? stderr : stdout;
     if (stream == MOBIUS_STDERR) fflush(stdout);   // keep the two in order on a terminal
     fwrite(data, 1, length, f);
+}
+
+struct MobiusFileRequest {
+    std::string* data;
+    std::string* error;
+};
+
+static const char* kFilesUnavailable = "file access is not available";
+
+void MobiusState::setFileSystem(const MobiusFileSystem* fs, void* userdata) {
+    has_file_system_ = fs != nullptr;
+    file_system_ = fs ? *fs : MobiusFileSystem{};
+    file_system_userdata_ = userdata;
+}
+
+bool MobiusState::readFile(const char* path, std::string& out, std::string& error, bool host_call) {
+    out.clear();
+    if (has_file_system_) {
+        if (!file_system_.read) { error = kFilesUnavailable; return false; }
+        MobiusFileRequest request{&out, &error};
+        if (file_system_.read(this, path, &request, file_system_userdata_) != MOBIUS_OK) {
+            if (error.empty()) error = "could not read file";
+            return false;
+        }
+        return true;
+    }
+    if (!host_call && !allowsDefault(MOBIUS_CAP_FILES)) { error = kFilesUnavailable; return false; }
+    FILE* f = fopen(path, "rb");
+    if (!f) { error = "could not open file"; return false; }
+    char chunk[65536];
+    size_t n;
+    while ((n = fread(chunk, 1, sizeof(chunk), f)) > 0) out.append(chunk, n);
+    bool failed = ferror(f) != 0;
+    fclose(f);
+    if (failed) { error = "read error"; return false; }
+    return true;
+}
+
+bool MobiusState::writeFile(const char* path, const char* data, size_t length, bool append,
+                            std::string& error) {
+    if (has_file_system_) {
+        if (!file_system_.write) { error = kFilesUnavailable; return false; }
+        MobiusFileRequest request{nullptr, &error};
+        if (file_system_.write(this, path, data, length, append ? 1 : 0, &request,
+                               file_system_userdata_) != MOBIUS_OK) {
+            if (error.empty()) error = "could not write file";
+            return false;
+        }
+        return true;
+    }
+    if (!allowsDefault(MOBIUS_CAP_FILES)) { error = kFilesUnavailable; return false; }
+    FILE* f = fopen(path, append ? "ab" : "wb");
+    if (!f) {
+        error = append ? "could not open file for appending" : "could not open file for writing";
+        return false;
+    }
+    size_t written = length ? fwrite(data, 1, length, f) : 0;
+    bool ok = fclose(f) == 0 && written == length;
+    if (!ok) error = "write error";
+    return ok;
+}
+
+int MobiusState::fileExists(const char* path, std::string& error) {
+    if (has_file_system_) {
+        if (!file_system_.exists) { error = kFilesUnavailable; return -1; }
+        return file_system_.exists(this, path, file_system_userdata_) ? 1 : 0;
+    }
+    if (!allowsDefault(MOBIUS_CAP_FILES)) { error = kFilesUnavailable; return -1; }
+    return file_exists(path) ? 1 : 0;
 }
 
 void MobiusState::requestExit(int code) {
@@ -1303,6 +1374,22 @@ void mobius_set_output_handler(MobiusState* state, MobiusOutputHandler handler, 
 
 void mobius_set_exit_handler(MobiusState* state, MobiusExitHandler handler, void* userdata) {
     if (state) state->setExitHandler(handler, userdata);
+}
+
+void mobius_set_file_system(MobiusState* state, const MobiusFileSystem* fs, void* userdata) {
+    if (state) state->setFileSystem(fs, userdata);
+}
+
+void mobius_file_set_data(MobiusFileRequest* request, const char* data, size_t length) {
+    if (request && request->data) request->data->assign(data ? data : "", data ? length : 0);
+}
+
+void mobius_file_set_error(MobiusFileRequest* request, const char* message) {
+    if (request && request->error) *request->error = message ? message : "";
+}
+
+void mobius_sandbox(MobiusState* state, unsigned int allow) {
+    if (state) state->setSandbox(allow);
 }
 
 }

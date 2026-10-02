@@ -1,6 +1,7 @@
 #include <mobius/mobius_plugin.h>
 #include "state/stack.h"
 #include "state/mobius_state.h"
+#include "plugin/module_registry.h"
 #include "vm/vm.h"
 #include "data/shared_cell.h"
 #include "data/enum.h"
@@ -1197,6 +1198,17 @@ void mobius_register_function(MobiusState* state, const char* name,
     int slot = state->assignGlobalSlot(name);
     if (slot < 0) return;
     state->setGlobalValue(slot, fval);
+}
+
+int mobius_register_module(MobiusState* state, const char* name) {
+    if (!state || !name || !state->registry()) return MOBIUS_ERROR_ARGUMENT;
+    NativeCallContext* nctx = get_nctx(state);
+    if (!nctx || nctx->top <= nctx->base) return MOBIUS_ERROR_ARGUMENT;
+    Value val = nctx->registers[--nctx->top];
+    if (val.type != VAL_TABLE || !val.as.table) return MOBIUS_ERROR_TYPE;
+    // Rooted by the registry (the GC visits registered module tables).
+    state->registry()->registerBuiltinModule(name, val.as.table);
+    return MOBIUS_OK;
 }
 
 // ============================================================================

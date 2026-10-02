@@ -384,6 +384,14 @@ MOBIUS_API void mobius_set_userdata_type_metatable(MobiusState* state,
 MOBIUS_API void mobius_register_function(MobiusState* state, const char* name,
                                         MobiusCFunction func);
 
+/**
+ * Pop the table on top of the stack and make it importable as `name`
+ * (`import "name"`), also in a sandbox. Registering a name again replaces
+ * the module for later imports. Returns MOBIUS_OK, MOBIUS_ERROR_TYPE if
+ * the top of the stack is not a table, or MOBIUS_ERROR_ARGUMENT.
+ */
+MOBIUS_API int mobius_register_module(MobiusState* state, const char* name);
+
 /* ====================================================================== */
 /*  Plugin registration structs                                            */
 /* ====================================================================== */

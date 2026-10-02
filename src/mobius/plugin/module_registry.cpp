@@ -379,6 +379,59 @@ static ModulePaths resolve_flat_module_paths(const std::string& dir, const char*
     return out;
 }
 
+// Imports in a sandboxed state, or one with a host file system: only .mob
+// modules, looked up through the state's file access (the host's
+// callbacks, the real file system, or not available), next to the
+// importing script and in the state's plugin directories. No native
+// plugins, no default directories.
+static ModulePaths resolve_script_module_paths(const char* name, const char* caller_source,
+                                               MobiusState* state) {
+    ModulePaths out;
+    std::string module_name(name);
+    if (state->sandboxed()) {
+        // Module names, not paths: no escaping the search directories.
+        bool bad = module_name.empty() || module_name[0] == '/' || module_name[0] == '\\';
+        size_t start = 0;
+        while (!bad && start <= module_name.size()) {
+            size_t sep = module_name.find_first_of("/\\", start);
+            std::string part = module_name.substr(start, sep == std::string::npos ? std::string::npos : sep - start);
+            if (part == "..") bad = true;
+            if (sep == std::string::npos) break;
+            start = sep + 1;
+        }
+        if (bad) {
+            out.error_message = std::string("Module name '") + name + "' is not allowed here";
+            return out;
+        }
+    }
+
+    std::vector<std::string> search_dirs;
+    std::unordered_set<std::string> seen_dirs;
+    if (caller_source && caller_source[0] != '\0' && strcmp(caller_source, "<string>") != 0) {
+        append_search_dir(search_dirs, seen_dirs, dirname_path(caller_source));
+    }
+    for (const auto& d : state->pluginDirectories()) append_search_dir(search_dirs, seen_dirs, d);
+
+    std::string unavailable;
+    for (const auto& dir : search_dirs) {
+        std::string mob_path = (dir.empty() || dir == ".") ? module_name + ".mob"
+                                                          : dir + "/" + module_name + ".mob";
+        std::string err;
+        int exists = state->fileExists(mob_path.c_str(), err);
+        if (exists < 0) { unavailable = err; break; }
+        if (exists == 1) {
+            out.has_mob = true;
+            out.mob_path = std::move(mob_path);
+            out.found = true;
+            return out;
+        }
+    }
+    if (!unavailable.empty()) {
+        out.error_message = std::string("Module '") + name + "' not found: " + unavailable;
+    }
+    return out;
+}
+
 static ModulePaths resolve_module_paths(const char* name, const char* caller_source, MobiusState* state) {
     ModulePaths out;
     const char* default_dirs[] = {
@@ -694,7 +747,9 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
             module_cv_.wait(lock);
         }
 
-        ModulePaths paths = resolve_module_paths(name, caller_source, state);
+        ModulePaths paths = (state->sandboxed() || state->hasFileSystem())
+            ? resolve_script_module_paths(name, caller_source, state)
+            : resolve_module_paths(name, caller_source, state);
         if (!paths.found) {
             last_error_ = paths.error_message.empty()
                 ? std::string("Module '") + name + "' not found"
