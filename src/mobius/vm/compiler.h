@@ -245,6 +245,7 @@ private:
     // literal), or a reference to an inlined const not shadowed by a local
     // or captured variable.
     bool constantValueOf(Expr* e, Value* out);
+    bool writesDestBeforeOperands(Expr* e);
     void checkSpawnedFunction(Expr* callee);
     // Prototypes of readonly global functions, by name, for resolving direct
     // calls to a global function from inside another function. Only functions
