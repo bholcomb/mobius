@@ -88,13 +88,18 @@ str(nil)     // "nil"
 
 ### int(value) -> int64
 
-Convert to an integer. Truncates floats toward zero; parses numeric strings.
+Convert to an integer. Truncates floats toward zero; parses decimal strings.
 
 ```mobius
 int(3.9)     // 3
 int("42")    // 42
 int(true)    // 1
 ```
+
+It is an error when the result can't be represented: a float outside the int64
+range, NaN or infinity; a `uint64` above the largest int64; a string that is
+empty, has other text (including surrounding spaces) or holds a number outside
+the int64 range.
 
 ### float(value) -> float64
 
@@ -104,6 +109,9 @@ Convert to a floating-point number.
 float(42)      // 42.0
 float("3.14")  // 3.14
 ```
+
+A string must be exactly a number: an empty string, surrounding spaces or other
+text are errors.
 
 ### exit([code])
 
