@@ -375,7 +375,14 @@ Expr* parse_primary(Parser* parser) {
                 if (result) ast_release_expr(result);
                 return NULL;
             }
-            result = result ? make_binary_expr(result, plus_op, expr_node) : expr_node;
+            if (!result) {
+                // Start from "" so every + concatenates. A template that
+                // began with ${...} used to be built as `a + b`, which added
+                // numbers (`${1}${2}` gave 3), and `${a}` alone was not a
+                // string.
+                result = make_literal_expr(make_string_value_from_cstr(parser->state, ""));
+            }
+            result = make_binary_expr(result, plus_op, expr_node);
 
             p = ds + 1;
         }
