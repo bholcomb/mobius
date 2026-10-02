@@ -1,0 +1,54 @@
+// ++ and -- on a captured variable update that variable. They fell through
+// to the global path: a global of the same name changed instead (or the
+// increment failed with "Undefined variable").
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+var c = 100
+func h() {
+    var c = 0
+    func g() { c++; return c }
+    g()
+    return c
+}
+check("captured incremented", h(), 1)
+check("global untouched", c, 100)
+
+func counter() {
+    var n = 0
+    func next() { return n++ }
+    func peek() { return n }
+    return [next, peek]
+}
+var fs = counter()
+var next = fs[0]
+var peek = fs[1]
+check("postfix returns old value", next(), 0)
+check("postfix stored", peek(), 1)
+
+func prefix_and_dec() {
+    var k = 10
+    var inc = func() { return ++k }
+    var dec = func() { return k-- }
+    var a = inc()
+    var b = dec()
+    return str(a) + "," + str(b) + "," + str(k)
+}
+check("prefix ++ and postfix --", prefix_and_dec(), "11,11,10")
+
+// A captured shared variable is updated under its lock.
+shared var total = 0
+func make_bumper() {
+    func bump() { total++; return 0 }
+    return bump
+}
+var bump = make_bumper()
+var futures = []
+for (var i = 0; i < 8; i++) { futures:push(spawn bump()) }
+fiber.all(futures)
+check("shared global ++ from fibers", total, 8)
+print("increment of captured variables: PASS")
