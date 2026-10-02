@@ -12,20 +12,30 @@
 // UNIFIED UTILITY FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
+// A uniform integer in [0, range), without modulo bias. range 0 means the
+// full 2^64.
+static uint64_t random_below(MobiusState* state, uint64_t range) {
+    if (range == 0) return state->nextRandom();
+    uint64_t limit = (0 - range) % range;   // reject the short first chunk
+    while (true) {
+        uint64_t x = state->nextRandom();
+        if (x >= limit) return x % range;
+    }
+}
+
 int lib_random(MobiusState* state, int arg_count) {
     if (arg_count > 2) {
         return state->error("random expects 0, 1, or 2 arguments");
     }
-    
+
     if (arg_count == 0) {
-        // Return random float between 0 and 1
-        state->npush(make_float_value((double)rand() / RAND_MAX));
+        // A float in [0, 1): the top 53 bits.
+        state->npush(make_float_value((double)(state->nextRandom() >> 11) * 0x1.0p-53));
         return 1;
     } else if (arg_count == 1) {
-        // Return random integer between 0 and n-1
+        // An integer in [0, n-1]
         Value arg = state->npeek(0);
-        state->npop(); // Remove argument
-        
+        state->npop();
         if (arg.type != VAL_INT64) {
             return state->error("random expects an integer argument");
         }
@@ -33,35 +43,28 @@ int lib_random(MobiusState* state, int arg_count) {
         if (max_val <= 0) {
             return state->error("random expects a positive integer");
         }
-        state->npush(make_int64_value(rand() % max_val));
+        state->npush(make_int64_value((int64_t)random_below(state, (uint64_t)max_val)));
         return 1;
-    } else if (arg_count == 2) {
-        // Return random integer between min and max (inclusive)
+    } else {
+        // An integer in [min, max] (inclusive)
         Value max_arg = state->npeek(0);
         Value min_arg = state->npeek(1);
-        
-        // Remove arguments
         state->npop();
         state->npop();
-        
         if (min_arg.type != VAL_INT64 || max_arg.type != VAL_INT64) {
             return state->error("random expects integer arguments");
         }
-        
         int64_t min_val = min_arg.as.i64;
         int64_t max_val = max_arg.as.i64;
-        
         if (min_val > max_val) {
             return state->error("random min value must be <= max value");
         }
-        
-        int64_t range = max_val - min_val + 1;
-        int64_t result = min_val + (rand() % range);
-        state->npush(make_int64_value(result));
+        // Unsigned arithmetic: the span of the whole int64 range wraps to 0.
+        uint64_t range = (uint64_t)max_val - (uint64_t)min_val + 1;
+        uint64_t offset = random_below(state, range);
+        state->npush(make_int64_value((int64_t)((uint64_t)min_val + offset)));
         return 1;
     }
-    
-    return state->error("random: unexpected argument count");
 }
 
 int lib_clock(MobiusState* state, int arg_count) {
@@ -123,9 +126,9 @@ int lib_randomseed(MobiusState* state, int arg_count) {
     Value arg = state->npeek(0);
     state->npop();
     if (arg.type == VAL_INT64) {
-        srand((unsigned int)arg.as.i64);
+        state->seedRandom((uint64_t)arg.as.i64);
     } else if (arg.type == VAL_FLOAT64) {
-        srand((unsigned int)arg.as.double_val);
+        state->seedRandom((uint64_t)(int64_t)arg.as.double_val);
     } else {
         return state->error("randomseed expects a numeric argument");
     }

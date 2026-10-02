@@ -290,9 +290,15 @@ random(10)     // 0..9
 random(5, 15)  // 5..15
 ```
 
+Ranges cover all of `int64`; the values are uniform (no bias toward low
+numbers).
+
 ### randomseed(seed)
 
-Seed the random number generator for reproducible sequences.
+Seed the random number generator for reproducible sequences. Each
+interpreter state has its own generator: seeding it never affects another
+state or the host program's C `rand()`. A seed gives the same sequence on
+every platform. Without a seed, each state starts from a different one.
 
 ### time() -> int64
 

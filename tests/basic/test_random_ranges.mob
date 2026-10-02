@@ -1,0 +1,45 @@
+// random(): floats in [0, 1), integers over the full int64 range without
+// the old 2^31 ceiling, and repeatable sequences after randomseed.
+var failures = 0
+func check(name, ok) {
+    if (!ok) {
+        failures++
+        print("FAIL: " + name)
+    }
+}
+
+var big_seen = false
+for (var i = 0; i < 200; i++) {
+    var f = random()
+    check("float in [0, 1)", f >= 0.0 && f < 1.0)
+    var n = random(1000000000000000)
+    check("random(n) in range", n >= 0 && n < 1000000000000000)
+    if (n > 2147483647) { big_seen = true }
+    var r = random(-5, 5)
+    check("random(min, max) in range", r >= -5 && r <= 5)
+}
+check("random(n) goes past 2^31", big_seen)
+
+// The whole int64 range: no overflow.
+var lo = -9223372036854775807 - 1
+var hi = 9223372036854775807
+for (var i = 0; i < 50; i++) {
+    var x = random(lo, hi)
+    check("full range", x >= lo && x <= hi)
+}
+check("single value range", random(7, 7) == 7)
+
+// Every value of a small range turns up.
+var seen = [false, false, false, false, false, false]
+for (var i = 0; i < 600; i++) { seen[random(6)] = true }
+var all = true
+for (var s in seen) { if (!s) { all = false } }
+check("all of 0..5 seen", all)
+
+randomseed(2024)
+var a = [random(), random(1000), random(-3, 3)]
+randomseed(2024)
+var b = [random(), random(1000), random(-3, 3)]
+check("repeatable after randomseed", a[0] == b[0] && a[1] == b[1] && a[2] == b[2])
+
+if (failures == 0) { print("random ranges: PASS") } else { exit(1) }
