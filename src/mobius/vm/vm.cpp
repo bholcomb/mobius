@@ -2344,6 +2344,8 @@ MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) 
         }
     } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
         lt = mobius_string_less(lhs.as.string, rhs.as.string);
+    } else if (lhs.type == VAL_CHAR && rhs.type == VAL_CHAR) {
+        lt = (unsigned char)lhs.as.character < (unsigned char)rhs.as.character;   // as bytes 0-255
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
         Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
         const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
@@ -2378,6 +2380,8 @@ MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) 
         }
     } else if (lhs.type == VAL_STRING && rhs.type == VAL_STRING) {
         le = !mobius_string_less(rhs.as.string, lhs.as.string);
+    } else if (lhs.type == VAL_CHAR && rhs.type == VAL_CHAR) {
+        le = (unsigned char)lhs.as.character <= (unsigned char)rhs.as.character;
     } else if (lhs.type == VAL_TABLE || rhs.type == VAL_TABLE) {
         Value lhs_c = lhs, rhs_c = rhs;   // metamethod may realloc registers_
         const Value& tbl = (lhs_c.type == VAL_TABLE) ? lhs_c : rhs_c;
@@ -2750,7 +2754,8 @@ MOBIUS_FORCEINLINE static int vm_op_typecompat(MobiusVM* vm, VMFrame& f, uint32_
     // every range, so `case 1..10:` never matched it.
     bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
     bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
-    bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
+    bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING) ||
+                  (lhs.type == VAL_CHAR && rhs.type == VAL_CHAR);
     if (compat != (a != 0)) f.ip++;
     return 0;
 }
