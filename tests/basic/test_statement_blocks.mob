@@ -1,0 +1,24 @@
+// A statement that starts with `{` is a block. The parser guessed from the
+// first tokens and treated `{}`, `{ [` and `{ name:` as table literals, so
+// these failed to parse.
+var log = []
+if (true) {} else { log:push("else") }
+if (false) {} else { log:push("else taken") }
+if (true) {
+    [1, 2]:push(3)
+    log:push("array first")
+}
+{
+    log:push("bare block")
+}
+while (true) {
+    [0][0]
+    break
+}
+var t = {x: 1}
+var u = {[2] = "two"}
+if (size(log) != 3 or log[0] != "else taken" or log[2] != "bare block" or t.x != 1 or u[2] != "two") {
+    print("FAIL: " + str(size(log)))
+    exit(1)
+}
+print("statement blocks: PASS")

@@ -121,6 +121,8 @@ statement           ::= block
                       | expr_stmt
 
 block               ::= "{" { NEWLINE | declaration } "}"
+                      // a statement starting with "{" is always a block,
+                      // never a table literal
 
 if_stmt             ::= "if" "(" expression ")" statement
                         { "elif" "(" expression ")" statement }
