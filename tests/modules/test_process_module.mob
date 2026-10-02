@@ -25,6 +25,7 @@ func open_fds() {
 
 var dir = os.join(os.tmpdir(), "mobius_process_" + str(os.getpid()))
 os.mkdirp(dir)
+fiber.sleep(1)   // starts the I/O reactor, whose descriptors live for the whole run
 var fds_before = open_fds()
 
 // Arguments pass through exactly: spaces, quotes, empty strings, no shell.

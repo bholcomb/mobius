@@ -1,12 +1,18 @@
 // io: file and standard-stream objects with incremental, binary-safe
 // reads and writes.
 //
-// A stream wraps a C FILE*. Files are always opened in binary mode, so bytes
-// pass through unchanged on every platform; strings in Mobius are bytes, so
-// there is no encoding layer. Each stream has a mutex, so one stream can be
-// shared between fibers: every call is atomic, and the order of calls from
-// different fibers is whatever the scheduler produces. Calls block their
-// worker thread (fiber-aware waits are later work).
+// Regular files and standard output/error go through a C FILE* (the
+// standard streams share C's buffers with print). Pipes, terminals, FIFOs
+// and standard input are "waitable": they use the descriptor directly, and
+// when it isn't ready the calling fiber parks in the I/O reactor
+// (mobius_io_wait) instead of blocking its worker thread. Files are always
+// opened in binary mode; Mobius strings are bytes, so there is no encoding
+// layer.
+//
+// Each stream has a fiber mutex held for a whole operation, so one stream
+// can be shared between fibers: every call is atomic. close() first wakes a
+// fiber waiting on the stream (which then reports "stream is closed"), so
+// closing never waits on a read that may never finish.
 //
 // The method table for streams is assembled by io.mob (native methods plus
 // script conveniences such as lines()) and installed with
@@ -20,6 +26,10 @@
 #include <mutex>
 #include <string>
 #include <vector>
+
+#include <climits>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 #include "io_stream.h"
 
@@ -42,7 +52,7 @@ static int op_error(MobiusState* state, const char* op, const std::string& name,
     return mobius_error(state, msg.c_str());
 }
 
-// Get `self` as an open stream for method `op`, or report why not.
+// Get `self` as a stream for method `op`, or report why not.
 static IoStream* self_stream(MobiusState* state, const char* op, int* rc) {
     IoStream* s = get_stream(state, 0);
     if (!s) { *rc = mobius_error(state, (std::string(op) + ": self is not a stream").c_str()); return nullptr; }
@@ -69,6 +79,189 @@ static bool arg_bytes(MobiusState* state, int idx, const char** data, size_t* le
         return true;
     }
     return false;
+}
+
+// Errors from the stream core, reported by the method that hit them.
+enum class IoErr { none, os, closed, cancelled };
+
+struct IoResult {
+    IoErr err = IoErr::none;
+    int os_errno = 0;
+};
+
+static int report(MobiusState* state, const char* op, IoStream* s, const IoResult& r) {
+    if (r.err == IoErr::closed) return op_error(state, op, s->name, "stream is closed");
+    if (r.err == IoErr::cancelled) return mobius_error(state, "CancellationError: fiber was cancelled");
+    return os_error(state, op, s->name, r.os_errno ? r.os_errno : EIO);
+}
+
+// Wait until a waitable stream's descriptor is ready (parks the fiber).
+static bool wait_ready(MobiusState* state, IoStream* s, int events, IoResult* r) {
+    while (true) {
+        if (s->closing.load(std::memory_order_acquire)) { r->err = IoErr::closed; return false; }
+        MobiusIoWait w = {s->fd, events};
+        int rc = mobius_io_wait(state, &w, 1, -1);
+        if (rc >= 0) return true;
+        if (rc == MOBIUS_IO_CLOSED) { r->err = IoErr::closed; return false; }
+        if (rc == MOBIUS_IO_CANCELLED) { r->err = IoErr::cancelled; return false; }
+        if (rc == MOBIUS_IO_TIMEOUT) continue;
+        r->err = IoErr::os;
+        r->os_errno = EIO;
+        return false;
+    }
+}
+
+// Read more into a waitable stream's buffer: at least one byte, or EOF.
+static bool waitable_fill(MobiusState* state, IoStream* s, IoResult* r) {
+    if (s->rpos > 0 && s->rpos == s->rbuf.size()) { s->rbuf.clear(); s->rpos = 0; }
+    char chunk[COPY_CHUNK];
+    while (!s->eof) {
+        // A descriptor we don't own (standard input) stays blocking: wait for
+        // it to be readable first, then read what is there.
+        if (!s->nonblocking && !wait_ready(state, s, MOBIUS_IO_READ, r)) return false;
+        ssize_t n = read(s->fd, chunk, sizeof(chunk));
+        if (n > 0) { s->rbuf.append(chunk, (size_t)n); return true; }
+        if (n == 0) { s->eof = true; return true; }
+        if (errno == EINTR) continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (!wait_ready(state, s, MOBIUS_IO_READ, r)) return false;
+            continue;
+        }
+        r->err = IoErr::os;
+        r->os_errno = errno;
+        return false;
+    }
+    return true;
+}
+
+static size_t buffered(const IoStream* s) { return s->rbuf.size() - s->rpos; }
+
+// Up to `max` bytes into `out` (0 at end of stream).
+static bool read_some(MobiusState* state, IoStream* s, char* out, size_t max, size_t* got, IoResult* r) {
+    *got = 0;
+    if (!s->waitable) {
+        switch_to(s, LastOp::read);
+        *got = fread(out, 1, max, s->fp);
+        if (*got == 0 && ferror(s->fp)) {
+            r->err = IoErr::os;
+            r->os_errno = errno;
+            clearerr(s->fp);
+            return false;
+        }
+        return true;
+    }
+    if (buffered(s) == 0 && !waitable_fill(state, s, r)) return false;
+    size_t n = buffered(s) < max ? buffered(s) : max;
+    memcpy(out, s->rbuf.data() + s->rpos, n);
+    s->rpos += n;
+    *got = n;
+    return true;
+}
+
+static bool read_rest(MobiusState* state, IoStream* s, std::string& out, IoResult* r) {
+    if (!s->waitable) {
+        switch_to(s, LastOp::read);
+        char chunk[COPY_CHUNK];
+        size_t n;
+        while ((n = fread(chunk, 1, sizeof(chunk), s->fp)) > 0) out.append(chunk, n);
+        if (ferror(s->fp)) {
+            r->err = IoErr::os;
+            r->os_errno = errno;
+            clearerr(s->fp);
+            return false;
+        }
+        return true;
+    }
+    while (true) {
+        out.append(s->rbuf, s->rpos, std::string::npos);
+        s->rbuf.clear();
+        s->rpos = 0;
+        if (s->eof) return true;
+        if (!waitable_fill(state, s, r)) return false;
+    }
+}
+
+// The next line without its newline; *found false at end of stream.
+static bool read_line(MobiusState* state, IoStream* s, std::string& line, bool* found, IoResult* r) {
+    *found = false;
+    bool newline = false;
+    if (!s->waitable) {
+        switch_to(s, LastOp::read);
+        bool got_any = false;
+        io_lock_file(s->fp);
+        int c;
+        while ((c = io_getc_unlocked(s->fp)) != EOF) {
+            got_any = true;
+            if (c == '\n') { newline = true; break; }
+            line.push_back((char)c);
+        }
+        io_unlock_file(s->fp);
+        if (!got_any && ferror(s->fp)) {
+            r->err = IoErr::os;
+            r->os_errno = errno;
+            clearerr(s->fp);
+            return false;
+        }
+        *found = got_any;
+    } else {
+        while (true) {
+            size_t nl = s->rbuf.find('\n', s->rpos);
+            if (nl != std::string::npos) {
+                line.append(s->rbuf, s->rpos, nl - s->rpos);
+                s->rpos = nl + 1;
+                newline = true;
+                *found = true;
+                break;
+            }
+            if (s->eof) {
+                if (buffered(s) > 0) {
+                    line.append(s->rbuf, s->rpos, std::string::npos);
+                    s->rpos = s->rbuf.size();
+                    *found = true;
+                }
+                break;
+            }
+            if (!waitable_fill(state, s, r)) return false;
+        }
+    }
+    if (newline && !line.empty() && line.back() == '\r') line.pop_back();
+    return true;
+}
+
+// Write all of `data`.
+static bool write_all(MobiusState* state, IoStream* s, const char* data, size_t len, IoResult* r) {
+    if (!s->waitable) {
+        switch_to(s, LastOp::write);
+        size_t put = len ? fwrite(data, 1, len, s->fp) : 0;
+        if (put != len) {
+            r->err = IoErr::os;
+            r->os_errno = errno ? errno : EIO;
+            clearerr(s->fp);
+            return false;
+        }
+        return true;
+    }
+    size_t done = 0;
+    while (done < len) {
+        // A blocking descriptor is written PIPE_BUF bytes at a time after a
+        // readiness wait (a writable pipe takes that much without blocking).
+        size_t chunk = len - done;
+        if (!s->nonblocking) {
+            if (!wait_ready(state, s, MOBIUS_IO_WRITE, r)) return false;
+            if (chunk > PIPE_BUF) chunk = PIPE_BUF;
+        }
+        ssize_t n = write(s->fd, data + done, chunk);
+        if (n > 0) { done += (size_t)n; continue; }
+        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+            if (!wait_ready(state, s, MOBIUS_IO_WRITE, r)) return false;
+            continue;
+        }
+        r->err = IoErr::os;
+        r->os_errno = n < 0 ? errno : EIO;
+        return false;
+    }
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,22 +300,35 @@ static int io_open(MobiusState* state, int arg_count) {
         return op_error(state, "io.open", "path", "contains a NUL byte");
     }
 
+    // A FIFO blocks in open() until the other side opens it; that wait is
+    // not fiber-aware.
     errno = 0;
     FILE* fp = fopen(path.c_str(), cmode);
     if (!fp) return os_error(state, "io.open", path, errno);
 
     IoStream* s = new IoStream();
-    s->fp = fp;
     s->name = path;
     s->readable = readable;
     s->writable = writable;
+    struct stat st;
+    if (fstat(fileno(fp), &st) == 0 && !S_ISREG(st.st_mode) && !S_ISBLK(st.st_mode)) {
+        // A FIFO or device: use the descriptor, non-blocking (we own it).
+        s->waitable = true;
+        s->fd = dup(fileno(fp));
+        fclose(fp);
+        fcntl(s->fd, F_SETFL, fcntl(s->fd, F_GETFL) | O_NONBLOCK);
+        fcntl(s->fd, F_SETFD, FD_CLOEXEC);
+        s->nonblocking = true;
+    } else {
+        s->fp = fp;
+    }
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushUserdata(state, s, stream_destructor, STREAM_TYPE, sizeof(IoStream));
     return 1;
 }
 
 // ---------------------------------------------------------------------------
-// Reading
+// Methods
 // ---------------------------------------------------------------------------
 
 static bool check_readable(MobiusState* state, IoStream* s, const char* op, int* rc) {
@@ -137,7 +343,7 @@ static bool check_writable(MobiusState* state, IoStream* s, const char* op, int*
     return true;
 }
 
-// stream:read(n): up to n bytes as a buffer, or nil at end of file.
+// stream:read(n): up to n bytes as a buffer, or nil at end of stream.
 static int stream_read(MobiusState* state, int arg_count) {
     int rc = 0;
     const char* op = "stream:read";
@@ -148,15 +354,21 @@ static int stream_read(MobiusState* state, int arg_count) {
     int64_t n = mobius_stack_getInt64(state, 1);
     if (n <= 0) return mobius_error(state, "stream:read: n must be positive");
 
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (!check_readable(state, s, op, &rc)) return rc;
-    switch_to(s, LastOp::read);
     std::vector<char> data((size_t)n);
-    size_t got = fread(data.data(), 1, (size_t)n, s->fp);
-    if (got == 0 && ferror(s->fp)) {
-        int err = errno;
-        clearerr(s->fp);
-        return os_error(state, op, s->name, err);
+    size_t got = 0;
+    IoResult r;
+    if (!s->waitable) {
+        if (!read_some(state, s, data.data(), (size_t)n, &got, &r)) return report(state, op, s, r);
+    } else {
+        // Like fread: fill up to n unless the stream ends first.
+        while (got < (size_t)n) {
+            size_t part = 0;
+            if (!read_some(state, s, data.data() + got, (size_t)n - got, &part, &r)) return report(state, op, s, r);
+            if (part == 0) break;
+            got += part;
+        }
     }
     mobius_stack_pop(state, arg_count);
     if (got == 0) mobius_stack_pushNil(state);
@@ -164,8 +376,8 @@ static int stream_read(MobiusState* state, int arg_count) {
     return 1;
 }
 
-// stream:read_into(buffer): fill up to the buffer's size; returns the count
-// read, 0 at end of file.
+// stream:read_into(buffer): read up to the buffer's size; the count read,
+// 0 at end of stream. Waitable streams return what is available.
 static int stream_read_into(MobiusState* state, int arg_count) {
     int rc = 0;
     const char* op = "stream:read_into";
@@ -177,32 +389,14 @@ static int stream_read_into(MobiusState* state, int arg_count) {
     size_t cap = 0;
     void* dst = mobius_stack_getBufferData(state, 1, &cap);
 
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (!check_readable(state, s, op, &rc)) return rc;
-    switch_to(s, LastOp::read);
-    size_t got = cap ? fread(dst, 1, cap, s->fp) : 0;
-    if (got == 0 && cap && ferror(s->fp)) {
-        int err = errno;
-        clearerr(s->fp);
-        return os_error(state, op, s->name, err);
-    }
+    size_t got = 0;
+    IoResult r;
+    if (cap && !read_some(state, s, static_cast<char*>(dst), cap, &got, &r)) return report(state, op, s, r);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushInt64(state, (int64_t)got);
     return 1;
-}
-
-// Everything left in the stream.
-static bool read_rest(IoStream* s, std::string& out, int* err) {
-    switch_to(s, LastOp::read);
-    char chunk[COPY_CHUNK];
-    size_t n;
-    while ((n = fread(chunk, 1, sizeof(chunk), s->fp)) > 0) out.append(chunk, n);
-    if (ferror(s->fp)) {
-        *err = errno;
-        clearerr(s->fp);
-        return false;
-    }
-    return true;
 }
 
 // stream:read_all(): the rest of the stream as a buffer (empty at EOF).
@@ -212,11 +406,11 @@ static int stream_read_all(MobiusState* state, int arg_count) {
     if (arg_count != 1) return mobius_error(state, "stream:read_all expects no arguments");
     IoStream* s = self_stream(state, op, &rc);
     if (!s) return rc;
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (!check_readable(state, s, op, &rc)) return rc;
     std::string data;
-    int err = 0;
-    if (!read_rest(s, data, &err)) return os_error(state, op, s->name, err);
+    IoResult r;
+    if (!read_rest(state, s, data, &r)) return report(state, op, s, r);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushBufferCopy(state, data.data(), data.size());
     return 1;
@@ -229,18 +423,18 @@ static int stream_read_text(MobiusState* state, int arg_count) {
     if (arg_count != 1) return mobius_error(state, "stream:read_text expects no arguments");
     IoStream* s = self_stream(state, op, &rc);
     if (!s) return rc;
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (!check_readable(state, s, op, &rc)) return rc;
     std::string data;
-    int err = 0;
-    if (!read_rest(s, data, &err)) return os_error(state, op, s->name, err);
+    IoResult r;
+    if (!read_rest(state, s, data, &r)) return report(state, op, s, r);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushStringLength(state, data.data(), data.size());
     return 1;
 }
 
 // stream:read_line(): the next line without "\n" (or "\r\n"), or nil at end
-// of file. A last line without a newline is still returned; an empty line
+// of stream. A last line without a newline is still returned; an empty line
 // is "". Byte-exact: NUL bytes stay in the line.
 static int stream_read_line(MobiusState* state, int arg_count) {
     int rc = 0;
@@ -248,38 +442,17 @@ static int stream_read_line(MobiusState* state, int arg_count) {
     if (arg_count != 1) return mobius_error(state, "stream:read_line expects no arguments");
     IoStream* s = self_stream(state, op, &rc);
     if (!s) return rc;
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (!check_readable(state, s, op, &rc)) return rc;
-    switch_to(s, LastOp::read);
-
     std::string line;
-    bool got_any = false, newline = false;
-    io_lock_file(s->fp);
-    int c;
-    while ((c = io_getc_unlocked(s->fp)) != EOF) {
-        got_any = true;
-        if (c == '\n') { newline = true; break; }
-        line.push_back((char)c);
-    }
-    io_unlock_file(s->fp);
-    if (!got_any && ferror(s->fp)) {
-        int err = errno;
-        clearerr(s->fp);
-        return os_error(state, op, s->name, err);
-    }
+    bool found = false;
+    IoResult r;
+    if (!read_line(state, s, line, &found, &r)) return report(state, op, s, r);
     mobius_stack_pop(state, arg_count);
-    if (!got_any) {
-        mobius_stack_pushNil(state);
-        return 1;
-    }
-    if (newline && !line.empty() && line.back() == '\r') line.pop_back();
-    mobius_stack_pushStringLength(state, line.data(), line.size());
+    if (!found) mobius_stack_pushNil(state);
+    else mobius_stack_pushStringLength(state, line.data(), line.size());
     return 1;
 }
-
-// ---------------------------------------------------------------------------
-// Writing and control
-// ---------------------------------------------------------------------------
 
 // stream:write(data): write a string or buffer completely; returns the
 // number of bytes written.
@@ -292,16 +465,11 @@ static int stream_write(MobiusState* state, int arg_count) {
     const char* data = nullptr;
     size_t len = 0;
     if (!arg_bytes(state, 1, &data, &len)) return mobius_error(state, "stream:write: data must be a string or buffer");
-
-    std::lock_guard<std::mutex> lock(s->mu);
+    // The argument stays on the stack (and alive) while a write waits.
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (!check_writable(state, s, op, &rc)) return rc;
-    switch_to(s, LastOp::write);
-    size_t put = len ? fwrite(data, 1, len, s->fp) : 0;
-    if (put != len) {
-        int err = errno;
-        clearerr(s->fp);
-        return os_error(state, op, s->name, err ? err : EIO);
-    }
+    IoResult r;
+    if (!write_all(state, s, data, len, &r)) return report(state, op, s, r);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushInt64(state, (int64_t)len);
     return 1;
@@ -313,27 +481,33 @@ static int stream_flush(MobiusState* state, int arg_count) {
     if (arg_count != 1) return mobius_error(state, "stream:flush expects no arguments");
     IoStream* s = self_stream(state, op, &rc);
     if (!s) return rc;
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (s->closed) return op_error(state, op, s->name, "stream is closed");
-    if (fflush(s->fp) != 0) return os_error(state, op, s->name, errno);
+    if (!s->waitable && fflush(s->fp) != 0) return os_error(state, op, s->name, errno);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushNil(state);
     return 1;
 }
 
-// stream:close(): flush and release the handle. Closing again is harmless.
-// A standard stream is flushed and marked closed, but the OS stream stays
-// open (print and child processes keep working).
+// stream:close(): flush and release the stream. Closing again is harmless.
+// A fiber waiting on the stream is woken first (its call reports "stream is
+// closed"). A standard stream is flushed and marked closed, but the OS
+// stream stays open (print and child processes keep working).
 static int stream_close(MobiusState* state, int arg_count) {
     int rc = 0;
     const char* op = "stream:close";
     if (arg_count != 1) return mobius_error(state, "stream:close expects no arguments");
     IoStream* s = self_stream(state, op, &rc);
     if (!s) return rc;
-    std::lock_guard<std::mutex> lock(s->mu);
+    s->closing.store(true, std::memory_order_release);
+    if (s->waitable && s->fd >= 0) mobius_io_wake_fd(s->fd);
+    std::lock_guard<FiberMutex> lock(s->mu);
     int err = 0;
     if (!s->closed) {
-        if (s->is_std) {
+        if (s->waitable) {
+            if (!s->is_std && close(s->fd) != 0) err = errno;
+            s->fd = -1;
+        } else if (s->is_std) {
             if (fflush(s->fp) != 0) err = errno;
         } else {
             if (fclose(s->fp) != 0) err = errno;
@@ -352,8 +526,7 @@ static int stream_is_closed(MobiusState* state, int arg_count) {
     if (arg_count != 1) return mobius_error(state, "stream:is_closed expects no arguments");
     IoStream* s = self_stream(state, "stream:is_closed", &rc);
     if (!s) return rc;
-    std::lock_guard<std::mutex> lock(s->mu);
-    bool closed = s->closed;
+    bool closed = s->closed || s->closing.load(std::memory_order_acquire);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushBool(state, closed);
     return 1;
@@ -379,8 +552,9 @@ static int stream_seek(MobiusState* state, int arg_count) {
         else if (origin == "end") whence = SEEK_END;
         else return mobius_error(state, ("stream:seek: invalid origin '" + origin + "' (use set, cur or end)").c_str());
     }
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (s->closed) return op_error(state, op, s->name, "stream is closed");
+    if (s->waitable) return os_error(state, op, s->name, ESPIPE);
     if (io_fseek(s->fp, offset, whence) != 0) return os_error(state, op, s->name, errno);
     s->last = LastOp::none;   // a seek satisfies both direction switches
     int64_t pos = (int64_t)io_ftell(s->fp);
@@ -396,8 +570,9 @@ static int stream_tell(MobiusState* state, int arg_count) {
     if (arg_count != 1) return mobius_error(state, "stream:tell expects no arguments");
     IoStream* s = self_stream(state, op, &rc);
     if (!s) return rc;
-    std::lock_guard<std::mutex> lock(s->mu);
+    std::lock_guard<FiberMutex> lock(s->mu);
     if (s->closed) return op_error(state, op, s->name, "stream is closed");
+    if (s->waitable) return os_error(state, op, s->name, ESPIPE);
     int64_t pos = (int64_t)io_ftell(s->fp);
     if (pos < 0) return os_error(state, op, s->name, errno);
     mobius_stack_pop(state, arg_count);
@@ -432,28 +607,20 @@ static int io_copy(MobiusState* state, int arg_count) {
 
     // Lock both without risking deadlock against a copy in the other
     // direction.
-    std::unique_lock<std::mutex> l1(src->mu, std::defer_lock), l2(dst->mu, std::defer_lock);
+    std::unique_lock<FiberMutex> l1(src->mu, std::defer_lock), l2(dst->mu, std::defer_lock);
     std::lock(l1, l2);
     if (!check_readable(state, src, op, &rc)) return rc;
     if (!check_writable(state, dst, op, &rc)) return rc;
-    switch_to(src, LastOp::read);
-    switch_to(dst, LastOp::write);
 
     std::vector<char> chunk(COPY_CHUNK);
     int64_t total = 0;
-    size_t n;
-    while ((n = fread(chunk.data(), 1, chunk.size(), src->fp)) > 0) {
-        if (fwrite(chunk.data(), 1, n, dst->fp) != n) {
-            int err = errno;
-            clearerr(dst->fp);
-            return os_error(state, op, dst->name, err ? err : EIO);
-        }
+    IoResult r;
+    while (true) {
+        size_t n = 0;
+        if (!read_some(state, src, chunk.data(), chunk.size(), &n, &r)) return report(state, op, src, r);
+        if (n == 0) break;
+        if (!write_all(state, dst, chunk.data(), n, &r)) return report(state, op, dst, r);
         total += (int64_t)n;
-    }
-    if (ferror(src->fp)) {
-        int err = errno;
-        clearerr(src->fp);
-        return os_error(state, op, src->name, err);
     }
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushInt64(state, total);
@@ -474,11 +641,21 @@ static int io_set_stream_methods(MobiusState* state, int arg_count) {
 static void push_std_stream(MobiusState* state, int module_idx, FILE* fp,
                             const char* key, const char* name, bool readable) {
     IoStream* s = new IoStream();
-    s->fp = fp;
     s->name = name;
     s->readable = readable;
     s->writable = !readable;
     s->is_std = true;
+    struct stat st;
+    if (readable && fstat(fileno(fp), &st) == 0 && !S_ISREG(st.st_mode)) {
+        // Standard input from a pipe or terminal: wait for it in the
+        // reactor. The descriptor stays blocking (it is shared with the
+        // parent process, e.g. a shell's terminal) and is read only once
+        // it reports readable.
+        s->waitable = true;
+        s->fd = fileno(fp);
+    } else {
+        s->fp = fp;
+    }
     mobius_stack_pushUserdata(state, s, stream_destructor, STREAM_TYPE, sizeof(IoStream));
     mobius_stack_setTableField(state, module_idx, key);
 }

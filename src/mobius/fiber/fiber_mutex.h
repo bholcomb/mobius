@@ -2,6 +2,7 @@
 #define MOBIUS_FIBER_MUTEX_H
 
 #include <atomic>
+#include <mobius/mobius.h>   // MOBIUS_API: plugins (io, process) lock streams with it
 
 // Recursive mutex owned by a *fiber*, not an OS thread.
 //
@@ -25,9 +26,9 @@ public:
     FiberMutex(const FiberMutex&) = delete;
     FiberMutex& operator=(const FiberMutex&) = delete;
 
-    void lock();
-    bool try_lock();
-    void unlock();
+    MOBIUS_API void lock();
+    MOBIUS_API bool try_lock();
+    MOBIUS_API void unlock();
 
 private:
     std::atomic<const void*> owner_{nullptr};
