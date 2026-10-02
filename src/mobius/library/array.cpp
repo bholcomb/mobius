@@ -89,8 +89,11 @@ int lib_array_create(MobiusState* state, int arg_count) {
         return state->error("array_create capacity must be non-negative");
     }
 
-    size_t capacity = (size_t)cap_arg.as.i64;
-    if (capacity == 0) capacity = 8;
+    // `count` elements are filled; the reservation is at least the
+    // default. (Using the bumped-up reservation as the fill count made
+    // array_create(0, x) return 8 elements.)
+    size_t count = (size_t)cap_arg.as.i64;
+    size_t capacity = count == 0 ? 8 : count;
 
     ArrayValue* array = new (std::nothrow) ArrayValue();
     if (!array) {
@@ -105,7 +108,7 @@ int lib_array_create(MobiusState* state, int arg_count) {
     }
 
     if (has_fill) {
-        for (size_t i = 0; i < capacity; i++) {
+        for (size_t i = 0; i < count; i++) {
             array->push(fill_val);
         }
     }

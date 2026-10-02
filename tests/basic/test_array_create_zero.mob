@@ -1,0 +1,15 @@
+// array_create(n, x) returns exactly n elements, including n = 0. A zero
+// count was bumped to the default capacity of 8 and then filled.
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+check("zero with fill", size(array_create(0, 7)), 0)
+check("zero without fill", size(array_create(0)), 0)
+check("three with fill", size(array_create(3, 0)), 3)
+var a = array_create(0, 1)
+a:push(5)
+check("usable after", a[0], 5)
+print("array_create count: PASS")
