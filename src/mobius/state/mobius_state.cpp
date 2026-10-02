@@ -431,6 +431,11 @@ MobiusState::~MobiusState() {
     // Clear all Value containers BEFORE destroying the string pool.
     for (int i = 0; i < root_globals_.count.load(std::memory_order_relaxed); i++)
         root_globals_.slots[i] = make_nil_value();
+    // Values held by the C API's references (mobius_ref_value) are roots
+    // too. As a member, the map used to be destroyed after the sweep below
+    // had freed the objects it still referenced: a plugin holding a
+    // reference to a table at exit crashed the interpreter on shutdown.
+    value_refs_.clear();
 
     // GC-managed objects (tables, arrays, closures, upvalues) are freed only
     // by the collector; every root above has been dropped, so sweep the lot.
