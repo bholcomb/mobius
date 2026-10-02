@@ -1,0 +1,44 @@
+// An error that escapes a fiber is reported once, by whoever is
+// responsible for it: not at all if the awaiter catches it, by the awaiter
+// if it doesn't, and when the future is dropped if nobody ever awaits it.
+// The fiber used to report it as well, so caught errors still printed.
+import "os"
+
+var dir = os.join(os.tmpdir(), "mobius_fiber_errors_" + str(os.getpid()))
+os.mkdirp(dir)
+var script = os.join(dir, "child.mob")
+var err_file = os.join(dir, "err.txt")
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+
+func stderr_of(source) {
+    writefile(script, source)
+    os.system("\"" + mobius_bin + "\" \"" + script + "\" > /dev/null 2> \"" + err_file + "\"")
+    return readfile(err_file)
+}
+func count(text, needle) { return size(split(text, needle)) - 1 }
+func fail(message) {
+    os.system("rm -rf \"" + dir + "\"")
+    print("FAIL: " + message)
+    exit(1)
+}
+
+var caught = stderr_of("func w() { throw \"boom\" }\ntry { await spawn w() } catch e { }\n")
+if (caught != "") { fail("caught fiber error was reported: " + caught) }
+
+var uncaught = stderr_of("func w() { throw \"boom\" }\nawait spawn w()\n")
+if (count(uncaught, "boom") != 1) { fail("uncaught await should report once: " + uncaught) }
+
+var discarded = stderr_of("func w() { throw \"lost\" }\nspawn w()\nfiber.sleep(50)\n")
+if (count(discarded, "lost") != 1) { fail("discarded failing fiber should report once: " + discarded) }
+
+var dropped = stderr_of("func w() { throw \"dropped\" }\nfunc hold() {\n    var f = spawn w()\n    fiber.sleep(50)\n    return 1\n}\nhold()\n")
+if (count(dropped, "dropped") != 1) { fail("dropped future should report once: " + dropped) }
+
+var any_ok = stderr_of("func w() { throw \"x\" }\nfunc ok() {\n    fiber.sleep(10)\n    return 7\n}\nvar r = fiber.any([spawn w(), spawn ok()])\n")
+if (any_ok != "") { fail("fiber.any handled the failure, nothing to report: " + any_ok) }
+
+var caught_all = stderr_of("func w() { throw \"x\" }\ntry { fiber.all([spawn w()]) } catch e { }\n")
+if (caught_all != "") { fail("caught fiber.all failure was reported: " + caught_all) }
+
+os.system("rm -rf \"" + dir + "\"")
+print("fiber error reporting: PASS")

@@ -30,6 +30,14 @@
 #include <time.h>
 #include <thread>
 #include <algorithm>
+#include <mutex>
+#include <unordered_set>
+
+// States that are alive, so a late report from a freed future never reaches
+// a destroyed state.
+static std::mutex g_live_states_mutex;
+static std::unordered_set<MobiusState*> g_live_states;
+
 
 static GlobalEnvironment* env_or_root(MobiusState* state, GlobalEnvironment* env) {
     return env ? env : state->rootGlobalEnvironment();
@@ -318,6 +326,10 @@ MobiusState::MobiusState(MobiusConfig* config)
       error_handler_(default_error_handler), error_handler_userdata_(nullptr),
       metrics_{}, initialized_(false),
       fallback_last_error_(nullptr), fallback_source_code_(nullptr) {
+    {
+        std::lock_guard<std::mutex> lock(g_live_states_mutex);
+        g_live_states.insert(this);
+    }
 
     config_ = config ? *config : mobius_default_config();
     compile_override_behavior_ = config_.override_behavior;
@@ -372,6 +384,10 @@ MobiusState::MobiusState(MobiusConfig* config)
 }
 
 MobiusState::~MobiusState() {
+    {
+        std::lock_guard<std::mutex> lock(g_live_states_mutex);
+        g_live_states.erase(this);
+    }
     delete job_system_;
 
     {
@@ -1090,7 +1106,10 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     // for every error the script handled itself.
     // If it escapes anyway, reportEscapedError reports it when it reaches
     // the host.
-    bool will_be_caught = vm && !vm->try_stack_.empty();
+    // An error escaping a spawned fiber goes to its future; await reports
+    // it if the awaiter doesn't catch it, and an unobserved future reports
+    // it when freed (MobiusState::reportFiberError).
+    bool will_be_caught = vm && (!vm->try_stack_.empty() || vm->future_ != nullptr);
     if (!will_be_caught) reportError(err_slot);
 
     return code;
@@ -1109,6 +1128,11 @@ void MobiusState::reportError(InternalError* err) {
     pub_err.column = err->column;
     pub_err.function_name = err->function_name;
     error_handler_(this, &pub_err, error_handler_userdata_);
+}
+
+void MobiusState::reportFiberError(MobiusState* state, InternalError* err) {
+    std::lock_guard<std::mutex> lock(g_live_states_mutex);
+    if (state && g_live_states.count(state)) state->reportError(err);
 }
 
 void MobiusState::reportEscapedError() {

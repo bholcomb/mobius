@@ -374,6 +374,11 @@ private:
     GlobalEnvironment* current_compile_env_ = nullptr;
 
     void clearErrorInternal();
+public:
+    // Report an error that left a spawned fiber and that nobody observed
+    // (see FutureValue). Does nothing if `state` has been destroyed.
+    static void reportFiberError(MobiusState* state, InternalError* err);
+private:
     void reportError(InternalError* err);
     // Report the current error if it reached the host without having been
     // reported (it was raised inside a try but escaped anyway).
