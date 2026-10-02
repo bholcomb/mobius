@@ -103,8 +103,8 @@ MobiusState* state = mobius_new_state(&config);
 
 | Field                     | Type                     | Default                | Description |
 |---------------------------|--------------------------|------------------------|-------------|
-| `initial_stack_size`      | `size_t`                 | `256`                  | Initial value-stack capacity |
-| `max_stack_size`          | `size_t`                 | `65536`                | Max stack depth before overflow |
+| `initial_stack_size`      | `size_t`                 | `256`                  | Reserved; not used. The register file grows as needed. |
+| `max_stack_size`          | `size_t`                 | `65536`                | Reserved; not enforced. Script recursion is limited by `max_call_depth`. |
 | `max_call_depth`          | `size_t`                 | `200000`               | Max nesting of script function calls; deeper recursion raises a catchable "Stack overflow" error (`0` = no limit) |
 | `strict_mode`             | `bool`                   | `false`                | Enforce type annotations at runtime |
 | `warn_on_conversion`      | `bool`                   | `false`                | Warn on implicit conversions |
