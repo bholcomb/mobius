@@ -1,0 +1,22 @@
+// An error thrown by __tostring while printing propagates like any other
+// error. print used to swallow it and print the raw table, leaving the VM
+// holding the error, so the next call failed.
+func main() {
+    var t = setmetatable({}, {__tostring: func(x) { throw "tostring failed" }})
+    var caught = ""
+    try { print(t) } catch e { caught = e }
+    if (caught != "tostring failed") {
+        print("FAIL: expected the __tostring error to propagate, got: " + str(caught))
+        exit(1)
+    }
+    var n = 1
+    n = n + 1
+    var u = setmetatable({}, {__tostring: func(x) { return "fine" }})
+    if (n != 2 or str(u) != "fine") {
+        print("FAIL: statements after the error misbehaved")
+        exit(1)
+    }
+    print(u)
+}
+main()
+print("print with failing __tostring: PASS")

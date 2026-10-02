@@ -29,15 +29,19 @@ int lib_print(MobiusState* state, int arg_count) {
                 state->npush(tostr);
                 state->npush(arg);
                 int rc = mobius_pcall(state, 1, 1);
-                if (rc >= 0) {
-                    Value s = state->npop();
-                    if (s.type == VAL_STRING && s.as.string)
-                        fwrite(s.as.string->data, 1, s.as.string->length, stdout);
-                    else
-                        print_value(s);
-                } else {
-                    print_value(arg);
+                if (rc < 0) {
+                    // Propagate the error, as str() does. Printing the raw
+                    // table and returning success left the VM holding the
+                    // error, and the next call failed ("Attempt to call a
+                    // non-function value").
+                    fflush(stdout);
+                    return -1;
                 }
+                Value s = state->npop();
+                if (s.type == VAL_STRING && s.as.string)
+                    fwrite(s.as.string->data, 1, s.as.string->length, stdout);
+                else
+                    print_value(s);
             } else {
                 print_value(arg);
             }
