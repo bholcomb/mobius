@@ -1,0 +1,34 @@
+// Characters compare by byte value, so `<`, `<=` and switch ranges like
+// 'a'..'f' work (the docs show that example). They raised "Cannot compare
+// incompatible types". Comparing a char with a number is still an error.
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+func letter_group(ch) {
+    switch (ch) {
+        case 'a'..'f': return "early"
+        case 'g'...'z': return "later"
+        default: return "other"
+    }
+}
+func main() {
+    var c = opaque('c')
+    check("<", c < 'd', true)
+    check("<=", c <= 'c', true)
+    check(">", c > 'a', true)
+    check(">=", c >= 'z', false)
+    check("range start", letter_group(opaque('a')), "early")
+    check("range end", letter_group(opaque('f')), "early")
+    check("second range", letter_group(opaque('q')), "later")
+    check("exclusive end", letter_group(opaque('z')), "other")
+    check("outside", letter_group(opaque('A')), "other")
+    var caught = false
+    try { var x = c < 100 } catch e { caught = true }
+    check("char vs number is an error", caught, true)
+}
+main()
+print("char comparisons: PASS")
