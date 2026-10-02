@@ -214,6 +214,11 @@ public:
     ExecutionContext* mainContext() const;
     ModuleRegistry* registry() const { return registry_; }
     GcHeap* gcHeap() const { return gc_heap_; }
+
+    // This state's random number generator (random/randomseed):
+    // xoshiro256**, the same sequence for a seed on every platform.
+    uint64_t nextRandom();
+    void seedRandom(uint64_t seed);
     StringInternPool* stringPool() const { return string_pool_; }
     const CommonInternedStrings& commonStrings() const { return common_strings_; }
     const MobiusConfig& config() const { return config_; }
@@ -346,6 +351,8 @@ private:
 
     ModuleRegistry* registry_;
     GcHeap* gc_heap_;   // this state's traced objects (tables, arrays, closures)
+    uint64_t rng_[4] = {0, 0, 0, 0};
+    std::mutex rng_mutex_;
     StringInternPool* string_pool_;
     CommonInternedStrings common_strings_;
     Metamethods* metamethods_;

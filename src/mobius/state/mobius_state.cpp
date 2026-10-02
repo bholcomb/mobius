@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 199309L 
 
+#include <chrono>
 #include <mobius/mobius_plugin.h>
 #include "state/mobius_state.h"
 #include "frontend/ast.h"
@@ -334,6 +335,10 @@ MobiusState::MobiusState(MobiusConfig* config)
     }
 
     config_ = config ? *config : mobius_default_config();
+
+    // Unseeded, each state starts somewhere different.
+    seedRandom((uint64_t)std::chrono::steady_clock::now().time_since_epoch().count() ^
+               (uint64_t)(uintptr_t)this);
     compile_override_behavior_ = config_.override_behavior;
 
     size_t slot_cap = config_.global_slot_capacity ? config_.global_slot_capacity
@@ -384,6 +389,32 @@ MobiusState::MobiusState(MobiusConfig* config)
     defineGlobal("nan", make_float_value(0.0 / 0.0), true);
 
     main_vm_ = new (std::nothrow) MobiusVM(this);
+}
+
+void MobiusState::seedRandom(uint64_t seed) {
+    // splitmix64 spreads the seed over the 256-bit state (never all zero).
+    std::lock_guard<std::mutex> lock(rng_mutex_);
+    for (uint64_t& word : rng_) {
+        seed += 0x9e3779b97f4a7c15ULL;
+        uint64_t z = seed;
+        z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
+        word = z ^ (z >> 31);
+    }
+}
+
+uint64_t MobiusState::nextRandom() {
+    std::lock_guard<std::mutex> lock(rng_mutex_);
+    auto rotl = [](uint64_t x, int k) { return (x << k) | (x >> (64 - k)); };
+    uint64_t result = rotl(rng_[1] * 5, 7) * 9;
+    uint64_t t = rng_[1] << 17;
+    rng_[2] ^= rng_[0];
+    rng_[3] ^= rng_[1];
+    rng_[1] ^= rng_[2];
+    rng_[0] ^= rng_[3];
+    rng_[2] ^= t;
+    rng_[3] = rotl(rng_[3], 45);
+    return result;
 }
 
 MobiusState::~MobiusState() {
