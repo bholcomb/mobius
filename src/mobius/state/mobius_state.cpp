@@ -323,7 +323,7 @@ struct ScopedCurrentVMOverride {
 }
 
 MobiusState::MobiusState(MobiusConfig* config)
-    : registry_(nullptr), string_pool_(nullptr),
+    : registry_(nullptr), gc_heap_(gc_heap_create()), string_pool_(nullptr),
       metamethods_(nullptr), job_system_(nullptr),
       error_handler_(default_error_handler), error_handler_userdata_(nullptr),
       metrics_{}, initialized_(false),
@@ -442,9 +442,10 @@ MobiusState::~MobiusState() {
     // GC-managed objects (tables, arrays, closures, upvalues) are freed only
     // by the collector; every root above has been dropped, so sweep the lot.
     // Must precede string-pool deletion — destructors release string refs.
-    // (The registry is process-global; with multiple concurrent states this
-    // would need per-state partitioning — see the stage-5 plan.)
-    gc_collect_all_for_teardown();
+    // Only this state's heap: other states' objects are untouched.
+    gc_collect_all_for_teardown(gc_heap_);
+    gc_heap_destroy(gc_heap_);
+    gc_heap_ = nullptr;
 
     delete string_pool_;
 

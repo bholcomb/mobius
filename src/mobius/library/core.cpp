@@ -246,7 +246,7 @@ int lib_str(MobiusState* state, int arg_count) {
 // lifetimes; not a public API.
 int lib_gc_objects(MobiusState* state, int arg_count) {
     (void)arg_count;
-    state->npush(make_int64_value((int64_t)gc_tracked_count()));
+    state->npush(make_int64_value((int64_t)gc_tracked_count(state->gcHeap())));
     return 1;
 }
 

@@ -179,7 +179,7 @@ Table::Table(MobiusState* state, size_t initial_capacity)
     entries_.resizeNoInit(initial_capacity);
     tags_.resize(initial_capacity, TAG_EMPTY);
     setGcManaged();
-    gc_track(&gc_, GC_TABLE, this);
+    gc_track(state->gcHeap(), &gc_, GC_TABLE, this);
 }
 
 Table::~Table() {

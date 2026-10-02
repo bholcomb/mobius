@@ -44,7 +44,7 @@ struct GcHeader {
     GcHeader* prev = nullptr;
     GcHeader* next = nullptr;
     void*     obj = nullptr;   // owning object (avoids offsetof on vptr types)
-    void*     owner = nullptr; // registry segment that links this header
+    void*     owner = nullptr; // registry segment (GcSegment) that links this header
     uint32_t  flags = 0;
 
     GcObjectType type() const { return (GcObjectType)(flags & 0x3); }
@@ -52,10 +52,21 @@ struct GcHeader {
     void setMarked(bool m) { if (m) flags |= 0x4; else flags &= ~0x4u; }
 };
 
-// Link/unlink an object into its thread's registry segment. Lock-free on the
-// owning thread; a free from a foreign thread defers the unlink to the owner
-// via a pending queue. Called from the tracked types' ctors/dtors.
-void gc_track(GcHeader* h, GcObjectType type, void* obj);
+// Each MobiusState owns one heap: its traced objects are tracked, collected
+// and torn down separately from every other state's. gc_heap_destroy
+// expects an empty heap (gc_collect_all_for_teardown first).
+struct GcHeap;
+GcHeap* gc_heap_create();
+void    gc_heap_destroy(GcHeap* heap);
+
+// The heap a tracked object belongs to (for copies of it).
+GcHeap* gc_heap_of(const GcHeader* h);
+
+// Link/unlink an object into this thread's registry segment of `heap`.
+// Lock-free on the owning thread; a free from a foreign thread defers the
+// unlink to the owner via a pending queue. Called from the tracked types'
+// ctors/dtors.
+void gc_track(GcHeap* heap, GcHeader* h, GcObjectType type, void* obj);
 void gc_untrack(GcHeader* h);
 
 // Pool-backed allocation for the traced types (fixed-size chunks, per-thread
@@ -65,8 +76,8 @@ void gc_untrack(GcHeader* h);
 void* gc_object_alloc(GcObjectType type, size_t sz);
 void  gc_object_free(GcObjectType type, void* p);
 
-// Number of currently tracked objects (all types).
-size_t gc_tracked_count();
+// Number of currently tracked objects in `heap` (all types).
+size_t gc_tracked_count(GcHeap* heap);
 
 // Invoke `cb(child, ud)` for every TRACED object directly referenced by `h`
 // (table entries + metatable, array elements, closure upvalues, an upvalue's
@@ -80,8 +91,8 @@ void gc_traverse_children(GcHeader* h, GcVisitFn cb, void* ud);
 // values, a future its result.
 void gc_visit_value_children(const Value& v, GcVisitFn cb, void* ud);
 
-// Walk every tracked object under the registry lock (shadow verification).
-void gc_for_each_tracked(GcVisitFn cb, void* ud);
+// Walk every tracked object of `heap` (quiescent callers only).
+void gc_for_each_tracked(GcHeap* heap, GcVisitFn cb, void* ud);
 
 // ---------------------------------------------------------------------------
 // Shadow verification (stage 2). Enabled with MOBIUS_GC_SHADOW=1 (report) or
@@ -97,8 +108,10 @@ void gc_shadow_verify_now(MobiusVM* vm);     // unconditional (test hook)
 
 // The collector. gc_safepoint() is the cheap per-hook entry (gates on
 // quiescence and native depth, collects under allocation pressure, runs
-// shadow verification when enabled). gc_collect() marks from roots and
-// frees everything unreachable; returns the number of objects freed.
+// shadow verification when enabled). gc_collect() marks from the roots of
+// the VM's state and frees everything unreachable in that state's heap;
+// returns the number of objects freed. g_gc_pending is a cheap hint for the
+// VM's hooks: some heap is over its allocation budget.
 extern volatile bool g_gc_pending;
 
 // True while the collector's sweep is destroying dead objects. Refcount
@@ -110,6 +123,6 @@ extern volatile bool g_gc_pending;
 MOBIUS_API bool gc_is_sweeping();
 void gc_safepoint(MobiusVM* vm);
 size_t gc_collect(MobiusVM* vm);
-size_t gc_collect_all_for_teardown();
+size_t gc_collect_all_for_teardown(GcHeap* heap);
 
 #endif // MOBIUS_GC_H

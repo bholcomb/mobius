@@ -16,7 +16,8 @@ class SharedCell;
 
 class ArrayValue : public RefCounted {
 public:
-    ArrayValue(size_t initial_capacity = 8);
+    // `heap`: the owning state's (state->gcHeap()).
+    explicit ArrayValue(GcHeap* heap, size_t initial_capacity = 8);
     ~ArrayValue() override;
 
     ArrayValue* retain();

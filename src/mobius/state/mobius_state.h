@@ -18,6 +18,7 @@
 // FORWARD DECLARATIONS
 // ============================================================================
 
+struct GcHeap;
 class MobiusState;
 class ModuleRegistry;
 class Metamethods;
@@ -212,6 +213,7 @@ public:
     // Accessors
     ExecutionContext* mainContext() const;
     ModuleRegistry* registry() const { return registry_; }
+    GcHeap* gcHeap() const { return gc_heap_; }
     StringInternPool* stringPool() const { return string_pool_; }
     const CommonInternedStrings& commonStrings() const { return common_strings_; }
     const MobiusConfig& config() const { return config_; }
@@ -343,6 +345,7 @@ private:
     static Value& invalidNativeValue();
 
     ModuleRegistry* registry_;
+    GcHeap* gc_heap_;   // this state's traced objects (tables, arrays, closures)
     StringInternPool* string_pool_;
     CommonInternedStrings common_strings_;
     Metamethods* metamethods_;

@@ -103,7 +103,7 @@ int table_method_pairs(MobiusState* state, int arg_count) {
 
     state->npop();
 
-    ArrayValue* pairs_array = new ArrayValue(tbl->size());
+    ArrayValue* pairs_array = new ArrayValue(state->gcHeap(), tbl->size());
     if (!pairs_array) {
         return state->error("Failed to create pairs array");
     }
@@ -111,7 +111,7 @@ int table_method_pairs(MobiusState* state, int arg_count) {
     bool alloc_failed = false;
     tbl->forEach([&](const Value& key, const Value& value) {
         if (alloc_failed) return;
-        ArrayValue* pair = new ArrayValue(2);
+        ArrayValue* pair = new ArrayValue(state->gcHeap(), 2);
         if (!pair) {
             alloc_failed = true;
             return;
