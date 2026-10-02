@@ -3458,7 +3458,7 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
         const auto& entries = tbl->entries();
         const auto& tags = tbl->tags();
         size_t cap = entries.size();
-        while ((size_t)slot < cap && tags[slot] == Table::TAG_EMPTY) {
+        while ((size_t)slot < cap && !Table::isLive(tags[slot])) {
             slot++;
         }
         if ((size_t)slot >= cap) {
@@ -3621,7 +3621,7 @@ MOBIUS_FORCEINLINE static int vm_op_import(MobiusVM* vm, VMFrame& f, uint32_t in
         const auto& entries = mod_table->entries();
         const auto& tags = mod_table->tags();
         for (size_t i = 0; i < entries.size(); i++) {
-            if (tags[i] == Table::TAG_EMPTY) continue;
+            if (!Table::isLive(tags[i])) continue;
             const Value& key = entries[i].key;
             if (key.type != VAL_STRING || !key.as.string) continue;
             Value val = entries[i].value;

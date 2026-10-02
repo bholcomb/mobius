@@ -349,7 +349,7 @@ Value deep_copy_value_impl(const Value& value, std::unordered_map<const void*, V
                 const auto& entries = value.as.table->entries();
                 const auto& tags = value.as.table->tags();
                 for (size_t ei = 0; ei < entries.size(); ei++) {
-                    if (tags[ei] == Table::TAG_EMPTY) continue;
+                    if (!Table::isLive(tags[ei])) continue;
                     clone->set(deep_copy_value_impl(entries[ei].key, memo),
                                deep_copy_value_impl(entries[ei].value, memo));
                 }

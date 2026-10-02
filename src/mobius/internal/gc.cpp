@@ -368,7 +368,7 @@ void gc_traverse_children(GcHeader* h, GcVisitFn cb, void* ud) {
             const auto& entries = t->entries();
             const auto& tags = t->tags();
             for (size_t i = 0; i < entries.size(); i++) {
-                if (tags[i] != Table::TAG_EMPTY) {
+                if (Table::isLive(tags[i])) {
                     visit_value(entries[i].key, &ctx);
                     visit_value(entries[i].value, &ctx);
                 }

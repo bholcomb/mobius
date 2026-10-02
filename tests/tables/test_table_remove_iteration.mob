@@ -1,0 +1,100 @@
+// Removing keys never moves other entries: for-in visits every key even
+// when the body removes the current one (removal used to re-insert the rest
+// of the probe chain, which could land behind the iterator). Also a
+// randomized check of lookups, sizes and iteration against a reference
+// model under heavy insert/remove churn.
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+func main() {
+    // Remove the current key while iterating.
+    for (var n = 1; n < 200; n = n + 7) {
+        var t = {}
+        for (var i = 0; i < n; i++) { t["k" + str(i)] = i }
+        var visited = 0
+        for (var k, v in t) {
+            visited++
+            t:remove(k)
+        }
+        check("visited all " + str(n) + " keys while removing", visited == n)
+        check("table empty after removing all", t:size() == 0)
+    }
+
+    // Remove other keys too: every key not yet removed is still visited.
+    var u = {}
+    for (var i = 0; i < 64; i++) { u[i] = true }
+    var seen = {}
+    for (var k, v in u) {
+        seen[k] = true
+        if (k % 2 == 0) { u:remove(k + 1) }
+    }
+    for (var i = 0; i < 64; i = i + 2) { check("even key visited", seen:has_key(i)) }
+
+    // Randomized model check. The model is two arrays of keys and values.
+    var seed = 12345
+    func next_rand(limit) {
+        seed = (seed * 1103515245 + 12345) % 2147483648
+        return seed % limit
+    }
+    var tbl = {}
+    var model_keys = []
+    var model_vals = []
+    func model_find(key) {
+        for (var i = 0; i < size(model_keys); i++) {
+            if (model_keys[i] == key) { return i }
+        }
+        return -1
+    }
+    for (var turn = 0; turn < 6000; turn++) {
+        var r = next_rand(40)
+        var key = (r % 2 == 0) ? "s" + str(r) : r
+        var op = next_rand(3)
+        var pos = model_find(key)
+        if (op < 2) {
+            tbl[key] = turn
+            if (pos < 0) {
+                model_keys:push(key)
+                model_vals:push(turn)
+            } else {
+                model_vals[pos] = turn
+            }
+        } else {
+            var removed = tbl:remove(key)
+            check("remove result matches", removed == (pos >= 0))
+            if (pos >= 0) {
+                var last = size(model_keys) - 1
+                model_keys[pos] = model_keys[last]
+                model_vals[pos] = model_vals[last]
+                model_keys:pop()
+                model_vals:pop()
+            }
+        }
+        if (turn % 250 == 0) {
+            check("size matches model", tbl:size() == size(model_keys))
+            for (var i = 0; i < size(model_keys); i++) {
+                check("value matches model", tbl[model_keys[i]] == model_vals[i])
+            }
+            var count = 0
+            for (var k, v in tbl) {
+                count++
+                check("iterated key is in the model", model_find(k) >= 0)
+            }
+            check("iteration count matches", count == size(model_keys))
+        }
+    }
+
+    // Churn on a small table: deleted slots are reclaimed, lookups stay right.
+    var churn = {}
+    for (var i = 0; i < 20000; i++) {
+        churn["x" + str(i)] = i
+        churn:remove("x" + str(i))
+    }
+    churn.final = 1
+    check("churned table has one key", churn:size() == 1 and churn.final == 1)
+}
+main()
+print("table remove and iteration: PASS")
