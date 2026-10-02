@@ -262,7 +262,7 @@ ch:send({x: 1})                 // receiver gets its own copy
 |-----------------------------------|--------------------------------------------------------------|
 | `fiber.channel([capacity])`       | Create a channel, optionally bounded.                        |
 | `fiber.all(futures)`              | Wait for all futures; return results in order.               |
-| `fiber.any(futures)`              | Return the result of the first future to resolve.            |
+| `fiber.any(futures)`              | Return the result of the first future to succeed.            |
 | `fiber.sleep(milliseconds)`       | Suspend the current fiber for at least the given time.       |
 | `fiber.cancel(future)`            | Request cancellation of the fiber behind a future.           |
 
@@ -275,8 +275,10 @@ var futures = [spawn work(1), spawn work(2), spawn work(3)]
 var results = fiber.all(futures)    // [10, 20, 30]
 ```
 
-`fiber.all` propagates the first error if any future rejects; `fiber.any`
-returns the first successful result.
+`fiber.all` propagates the first error if any future rejects. `fiber.any`
+returns the first successful result, skipping futures that fail; if every
+future fails it raises `"fiber.any: all fibers failed"`, and for an empty array
+it returns `nil`.
 
 ### Cancellation
 
