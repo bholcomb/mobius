@@ -40,7 +40,7 @@ class SharedCell;
 class Table;
 class MobiusState;
 
-typedef int (*MobiusCFunction)(MobiusState* ctx, int arg_count);
+typedef int (*MobiusCFunction)(MobiusState* ctx, int arg_count, void* userdata);
 typedef void (*UserdataDestructor)(void* ptr);
 
 class BufferValue;

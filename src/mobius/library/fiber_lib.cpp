@@ -22,7 +22,7 @@
 // Module-level functions (accessed as fiber.channel, fiber.all, etc.)
 // ============================================================================
 
-int lib_fiber_channel(MobiusState* state, int arg_count) {
+int lib_fiber_channel(MobiusState* state, int arg_count, void* /*userdata*/) {
     size_t capacity = 1;
     if (arg_count >= 1) {
         Value cap_arg = state->npeek(0);
@@ -38,7 +38,7 @@ int lib_fiber_channel(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_fiber_cancel(MobiusState* state, int arg_count) {
+int lib_fiber_cancel(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("fiber.cancel expects 1 argument (future)");
 
     Value fut_val = state->npeek(0);
@@ -99,7 +99,7 @@ static bool snapshot_futures(MobiusState* state, const char* fn, std::vector<Val
     return true;
 }
 
-int lib_fiber_all(MobiusState* state, int arg_count) {
+int lib_fiber_all(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("fiber.all expects 1 argument (array of futures)");
 
     std::vector<Value> held;
@@ -146,7 +146,7 @@ int lib_fiber_all(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_fiber_any(MobiusState* state, int arg_count) {
+int lib_fiber_any(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("fiber.any expects 1 argument (array of futures)");
 
     std::vector<Value> held;
@@ -190,7 +190,7 @@ int lib_fiber_any(MobiusState* state, int arg_count) {
     }
 }
 
-int lib_fiber_sleep(MobiusState* state, int arg_count) {
+int lib_fiber_sleep(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("fiber.sleep expects 1 argument (milliseconds)");
 
     Value ms_val = state->npeek(0);
@@ -216,7 +216,7 @@ int lib_fiber_sleep(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_fiber_slice(MobiusState* state, int arg_count) {
+int lib_fiber_slice(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("fiber.slice expects 3 arguments (array, start, length)");
 
     Value len_val = state->npeek(0);
@@ -283,7 +283,7 @@ static Channel* extract_channel_self(MobiusState* state, const char* err_msg) {
     return self.as.channel;
 }
 
-int channel_method_send(MobiusState* state, int arg_count) {
+int channel_method_send(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("ch:send expects 1 argument (value)");
 
     Channel* ch = extract_channel_self(state, "ch:send: self is not a channel");
@@ -316,7 +316,7 @@ int channel_method_send(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int channel_method_recv(MobiusState* state, int arg_count) {
+int channel_method_recv(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("ch:recv expects 0 arguments");
 
     Channel* ch = extract_channel_self(state, "ch:recv: self is not a channel");
@@ -349,7 +349,7 @@ int channel_method_recv(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int channel_method_try_send(MobiusState* state, int arg_count) {
+int channel_method_try_send(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("ch:try_send expects 1 argument (value)");
 
     Channel* ch = extract_channel_self(state, "ch:try_send: self is not a channel");
@@ -363,7 +363,7 @@ int channel_method_try_send(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int channel_method_try_recv(MobiusState* state, int arg_count) {
+int channel_method_try_recv(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("ch:try_recv expects 0 arguments");
 
     Channel* ch = extract_channel_self(state, "ch:try_recv: self is not a channel");
@@ -384,7 +384,7 @@ int channel_method_try_recv(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int channel_method_close(MobiusState* state, int arg_count) {
+int channel_method_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("ch:close expects 0 arguments");
 
     Channel* ch = extract_channel_self(state, "ch:close: self is not a channel");
@@ -396,7 +396,7 @@ int channel_method_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int channel_method_is_closed(MobiusState* state, int arg_count) {
+int channel_method_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("ch:is_closed expects 0 arguments");
 
     Channel* ch = extract_channel_self(state, "ch:is_closed: self is not a channel");

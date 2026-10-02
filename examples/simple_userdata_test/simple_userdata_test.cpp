@@ -36,7 +36,7 @@ static void test_object_destructor(void* ptr) {
     }
 }
 
-static int test_object_describe(MobiusState* state, int arg_count) {
+static int test_object_describe(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "test_object_describe expects 1 argument");
     TestObject* obj = get_test_object(state, -1);
     if (!obj) return mobius_error(state, "test_object_describe expects a TestObject");
@@ -47,7 +47,7 @@ static int test_object_describe(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int test_object_kind(MobiusState* state, int arg_count) {
+static int test_object_kind(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "test_object_kind expects 1 argument");
     TestObject* obj = get_test_object(state, -1);
     if (!obj) return mobius_error(state, "test_object_kind expects a TestObject");
@@ -57,7 +57,7 @@ static int test_object_kind(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int test_object_id(MobiusState* state, int arg_count) {
+static int test_object_id(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "test_object_id expects 1 argument");
     TestObject* obj = get_test_object(state, -1);
     if (!obj) return mobius_error(state, "test_object_id expects a TestObject");
@@ -66,7 +66,7 @@ static int test_object_id(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int generic_userdata_kind(MobiusState* state, int arg_count) {
+static int generic_userdata_kind(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "generic_userdata_kind expects 1 argument");
     if (!mobius_stack_isUserdata(state, -1)) {
         return mobius_error(state, "generic_userdata_kind expects userdata");

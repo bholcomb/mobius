@@ -6,25 +6,25 @@
 class Table;
 
 // Global: array_create(capacity [, fill_value])
-int lib_array_create(MobiusState* state, int arg_count);
+int lib_array_create(MobiusState* state, int arg_count, void* /*userdata*/);
 
 // Method-style natives (called via arr:method() with self at base)
-int array_method_push(MobiusState* state, int arg_count);
-int array_method_pop(MobiusState* state, int arg_count);
-int array_method_get(MobiusState* state, int arg_count);
-int array_method_set(MobiusState* state, int arg_count);
-int array_method_length(MobiusState* state, int arg_count);
-int array_method_slice(MobiusState* state, int arg_count);
-int array_method_concat(MobiusState* state, int arg_count);
-int array_method_reverse(MobiusState* state, int arg_count);
-int array_method_find(MobiusState* state, int arg_count);
-int array_method_sort(MobiusState* state, int arg_count);
-int array_method_map(MobiusState* state, int arg_count);
-int array_method_filter(MobiusState* state, int arg_count);
-int array_method_reduce(MobiusState* state, int arg_count);
-int array_method_foreach(MobiusState* state, int arg_count);
-int array_method_any(MobiusState* state, int arg_count);
-int array_method_all(MobiusState* state, int arg_count);
+int array_method_push(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_pop(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_get(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_set(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_length(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_slice(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_concat(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_reverse(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_find(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_sort(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_map(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_filter(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_reduce(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_foreach(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_any(MobiusState* state, int arg_count, void* /*userdata*/);
+int array_method_all(MobiusState* state, int arg_count, void* /*userdata*/);
 
 // Type metatable builder
 Table* create_array_type_metatable(MobiusState* state);

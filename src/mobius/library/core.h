@@ -8,14 +8,14 @@
 // =============================================================================
 
 // Core functions using unified library interface
-int lib_print(MobiusState* state, int arg_count);
-int lib_typeof(MobiusState* state, int arg_count);
-int lib_int(MobiusState* state, int arg_count);
-int lib_float(MobiusState* state, int arg_count);
-int lib_str(MobiusState* state, int arg_count);
-int lib_gc_objects(MobiusState* state, int arg_count);
-int lib_gc_verify(MobiusState* state, int arg_count);
-int lib_gc_collect(MobiusState* state, int arg_count);
-int lib_exit(MobiusState* state, int arg_count);
+int lib_print(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_typeof(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_int(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_float(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_str(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_gc_objects(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_gc_verify(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_gc_collect(MobiusState* state, int arg_count, void* /*userdata*/);
+int lib_exit(MobiusState* state, int arg_count, void* /*userdata*/);
 
 #endif // MOBIUS_LIBRARY_CORE_H

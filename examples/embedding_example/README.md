@@ -41,7 +41,7 @@ Only two public headers are needed:
 Every native function uses the public stack API:
 
 ```cpp
-int custom_add(MobiusState* state, int arg_count) {
+int custom_add(MobiusState* state, int arg_count, void* userdata) {
     if (arg_count != 2)
         return mobius_error(state, "custom_add requires exactly 2 arguments");
 

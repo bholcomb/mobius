@@ -394,13 +394,14 @@ public sealed unsafe class MobiusState : IDisposable
         }
     }
 
-    // One entry point for every registered C# function: the userdata says which.
+    // One entry point for every registered C# function: the userdata (a
+    // GCHandle to the C# function) says which.
     [UnmanagedCallersOnly]
-    private static int Dispatch(IntPtr state, int argc)
+    private static int Dispatch(IntPtr state, int argc, IntPtr userdata)
     {
         try
         {
-            var fn = (HostFunction)GCHandle.FromIntPtr(Native.mobius_function_userdata(state)).Target!;
+            var fn = (HostFunction)GCHandle.FromIntPtr(userdata).Target!;
             var args = new object?[argc];
             for (int i = 0; i < argc; i++) args[i] = Read(fn.Owner, state, i);
             Native.mobius_stack_pop(state, argc);

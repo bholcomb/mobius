@@ -373,7 +373,7 @@ static int require_two_bytes_args(MobiusState* state, int arg_count, const char*
     return 0;
 }
 
-static int crypto_sha256(MobiusState* state, int arg_count) {
+static int crypto_sha256(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "sha256()", input);
     if (rc != 0) return rc;
@@ -383,7 +383,7 @@ static int crypto_sha256(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_sha256_hex(MobiusState* state, int arg_count) {
+static int crypto_sha256_hex(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "sha256_hex()", input);
     if (rc != 0) return rc;
@@ -394,7 +394,7 @@ static int crypto_sha256_hex(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_sha1(MobiusState* state, int arg_count) {
+static int crypto_sha1(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "sha1()", input);
     if (rc != 0) return rc;
@@ -404,7 +404,7 @@ static int crypto_sha1(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_sha1_hex(MobiusState* state, int arg_count) {
+static int crypto_sha1_hex(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "sha1_hex()", input);
     if (rc != 0) return rc;
@@ -415,7 +415,7 @@ static int crypto_sha1_hex(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_md5(MobiusState* state, int arg_count) {
+static int crypto_md5(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "md5()", input);
     if (rc != 0) return rc;
@@ -425,7 +425,7 @@ static int crypto_md5(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_md5_hex(MobiusState* state, int arg_count) {
+static int crypto_md5_hex(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "md5_hex()", input);
     if (rc != 0) return rc;
@@ -436,7 +436,7 @@ static int crypto_md5_hex(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_hmac_sha256(MobiusState* state, int arg_count) {
+static int crypto_hmac_sha256(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> key;
     std::vector<uint8_t> msg;
     int rc = require_two_bytes_args(state, arg_count, "hmac_sha256()", key, msg);
@@ -450,7 +450,7 @@ static int crypto_hmac_sha256(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_hmac_sha256_hex_fn(MobiusState* state, int arg_count) {
+static int crypto_hmac_sha256_hex_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> key;
     std::vector<uint8_t> msg;
     int rc = require_two_bytes_args(state, arg_count, "hmac_sha256_hex()", key, msg);
@@ -462,7 +462,7 @@ static int crypto_hmac_sha256_hex_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_crc32(MobiusState* state, int arg_count) {
+static int crypto_crc32(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "crc32()", input);
     if (rc != 0) return rc;
@@ -472,7 +472,7 @@ static int crypto_crc32(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_base64_encode(MobiusState* state, int arg_count) {
+static int crypto_base64_encode(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "base64_encode()", input);
     if (rc != 0) return rc;
@@ -482,7 +482,7 @@ static int crypto_base64_encode(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_base64_decode(MobiusState* state, int arg_count) {
+static int crypto_base64_decode(MobiusState* state, int arg_count, void* /*userdata*/) {
     const char* text = nullptr;
     int rc = require_string_arg(state, arg_count, "base64_decode()", &text);
     if (rc != 0) return rc;
@@ -495,7 +495,7 @@ static int crypto_base64_decode(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_hex_encode_fn(MobiusState* state, int arg_count) {
+static int crypto_hex_encode_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::vector<uint8_t> input;
     int rc = require_bytes_arg(state, arg_count, "hex_encode()", input);
     if (rc != 0) return rc;
@@ -505,7 +505,7 @@ static int crypto_hex_encode_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_hex_decode_fn(MobiusState* state, int arg_count) {
+static int crypto_hex_decode_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     const char* text = nullptr;
     int rc = require_string_arg(state, arg_count, "hex_decode()", &text);
     if (rc != 0) return rc;
@@ -518,7 +518,7 @@ static int crypto_hex_decode_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_uuid4(MobiusState* state, int arg_count) {
+static int crypto_uuid4(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     std::string uuid = uuid4_string();
     if (uuid.empty()) return mobius_error(state, "uuid4() secure random generation failed");
@@ -526,7 +526,7 @@ static int crypto_uuid4(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_random_hex(MobiusState* state, int arg_count) {
+static int crypto_random_hex(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "random_hex() expects exactly 1 argument");
     if (!mobius_stack_isInteger(state, -1)) return mobius_error(state, "random_hex() expects an integer argument");
     int64_t bytes = mobius_stack_asInt64(state, -1);
@@ -539,7 +539,7 @@ static int crypto_random_hex(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_random_bytes(MobiusState* state, int arg_count) {
+static int crypto_random_bytes(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "random_bytes() expects exactly 1 argument");
     if (!mobius_stack_isInteger(state, -1)) return mobius_error(state, "random_bytes() expects an integer argument");
     int64_t bytes = mobius_stack_asInt64(state, -1);
@@ -551,7 +551,7 @@ static int crypto_random_bytes(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int crypto_random_int(MobiusState* state, int arg_count) {
+static int crypto_random_int(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "random_int() expects exactly 2 arguments");
     if (!mobius_stack_isInteger(state, -2) || !mobius_stack_isInteger(state, -1)) {
         return mobius_error(state, "random_int() expects integer arguments");

@@ -467,7 +467,7 @@ static int push_response_head_table(MobiusState* state, const ParsedResponseHead
     return 1;
 }
 
-static int http_status_text(MobiusState* state, int arg_count) {
+static int http_status_text(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.status_text() expects 1 argument");
     if (!mobius_stack_isInteger(state, -1)) return mobius_error(state, "http.status_text() expects an integer argument");
     int64_t code = mobius_stack_asInt64(state, -1);
@@ -476,7 +476,7 @@ static int http_status_text(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_parse_request(MobiusState* state, int arg_count) {
+static int http_parse_request(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.parse_request() expects 1 argument");
     if (!mobius_stack_isString(state, -1)) return mobius_error(state, "http.parse_request() expects a string argument");
 
@@ -533,7 +533,7 @@ static int http_parse_request(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_parse_response(MobiusState* state, int arg_count) {
+static int http_parse_response(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.parse_response() expects 1 argument");
     if (!mobius_stack_isString(state, -1)) return mobius_error(state, "http.parse_response() expects a string argument");
 
@@ -551,7 +551,7 @@ static int http_parse_response(MobiusState* state, int arg_count) {
     return push_parsed_response_table(state, parsed, body, false);
 }
 
-static int http_parse_response_head_only(MobiusState* state, int arg_count) {
+static int http_parse_response_head_only(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.__parse_response_head() expects 1 argument");
     if (!mobius_stack_isString(state, -1)) return mobius_error(state, "http.__parse_response_head() expects a string argument");
 
@@ -629,7 +629,7 @@ static bool decode_chunked_message(const std::string& input, std::string& out, s
     }
 }
 
-static int http_decode_chunked_body(MobiusState* state, int arg_count) {
+static int http_decode_chunked_body(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.__decode_chunked_body() expects 1 argument");
 
     std::string input;
@@ -654,7 +654,7 @@ static int http_decode_chunked_body(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_try_decode_chunked_body(MobiusState* state, int arg_count) {
+static int http_try_decode_chunked_body(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.__try_decode_chunked_body() expects 1 argument");
 
     std::string input;
@@ -686,7 +686,7 @@ static int http_try_decode_chunked_body(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_text_if_utf8(MobiusState* state, int arg_count) {
+static int http_text_if_utf8(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.__text_if_utf8() expects 1 argument");
 
     const uint8_t* bytes = nullptr;
@@ -712,7 +712,7 @@ static int http_text_if_utf8(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_build_headers(MobiusState* state, int arg_count) {
+static int http_build_headers(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.build_headers() expects 1 argument");
     if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "http.build_headers() expects a table argument");
     int tbl = mobius_stack_size(state) - 1;
@@ -724,7 +724,7 @@ static int http_build_headers(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_parse_headers(MobiusState* state, int arg_count) {
+static int http_parse_headers(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.parse_headers() expects 1 argument");
     if (!mobius_stack_isString(state, -1)) return mobius_error(state, "http.parse_headers() expects a string argument");
     std::string input = mobius_stack_asString(state, -1);
@@ -740,7 +740,7 @@ static int http_parse_headers(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_build_request(MobiusState* state, int arg_count) {
+static int http_build_request(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.build_request() expects 1 argument");
     if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "http.build_request() expects a table argument");
 
@@ -794,7 +794,7 @@ static int http_build_request(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int http_build_response(MobiusState* state, int arg_count) {
+static int http_build_response(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "http.build_response() expects 1 argument");
     if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "http.build_response() expects a table argument");
 

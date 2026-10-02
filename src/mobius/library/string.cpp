@@ -78,7 +78,7 @@ static MobiusString* make_bytes_string(MobiusState* state, const char* data, siz
 // UNIFIED STRING FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-int lib_len(MobiusState* state, int arg_count) {
+int lib_len(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("size expects exactly 1 argument");
     }
@@ -107,7 +107,7 @@ int lib_len(MobiusState* state, int arg_count) {
     return 1;
 }
     
-int lib_upper(MobiusState* state, int arg_count) {
+int lib_upper(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("upper expects exactly 1 argument");
     }
@@ -142,7 +142,7 @@ int lib_upper(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_lower(MobiusState* state, int arg_count) {
+int lib_lower(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("lower expects exactly 1 argument");
     }
@@ -177,7 +177,7 @@ int lib_lower(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_substr(MobiusState* state, int arg_count) {
+int lib_substr(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) {
         return state->error("substr expects exactly 3 arguments (string, start, length)");
     }
@@ -241,7 +241,7 @@ int lib_substr(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_concat(MobiusState* state, int arg_count) {
+int lib_concat(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2) {
         return state->error("concat expects at least 2 arguments");
     }
@@ -309,7 +309,7 @@ int lib_concat(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_contains(MobiusState* state, int arg_count) {
+int lib_contains(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return state->error("contains expects exactly 2 arguments (haystack, needle)");
     }
@@ -333,7 +333,7 @@ int lib_contains(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_split(MobiusState* state, int arg_count) {
+int lib_split(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("split expects 2 arguments (string, delimiter)");
 
     Value delim_val = state->npeek(0);
@@ -384,7 +384,7 @@ int lib_split(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_join(MobiusState* state, int arg_count) {
+int lib_join(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("join expects 2 arguments (array, separator)");
 
     Value sep_val = state->npeek(0);
@@ -448,7 +448,7 @@ int lib_join(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_trim(MobiusState* state, int arg_count) {
+int lib_trim(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("trim expects 1 argument");
 
     Value arg = state->npeek(0);
@@ -482,7 +482,7 @@ int lib_trim(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_startswith(MobiusState* state, int arg_count) {
+int lib_startswith(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("startswith expects 2 arguments");
 
     Value prefix_val = state->npeek(0);
@@ -502,7 +502,7 @@ int lib_startswith(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_endswith(MobiusState* state, int arg_count) {
+int lib_endswith(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("endswith expects 2 arguments");
 
     Value suffix_val = state->npeek(0);
@@ -522,7 +522,7 @@ int lib_endswith(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_replace(MobiusState* state, int arg_count) {
+int lib_replace(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("replace expects 3 arguments (string, old, new)");
 
     Value new_val = state->npeek(0);
@@ -597,7 +597,7 @@ int lib_replace(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_find(MobiusState* state, int arg_count) {
+int lib_find(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("find expects 2 arguments (string, substring)");
 
     Value needle_val = state->npeek(0);
@@ -618,7 +618,7 @@ int lib_find(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_repeat(MobiusState* state, int arg_count) {
+int lib_repeat(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("repeat expects 2 arguments (string, count)");
 
     Value count_val = state->npeek(0);

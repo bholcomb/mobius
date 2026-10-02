@@ -233,7 +233,7 @@ static int ensure_window_alive(MobiusState* state, WindowObject* window, const c
     return 0;
 }
 
-static int return_self(MobiusState* state, int arg_count) {
+static int return_self(MobiusState* state, int arg_count, void* /*userdata*/) {
     mobius_stack_copy(state, 0);
     mobius_stack_pop(state, arg_count);
     return 1;
@@ -558,7 +558,7 @@ static int set_callback_ref(MobiusState* state, MobiusValueRef& slot, int idx, c
     return 0;
 }
 
-static int glfw_version(MobiusState* state, int arg_count) {
+static int glfw_version(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "version() expects no arguments");
 
     int major = 0;
@@ -574,19 +574,19 @@ static int glfw_version(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_version_string(MobiusState* state, int arg_count) {
+static int glfw_version_string(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "version_string() expects no arguments");
     mobius_stack_pushString(state, glfwGetVersionString());
     return 1;
 }
 
-static int glfw_vulkan_supported(MobiusState* state, int arg_count) {
+static int glfw_vulkan_supported(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "vulkan_supported() expects no arguments");
     mobius_stack_pushBool(state, glfwVulkanSupported() == GLFW_TRUE);
     return 1;
 }
 
-static int glfw_init(MobiusState* state, int arg_count) {
+static int glfw_init(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "init() expects no arguments");
 
     std::lock_guard<std::mutex> lock(g_glfw_mutex);
@@ -607,7 +607,7 @@ static int glfw_init(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_terminate(MobiusState* state, int arg_count) {
+static int glfw_terminate(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "terminate() expects no arguments");
 
     bool should_terminate = false;
@@ -636,13 +636,13 @@ static int glfw_terminate(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_initialized(MobiusState* state, int arg_count) {
+static int glfw_initialized(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "initialized() expects no arguments");
     mobius_stack_pushBool(state, state_is_initialized(state));
     return 1;
 }
 
-static int glfw_last_error(MobiusState* state, int arg_count) {
+static int glfw_last_error(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "last_error() expects no arguments");
     const char* description = nullptr;
     int code = glfwGetError(&description);
@@ -650,7 +650,7 @@ static int glfw_last_error(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_default_window_hints(MobiusState* state, int arg_count) {
+static int glfw_default_window_hints(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "default_window_hints() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before default_window_hints()");
     glfwDefaultWindowHints();
@@ -658,7 +658,7 @@ static int glfw_default_window_hints(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_window_hint(MobiusState* state, int arg_count) {
+static int glfw_window_hint(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window_hint() expects 2 arguments (hint, value)");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before window_hint()");
     int hint = (int)mobius_stack_asInt64(state, 0);
@@ -669,7 +669,7 @@ static int glfw_window_hint(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_required_instance_extensions(MobiusState* state, int arg_count) {
+static int glfw_required_instance_extensions(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "required_instance_extensions() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before required_instance_extensions()");
     uint32_t count = 0;
@@ -687,7 +687,7 @@ static int glfw_required_instance_extensions(MobiusState* state, int arg_count) 
     return 1;
 }
 
-static int glfw_wait_events_timeout(MobiusState* state, int arg_count) {
+static int glfw_wait_events_timeout(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "wait_events_timeout() expects 1 argument (seconds)");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before wait_events_timeout()");
     double timeout = mobius_stack_asFloat64(state, 0);
@@ -699,14 +699,14 @@ static int glfw_wait_events_timeout(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_get_time(MobiusState* state, int arg_count) {
+static int glfw_get_time(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "get_time() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before get_time()");
     mobius_stack_pushFloat64(state, glfwGetTime());
     return 1;
 }
 
-static int glfw_set_time(MobiusState* state, int arg_count) {
+static int glfw_set_time(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "set_time() expects 1 argument");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before set_time()");
     double value = mobius_stack_asFloat64(state, 0);
@@ -717,21 +717,21 @@ static int glfw_set_time(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_get_timer_value(MobiusState* state, int arg_count) {
+static int glfw_get_timer_value(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "timer_value() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before timer_value()");
     mobius_stack_pushUInt64(state, glfwGetTimerValue());
     return 1;
 }
 
-static int glfw_get_timer_frequency(MobiusState* state, int arg_count) {
+static int glfw_get_timer_frequency(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "timer_frequency() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before timer_frequency()");
     mobius_stack_pushUInt64(state, glfwGetTimerFrequency());
     return 1;
 }
 
-static int glfw_swap_interval(MobiusState* state, int arg_count) {
+static int glfw_swap_interval(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "swap_interval() expects 1 argument");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before swap_interval()");
     int interval = (int)mobius_stack_asInt64(state, 0);
@@ -741,7 +741,7 @@ static int glfw_swap_interval(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_extension_supported(MobiusState* state, int arg_count) {
+static int glfw_extension_supported(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "extension_supported() expects 1 argument");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before extension_supported()");
     if (!mobius_stack_isString(state, 0)) return mobius_error(state, "extension_supported() extension must be a string");
@@ -751,14 +751,14 @@ static int glfw_extension_supported(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_raw_mouse_motion_supported(MobiusState* state, int arg_count) {
+static int glfw_raw_mouse_motion_supported(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "raw_mouse_motion_supported() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before raw_mouse_motion_supported()");
     mobius_stack_pushBool(state, glfwRawMouseMotionSupported() == GLFW_TRUE);
     return 1;
 }
 
-static int glfw_get_key_name(MobiusState* state, int arg_count) {
+static int glfw_get_key_name(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "get_key_name() expects 2 arguments (key, scancode)");
     int key = (int)mobius_stack_asInt64(state, 0);
     int scancode = (int)mobius_stack_asInt64(state, 1);
@@ -769,7 +769,7 @@ static int glfw_get_key_name(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_get_key_scancode(MobiusState* state, int arg_count) {
+static int glfw_get_key_scancode(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "get_key_scancode() expects 1 argument");
     int key = (int)mobius_stack_asInt64(state, 0);
     mobius_stack_pop(state, 1);
@@ -777,7 +777,7 @@ static int glfw_get_key_scancode(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_install_enum(MobiusState* state, int arg_count) {
+static int glfw_install_enum(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "__install_enum() expects 2 arguments (name, enum_def)");
     if (!mobius_stack_isString(state, 0)) return mobius_error(state, "__install_enum() name must be a string");
 
@@ -798,7 +798,7 @@ static int glfw_install_enum(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_get_clipboard_string(MobiusState* state, int arg_count) {
+static int glfw_get_clipboard_string(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0 && arg_count != 1) return mobius_error(state, "get_clipboard_string() expects 0 or 1 arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before get_clipboard_string()");
     GLFWwindow* window = nullptr;
@@ -814,7 +814,7 @@ static int glfw_get_clipboard_string(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_set_clipboard_string(MobiusState* state, int arg_count) {
+static int glfw_set_clipboard_string(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1 && arg_count != 2) return mobius_error(state, "set_clipboard_string() expects 1 or 2 arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before set_clipboard_string()");
     if (!mobius_stack_isString(state, 0)) return mobius_error(state, "set_clipboard_string() text must be a string");
@@ -831,7 +831,7 @@ static int glfw_set_clipboard_string(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_make_context_current(MobiusState* state, int arg_count) {
+static int glfw_make_context_current(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0 && arg_count != 1) return mobius_error(state, "make_context_current() expects 0 or 1 arguments");
     GLFWwindow* window = nullptr;
     if (arg_count == 1 && !mobius_stack_isNil(state, 0)) {
@@ -846,7 +846,7 @@ static int glfw_make_context_current(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_current_context(MobiusState* state, int arg_count) {
+static int glfw_current_context(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "current_context() expects no arguments");
     return push_window_for_handle(state, glfwGetCurrentContext());
 }
@@ -864,13 +864,13 @@ static int push_monitor_userdata(MobiusState* state, GLFWmonitor* handle) {
     return 1;
 }
 
-static int glfw_primary_monitor(MobiusState* state, int arg_count) {
+static int glfw_primary_monitor(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "primary_monitor() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before primary_monitor()");
     return push_monitor_userdata(state, glfwGetPrimaryMonitor());
 }
 
-static int glfw_monitors(MobiusState* state, int arg_count) {
+static int glfw_monitors(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "monitors() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before monitors()");
     int count = 0;
@@ -884,7 +884,7 @@ static int glfw_monitors(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_create_window(MobiusState* state, int arg_count) {
+static int glfw_create_window(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3 && arg_count != 4 && arg_count != 5) {
         return mobius_error(state, "create_window() expects 3 to 5 arguments (width, height, title [, monitor [, share_window]])");
     }
@@ -939,7 +939,7 @@ static int glfw_create_window(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_poll_events(MobiusState* state, int arg_count) {
+static int glfw_poll_events(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "poll_events() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before poll_events()");
     glfwPollEvents();
@@ -948,7 +948,7 @@ static int glfw_poll_events(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_wait_events(MobiusState* state, int arg_count) {
+static int glfw_wait_events(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "wait_events() expects no arguments");
     if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before wait_events()");
     glfwWaitEvents();
@@ -957,14 +957,14 @@ static int glfw_wait_events(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int glfw_post_empty_event(MobiusState* state, int arg_count) {
+static int glfw_post_empty_event(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "post_empty_event() expects no arguments");
     glfwPostEmptyEvent();
     mobius_stack_pushBool(state, true);
     return 1;
 }
 
-static int monitor_name(MobiusState* state, int arg_count) {
+static int monitor_name(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "monitor:name() expects 0 arguments");
     MonitorObject* monitor = get_monitor_object(state, 0, "monitor:name() self is not a monitor");
     if (!monitor || !monitor->handle) return -1;
@@ -975,7 +975,7 @@ static int monitor_name(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int monitor_video_mode(MobiusState* state, int arg_count) {
+static int monitor_video_mode(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "monitor:video_mode() expects 0 arguments");
     MonitorObject* monitor = get_monitor_object(state, 0, "monitor:video_mode() self is not a monitor");
     if (!monitor || !monitor->handle) return -1;
@@ -984,7 +984,7 @@ static int monitor_video_mode(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int monitor_video_modes(MobiusState* state, int arg_count) {
+static int monitor_video_modes(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "monitor:video_modes() expects 0 arguments");
     MonitorObject* monitor = get_monitor_object(state, 0, "monitor:video_modes() self is not a monitor");
     if (!monitor || !monitor->handle) return -1;
@@ -1000,7 +1000,7 @@ static int monitor_video_modes(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int monitor_get_pos(MobiusState* state, int arg_count) {
+static int monitor_get_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "monitor:get_pos() expects 0 arguments");
     MonitorObject* monitor = get_monitor_object(state, 0, "monitor:get_pos() self is not a monitor");
     if (!monitor || !monitor->handle) return -1;
@@ -1012,7 +1012,7 @@ static int monitor_get_pos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int monitor_get_workarea(MobiusState* state, int arg_count) {
+static int monitor_get_workarea(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "monitor:get_workarea() expects 0 arguments");
     MonitorObject* monitor = get_monitor_object(state, 0, "monitor:get_workarea() self is not a monitor");
     if (!monitor || !monitor->handle) return -1;
@@ -1026,7 +1026,7 @@ static int monitor_get_workarea(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int monitor_get_physical_size(MobiusState* state, int arg_count) {
+static int monitor_get_physical_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "monitor:get_physical_size() expects 0 arguments");
     MonitorObject* monitor = get_monitor_object(state, 0, "monitor:get_physical_size() self is not a monitor");
     if (!monitor || !monitor->handle) return -1;
@@ -1038,7 +1038,7 @@ static int monitor_get_physical_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int monitor_get_content_scale(MobiusState* state, int arg_count) {
+static int monitor_get_content_scale(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "monitor:get_content_scale() expects 0 arguments");
     MonitorObject* monitor = get_monitor_object(state, 0, "monitor:get_content_scale() self is not a monitor");
     if (!monitor || !monitor->handle) return -1;
@@ -1050,7 +1050,7 @@ static int monitor_get_content_scale(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_close(MobiusState* state, int arg_count) {
+static int window_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:close() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:close() self is not a window");
     if (!window) return -1;
@@ -1060,7 +1060,7 @@ static int window_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_is_closed(MobiusState* state, int arg_count) {
+static int window_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:is_closed() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:is_closed() self is not a window");
     if (!window) return -1;
@@ -1069,7 +1069,7 @@ static int window_is_closed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_should_close(MobiusState* state, int arg_count) {
+static int window_should_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:should_close() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:should_close() self is not a window");
     if (!window) return -1;
@@ -1079,17 +1079,17 @@ static int window_should_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_set_should_close(MobiusState* state, int arg_count) {
+static int window_set_should_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:set_should_close() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:set_should_close() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     bool value = mobius_stack_asBool(state, 1);
     glfwSetWindowShouldClose(window->handle, value ? GLFW_TRUE : GLFW_FALSE);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_get_size(MobiusState* state, int arg_count) {
+static int window_get_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_size() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_size() self is not a window");
     if (!window) return -1;
@@ -1102,7 +1102,7 @@ static int window_get_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_set_size(MobiusState* state, int arg_count) {
+static int window_set_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "window:set_size() expects 2 arguments");
     WindowObject* window = get_window_object(state, 0, "window:set_size() self is not a window");
     if (!window) return -1;
@@ -1111,10 +1111,10 @@ static int window_set_size(MobiusState* state, int arg_count) {
     int height = (int)mobius_stack_asInt64(state, 2);
     if (width <= 0 || height <= 0) return mobius_error(state, "window:set_size() width and height must be > 0");
     glfwSetWindowSize(window->handle, width, height);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_get_framebuffer_size(MobiusState* state, int arg_count) {
+static int window_get_framebuffer_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_framebuffer_size() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_framebuffer_size() self is not a window");
     if (!window) return -1;
@@ -1127,7 +1127,7 @@ static int window_get_framebuffer_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_get_pos(MobiusState* state, int arg_count) {
+static int window_get_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_pos() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_pos() self is not a window");
     if (!window) return -1;
@@ -1140,7 +1140,7 @@ static int window_get_pos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_set_pos(MobiusState* state, int arg_count) {
+static int window_set_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "window:set_pos() expects 2 arguments");
     WindowObject* window = get_window_object(state, 0, "window:set_pos() self is not a window");
     if (!window) return -1;
@@ -1148,47 +1148,47 @@ static int window_set_pos(MobiusState* state, int arg_count) {
     int x = (int)mobius_stack_asInt64(state, 1);
     int y = (int)mobius_stack_asInt64(state, 2);
     glfwSetWindowPos(window->handle, x, y);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_set_title(MobiusState* state, int arg_count) {
+static int window_set_title(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:set_title() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:set_title() self is not a window");
     if (!window) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "window:set_title() title must be a string");
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwSetWindowTitle(window->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_show(MobiusState* state, int arg_count) {
+static int window_show(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:show() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:show() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwShowWindow(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_hide(MobiusState* state, int arg_count) {
+static int window_hide(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:hide() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:hide() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwHideWindow(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_focus(MobiusState* state, int arg_count) {
+static int window_focus(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:focus() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:focus() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwFocusWindow(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_get_key(MobiusState* state, int arg_count) {
+static int window_get_key(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:get_key() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:get_key() self is not a window");
     if (!window) return -1;
@@ -1199,7 +1199,7 @@ static int window_get_key(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_get_mouse_button(MobiusState* state, int arg_count) {
+static int window_get_mouse_button(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:get_mouse_button() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:get_mouse_button() self is not a window");
     if (!window) return -1;
@@ -1210,7 +1210,7 @@ static int window_get_mouse_button(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_get_cursor_pos(MobiusState* state, int arg_count) {
+static int window_get_cursor_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_cursor_pos() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_cursor_pos() self is not a window");
     if (!window) return -1;
@@ -1223,7 +1223,7 @@ static int window_get_cursor_pos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_set_cursor_pos(MobiusState* state, int arg_count) {
+static int window_set_cursor_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "window:set_cursor_pos() expects 2 arguments");
     WindowObject* window = get_window_object(state, 0, "window:set_cursor_pos() self is not a window");
     if (!window) return -1;
@@ -1231,10 +1231,10 @@ static int window_set_cursor_pos(MobiusState* state, int arg_count) {
     double x = mobius_stack_asFloat64(state, 1);
     double y = mobius_stack_asFloat64(state, 2);
     glfwSetCursorPos(window->handle, x, y);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_get_frame_size(MobiusState* state, int arg_count) {
+static int window_get_frame_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_frame_size() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_frame_size() self is not a window");
     if (!window) return -1;
@@ -1249,7 +1249,7 @@ static int window_get_frame_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_get_content_scale(MobiusState* state, int arg_count) {
+static int window_get_content_scale(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_content_scale() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_content_scale() self is not a window");
     if (!window) return -1;
@@ -1262,7 +1262,7 @@ static int window_get_content_scale(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_get_opacity(MobiusState* state, int arg_count) {
+static int window_get_opacity(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_opacity() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_opacity() self is not a window");
     if (!window) return -1;
@@ -1272,7 +1272,7 @@ static int window_get_opacity(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_set_opacity(MobiusState* state, int arg_count) {
+static int window_set_opacity(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:set_opacity() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:set_opacity() self is not a window");
     if (!window) return -1;
@@ -1280,46 +1280,46 @@ static int window_set_opacity(MobiusState* state, int arg_count) {
     double opacity = mobius_stack_asFloat64(state, 1);
     if (opacity < 0.0 || opacity > 1.0) return mobius_error(state, "window:set_opacity() opacity must be between 0 and 1");
     glfwSetWindowOpacity(window->handle, (float)opacity);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_iconify(MobiusState* state, int arg_count) {
+static int window_iconify(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:iconify() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:iconify() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwIconifyWindow(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_restore(MobiusState* state, int arg_count) {
+static int window_restore(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:restore() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:restore() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwRestoreWindow(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_maximize(MobiusState* state, int arg_count) {
+static int window_maximize(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:maximize() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:maximize() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwMaximizeWindow(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_request_attention(MobiusState* state, int arg_count) {
+static int window_request_attention(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:request_attention() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:request_attention() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwRequestWindowAttention(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_get_monitor(MobiusState* state, int arg_count) {
+static int window_get_monitor(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:get_monitor() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:get_monitor() self is not a window");
     if (!window) return -1;
@@ -1328,7 +1328,7 @@ static int window_get_monitor(MobiusState* state, int arg_count) {
     return push_monitor_userdata(state, glfwGetWindowMonitor(window->handle));
 }
 
-static int window_set_monitor(MobiusState* state, int arg_count) {
+static int window_set_monitor(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 6 && arg_count != 7) {
         return mobius_error(state, "window:set_monitor() expects 5 or 6 arguments");
     }
@@ -1347,10 +1347,10 @@ static int window_set_monitor(MobiusState* state, int arg_count) {
     int height = (int)mobius_stack_asInt64(state, 5);
     int refresh = (arg_count == 7) ? (int)mobius_stack_asInt64(state, 6) : GLFW_DONT_CARE;
     glfwSetWindowMonitor(window->handle, monitor, x, y, width, height, refresh);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_get_attrib(MobiusState* state, int arg_count) {
+static int window_get_attrib(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:get_attrib() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:get_attrib() self is not a window");
     if (!window) return -1;
@@ -1361,7 +1361,7 @@ static int window_get_attrib(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_set_attrib(MobiusState* state, int arg_count) {
+static int window_set_attrib(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "window:set_attrib() expects 2 arguments");
     WindowObject* window = get_window_object(state, 0, "window:set_attrib() self is not a window");
     if (!window) return -1;
@@ -1369,10 +1369,10 @@ static int window_set_attrib(MobiusState* state, int arg_count) {
     int attrib = (int)mobius_stack_asInt64(state, 1);
     int value = (int)mobius_stack_asInt64(state, 2);
     glfwSetWindowAttrib(window->handle, attrib, value);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_get_input_mode(MobiusState* state, int arg_count) {
+static int window_get_input_mode(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:get_input_mode() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:get_input_mode() self is not a window");
     if (!window) return -1;
@@ -1385,7 +1385,7 @@ static int window_get_input_mode(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int window_set_input_mode(MobiusState* state, int arg_count) {
+static int window_set_input_mode(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "window:set_input_mode() expects 2 arguments");
     WindowObject* window = get_window_object(state, 0, "window:set_input_mode() self is not a window");
     if (!window) return -1;
@@ -1393,10 +1393,10 @@ static int window_set_input_mode(MobiusState* state, int arg_count) {
     int mode = (int)mobius_stack_asInt64(state, 1);
     int value = (int)mobius_stack_asInt64(state, 2);
     glfwSetInputMode(window->handle, mode, value);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_set_size_limits(MobiusState* state, int arg_count) {
+static int window_set_size_limits(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 5) return mobius_error(state, "window:set_size_limits() expects 4 arguments");
     WindowObject* window = get_window_object(state, 0, "window:set_size_limits() self is not a window");
     if (!window) return -1;
@@ -1406,10 +1406,10 @@ static int window_set_size_limits(MobiusState* state, int arg_count) {
     int max_width = (int)mobius_stack_asInt64(state, 3);
     int max_height = (int)mobius_stack_asInt64(state, 4);
     glfwSetWindowSizeLimits(window->handle, min_width, min_height, max_width, max_height);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_set_aspect_ratio(MobiusState* state, int arg_count) {
+static int window_set_aspect_ratio(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "window:set_aspect_ratio() expects 2 arguments");
     WindowObject* window = get_window_object(state, 0, "window:set_aspect_ratio() self is not a window");
     if (!window) return -1;
@@ -1417,124 +1417,124 @@ static int window_set_aspect_ratio(MobiusState* state, int arg_count) {
     int numer = (int)mobius_stack_asInt64(state, 1);
     int denom = (int)mobius_stack_asInt64(state, 2);
     glfwSetWindowAspectRatio(window->handle, numer, denom);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_swap_buffers(MobiusState* state, int arg_count) {
+static int window_swap_buffers(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "window:swap_buffers() expects 0 arguments");
     WindowObject* window = get_window_object(state, 0, "window:swap_buffers() self is not a window");
     if (!window) return -1;
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     glfwSwapBuffers(window->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_key(MobiusState* state, int arg_count) {
+static int window_on_key(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_key() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_key() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_key_ref, 1, "window:on_key() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetKeyCallback(window->handle, window->on_key_ref ? glfw_key_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_char(MobiusState* state, int arg_count) {
+static int window_on_char(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_char() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_char() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_char_ref, 1, "window:on_char() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetCharCallback(window->handle, window->on_char_ref ? glfw_char_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_cursor_pos(MobiusState* state, int arg_count) {
+static int window_on_cursor_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_cursor_pos() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_cursor_pos() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_cursor_pos_ref, 1, "window:on_cursor_pos() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetCursorPosCallback(window->handle, window->on_cursor_pos_ref ? glfw_cursor_pos_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_mouse_button(MobiusState* state, int arg_count) {
+static int window_on_mouse_button(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_mouse_button() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_mouse_button() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_mouse_button_ref, 1, "window:on_mouse_button() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetMouseButtonCallback(window->handle, window->on_mouse_button_ref ? glfw_mouse_button_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_scroll(MobiusState* state, int arg_count) {
+static int window_on_scroll(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_scroll() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_scroll() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_scroll_ref, 1, "window:on_scroll() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetScrollCallback(window->handle, window->on_scroll_ref ? glfw_scroll_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_resize(MobiusState* state, int arg_count) {
+static int window_on_resize(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_resize() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_resize() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_resize_ref, 1, "window:on_resize() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetWindowSizeCallback(window->handle, window->on_resize_ref ? glfw_window_size_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_framebuffer_resize(MobiusState* state, int arg_count) {
+static int window_on_framebuffer_resize(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_framebuffer_resize() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_framebuffer_resize() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_framebuffer_resize_ref, 1, "window:on_framebuffer_resize() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetFramebufferSizeCallback(window->handle, window->on_framebuffer_resize_ref ? glfw_framebuffer_size_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_close(MobiusState* state, int arg_count) {
+static int window_on_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_close() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_close() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_close_ref, 1, "window:on_close() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetWindowCloseCallback(window->handle, window->on_close_ref ? glfw_window_close_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_focus(MobiusState* state, int arg_count) {
+static int window_on_focus(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_focus() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_focus() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_focus_ref, 1, "window:on_focus() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetWindowFocusCallback(window->handle, window->on_focus_ref ? glfw_window_focus_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_cursor_enter(MobiusState* state, int arg_count) {
+static int window_on_cursor_enter(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_cursor_enter() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_cursor_enter() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_cursor_enter_ref, 1, "window:on_cursor_enter() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetCursorEnterCallback(window->handle, window->on_cursor_enter_ref ? glfw_cursor_enter_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_iconify(MobiusState* state, int arg_count) {
+static int window_on_iconify(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_iconify() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_iconify() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_iconify_ref, 1, "window:on_iconify() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetWindowIconifyCallback(window->handle, window->on_iconify_ref ? glfw_window_iconify_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int window_on_maximize(MobiusState* state, int arg_count) {
+static int window_on_maximize(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "window:on_maximize() expects 1 argument");
     WindowObject* window = get_window_object(state, 0, "window:on_maximize() self is not a window");
     if (!window) return -1;
     if (set_callback_ref(state, window->on_maximize_ref, 1, "window:on_maximize() callback must be a function or nil") < 0) return -1;
     if (window->handle) glfwSetWindowMaximizeCallback(window->handle, window->on_maximize_ref ? glfw_window_maximize_callback : nullptr);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
 static void copy_module_function(MobiusState* state, int module_idx, const char* from_key, int target_idx, const char* to_key) {

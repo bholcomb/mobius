@@ -96,7 +96,7 @@ static void push_version_table(MobiusState* state, uint32_t version) {
     push_int_field(state, tbl, "patch", version & 0xfff);
 }
 
-static int return_self(MobiusState* state, int arg_count) {
+static int return_self(MobiusState* state, int arg_count, void* /*userdata*/) {
     mobius_stack_copy(state, 0);
     mobius_stack_pop(state, arg_count);
     return 1;
@@ -224,14 +224,14 @@ static bool collect_string_array(MobiusState* state, int idx,
     return true;
 }
 
-static int vulkease_version(MobiusState* state, int arg_count) {
+static int vulkease_version(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "version() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     push_version_table(state, g_api.getVersion());
     return 1;
 }
 
-static int vulkease_result_string(MobiusState* state, int arg_count) {
+static int vulkease_result_string(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "result_string() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     VEResult result = (VEResult)mobius_stack_asInt64(state, 0);
@@ -240,7 +240,7 @@ static int vulkease_result_string(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int vulkease_instance_extension_available(MobiusState* state, int arg_count) {
+static int vulkease_instance_extension_available(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "instance_extension_available() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     if (!mobius_stack_isString(state, 0)) return mobius_error(state, "instance_extension_available() extension name must be a string");
@@ -250,7 +250,7 @@ static int vulkease_instance_extension_available(MobiusState* state, int arg_cou
     return 1;
 }
 
-static int vulkease_create_context(MobiusState* state, int arg_count) {
+static int vulkease_create_context(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count > 2) return mobius_error(state, "create_context() expects at most 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
 
@@ -285,7 +285,7 @@ static int vulkease_create_context(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_close(MobiusState* state, int arg_count) {
+static int context_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:close() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:close() self is not a vulkease context");
@@ -298,7 +298,7 @@ static int context_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_closed(MobiusState* state, int arg_count) {
+static int context_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_closed() expects no arguments");
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_closed() self is not a vulkease context");
     if (!ctx_obj) return -1;
@@ -307,7 +307,7 @@ static int context_is_closed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_physical_devices(MobiusState* state, int arg_count) {
+static int context_physical_devices(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:physical_devices() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:physical_devices() self is not a vulkease context");
@@ -338,7 +338,7 @@ static int context_physical_devices(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_create_device(MobiusState* state, int arg_count) {
+static int context_create_device(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 3) {
         return mobius_error(state, "context:create_device() expects up to 2 arguments");
     }
@@ -394,7 +394,7 @@ static int context_create_device(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int device_close(MobiusState* state, int arg_count) {
+static int device_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "device:close() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     DeviceObject* device_obj = get_device_object(state, 0, "device:close() self is not a vulkease device");
@@ -413,7 +413,7 @@ static int device_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int device_is_closed(MobiusState* state, int arg_count) {
+static int device_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "device:is_closed() expects no arguments");
     DeviceObject* device_obj = get_device_object(state, 0, "device:is_closed() self is not a vulkease device");
     if (!device_obj) return -1;
@@ -422,7 +422,7 @@ static int device_is_closed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int device_wait_idle(MobiusState* state, int arg_count) {
+static int device_wait_idle(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "device:wait_idle() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     DeviceObject* device_obj = get_device_object(state, 0, "device:wait_idle() self is not a vulkease device");
@@ -430,10 +430,10 @@ static int device_wait_idle(MobiusState* state, int arg_count) {
     if (ensure_device_open(state, device_obj, "vulkease device has been destroyed") < 0) return -1;
     VEResult rc = g_api.deviceWaitIdle(device_obj->handle);
     if (rc != VE_SUCCESS) return result_error(state, rc, "veDeviceWaitIdle");
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int device_vulkan_version(MobiusState* state, int arg_count) {
+static int device_vulkan_version(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "device:vulkan_version() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     DeviceObject* device_obj = get_device_object(state, 0, "device:vulkan_version() self is not a vulkease device");
@@ -445,7 +445,7 @@ static int device_vulkan_version(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int device_mesh_shader_supported(MobiusState* state, int arg_count) {
+static int device_mesh_shader_supported(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "device:mesh_shader_supported() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     DeviceObject* device_obj = get_device_object(state, 0, "device:mesh_shader_supported() self is not a vulkease device");

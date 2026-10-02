@@ -16,7 +16,7 @@
 // TRIGONOMETRIC FUNCTIONS
 // ============================================================================
 
-int math_sin(MobiusState* state, int arg_count) {
+int math_sin(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "sin() expects exactly 1 argument");
     }
@@ -31,7 +31,7 @@ int math_sin(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_cos(MobiusState* state, int arg_count) {
+int math_cos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "cos() expects exactly 1 argument");
     }
@@ -46,7 +46,7 @@ int math_cos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_tan(MobiusState* state, int arg_count) {
+int math_tan(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "tan() expects exactly 1 argument");
     }
@@ -61,7 +61,7 @@ int math_tan(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_asin(MobiusState* state, int arg_count) {
+int math_asin(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "asin() expects exactly 1 argument");
     }
@@ -79,7 +79,7 @@ int math_asin(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_acos(MobiusState* state, int arg_count) {
+int math_acos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "acos() expects exactly 1 argument");
     }
@@ -97,7 +97,7 @@ int math_acos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_atan(MobiusState* state, int arg_count) {
+int math_atan(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "atan() expects exactly 1 argument");
     }
@@ -112,7 +112,7 @@ int math_atan(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_atan2(MobiusState* state, int arg_count) {
+int math_atan2(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "atan2() expects exactly 2 arguments");
     }
@@ -132,7 +132,7 @@ int math_atan2(MobiusState* state, int arg_count) {
 // LOGARITHMIC AND EXPONENTIAL FUNCTIONS
 // ============================================================================
 
-int math_log(MobiusState* state, int arg_count) {
+int math_log(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log() expects exactly 1 argument");
     }
@@ -150,7 +150,7 @@ int math_log(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_log10(MobiusState* state, int arg_count) {
+int math_log10(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log10() expects exactly 1 argument");
     }
@@ -168,7 +168,7 @@ int math_log10(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_exp(MobiusState* state, int arg_count) {
+int math_exp(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "exp() expects exactly 1 argument");
     }
@@ -187,7 +187,7 @@ int math_exp(MobiusState* state, int arg_count) {
 // HYPERBOLIC FUNCTIONS
 // ============================================================================
 
-int math_sinh(MobiusState* state, int arg_count) {
+int math_sinh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "sinh() expects exactly 1 argument");
     }
@@ -202,7 +202,7 @@ int math_sinh(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_cosh(MobiusState* state, int arg_count) {
+int math_cosh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "cosh() expects exactly 1 argument");
     }
@@ -217,7 +217,7 @@ int math_cosh(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_tanh(MobiusState* state, int arg_count) {
+int math_tanh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "tanh() expects exactly 1 argument");
     }
@@ -236,7 +236,7 @@ int math_tanh(MobiusState* state, int arg_count) {
 // ADVANCED MATHEMATICAL FUNCTIONS
 // ============================================================================
 
-int math_factorial(MobiusState* state, int arg_count) {
+int math_factorial(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "factorial() expects exactly 1 argument");
     }
@@ -264,7 +264,7 @@ int math_factorial(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_gcd(MobiusState* state, int arg_count) {
+int math_gcd(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "gcd() expects exactly 2 arguments");
     }
@@ -287,7 +287,7 @@ int math_gcd(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_lcm(MobiusState* state, int arg_count) {
+int math_lcm(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "lcm() expects exactly 2 arguments");
     }
@@ -320,7 +320,7 @@ int math_lcm(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_hypot(MobiusState* state, int arg_count) {
+int math_hypot(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "hypot() expects exactly 2 arguments");
     }
@@ -336,7 +336,7 @@ int math_hypot(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_cbrt(MobiusState* state, int arg_count) {
+int math_cbrt(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "cbrt() expects exactly 1 argument");
     }
@@ -351,7 +351,7 @@ int math_cbrt(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_trunc(MobiusState* state, int arg_count) {
+int math_trunc(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "trunc() expects exactly 1 argument");
     }
@@ -392,7 +392,7 @@ int math_post_init(MobiusState* state) {
 // INVERSE HYPERBOLIC FUNCTIONS
 // ============================================================================
 
-int math_asinh(MobiusState* state, int arg_count) {
+int math_asinh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "asinh() expects exactly 1 argument");
     }
@@ -405,7 +405,7 @@ int math_asinh(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_acosh(MobiusState* state, int arg_count) {
+int math_acosh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "acosh() expects exactly 1 argument");
     }
@@ -421,7 +421,7 @@ int math_acosh(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_atanh(MobiusState* state, int arg_count) {
+int math_atanh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "atanh() expects exactly 1 argument");
     }
@@ -441,7 +441,7 @@ int math_atanh(MobiusState* state, int arg_count) {
 // ADDITIONAL LOGARITHMIC/EXPONENTIAL FUNCTIONS
 // ============================================================================
 
-int math_log2(MobiusState* state, int arg_count) {
+int math_log2(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log2() expects exactly 1 argument");
     }
@@ -457,7 +457,7 @@ int math_log2(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_log1p(MobiusState* state, int arg_count) {
+int math_log1p(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log1p() expects exactly 1 argument");
     }
@@ -473,7 +473,7 @@ int math_log1p(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_expm1(MobiusState* state, int arg_count) {
+int math_expm1(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "expm1() expects exactly 1 argument");
     }
@@ -486,7 +486,7 @@ int math_expm1(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_exp2(MobiusState* state, int arg_count) {
+int math_exp2(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "exp2() expects exactly 1 argument");
     }
@@ -503,7 +503,7 @@ int math_exp2(MobiusState* state, int arg_count) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
-int math_deg2rad(MobiusState* state, int arg_count) {
+int math_deg2rad(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "deg2rad() expects exactly 1 argument");
     }
@@ -519,7 +519,7 @@ int math_deg2rad(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_rad2deg(MobiusState* state, int arg_count) {
+int math_rad2deg(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "rad2deg() expects exactly 1 argument");
     }
@@ -535,7 +535,7 @@ int math_rad2deg(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_sign(MobiusState* state, int arg_count) {
+int math_sign(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "sign() expects exactly 1 argument");
     }
@@ -551,7 +551,7 @@ int math_sign(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int math_clamp(MobiusState* state, int arg_count) {
+int math_clamp(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) {
         return mobius_error(state, "clamp() expects exactly 3 arguments");
     }

@@ -416,7 +416,7 @@ static void push_match_table(MobiusState* state, const MatchResult& mr) {
 // regex.match(pattern, string) -> table | nil
 // ============================================================================
 
-static int regex_match(MobiusState* state, int arg_count) {
+static int regex_match(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3)
         return mobius_error(state, "regex.match() expects 2 or 3 arguments (pattern, string [, flags|options])");
     if (!mobius_stack_isString(state, -arg_count))
@@ -458,7 +458,7 @@ static int regex_match(MobiusState* state, int arg_count) {
 // regex.search(pattern, string) -> table | nil
 // ============================================================================
 
-static int regex_search(MobiusState* state, int arg_count) {
+static int regex_search(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3)
         return mobius_error(state, "regex.search() expects 2 or 3 arguments (pattern, string [, flags|options])");
     if (!mobius_stack_isString(state, -arg_count))
@@ -495,7 +495,7 @@ static int regex_search(MobiusState* state, int arg_count) {
 // regex.findall(pattern, string) -> array of tables
 // ============================================================================
 
-static int regex_findall(MobiusState* state, int arg_count) {
+static int regex_findall(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3)
         return mobius_error(state, "regex.findall() expects 2 or 3 arguments (pattern, string [, flags|options])");
     if (!mobius_stack_isString(state, -arg_count))
@@ -534,7 +534,7 @@ static int regex_findall(MobiusState* state, int arg_count) {
 // regex.replace(pattern, string, replacement) -> string
 // ============================================================================
 
-static int regex_replace(MobiusState* state, int arg_count) {
+static int regex_replace(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 3 || arg_count > 4)
         return mobius_error(state, "regex.replace() expects 3 or 4 arguments (pattern, string, replacement [, flags|options])");
     if (!mobius_stack_isString(state, -arg_count))
@@ -569,7 +569,7 @@ static int regex_replace(MobiusState* state, int arg_count) {
 // regex.split(pattern, string) -> array of strings
 // ============================================================================
 
-static int regex_split(MobiusState* state, int arg_count) {
+static int regex_split(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3)
         return mobius_error(state, "regex.split() expects 2 or 3 arguments (pattern, string [, flags|options])");
     if (!mobius_stack_isString(state, -arg_count))

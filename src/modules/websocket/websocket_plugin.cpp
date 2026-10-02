@@ -475,7 +475,7 @@ static int push_parsed_frame(MobiusState* state, const ParsedFrame& frame) {
     return 1;
 }
 
-static int websocket_accept_key_fn(MobiusState* state, int arg_count) {
+static int websocket_accept_key_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "websocket.accept_key() expects 1 argument");
     if (!mobius_stack_isString(state, -1)) return mobius_error(state, "websocket.accept_key() expects a string argument");
     std::string key = mobius_stack_asString(state, -1);
@@ -485,7 +485,7 @@ static int websocket_accept_key_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int websocket_is_upgrade_request(MobiusState* state, int arg_count) {
+static int websocket_is_upgrade_request(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "websocket.is_upgrade_request() expects 1 argument");
     if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "websocket.is_upgrade_request() expects a table argument");
     int request_tbl = mobius_stack_size(state) - 1;
@@ -495,7 +495,7 @@ static int websocket_is_upgrade_request(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int websocket_handshake_response(MobiusState* state, int arg_count) {
+static int websocket_handshake_response(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) return mobius_error(state, "websocket.handshake_response() expects 1 or 2 arguments");
     if (!mobius_stack_isTable(state, -arg_count)) return mobius_error(state, "websocket.handshake_response() expects a request table");
     if (arg_count == 2 && !mobius_stack_isString(state, -1)) return mobius_error(state, "websocket.handshake_response() protocol must be a string");
@@ -525,7 +525,7 @@ static int websocket_handshake_response(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int websocket_handshake_request(MobiusState* state, int arg_count) {
+static int websocket_handshake_request(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "websocket.handshake_request() expects 1 argument");
     if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "websocket.handshake_request() expects a table argument");
 
@@ -574,7 +574,7 @@ static int websocket_handshake_request(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int websocket_build_frame(MobiusState* state, int arg_count) {
+static int websocket_build_frame(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "websocket.build_frame() expects 1 argument");
     if (!mobius_stack_isTable(state, -1)) return mobius_error(state, "websocket.build_frame() expects a table argument");
 
@@ -751,7 +751,7 @@ static int websocket_build_frame(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int websocket_parse_frame(MobiusState* state, int arg_count) {
+static int websocket_parse_frame(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "websocket.parse_frame() expects 1 argument");
     if (!mobius_stack_isBuffer(state, -1)) return mobius_error(state, "websocket.parse_frame() expects a buffer argument");
 
@@ -769,7 +769,7 @@ static int websocket_parse_frame(MobiusState* state, int arg_count) {
     return push_parsed_frame(state, frame);
 }
 
-static int websocket_try_parse_frame(MobiusState* state, int arg_count) {
+static int websocket_try_parse_frame(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "websocket.__try_parse_frame() expects 1 argument");
     if (!mobius_stack_isBuffer(state, -1)) return mobius_error(state, "websocket.__try_parse_frame() expects a buffer argument");
 

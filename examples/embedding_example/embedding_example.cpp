@@ -26,7 +26,7 @@
  * Custom function: add two numbers
  * Demonstrates basic value exchange and error handling
  */
-int custom_add(MobiusState* state, int arg_count) {
+int custom_add(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "custom_add requires exactly 2 arguments");
     }
@@ -46,7 +46,7 @@ int custom_add(MobiusState* state, int arg_count) {
  * Custom function: get system information
  * Demonstrates string return values
  */
-int custom_system_info(MobiusState* state, int arg_count) {
+int custom_system_info(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return mobius_error(state, "system_info takes no arguments");
     }
@@ -60,7 +60,7 @@ int custom_system_info(MobiusState* state, int arg_count) {
  * Custom function: double a number
  * Demonstrates simple numeric operations
  */
-int custom_double(MobiusState* state, int arg_count) {
+int custom_double(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "double requires exactly 1 argument");
     }

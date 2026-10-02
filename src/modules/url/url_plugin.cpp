@@ -71,7 +71,7 @@ static void collect_sorted_string_keys(MobiusState* state, int tbl_idx, std::vec
     std::sort(keys.begin(), keys.end());
 }
 
-static int url_encode(MobiusState* state, int arg_count) {
+static int url_encode(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "url.encode() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -83,7 +83,7 @@ static int url_encode(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int url_decode(MobiusState* state, int arg_count) {
+static int url_decode(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "url.decode() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -97,7 +97,7 @@ static int url_decode(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int url_parse_query(MobiusState* state, int arg_count) {
+static int url_parse_query(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "url.parse_query() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -130,7 +130,7 @@ static int url_parse_query(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int url_build_query(MobiusState* state, int arg_count) {
+static int url_build_query(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "url.build_query() expects 1 argument");
     if (!mobius_stack_isTable(state, -1))
@@ -162,7 +162,7 @@ static int url_build_query(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int url_parse(MobiusState* state, int arg_count) {
+static int url_parse(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "url.parse() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -266,7 +266,7 @@ static int url_parse(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int url_build(MobiusState* state, int arg_count) {
+static int url_build(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "url.build() expects 1 argument");
     if (!mobius_stack_isTable(state, -1))

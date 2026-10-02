@@ -5,9 +5,9 @@
 
 class Table;
 
-int lib_define_struct(MobiusState* state, int arg_count);
-int buffer_method_view_as(MobiusState* state, int arg_count);
-int buffer_method_array_view_as(MobiusState* state, int arg_count);
+int lib_define_struct(MobiusState* state, int arg_count, void* /*userdata*/);
+int buffer_method_view_as(MobiusState* state, int arg_count, void* /*userdata*/);
+int buffer_method_array_view_as(MobiusState* state, int arg_count, void* /*userdata*/);
 
 Table* create_struct_layout_metatable(MobiusState* state);
 Table* create_struct_view_metatable(MobiusState* state);

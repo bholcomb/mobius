@@ -74,7 +74,7 @@ static void reverse_string(char* str) {
  * Count words in a string
  * word_count(text) -> integer
  */
-int text_word_count(MobiusState* state, int arg_count) {
+int text_word_count(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "word_count() expects exactly 1 argument");
     }
@@ -106,7 +106,7 @@ int text_word_count(MobiusState* state, int arg_count) {
  * Count lines in a string
  * line_count(text) -> integer
  */
-int text_line_count(MobiusState* state, int arg_count) {
+int text_line_count(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "line_count() expects exactly 1 argument");
     }
@@ -138,7 +138,7 @@ int text_line_count(MobiusState* state, int arg_count) {
  * Count occurrences of a character
  * char_count(text, character) -> integer
  */
-int text_char_count(MobiusState* state, int arg_count) {
+int text_char_count(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "char_count() expects exactly 2 arguments");
     }
@@ -170,7 +170,7 @@ int text_char_count(MobiusState* state, int arg_count) {
  * Reverse a string
  * reverse(text) -> string
  */
-int text_reverse(MobiusState* state, int arg_count) {
+int text_reverse(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "reverse() expects exactly 1 argument");
     }
@@ -197,7 +197,7 @@ int text_reverse(MobiusState* state, int arg_count) {
  * Convert to title case
  * title_case(text) -> string
  */
-int text_title_case(MobiusState* state, int arg_count) {
+int text_title_case(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "title_case() expects exactly 1 argument");
     }
@@ -236,7 +236,7 @@ int text_title_case(MobiusState* state, int arg_count) {
  * Remove whitespace from both ends
  * trim(text) -> string
  */
-int text_trim(MobiusState* state, int arg_count) {
+int text_trim(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "trim() expects exactly 1 argument");
     }
@@ -278,7 +278,7 @@ int text_trim(MobiusState* state, int arg_count) {
  * Replace all occurrences of a substring
  * replace_all(text, old_substr, new_substr) -> string
  */
-int text_replace_all(MobiusState* state, int arg_count) {
+int text_replace_all(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) {
         return mobius_error(state, "replace_all() expects exactly 3 arguments");
     }
@@ -351,7 +351,7 @@ int text_replace_all(MobiusState* state, int arg_count) {
  * Pad string to specified width with character
  * pad_left(text, width, pad_char) -> string
  */
-int text_pad_left(MobiusState* state, int arg_count) {
+int text_pad_left(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) {
         return mobius_error(state, "pad_left() expects exactly 3 arguments");
     }
@@ -399,7 +399,7 @@ int text_pad_left(MobiusState* state, int arg_count) {
  * Split string by delimiter
  * split(text, delimiter) -> string (comma-separated for this example)
  */
-int text_split(MobiusState* state, int arg_count) {
+int text_split(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "split() expects exactly 2 arguments");
     }

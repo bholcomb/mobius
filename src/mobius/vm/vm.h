@@ -181,15 +181,14 @@ struct VMFrame;
 class MobiusVM {
 public:
     // Call a native function value with `nargs` arguments on the native
-    // stack. Built-in natives (aux 0) are called directly; host functions
-    // (mobius_register_function / mobius_stack_pushFunction) go through
-    // invokeHostFunction for their userdata and threading.
+    // stack. Built-in natives (aux 0) are called directly, with no userdata;
+    // host functions (mobius_register_function / mobius_stack_pushFunction)
+    // go through invokeHostFunction for their userdata and threading.
     MOBIUS_FORCEINLINE int invokeNative(const Value& func, int nargs) {
-        if (MOBIUS_LIKELY(func.aux == 0)) return func.as.native_function(state_, nargs);
+        if (MOBIUS_LIKELY(func.aux == 0)) return func.as.native_function(state_, nargs, nullptr);
         return invokeHostFunction(func, nargs);
     }
     int invokeHostFunction(const Value& func, int nargs);
-    void* current_host_userdata_ = nullptr;   // mobius_function_userdata
 
     explicit MobiusVM(MobiusState* state);
     ~MobiusVM();

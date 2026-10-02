@@ -9,7 +9,7 @@
 // UNIFIED MATH FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-int lib_abs(MobiusState* state, int arg_count) {
+int lib_abs(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("abs expects 1 argument");
     }
@@ -35,7 +35,7 @@ int lib_abs(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_min(MobiusState* state, int arg_count) {
+int lib_min(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2) {
         return state->error("min expects at least 2 arguments");
     }
@@ -73,7 +73,7 @@ int lib_min(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_max(MobiusState* state, int arg_count) {
+int lib_max(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2) {
         return state->error("max expects at least 2 arguments");
     }
@@ -111,7 +111,7 @@ int lib_max(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_pow(MobiusState* state, int arg_count) {
+int lib_pow(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return state->error("pow expects 2 arguments");
     }
@@ -151,7 +151,7 @@ int lib_pow(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_sqrt(MobiusState* state, int arg_count) {
+int lib_sqrt(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("sqrt expects 1 argument");
     }
@@ -181,7 +181,7 @@ int lib_sqrt(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_floor(MobiusState* state, int arg_count) {
+int lib_floor(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("floor expects 1 argument");
     }
@@ -210,7 +210,7 @@ int lib_floor(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_ceil(MobiusState* state, int arg_count) {
+int lib_ceil(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("ceil expects 1 argument");
     }
@@ -239,7 +239,7 @@ int lib_ceil(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_round(MobiusState* state, int arg_count) {
+int lib_round(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("round expects 1 argument");
     }

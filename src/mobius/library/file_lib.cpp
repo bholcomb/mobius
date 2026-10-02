@@ -14,7 +14,7 @@
 // system (mobius_set_file_system), the real one, or - in a sandbox that
 // doesn't allow it - a "file access is not available" error.
 
-int lib_readfile(MobiusState* state, int arg_count) {
+int lib_readfile(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("readfile expects 1 argument (path)");
     }
@@ -66,15 +66,15 @@ static int write_or_append(MobiusState* state, int arg_count, bool append) {
     return 1;
 }
 
-int lib_writefile(MobiusState* state, int arg_count) {
+int lib_writefile(MobiusState* state, int arg_count, void* /*userdata*/) {
     return write_or_append(state, arg_count, false);
 }
 
-int lib_appendfile(MobiusState* state, int arg_count) {
+int lib_appendfile(MobiusState* state, int arg_count, void* /*userdata*/) {
     return write_or_append(state, arg_count, true);
 }
 
-int lib_file_exists(MobiusState* state, int arg_count) {
+int lib_file_exists(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("file_exists expects 1 argument (path)");
     }
@@ -90,7 +90,7 @@ int lib_file_exists(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_readlines(MobiusState* state, int arg_count) {
+int lib_readlines(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("readlines expects 1 argument (path)");
     }

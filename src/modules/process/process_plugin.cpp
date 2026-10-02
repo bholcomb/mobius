@@ -502,7 +502,7 @@ static void push_spawn_table(MobiusState* state, SpawnResult& r) {
 }
 
 // __set_child_methods(table): the methods every child gets.
-static int set_child_methods(MobiusState* state, int arg_count) {
+static int set_child_methods(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1 || !mobius_stack_isTable(state, 0))
         return mobius_error(state, "__set_child_methods expects a table");
     mobius_stack_setGlobal(state, CHILD_METHODS_GLOBAL);   // pops the table
@@ -690,7 +690,7 @@ static std::string describe_args(MobiusState* state) {
 // process.run(args [, options])
 // ---------------------------------------------------------------------------
 
-static int process_run(MobiusState* state, int arg_count) {
+static int process_run(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) return mobius_error(state, "process.run expects (args [, options])");
     int opts_idx = -1;
     if (arg_count == 2) {
@@ -759,7 +759,7 @@ static int process_run(MobiusState* state, int arg_count) {
 // process.start(args [, options]) and the child methods
 // ---------------------------------------------------------------------------
 
-static int process_start(MobiusState* state, int arg_count) {
+static int process_start(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) return mobius_error(state, "process.start expects (args [, options])");
     int opts_idx = -1;
     if (arg_count == 2) {
@@ -780,7 +780,7 @@ static int process_start(MobiusState* state, int arg_count) {
 
 // child:wait([timeout_ms]): the exit code, or nil if the timeout passed
 // first.
-static int child_wait(MobiusState* state, int arg_count) {
+static int child_wait(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) return mobius_error(state, "child:wait expects ([timeout_ms])");
     ChildHandle* c = child_from_self(state, 0);
     if (!c) return mobius_error(state, "child:wait: self is not a child process");
@@ -799,7 +799,7 @@ static int child_wait(MobiusState* state, int arg_count) {
 }
 
 // child:poll(): the exit code if the child has finished, otherwise nil.
-static int child_poll(MobiusState* state, int arg_count) {
+static int child_poll(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "child:poll expects no arguments");
     ChildHandle* c = child_from_self(state, 0);
     if (!c) return mobius_error(state, "child:poll: self is not a child process");
@@ -813,7 +813,7 @@ static int child_poll(MobiusState* state, int arg_count) {
 
 // child:kill([signal]): "term" (default), "kill", "int" or "hup". Returns
 // false if the child had already exited.
-static int child_kill(MobiusState* state, int arg_count) {
+static int child_kill(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) return mobius_error(state, "child:kill expects ([signal])");
     ChildHandle* c = child_from_self(state, 0);
     if (!c) return mobius_error(state, "child:kill: self is not a child process");
@@ -838,7 +838,7 @@ static int child_kill(MobiusState* state, int arg_count) {
 // piped) and close it, read stdout/stderr (if piped) to the end, wait for
 // the exit. Returns {exit_code, stdout, stderr, timed_out}. The child's
 // pipe streams are consumed (closed) by this call.
-static int child_communicate(MobiusState* state, int arg_count) {
+static int child_communicate(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 3) return mobius_error(state, "child:communicate expects ([input [, timeout_ms]])");
     ChildHandle* c = child_from_self(state, 0);
     if (!c) return mobius_error(state, "child:communicate: self is not a child process");

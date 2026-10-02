@@ -30,7 +30,7 @@ static int errors_reported;
 static void on_error(MobiusState* s, const MobiusError* e, void* ud) { (void)s; (void)e; (void)ud; errors_reported++; }
 
 static atomic_long ticks;
-static int tick(MobiusState* s, int argc) {
+static int tick(MobiusState* s, int argc, void* userdata) {
     mobius_stack_pop(s, argc);
     atomic_fetch_add(&ticks, 1);
     return 0;

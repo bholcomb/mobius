@@ -30,9 +30,12 @@ extern "C" {
  * Arguments are on the stack.  Pop/read them, push return values, and
  * return the number of values pushed (>= 0).
  *
+ * `userdata` is the pointer given to mobius_register_function or
+ * mobius_stack_pushFunction (NULL for plugin functions and built-ins).
+ *
  * On error, call mobius_error() and return its result (always negative).
  */
-typedef int (*MobiusCFunction)(MobiusState* state, int arg_count);
+typedef int (*MobiusCFunction)(MobiusState* state, int arg_count, void* userdata);
 
 /**
  * Report an error from a native function.
@@ -380,11 +383,10 @@ MOBIUS_API void mobius_set_userdata_type_metatable(MobiusState* state,
  * the built-in functions: scripts can't reassign it, and spawned fibers can
  * call it. Registering the same name again replaces the function.
  *
- * `userdata` is handed back by mobius_function_userdata() while the
- * function runs, so one C function can serve many registrations: a C++
- * member function through a static trampoline, or a language binding's
- * single dispatcher. It may be NULL. Functions with different userdata are
- * different values to scripts.
+ * `userdata` is passed to the function on every call, so one C function
+ * can serve many registrations: a C++ member function through a static
+ * trampoline, or a language binding's single dispatcher. It may be NULL.
+ * Functions with different userdata are different values to scripts.
  *
  * A registered function stays on its thread while it runs. If it calls
  * back into a script, that script may sleep or do I/O (blocking the
@@ -401,11 +403,6 @@ MOBIUS_API void mobius_register_function(MobiusState* state, const char* name,
 MOBIUS_API void mobius_stack_pushFunction(MobiusState* state, MobiusCFunction func,
                                          void* userdata);
 
-/**
- * The userdata of the registered function currently running (NULL outside
- * one, or in a built-in).
- */
-MOBIUS_API void* mobius_function_userdata(MobiusState* state);
 
 /**
  * Pop the table on top of the stack and make it importable as `name`
@@ -419,7 +416,7 @@ MOBIUS_API int mobius_register_module(MobiusState* state, const char* name);
 /*  Plugin registration structs                                            */
 /* ====================================================================== */
 
-#define MOBIUS_PLUGIN_API_VERSION 1
+#define MOBIUS_PLUGIN_API_VERSION 2   /* 2: native functions receive userdata */
 
 #ifndef _WIN32
 #define MOBIUS_PLUGIN_EXPORT __attribute__((visibility("default")))

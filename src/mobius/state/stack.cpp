@@ -1201,13 +1201,6 @@ void mobius_stack_pushFunction(MobiusState* state, MobiusCFunction func, void* u
     stack_push(state, host_function_value(state, func, userdata));
 }
 
-void* mobius_function_userdata(MobiusState* state) {
-    if (!state) return nullptr;
-    MobiusVM* vm = state->activeVM();
-    if (!vm) vm = state->mainVM();
-    return vm ? vm->current_host_userdata_ : nullptr;
-}
-
 void mobius_register_function(MobiusState* state, const char* name,
                               MobiusCFunction func, void* userdata) {
     if (!state || !name || !func) return;

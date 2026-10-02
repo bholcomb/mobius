@@ -16,7 +16,7 @@
 // UNIFIED CORE FUNCTION IMPLEMENTATIONS
 // =============================================================================
 
-int lib_print(MobiusState* state, int arg_count) {
+int lib_print(MobiusState* state, int arg_count, void* /*userdata*/) {
     // The whole line is built first and written in one piece: through the
     // host's output handler if it set one, and never interleaved with
     // another fiber's print.
@@ -57,7 +57,7 @@ int lib_print(MobiusState* state, int arg_count) {
     return 0;
 }
 
-int lib_typeof(MobiusState* state, int arg_count) {
+int lib_typeof(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("typeof expects 1 argument");
     }
@@ -89,7 +89,7 @@ static bool whole_string_number(const MobiusString* s, const char* end) {
            end == s->data + s->length;
 }
 
-int lib_int(MobiusState* state, int arg_count) {
+int lib_int(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("int expects 1 argument");
     }
@@ -151,7 +151,7 @@ int lib_int(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_float(MobiusState* state, int arg_count) {
+int lib_float(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("float expects 1 argument");
     }
@@ -189,7 +189,7 @@ int lib_float(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_exit(MobiusState* state, int arg_count) {
+int lib_exit(MobiusState* state, int arg_count, void* /*userdata*/) {
     int exit_code = 0;
     if (arg_count > 1) {
         return state->error("exit expects 0 or 1 arguments");
@@ -211,7 +211,7 @@ int lib_exit(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_str(MobiusState* state, int arg_count) {
+int lib_str(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("str expects 1 argument");
     }
@@ -242,14 +242,14 @@ int lib_str(MobiusState* state, int arg_count) {
 // Introspection for the tracing-GC work: number of tracked heap objects
 // (tables, arrays, closures, upvalues). Used by tests to verify object
 // lifetimes; not a public API.
-int lib_gc_objects(MobiusState* state, int arg_count) {
+int lib_gc_objects(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     state->npush(make_int64_value((int64_t)gc_tracked_count(state->gcHeap())));
     return 1;
 }
 
 // Force a shadow-GC verification pass (test hook; requires MOBIUS_GC_SHADOW).
-int lib_gc_verify(MobiusState* state, int arg_count) {
+int lib_gc_verify(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     MobiusVM* vm = state->activeVM();
     // Called from a native, so the caller's native frame is in flight; the
@@ -267,7 +267,7 @@ int lib_gc_verify(MobiusState* state, int arg_count) {
 }
 
 // Force a full collection; returns objects freed (test hook).
-int lib_gc_collect(MobiusState* state, int arg_count) {
+int lib_gc_collect(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     MobiusVM* vm = state->activeVM();
     int64_t freed = 0;

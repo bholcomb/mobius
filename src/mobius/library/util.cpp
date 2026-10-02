@@ -24,7 +24,7 @@ static uint64_t random_below(MobiusState* state, uint64_t range) {
     }
 }
 
-int lib_random(MobiusState* state, int arg_count) {
+int lib_random(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count > 2) {
         return state->error("random expects 0, 1, or 2 arguments");
     }
@@ -68,7 +68,7 @@ int lib_random(MobiusState* state, int arg_count) {
     }
 }
 
-int lib_clock(MobiusState* state, int arg_count) {
+int lib_clock(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return state->error("clock expects no arguments");
     }
@@ -78,7 +78,7 @@ int lib_clock(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_load(MobiusState* state, int arg_count) {
+int lib_load(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("load expects exactly 1 argument (filename)");
     }
@@ -120,7 +120,7 @@ int lib_load(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_randomseed(MobiusState* state, int arg_count) {
+int lib_randomseed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("randomseed expects exactly 1 argument");
     }
@@ -136,7 +136,7 @@ int lib_randomseed(MobiusState* state, int arg_count) {
     return 0;
 }
 
-int lib_isnan(MobiusState* state, int arg_count) {
+int lib_isnan(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("isnan expects 1 argument");
     Value arg = state->npeek(0);
     state->npop();
@@ -146,7 +146,7 @@ int lib_isnan(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_isinf(MobiusState* state, int arg_count) {
+int lib_isinf(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("isinf expects 1 argument");
     Value arg = state->npeek(0);
     state->npop();
@@ -156,7 +156,7 @@ int lib_isinf(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_isfinite(MobiusState* state, int arg_count) {
+int lib_isfinite(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("isfinite expects 1 argument");
     Value arg = state->npeek(0);
     state->npop();
@@ -166,7 +166,7 @@ int lib_isfinite(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_id(MobiusState* state, int arg_count) {
+int lib_id(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("id() expects exactly 1 argument");
     }
@@ -198,7 +198,7 @@ int lib_id(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_time(MobiusState* state, int arg_count) {
+int lib_time(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return state->error("time expects no arguments");
     }
