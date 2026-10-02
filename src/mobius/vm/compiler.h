@@ -74,6 +74,16 @@ private:
         // must emit one OP_TRY_END per crossed region, or the VM keeps a
         // stale handler that hijacks a later unrelated throw.
         int open_trys = 0;
+
+        // Enclosing try statements with a finally body, innermost last.
+        // `return`, `break` and `continue` that leave one run its finally
+        // body inline first (see emitFinallyExits).
+        struct FinallyContext {
+            Stmt** body;
+            size_t count;
+            int open_trys_outside;   // open_trys outside the try statement
+        };
+        std::vector<FinallyContext> finallys;
     };
 
     FunctionState* current_;
@@ -247,6 +257,7 @@ private:
     bool constantValueOf(Expr* e, Value* out);
     bool writesDestBeforeOperands(Expr* e);
     void closeLoopLocals(const LoopContext& loop);
+    void emitFinallyExits(int stop_open_trys);
     void checkSpawnedFunction(Expr* callee);
     // Prototypes of readonly global functions, by name, for resolving direct
     // calls to a global function from inside another function. Only functions

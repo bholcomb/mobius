@@ -3388,24 +3388,31 @@ void Compiler::compileReturnStmt(ReturnStmt* stmt) {
         // a tail call replaces the frame, which would leave the handler's
         // catch_ip pointing into the replaced function's code. Fall through
         // to the plain call + TRY_END + RETURN path instead.
-        if (stmt->value->type == EXPR_CALL && current_->open_trys == 0) {
+        if (stmt->value->type == EXPR_CALL && current_->open_trys == 0 &&
+            current_->finallys.empty()) {
             compileTailCall(&stmt->value->as.call);
             return;
         }
 
         int save = current_->free_reg;
         int reg = compileExpr(stmt->value);
+        if (!current_->finallys.empty()) {
+            // The value is fixed before finally runs: copy it out of a
+            // local's register so a finally body that assigns the local
+            // doesn't change what is returned.
+            int tmp = allocReg();
+            emitABC(OP_MOVE, (uint8_t)tmp, (uint8_t)reg, 0);
+            reg = tmp;
+        }
         // The return expression is evaluated with the handlers still armed
         // (so `try { return risky() } catch ...` catches); pop them only on
-        // the way out.
-        for (int i = 0; i < current_->open_trys; i++)
-            emitABC(OP_TRY_END, 0, 0, 0);
-        emitReturn(reg, 1);
+        // the way out, running finally bodies.
+        emitFinallyExits(0);
+        if (!unreachable_) emitReturn(reg, 1);
         setFreeReg(save);
     } else {
-        for (int i = 0; i < current_->open_trys; i++)
-            emitABC(OP_TRY_END, 0, 0, 0);
-        emitReturn(0, 0);
+        emitFinallyExits(0);
+        if (!unreachable_) emitReturn(0, 0);
     }
 }
 
@@ -3790,8 +3797,7 @@ void Compiler::compileBreakStmt() {
     }
     // Pop handlers for try regions entered inside the loop that this break
     // is jumping out of.
-    for (int i = current_->loops.back().open_trys_at_entry; i < current_->open_trys; i++)
-        emitABC(OP_TRY_END, 0, 0, 0);
+    emitFinallyExits(current_->loops.back().open_trys_at_entry);
     closeLoopLocals(current_->loops.back());
     int jmp = emitJump();
     current_->loops.back().break_jumps.push_back(jmp);
@@ -3818,8 +3824,7 @@ void Compiler::compileContinueStmt() {
 
     // Pop handlers for try regions entered inside the loop body; the next
     // iteration re-arms them via its own TRY_BEGIN.
-    for (int i = loop.open_trys_at_entry; i < current_->open_trys; i++)
-        emitABC(OP_TRY_END, 0, 0, 0);
+    emitFinallyExits(loop.open_trys_at_entry);
     closeLoopLocals(loop);
 
     if (loop.is_for_loop) {
@@ -4765,6 +4770,18 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
     int save = current_->free_reg;
     int catch_var_reg = addLocal(stmt->catch_var.identifier);
 
+    // finally always runs. Normal completion of try or catch falls into it
+    // below; return/break/continue run it inline (emitFinallyExits); and a
+    // throw out of the catch body lands in a guard handler that runs it and
+    // rethrows. The guard catches into a hidden local (the name is not an
+    // interned identifier, so no user variable can resolve to it).
+    bool has_finally = stmt->finally_body && stmt->finally_body_count > 0;
+    int rethrow_reg = has_finally ? addLocal("(finally)") : -1;
+    if (has_finally) {
+        current_->finallys.push_back(
+            {stmt->finally_body, stmt->finally_body_count, current_->open_trys});
+    }
+
     int try_begin_pc = emitAsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, 0);
 
     current_->open_trys++;
@@ -4786,22 +4803,81 @@ void Compiler::compileTryCatchStmt(TryCatchStmt* stmt) {
     int offset = catch_target - (try_begin_pc + 1);
     current_->proto->code[try_begin_pc] = ENCODE_AsBx(OP_TRY_BEGIN, (uint8_t)catch_var_reg, offset);
 
+    int guard_pc = -1;
+    if (has_finally) {
+        guard_pc = emitAsBx(OP_TRY_BEGIN, (uint8_t)rethrow_reg, 0);
+        current_->open_trys++;
+    }
+
     unreachable_ = false;
     beginScope();
     compileBlock(stmt->catch_body, stmt->catch_body_count);
     endScope();
     bool catch_unreachable = unreachable_;
 
-    patchJump(jmp_past_catch);
+    int jmp_past_guard = -1;
+    if (has_finally) {
+        emitABC(OP_TRY_END, 0, 0, 0);
+        current_->open_trys--;
+        current_->finallys.pop_back();
+        jmp_past_guard = emitJump();
 
-    if (stmt->finally_body && stmt->finally_body_count > 0) {
+        // The catch body threw: run finally, then rethrow.
+        int pad = (int)current_->proto->code.size();
+        current_->proto->code[guard_pc] =
+            ENCODE_AsBx(OP_TRY_BEGIN, (uint8_t)rethrow_reg, pad - (guard_pc + 1));
         unreachable_ = false;
+        beginScope();
         compileBlock(stmt->finally_body, stmt->finally_body_count);
+        endScope();
+        if (!unreachable_) emitABC(OP_THROW, (uint8_t)rethrow_reg, 0, 0);
     }
 
-    unreachable_ = try_unreachable && catch_unreachable;
+    patchJump(jmp_past_catch);
+    if (jmp_past_guard >= 0) patchJump(jmp_past_guard);
+
+    bool finally_unreachable = false;
+    if (has_finally) {
+        unreachable_ = false;
+        beginScope();
+        compileBlock(stmt->finally_body, stmt->finally_body_count);
+        endScope();
+        finally_unreachable = unreachable_;
+    }
+
+    unreachable_ = (try_unreachable && catch_unreachable) || finally_unreachable;
     endScope();
     setFreeReg(save);
+}
+
+// Leaving try statements early (return, break, continue): pop the handlers
+// of the try regions being exited and run the finally body of each one that
+// has it, innermost first, down to stop_open_trys handlers. Each finally
+// body runs with only the handlers and finally contexts outside its own try
+// statement, so a return or throw inside it behaves as it would there.
+void Compiler::emitFinallyExits(int stop_open_trys) {
+    int level = current_->open_trys;
+    std::vector<FunctionState::FinallyContext> saved = current_->finallys;
+    for (int i = (int)saved.size() - 1; i >= 0; i--) {
+        const auto& ctx = saved[i];
+        if (ctx.open_trys_outside < stop_open_trys) break;
+        for (; level > ctx.open_trys_outside; level--) emitABC(OP_TRY_END, 0, 0, 0);
+
+        int saved_open = current_->open_trys;
+        bool saved_unreachable = unreachable_;
+        int saved_line = currentLine_;
+        current_->open_trys = ctx.open_trys_outside;
+        current_->finallys.assign(saved.begin(), saved.begin() + i);
+        unreachable_ = false;
+        beginScope();
+        compileBlock(ctx.body, ctx.count);
+        endScope();
+        current_->open_trys = saved_open;
+        current_->finallys = saved;
+        unreachable_ = saved_unreachable;
+        currentLine_ = saved_line;
+    }
+    for (; level > stop_open_trys; level--) emitABC(OP_TRY_END, 0, 0, 0);
 }
 
 // --- Throw ---

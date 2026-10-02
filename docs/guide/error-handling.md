@@ -25,8 +25,10 @@ func parse_port(s) {
 ## try / catch / finally
 
 A `try` block must be followed by a `catch` clause that names a variable to hold
-the thrown value. A `finally` block is optional and always runs — whether the
-`try` completed normally or an exception was caught.
+the thrown value. A `finally` block is optional and always runs, however the
+statement is left: `try` or `catch` completing normally, a `return`, `break` or
+`continue` out of either, or a `throw` out of `catch` (finally runs, then the
+exception keeps propagating).
 
 ```mobius
 try {
@@ -63,6 +65,21 @@ try {
 }
 print(order)    // ["try", "catch", "finally"]
 ```
+
+A `return` inside `try` or `catch` computes its value first, then runs
+`finally`, then returns. Assigning to the returned variable in `finally` does not
+change the result, but a `return` in `finally` replaces it:
+
+```mobius
+func f() {
+    var x = 1
+    try { return x } catch e { } finally { x = 2 }
+}
+print(f())      // 1
+```
+
+When a `return`, `break` or `continue` leaves several nested `try` statements,
+their `finally` blocks run innermost first.
 
 ### Nesting and re-throwing
 
