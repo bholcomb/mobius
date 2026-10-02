@@ -2619,10 +2619,17 @@ MOBIUS_FORCEINLINE static int vm_op_typelock(MobiusVM* vm, VMFrame& f, uint32_t 
     return 0;
 }
 
+// The type a TYPECHECK_LOCKED word checks against: compile-time type B - 1,
+// or the register's runtime tag when B is 0.
+MOBIUS_FORCEINLINE static ValueType locked_type(const VMFrame& f, uint32_t check) {
+    int b = DECODE_B(check);
+    return b ? (ValueType)(b - 1) : f.tags[DECODE_A(check)];
+}
+
 MOBIUS_FORCEINLINE static int vm_op_typecheck_locked(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     uint8_t a = DECODE_A(inst);
     const Value& val = f.regs[a];
-    ValueType tag = f.tags[a];
+    ValueType tag = locked_type(f, inst);
     if (tag == VAL_UNKNOWN) {
         if (val.type != VAL_NIL) {
             f.tags[a] = val.type;
@@ -2651,7 +2658,7 @@ MOBIUS_FORCEINLINE static int vm_op_add_check(MobiusVM* vm, VMFrame& f, uint32_t
         const Value& rhs = f.regs[c];
         if (MOBIUS_LIKELY(lhs.type == VAL_INT64 && rhs.type == VAL_INT64)) {
             int a = DECODE_A(inst);
-            ValueType tag = f.tags[DECODE_A(inst2)];
+            ValueType tag = locked_type(f, inst2);
             if (MOBIUS_LIKELY(tag == VAL_INT64 || tag == VAL_UNKNOWN)) {
                 int64_t r = lhs.as.i64 + rhs.as.i64;
                 Value& dst = f.regs[a];
@@ -2685,7 +2692,7 @@ MOBIUS_FORCEINLINE static int vm_op_aget_add_check(MobiusVM* vm, VMFrame& f, uin
         if (MOBIUS_LIKELY(idx_v.type == VAL_INT64 &&
                           idx_v.as.i64 >= 0 && idx_v.as.i64 < (int64_t)arr->length())) {
             const Value& elem = arr->unsafeGet((size_t)idx_v.as.i64);
-            ValueType tag = f.tags[DECODE_A(inst3)];
+            ValueType tag = locked_type(f, inst3);
             if (MOBIUS_LIKELY(elem.type == VAL_INT64 &&
                               (tag == VAL_INT64 || tag == VAL_UNKNOWN))) {
                 sum.as.i64 += elem.as.i64;

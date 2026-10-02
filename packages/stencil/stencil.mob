@@ -1756,10 +1756,11 @@ func __render_use(ctx, node, out) {
     var component = __find_component(ctx, node)
     var args = {}
     if (node.args != nil) {
-        args = __plain(__eval(ctx, node.args))
-        if (typeof(args) != "table") {
-            __fail(node.args, "component arguments must be a table, e.g. " + node.name + "({ key: value }), got " + typeof(args))
+        var given = __plain(__eval(ctx, node.args))
+        if (typeof(given) != "table") {
+            __fail(node.args, "component arguments must be a table, e.g. " + node.name + "({ key: value }), got " + typeof(given))
         }
+        args = given
     }
     var params = {}
     for (var i = 0; i < size(component.params); i++) {

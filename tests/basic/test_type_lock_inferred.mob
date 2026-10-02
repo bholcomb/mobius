@@ -1,0 +1,47 @@
+// A local whose type the compiler inferred from its initializer is locked
+// to that type at runtime as well. The runtime check used the register's
+// tag, which only declarations of unknown type set: an inferred local had
+// either no tag (any type was accepted, and integer fast paths then read a
+// float's bits) or a stale tag from an earlier local in the same register
+// (a false type error).
+func opaque(x) { return x }
+
+func check(name, cond) {
+    if (!cond) {
+        print("FAIL: " + name)
+        exit(1)
+    }
+}
+
+// A float from an untyped source cannot go into an int64 local.
+func float_into_int() {
+    var n = 1
+    try {
+        n = opaque(1.5)
+        return "accepted " + str(n)
+    } catch e {
+        return "rejected"
+    }
+}
+check("inferred int64 lock enforced", float_into_int() == "rejected")
+
+// A stale tag from an earlier local in the same register is ignored.
+func reuse() {
+    if (true) {
+        var t = opaque({})          // unknown type: locked by its tag (table)
+        t = opaque({x: 1})
+    }
+    var flag = false            // inferred bool, may reuse t's register
+    flag = opaque(true)
+    return flag
+}
+check("no stale lock from an earlier local", reuse() == true)
+
+// nil is still allowed in any locked variable.
+func nil_ok() {
+    var n = 5
+    n = opaque(nil)
+    return n == nil
+}
+check("nil allowed", nil_ok())
+print("inferred type locks: PASS")
