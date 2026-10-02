@@ -19,6 +19,11 @@
 // ============================================================================
 
 struct GcHeap;
+
+// Pause/abort hint for the VM's safe points (see MobiusState::runControl).
+extern volatile bool g_vm_interrupt;
+// The error message of an execution stopped by mobius_abort.
+extern const char* const kAbortedMessage;
 class MobiusState;
 class ModuleRegistry;
 class Metamethods;
@@ -235,6 +240,21 @@ public:
     // exit(code) from a script: the host's handler, or a warning.
     void requestExit(int code);
 
+    // Pause / abort control (mobius_pause, mobius_abort, time limits).
+    // Set flags make every VM safe point of this state take the slow path
+    // (vm_interrupt_point) through the process-wide hint g_vm_interrupt.
+    enum : int { RUN_PAUSE = 1, RUN_ABORT = 2 };
+    int runControl() const { return run_control_.load(std::memory_order_acquire); }
+    bool abortRequested() const { return (runControl() & RUN_ABORT) != 0; }
+    void requestPause();
+    void requestAbort();
+    void setTimeLimit(unsigned int ms) { time_limit_ms_ = ms; }
+    bool hasPausedExecution() const { return paused_execution_; }
+    int resumeExecution();
+    int abortExecution();
+    // Called from the reactor thread when a time limit runs out.
+    void timeLimitExpired();
+
     // Sandbox (mobius_sandbox) and the host's file system.
     void setSandbox(unsigned int allow) { sandboxed_ = true; sandbox_allow_ = allow; }
     bool sandboxed() const { return sandboxed_; }
@@ -394,6 +414,17 @@ private:
 
     MobiusErrorHandler error_handler_;
     void* error_handler_userdata_;
+    std::atomic<int> run_control_{0};
+    unsigned int time_limit_ms_ = 0;
+    uint64_t time_limit_timer_ = 0;
+    std::atomic<bool> time_limit_hit_{false};
+    bool paused_execution_ = false;
+    void setRunControl(int bits);
+    void clearRunControl(int bits);
+    void startTimeLimit();
+    void stopTimeLimit();
+    int finishExecution(int vm_result);
+    void drainAbortedFibers();
     bool sandboxed_ = false;
     unsigned int sandbox_allow_ = 0;
     bool has_file_system_ = false;

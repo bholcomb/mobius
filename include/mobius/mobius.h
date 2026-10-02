@@ -63,6 +63,9 @@ typedef struct MobiusState MobiusState;
 #define MOBIUS_ERROR_MEMORY     5
 #define MOBIUS_ERROR_FILE       6
 #define MOBIUS_ERROR_PLUGIN     7
+#define MOBIUS_ERROR_BUSY       8   /* a paused execution must be resumed or aborted first */
+#define MOBIUS_ERROR_ABORTED    9   /* mobius_abort stopped the execution */
+#define MOBIUS_PAUSED          10   /* not an error: paused, continue with mobius_resume */
 
 /* ====================================================================== */
 /*  Configuration                                                          */
@@ -325,6 +328,50 @@ MOBIUS_API void mobius_file_set_error(MobiusFileRequest* request,
  * Calling it again changes `allow`.
  */
 MOBIUS_API void mobius_sandbox(MobiusState* state, unsigned int allow);
+
+/* ====================================================================== */
+/*  Pausing, time limits and abort                                         */
+/* ====================================================================== */
+
+/**
+ * Give each mobius_exec_string / mobius_exec_file / mobius_resume call at
+ * most `milliseconds` of running time (0, the default: no limit). When it
+ * runs out, the script and all its fibers pause at their next safe point
+ * (a loop iteration or a function call), the call returns MOBIUS_PAUSED,
+ * and a warning goes to the state's error output. A pause waits while a
+ * host function is running inside the script.
+ */
+MOBIUS_API void mobius_set_time_limit(MobiusState* state, unsigned int milliseconds);
+
+/**
+ * Ask the state to pause at its next safe point (any thread). The running
+ * exec/resume call returns MOBIUS_PAUSED. Fibers left running in the
+ * background by an earlier call pause too.
+ */
+MOBIUS_API void mobius_pause(MobiusState* state);
+
+/**
+ * Continue a paused execution. Returns MOBIUS_OK when it finishes, an
+ * error code if it fails, or MOBIUS_PAUSED if it pauses again. Without a
+ * paused execution, lets paused background fibers run and returns
+ * MOBIUS_OK. While an execution is paused, the state accepts only
+ * mobius_resume and mobius_abort; other exec calls return
+ * MOBIUS_ERROR_BUSY.
+ */
+MOBIUS_API int mobius_resume(MobiusState* state);
+
+/**
+ * Stop the state's execution and every fiber, at their next safe point or
+ * wait. Scripts can't catch it, and finally blocks don't run. A paused
+ * execution is discarded on the calling thread before this returns; a
+ * running one (on another thread) returns MOBIUS_ERROR_ABORTED from its
+ * exec call. The state stays usable: globals keep what was assigned
+ * before the abort.
+ */
+MOBIUS_API int mobius_abort(MobiusState* state);
+
+/** 1 if the state has a paused execution, else 0. */
+MOBIUS_API int mobius_is_paused(MobiusState* state);
 
 /* ====================================================================== */
 /*  Lifecycle                                                              */

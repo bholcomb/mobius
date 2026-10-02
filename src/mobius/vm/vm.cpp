@@ -2709,11 +2709,44 @@ MOBIUS_FORCEINLINE static int vm_op_modi(MobiusVM* vm, VMFrame& f, uint32_t inst
     return 0;
 }
 
+// ---- Safe points for pause / abort ----
+
+// The slow path of a safe point, taken only while some state has a pause or
+// abort requested (g_vm_interrupt). Callers sync f.ci->ip first. Returns 0
+// to continue (possibly after being paused and resumed) or -1 with the
+// abort error raised.
+MOBIUS_NOINLINE static int vm_interrupt_point(MobiusVM* vm) {
+    MobiusState* state = vm->state_;
+    for (;;) {
+        int control = state->runControl();
+        if (control & MobiusState::RUN_ABORT) {
+            vm->runtimeError("%s", kAbortedMessage);
+            return -1;
+        }
+        if (!(control & MobiusState::RUN_PAUSE)) return 0;
+        // Not inside a host (native) function: its frames would be
+        // suspended along with the script's. It pauses once back here.
+        JobSystem* js = state->jobSystem();
+        if (vm->native_depth_ > 0 || !js || !js->currentFiber()) return 0;
+        js->yieldFiber();   // held in the ready queue until the state resumes
+    }
+}
+
+// Loop back-edges and calls: one global load while nothing is requested.
+#define VM_SAFE_POINT(vm, f) \
+    do { \
+        if (MOBIUS_UNLIKELY(g_vm_interrupt)) { \
+            f.ci->ip = f.ip; \
+            if (vm_interrupt_point(vm) < 0) return -1; \
+        } \
+    } while (0)
+
 // ---- Jumps ----
 
 MOBIUS_FORCEINLINE static int vm_op_jmp(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm;
-    f.ip += DECODE_sBx_wide(inst);
+    int offset = DECODE_sBx_wide(inst);
+    f.ip += offset;
+    if (offset < 0) VM_SAFE_POINT(vm, f);   // a loop's back-edge
     return 0;
 }
 
@@ -3079,6 +3112,7 @@ MOBIUS_FORCEINLINE static int vm_op_iforloop(MobiusVM* vm, VMFrame& f, uint32_t 
         f.ip += DECODE_sBx(inst);
         f.regs[a + 3].as.i64 = iv;
         f.regs[a + 3].type = VAL_INT64;
+        VM_SAFE_POINT(vm, f);
     }
     return 0;
 }
@@ -4217,6 +4251,10 @@ MOBIUS_FORCEINLINE static int vm_op_await(MobiusVM* vm, VMFrame& f, uint32_t ins
             VM_ERROR(vm, f, "CancellationError: fiber was cancelled");
             return -1;
         }
+        if (MOBIUS_UNLIKELY(vm->state_->abortRequested())) {
+            VM_ERROR(vm, f, "%s", kAbortedMessage);
+            return -1;
+        }
         if (MOBIUS_UNLIKELY(wait.deadlocked())) {
             VM_ERROR(vm, f, "%s", js->fiberLimitDeadlockMessage().c_str());
             return -1;
@@ -4358,6 +4396,9 @@ MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // ============================================================================
 
 MOBIUS_NOINLINE int MobiusVM::handleHandlerError(size_t base_depth) {
+    // An abort can't be caught (and skips finally blocks, which are
+    // handlers too).
+    if (MOBIUS_UNLIKELY(state_->abortRequested())) return -1;
     if (!try_stack_.empty() &&
         try_stack_.back().call_stack_depth > base_depth) {
         TryBlock& tb = try_stack_.back();

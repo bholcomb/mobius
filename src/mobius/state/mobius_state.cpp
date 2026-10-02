@@ -19,6 +19,7 @@
 #include "data/metamethods.h"
 #include "plugin/module_registry.h"
 #include "fiber/job_system.h"
+#include "fiber/io_reactor.h"
 #include "repl.h"
 #include "util/utility.h"
 #include "util/file_io.h"
@@ -1054,6 +1055,13 @@ int MobiusState::execString(const char* code) {
 int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* env) {
     if (!code) return MOBIUS_ERROR_ARGUMENT;
 
+    if (paused_execution_ && !(job_system_ && job_system_->currentFiber())) {
+        setError(MOBIUS_ERROR_BUSY,
+                 "The state has a paused execution: call mobius_resume or mobius_abort first",
+                 nullptr, 0, 0, nullptr);
+        return MOBIUS_ERROR_BUSY;
+    }
+
     clearErrorInternal();
 
     // Parse and compile errors are collected, then reported through the
@@ -1112,13 +1120,23 @@ int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* en
 
     addOwnedProto(proto);
 
-    int rc = main_vm_->execute(proto);
-
-    if (rc != 0) {
-        reportEscapedError();
-        return MOBIUS_ERROR_RUNTIME;
+    // A host-level execution (not a load or import inside a running
+    // script) can be paused, time-limited and aborted.
+    bool host_level = !(job_system_ && job_system_->currentFiber());
+    if (!host_level) {
+        int rc = main_vm_->execute(proto);
+        if (rc != 0) {
+            reportEscapedError();
+            return MOBIUS_ERROR_RUNTIME;
+        }
+        return MOBIUS_OK;
     }
-    return MOBIUS_OK;
+    clearRunControl(RUN_PAUSE);   // a pause requested while idle ends here
+    if (job_system_) job_system_->setPaused(false);
+    startTimeLimit();
+    int rc = main_vm_->execute(proto);
+    stopTimeLimit();
+    return finishExecution(rc);
 }
 
 int MobiusState::execFile(const char* filename) {
@@ -1213,6 +1231,8 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
 void MobiusState::reportError(InternalError* err) {
     if (!err || err->reported) return;
     err->reported = true;
+    // The host asked for the abort: no error to report.
+    if (abortRequested() || (err->message && strcmp(err->message, kAbortedMessage) == 0)) return;
     if (!error_handler_) return;
     MobiusError pub_err;
     pub_err.code = err->code;
@@ -1285,6 +1305,127 @@ void MobiusState::writeOutput(int stream, const char* data, size_t length) {
     FILE* f = stream == MOBIUS_STDERR ? stderr : stdout;
     if (stream == MOBIUS_STDERR) fflush(stdout);   // keep the two in order on a terminal
     fwrite(data, 1, length, f);
+}
+
+// ============================================================================
+// PAUSE, TIME LIMITS, ABORT
+// ============================================================================
+
+// Set while any state has pause/abort requested: the VM's safe points test
+// this one global (as with g_gc_pending), and only then their own state.
+volatile bool g_vm_interrupt = false;
+static std::atomic<int> g_interrupting_states{0};
+
+const char* const kAbortedMessage = "Aborted: the host stopped this script";
+
+void MobiusState::setRunControl(int bits) {
+    int old = run_control_.fetch_or(bits, std::memory_order_acq_rel);
+    if (old == 0 && g_interrupting_states.fetch_add(1, std::memory_order_acq_rel) == 0)
+        g_vm_interrupt = true;
+}
+
+void MobiusState::clearRunControl(int bits) {
+    int old = run_control_.fetch_and(~bits, std::memory_order_acq_rel);
+    if (old != 0 && (old & ~bits) == 0 &&
+        g_interrupting_states.fetch_sub(1, std::memory_order_acq_rel) == 1)
+        g_vm_interrupt = false;
+}
+
+void MobiusState::requestPause() {
+    setRunControl(RUN_PAUSE);
+    if (job_system_) job_system_->setPaused(true);
+}
+
+void MobiusState::requestAbort() {
+    setRunControl(RUN_ABORT);
+    if (job_system_) {
+        job_system_->setPaused(false);              // let fibers reach their abort point
+        mobius_io_cancel_job_system(job_system_);   // and wake those waiting on I/O or timers
+    }
+}
+
+void MobiusState::timeLimitExpired() {
+    time_limit_hit_.store(true, std::memory_order_release);
+    requestPause();
+}
+
+static void time_limit_timer_cb(void* arg) {
+    static_cast<MobiusState*>(arg)->timeLimitExpired();
+}
+
+void MobiusState::startTimeLimit() {
+    time_limit_hit_.store(false, std::memory_order_relaxed);
+    if (time_limit_ms_ == 0) return;
+    time_limit_timer_ = mobius_io_add_timer(mobius_io_now_ms() + time_limit_ms_,
+                                            time_limit_timer_cb, this);
+}
+
+void MobiusState::stopTimeLimit() {
+    if (time_limit_timer_) mobius_io_cancel_timer(time_limit_timer_);
+    time_limit_timer_ = 0;
+}
+
+// Wait (running fibers on this thread if need be) until every fiber of an
+// aborted state has unwound, then lift the abort.
+void MobiusState::drainAbortedFibers() {
+    if (job_system_) job_system_->runUntilNoJobs();
+    clearRunControl(RUN_ABORT | RUN_PAUSE);
+    if (job_system_) job_system_->setPaused(false);
+}
+
+// The end of a host-level execution (exec, resume, abort): its result as
+// a public code.
+int MobiusState::finishExecution(int vm_result) {
+    if (vm_result == JobSystem::kMainPaused) {
+        paused_execution_ = true;
+        if (time_limit_hit_.load(std::memory_order_acquire)) {
+            char msg[128];
+            int n = snprintf(msg, sizeof(msg),
+                             "Warning: script ran past its %u ms time limit and was paused\n",
+                             time_limit_ms_);
+            if (n > 0) writeOutput(MOBIUS_STDERR, msg, (size_t)n);
+        }
+        return MOBIUS_PAUSED;
+    }
+    paused_execution_ = false;
+    if (abortRequested()) {
+        drainAbortedFibers();
+        clearErrorInternal();
+        return MOBIUS_ERROR_ABORTED;
+    }
+    // A pause requested too late to take effect doesn't carry over.
+    clearRunControl(RUN_PAUSE);
+    if (job_system_) job_system_->setPaused(false);
+    if (vm_result != 0) {
+        reportEscapedError();
+        return MOBIUS_ERROR_RUNTIME;
+    }
+    return MOBIUS_OK;
+}
+
+int MobiusState::resumeExecution() {
+    clearRunControl(RUN_PAUSE);
+    if (job_system_) job_system_->setPaused(false);
+    if (!paused_execution_) return MOBIUS_OK;
+    startTimeLimit();
+    int rc = job_system_->resumeMainFiber();
+    stopTimeLimit();
+    return finishExecution(rc);
+}
+
+int MobiusState::abortExecution() {
+    requestAbort();
+    if (paused_execution_) {
+        // Unwind the paused execution here, on the calling thread.
+        int rc = job_system_->resumeMainFiber();
+        finishExecution(rc);
+        return MOBIUS_OK;
+    }
+    // Running on another thread: its exec call finishes the abort. Idle:
+    // stop the background fibers now.
+    if (!job_system_ || job_system_->mainFiberPending()) return MOBIUS_OK;
+    drainAbortedFibers();
+    return MOBIUS_OK;
 }
 
 struct MobiusFileRequest {
@@ -1390,6 +1531,26 @@ void mobius_file_set_error(MobiusFileRequest* request, const char* message) {
 
 void mobius_sandbox(MobiusState* state, unsigned int allow) {
     if (state) state->setSandbox(allow);
+}
+
+void mobius_set_time_limit(MobiusState* state, unsigned int milliseconds) {
+    if (state) state->setTimeLimit(milliseconds);
+}
+
+void mobius_pause(MobiusState* state) {
+    if (state) state->requestPause();
+}
+
+int mobius_resume(MobiusState* state) {
+    return state ? state->resumeExecution() : MOBIUS_ERROR_ARGUMENT;
+}
+
+int mobius_abort(MobiusState* state) {
+    return state ? state->abortExecution() : MOBIUS_ERROR_ARGUMENT;
+}
+
+int mobius_is_paused(MobiusState* state) {
+    return state && state->hasPausedExecution() ? 1 : 0;
 }
 
 }
