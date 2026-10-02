@@ -5117,6 +5117,9 @@ void Compiler::checkSpawnedFunction(Expr* callee) {
 }
 
 int Compiler::compileSpawn(SpawnExpr* expr, int dest) {
+    // Without this the instruction carried the previous statement's line,
+    // so errors at a spawn or await pointed one statement early.
+    if (expr->line > 0) currentLine_ = expr->line;
     checkSpawnedFunction(expr->callee);
     int base = current_->free_reg;
     int func_reg = allocReg();
@@ -5145,6 +5148,7 @@ int Compiler::compileSpawn(SpawnExpr* expr, int dest) {
 
 // OP_AWAIT A B -- await future in R[B], result into R[A]
 int Compiler::compileAwait(AwaitExpr* expr, int dest) {
+    if (expr->line > 0) currentLine_ = expr->line;   // see compileSpawn
     int save = current_->free_reg;
     int operand_reg = compileExpr(expr->operand);
     // Never write the result over the operand register: when the operand is a

@@ -166,11 +166,13 @@ typedef struct {
     Expr* callee;
     Expr** arguments;
     size_t arg_count;
+    int line;   // line of the `spawn` keyword, for error locations
 } SpawnExpr;
 
 // await expression: await future_expr
 typedef struct {
     Expr* operand;
+    int line;   // line of the `await` keyword, for error locations
 } AwaitExpr;
 
 // shared expression: shared container_expr
