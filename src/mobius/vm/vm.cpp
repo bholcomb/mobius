@@ -2165,6 +2165,22 @@ MOBIUS_FORCEINLINE static int vm_op_bitwise(MobiusVM* vm, VMFrame& f, uint32_t i
     return 0;
 }
 
+MOBIUS_FORCEINLINE static int vm_op_band(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_bitwise(vm, f, inst, '&');
+}
+MOBIUS_FORCEINLINE static int vm_op_bor(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_bitwise(vm, f, inst, '|');
+}
+MOBIUS_FORCEINLINE static int vm_op_bxor(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_bitwise(vm, f, inst, '^');
+}
+MOBIUS_FORCEINLINE static int vm_op_shl(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_bitwise(vm, f, inst, '<');
+}
+MOBIUS_FORCEINLINE static int vm_op_shr(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    return vm_op_bitwise(vm, f, inst, '>');
+}
+
 MOBIUS_FORCEINLINE static int vm_op_bnot(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     Value val = shared_unwrap(RB(inst));
     if (val.type == VAL_UINT64) {
@@ -4305,11 +4321,14 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_UNM, vm_op_unm)
     VM_HANDLER(OP_NOT, vm_op_not)
 
-    VM_CASE(OP_BAND) { if (vm_op_bitwise(this, f, inst, '&') < 0) return -1; VM_NEXT(); }
-    VM_CASE(OP_BOR)  { if (vm_op_bitwise(this, f, inst, '|') < 0) return -1; VM_NEXT(); }
-    VM_CASE(OP_BXOR) { if (vm_op_bitwise(this, f, inst, '^') < 0) return -1; VM_NEXT(); }
-    VM_CASE(OP_SHL)  { if (vm_op_bitwise(this, f, inst, '<') < 0) return -1; VM_NEXT(); }
-    VM_CASE(OP_SHR)  { if (vm_op_bitwise(this, f, inst, '>') < 0) return -1; VM_NEXT(); }
+    // Through VM_HANDLER like every other instruction, so an error unwinds
+    // to an enclosing try. These cases returned straight out of run(),
+    // making `"s" | 1` inside try uncatchable.
+    VM_HANDLER(OP_BAND, vm_op_band)
+    VM_HANDLER(OP_BOR, vm_op_bor)
+    VM_HANDLER(OP_BXOR, vm_op_bxor)
+    VM_HANDLER(OP_SHL, vm_op_shl)
+    VM_HANDLER(OP_SHR, vm_op_shr)
     VM_HANDLER(OP_BNOT, vm_op_bnot)
 
     VM_HANDLER(OP_EQ, vm_op_eq)
