@@ -1,0 +1,12 @@
+// readfile reads until end of file instead of trusting the reported size.
+// Files under /proc report a size of 0 and read back empty. (Linux only;
+// elsewhere this test has nothing to check.)
+import "os"
+if (os.exists("/proc/self/statm")) {
+    var text = readfile("/proc/self/statm")
+    if (size(text) == 0 or size(split(text, " ")) < 2) {
+        print("FAIL: /proc/self/statm read back as '" + text + "'")
+        exit(1)
+    }
+}
+print("readfile of unsized files: PASS")
