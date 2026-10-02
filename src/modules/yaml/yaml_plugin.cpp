@@ -663,7 +663,7 @@ struct YamlSerializer {
 
 } // namespace
 
-static int yaml_parse(MobiusState* state, int arg_count) {
+static int yaml_parse(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "yaml.parse() expects 1 argument (string)");
     if (!mobius_stack_isString(state, -1))
@@ -681,7 +681,7 @@ static int yaml_parse(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int yaml_parsefile(MobiusState* state, int arg_count) {
+static int yaml_parsefile(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "yaml.parsefile() expects 1 argument (path)");
     if (!mobius_stack_isString(state, -1))
@@ -706,7 +706,7 @@ static int yaml_parsefile(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int yaml_stringify(MobiusState* state, int arg_count) {
+static int yaml_stringify(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "yaml.stringify() expects 1 argument");
 

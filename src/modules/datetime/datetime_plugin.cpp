@@ -152,7 +152,7 @@ static bool parse_fixed_digits(const char* text, size_t offset, size_t count, in
     return true;
 }
 
-static int datetime_now(MobiusState* state, int arg_count) {
+static int datetime_now(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     time_t now = ::time(nullptr);
     struct tm tm_value;
@@ -164,7 +164,7 @@ static int datetime_now(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int datetime_utc_now(MobiusState* state, int arg_count) {
+static int datetime_utc_now(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     time_t now = ::time(nullptr);
     struct tm tm_value;
@@ -176,7 +176,7 @@ static int datetime_utc_now(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int datetime_from_unix(MobiusState* state, int arg_count) {
+static int datetime_from_unix(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "datetime.from_unix() expects 1 argument");
     if (!mobius_stack_isNumber(state, -1))
@@ -192,7 +192,7 @@ static int datetime_from_unix(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int datetime_from_unix_utc(MobiusState* state, int arg_count) {
+static int datetime_from_unix_utc(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "datetime.from_unix_utc() expects 1 argument");
     if (!mobius_stack_isNumber(state, -1))
@@ -208,7 +208,7 @@ static int datetime_from_unix_utc(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int datetime_to_unix(MobiusState* state, int arg_count) {
+static int datetime_to_unix(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "datetime.to_unix() expects 1 argument");
     if (!mobius_stack_isTable(state, -1))
@@ -239,7 +239,7 @@ static int datetime_to_unix(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int datetime_format(MobiusState* state, int arg_count) {
+static int datetime_format(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "datetime.format() expects 2 arguments (format, value)");
     if (!mobius_stack_isString(state, -2))
@@ -278,7 +278,7 @@ static int datetime_format(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int datetime_isoformat(MobiusState* state, int arg_count) {
+static int datetime_isoformat(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "datetime.isoformat() expects 1 argument");
     if (!mobius_stack_isTable(state, -1))
@@ -307,7 +307,7 @@ static int datetime_isoformat(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int datetime_parse_iso(MobiusState* state, int arg_count) {
+static int datetime_parse_iso(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "datetime.parse_iso() expects 1 argument");
     if (!mobius_stack_isString(state, -1))

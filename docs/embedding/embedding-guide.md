@@ -368,8 +368,11 @@ To give a userdata type methods callable from scripts, register a
 A native function has the signature:
 
 ```c
-int my_function(MobiusState* state, int arg_count);
+int my_function(MobiusState* state, int arg_count, void* userdata);
 ```
+
+`userdata` is the pointer you registered the function with (below); built-in
+and plugin functions get `NULL`.
 
 Arguments are on the stack (last argument at `-1`). Read them, pop what you
 consume, push return values, and return the count pushed (`>= 0`). On error,
@@ -378,7 +381,7 @@ return `mobius_error()` (always negative).
 ```c
 #include <mobius/mobius_plugin.h>
 
-int native_square(MobiusState* state, int arg_count) {
+int native_square(MobiusState* state, int arg_count, void* userdata) {
     if (arg_count != 1)
         return mobius_error(state, "square() expects 1 argument");
     if (!mobius_stack_isNumber(state, -1))
@@ -403,10 +406,9 @@ nothing by returning `0`.
 
 ### Userdata: calling C++ member functions
 
-The last argument of `mobius_register_function` is a pointer the function
-gets back from `mobius_function_userdata(state)` while it runs (it may be
-`NULL`). Use it to reach an object, for example a C++ member function
-through a static trampoline:
+The last argument of `mobius_register_function` is passed to the function as
+its `userdata` on every call (it may be `NULL`). Use it to reach an object,
+for example a C++ member function through a static trampoline:
 
 ```cpp
 class World {
@@ -414,9 +416,8 @@ public:
     int spawnEnemy(MobiusState* state, int argc);   // reads args, pushes results
 };
 
-static int SpawnEnemy(MobiusState* state, int argc) {
-    auto* world = static_cast<World*>(mobius_function_userdata(state));
-    return world->spawnEnemy(state, argc);
+static int SpawnEnemy(MobiusState* state, int argc, void* userdata) {
+    return static_cast<World*>(userdata)->spawnEnemy(state, argc);
 }
 
 mobius_register_function(state, "spawn_enemy", SpawnEnemy, &world);
@@ -739,7 +740,7 @@ setmetatable(Proto, { __index: Base })   // Proto inherits from Base
 A method's receiver (`self`) arrives as the first argument on the native stack:
 
 ```c
-int native_array_sum(MobiusState* state, int arg_count) {
+int native_array_sum(MobiusState* state, int arg_count, void* userdata) {
     if (!mobius_stack_isArray(state, 1))
         return mobius_error(state, "sum() expects an array receiver");
     size_t len = mobius_stack_getArrayLength(state, 1);

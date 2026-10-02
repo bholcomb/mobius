@@ -628,7 +628,7 @@ static int json_parse_input(MobiusState* state, const char* input) {
 // json.parse(string) -> value
 // ============================================================================
 
-static int json_parse(MobiusState* state, int arg_count) {
+static int json_parse(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "json.parse() expects 1 argument (string)");
     if (!mobius_stack_isString(state, -1))
@@ -643,7 +643,7 @@ static int json_parse(MobiusState* state, int arg_count) {
 // json.parsefile(path) -> value
 // ============================================================================
 
-static int json_parsefile(MobiusState* state, int arg_count) {
+static int json_parsefile(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "json.parsefile() expects 1 argument (path)");
     if (!mobius_stack_isString(state, -1))
@@ -685,7 +685,7 @@ static int json_parsefile(MobiusState* state, int arg_count) {
 // json.stringify(value [, indent]) -> string
 // ============================================================================
 
-static int json_stringify(MobiusState* state, int arg_count) {
+static int json_stringify(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2)
         return mobius_error(state, "json.stringify() expects 1 or 2 arguments (value [, indent|options])");
 

@@ -12,7 +12,7 @@
 // Note: set_strict_types() and set_type_warnings() have been removed.
 // Use #pragma strict_types true/false instead.
 
-int lib_get_type_config(MobiusState* state, int arg_count) {
+int lib_get_type_config(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return state->error("get_type_config expects no arguments");
     }

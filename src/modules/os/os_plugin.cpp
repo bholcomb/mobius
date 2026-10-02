@@ -59,7 +59,7 @@
 // ENVIRONMENT VARIABLES
 // ============================================================================
 
-static int os_getenv(MobiusState* state, int arg_count) {
+static int os_getenv(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "getenv() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -72,7 +72,7 @@ static int os_getenv(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_setenv(MobiusState* state, int arg_count) {
+static int os_setenv(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "setenv() expects 2 arguments");
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2))
@@ -89,7 +89,7 @@ static int os_setenv(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_unsetenv(MobiusState* state, int arg_count) {
+static int os_unsetenv(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "unsetenv() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -109,7 +109,7 @@ static int os_unsetenv(MobiusState* state, int arg_count) {
 // WORKING DIRECTORY
 // ============================================================================
 
-static int os_getcwd(MobiusState* state, int arg_count) {
+static int os_getcwd(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     char buf[PATH_MAX];
 #ifdef _WIN32
@@ -124,7 +124,7 @@ static int os_getcwd(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_chdir(MobiusState* state, int arg_count) {
+static int os_chdir(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "chdir() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -146,7 +146,7 @@ static int os_chdir(MobiusState* state, int arg_count) {
 // SLEEP
 // ============================================================================
 
-static int os_sleep(MobiusState* state, int arg_count) {
+static int os_sleep(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "sleep() expects 1 argument");
     if (!mobius_stack_isNumber(state, -1))
@@ -330,7 +330,7 @@ static bool os_which_impl(const char* name, std::string& out) {
     return false;
 }
 
-static int os_system(MobiusState* state, int arg_count) {
+static int os_system(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "system() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -347,7 +347,7 @@ static int os_system(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_exec(MobiusState* state, int arg_count) {
+static int os_exec(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "exec() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -380,7 +380,7 @@ static int os_exec(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_getpid(MobiusState* state, int arg_count) {
+static int os_getpid(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
 #ifdef _WIN32
     mobius_stack_pushInt64(state, (int64_t)_getpid());
@@ -390,7 +390,7 @@ static int os_getpid(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_getppid(MobiusState* state, int arg_count) {
+static int os_getppid(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
 #ifdef _WIN32
     mobius_stack_pushNil(state);
@@ -400,7 +400,7 @@ static int os_getppid(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_hostname_fn(MobiusState* state, int arg_count) {
+static int os_hostname_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     std::string hostname;
     if (os_hostname(hostname)) mobius_stack_pushString(state, hostname.c_str());
@@ -408,7 +408,7 @@ static int os_hostname_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_executable(MobiusState* state, int arg_count) {
+static int os_executable(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     std::string path;
     if (os_current_executable(path)) mobius_stack_pushString(state, path.c_str());
@@ -416,7 +416,7 @@ static int os_executable(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_env(MobiusState* state, int arg_count) {
+static int os_env(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     mobius_stack_pushNewTable(state, 32);
     int tbl = mobius_stack_size(state) - 1;
@@ -449,7 +449,7 @@ static int os_env(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_which(MobiusState* state, int arg_count) {
+static int os_which(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "which() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -467,7 +467,7 @@ static int os_which(MobiusState* state, int arg_count) {
 // DIRECTORY OPERATIONS
 // ============================================================================
 
-static int os_listdir(MobiusState* state, int arg_count) {
+static int os_listdir(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "listdir() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -510,7 +510,7 @@ static int os_listdir(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_mkdir(MobiusState* state, int arg_count) {
+static int os_mkdir(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "mkdir() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -526,7 +526,7 @@ static int os_mkdir(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_rmdir(MobiusState* state, int arg_count) {
+static int os_rmdir(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "rmdir() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -546,7 +546,7 @@ static int os_rmdir(MobiusState* state, int arg_count) {
 // FILE OPERATIONS
 // ============================================================================
 
-static int os_remove(MobiusState* state, int arg_count) {
+static int os_remove(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "remove() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -558,7 +558,7 @@ static int os_remove(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_rename(MobiusState* state, int arg_count) {
+static int os_rename(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "rename() expects 2 arguments");
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2))
@@ -571,7 +571,7 @@ static int os_rename(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_cp(MobiusState* state, int arg_count) {
+static int os_cp(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "cp() expects 2 arguments");
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2))
@@ -603,7 +603,7 @@ static int os_cp(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_touch(MobiusState* state, int arg_count) {
+static int os_touch(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "touch() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -641,7 +641,7 @@ static int os_touch(MobiusState* state, int arg_count) {
 // FILE METADATA
 // ============================================================================
 
-static int os_stat(MobiusState* state, int arg_count) {
+static int os_stat(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "stat() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -711,7 +711,7 @@ static int os_stat(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_chmod(MobiusState* state, int arg_count) {
+static int os_chmod(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "chmod() expects 2 arguments");
     if (!mobius_stack_isInteger(state, -1))
@@ -730,7 +730,7 @@ static int os_chmod(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_filesize(MobiusState* state, int arg_count) {
+static int os_filesize(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "filesize() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -750,7 +750,7 @@ static int os_filesize(MobiusState* state, int arg_count) {
 // LINKS AND PATHS
 // ============================================================================
 
-static int os_link(MobiusState* state, int arg_count) {
+static int os_link(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "link() expects 2 arguments");
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2))
@@ -768,7 +768,7 @@ static int os_link(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_symlink(MobiusState* state, int arg_count) {
+static int os_symlink(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "symlink() expects 2 arguments");
     if (!mobius_stack_isString(state, -1) || !mobius_stack_isString(state, -2))
@@ -790,7 +790,7 @@ static int os_symlink(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_realpath(MobiusState* state, int arg_count) {
+static int os_realpath(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "realpath() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -820,7 +820,7 @@ static int os_realpath(MobiusState* state, int arg_count) {
 // TEMP FILES AND DIRECTORIES
 // ============================================================================
 
-static int os_tmpdir(MobiusState* state, int arg_count) {
+static int os_tmpdir(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
 #ifdef _WIN32
     char buf[PATH_MAX];
@@ -840,7 +840,7 @@ static int os_tmpdir(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_tmpfile(MobiusState* state, int arg_count) {
+static int os_tmpfile(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
 #ifdef _WIN32
     char tmp_dir[PATH_MAX];
@@ -871,7 +871,7 @@ static int os_tmpfile(MobiusState* state, int arg_count) {
 // GLOB AND DIRECTORY WALKING
 // ============================================================================
 
-static int os_glob(MobiusState* state, int arg_count) {
+static int os_glob(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "glob() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -954,7 +954,7 @@ static void walkdir_recurse(MobiusState* state, const char* base, int arr_idx) {
 }
 #endif
 
-static int os_walkdir(MobiusState* state, int arg_count) {
+static int os_walkdir(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "walkdir() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -976,7 +976,7 @@ static int os_walkdir(MobiusState* state, int arg_count) {
 // SYSTEM INFO
 // ============================================================================
 
-static int os_uname(MobiusState* state, int arg_count) {
+static int os_uname(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     mobius_stack_pushNewTable(state, 8);
     int tbl = mobius_stack_size(state) - 1;
@@ -1033,7 +1033,7 @@ static int os_uname(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_cpu_count(MobiusState* state, int arg_count) {
+static int os_cpu_count(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
 #ifdef _WIN32
     SYSTEM_INFO si;
@@ -1050,7 +1050,7 @@ static int os_cpu_count(MobiusState* state, int arg_count) {
 // DATETIME
 // ============================================================================
 
-static int os_gmtime(MobiusState* state, int arg_count) {
+static int os_gmtime(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "gmtime() expects 1 argument");
     if (!mobius_stack_isNumber(state, -1))
@@ -1088,7 +1088,7 @@ static int os_gmtime(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_localtime(MobiusState* state, int arg_count) {
+static int os_localtime(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "localtime() expects 1 argument");
     if (!mobius_stack_isNumber(state, -1))
@@ -1126,7 +1126,7 @@ static int os_localtime(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_strftime(MobiusState* state, int arg_count) {
+static int os_strftime(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "strftime() expects 2 arguments");
     if (!mobius_stack_isNumber(state, -1))
@@ -1152,7 +1152,7 @@ static int os_strftime(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_mktime(MobiusState* state, int arg_count) {
+static int os_mktime(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "mktime() expects 1 argument (table)");
     if (!mobius_stack_isTable(state, -1))
@@ -1198,7 +1198,7 @@ static int os_mktime(MobiusState* state, int arg_count) {
 // EXISTENCE CHECKS
 // ============================================================================
 
-static int os_exists(MobiusState* state, int arg_count) {
+static int os_exists(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "exists() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -1210,7 +1210,7 @@ static int os_exists(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_is_file(MobiusState* state, int arg_count) {
+static int os_is_file(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "is_file() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -1222,7 +1222,7 @@ static int os_is_file(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_is_dir(MobiusState* state, int arg_count) {
+static int os_is_dir(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "is_dir() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -1238,7 +1238,7 @@ static int os_is_dir(MobiusState* state, int arg_count) {
 // PATH UTILITIES
 // ============================================================================
 
-static int os_basename(MobiusState* state, int arg_count) {
+static int os_basename(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "basename() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -1264,7 +1264,7 @@ static int os_basename(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_dirname(MobiusState* state, int arg_count) {
+static int os_dirname(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "dirname() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -1296,7 +1296,7 @@ static int os_dirname(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_extname(MobiusState* state, int arg_count) {
+static int os_extname(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "extname() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -1317,7 +1317,7 @@ static int os_extname(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int os_join(MobiusState* state, int arg_count) {
+static int os_join(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1)
         return mobius_error(state, "join() expects at least 1 argument");
     for (int i = 1; i <= arg_count; i++) {
@@ -1399,7 +1399,7 @@ static bool mkdirp_impl(const char* path) {
 #endif
 }
 
-static int os_mkdirp(MobiusState* state, int arg_count) {
+static int os_mkdirp(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "mkdirp() expects 1 argument");
     if (!mobius_stack_isString(state, -1))
@@ -1414,7 +1414,7 @@ static int os_mkdirp(MobiusState* state, int arg_count) {
 // TIMESTAMP
 // ============================================================================
 
-static int os_time(MobiusState* state, int arg_count) {
+static int os_time(MobiusState* state, int arg_count, void* /*userdata*/) {
     (void)arg_count;
     mobius_stack_pushInt64(state, (int64_t)::time(nullptr));
     return 1;

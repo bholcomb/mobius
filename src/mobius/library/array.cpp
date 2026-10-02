@@ -69,7 +69,7 @@ static bool reject_frozen(MobiusState* state, ArrayValue* arr, const char* metho
 // GLOBAL: array_create(capacity [, fill_value])
 // =============================================================================
 
-int lib_array_create(MobiusState* state, int arg_count) {
+int lib_array_create(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) {
         return state->error("array_create expects 1 or 2 arguments (capacity [, fill_value])");
     }
@@ -121,7 +121,7 @@ int lib_array_create(MobiusState* state, int arg_count) {
 // METHOD-STYLE ARRAY FUNCTIONS (called via arr:method() with self at base)
 // =============================================================================
 
-int array_method_push(MobiusState* state, int arg_count) {
+int array_method_push(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:push expects 1 argument (value)");
 
     ArraySelfAccess access;
@@ -139,7 +139,7 @@ int array_method_push(MobiusState* state, int arg_count) {
     return 0;
 }
 
-int array_method_pop(MobiusState* state, int arg_count) {
+int array_method_pop(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("arr:pop expects 0 arguments");
 
     ArraySelfAccess access;
@@ -160,7 +160,7 @@ int array_method_pop(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_get(MobiusState* state, int arg_count) {
+int array_method_get(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:get expects 1 argument (index)");
 
     ArraySelfAccess access;
@@ -183,7 +183,7 @@ int array_method_get(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_set(MobiusState* state, int arg_count) {
+int array_method_set(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("arr:set expects 2 arguments (index, value)");
 
     ArraySelfAccess access;
@@ -208,7 +208,7 @@ int array_method_set(MobiusState* state, int arg_count) {
     return 0;
 }
 
-int array_method_length(MobiusState* state, int arg_count) {
+int array_method_length(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("arr:length expects 0 arguments");
 
     ArraySelfAccess access;
@@ -221,7 +221,7 @@ int array_method_length(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_slice(MobiusState* state, int arg_count) {
+int array_method_slice(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("arr:slice expects 2 arguments (start, end)");
 
     ArraySelfAccess access;
@@ -259,7 +259,7 @@ int array_method_slice(MobiusState* state, int arg_count) {
 // arr:span(start, end) — aliasing view (write-through) over [start, end),
 // unlike arr:slice which copies. If the array is held in a shared cell, the
 // span synchronizes through that parent, making it safe to hand to fibers.
-int array_method_span(MobiusState* state, int arg_count) {
+int array_method_span(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("arr:span expects 2 arguments (start, end)");
 
     ArraySelfAccess access;
@@ -290,7 +290,7 @@ int array_method_span(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_concat(MobiusState* state, int arg_count) {
+int array_method_concat(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2) return state->error("arr:concat expects at least 1 argument");
 
     ArraySelfAccess access;
@@ -329,7 +329,7 @@ int array_method_concat(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_reverse(MobiusState* state, int arg_count) {
+int array_method_reverse(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("arr:reverse expects 0 arguments");
 
     ArraySelfAccess access;
@@ -345,7 +345,7 @@ int array_method_reverse(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_find(MobiusState* state, int arg_count) {
+int array_method_find(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:find expects 1 argument (value)");
 
     ArraySelfAccess access;
@@ -404,7 +404,7 @@ static void merge_sort_values(std::vector<Value>& items, Less less) {
     }
 }
 
-int array_method_sort(MobiusState* state, int arg_count) {
+int array_method_sort(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2)
         return state->error("arr:sort expects 0 or 1 arguments ([comparator])");
 
@@ -458,7 +458,7 @@ int array_method_sort(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_map(MobiusState* state, int arg_count) {
+int array_method_map(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:map expects 1 argument (function)");
 
     ArraySelfAccess access;
@@ -489,7 +489,7 @@ int array_method_map(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_filter(MobiusState* state, int arg_count) {
+int array_method_filter(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:filter expects 1 argument (function)");
 
     ArraySelfAccess access;
@@ -523,7 +523,7 @@ int array_method_filter(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_reduce(MobiusState* state, int arg_count) {
+int array_method_reduce(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("arr:reduce expects 2 arguments (function, initial)");
 
     ArraySelfAccess access;
@@ -555,7 +555,7 @@ int array_method_reduce(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_foreach(MobiusState* state, int arg_count) {
+int array_method_foreach(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:foreach expects 1 argument (function)");
 
     ArraySelfAccess access;
@@ -583,7 +583,7 @@ int array_method_foreach(MobiusState* state, int arg_count) {
     return 0;
 }
 
-int array_method_any(MobiusState* state, int arg_count) {
+int array_method_any(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:any expects 1 argument (function)");
 
     ArraySelfAccess access;
@@ -615,7 +615,7 @@ int array_method_any(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int array_method_all(MobiusState* state, int arg_count) {
+int array_method_all(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("arr:all expects 1 argument (function)");
 
     ArraySelfAccess access;

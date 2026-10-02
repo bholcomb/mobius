@@ -129,7 +129,7 @@ static void* get_userdata_of_type(MobiusState* state, int idx, const char* expec
 // VECTOR3 MOBIUS BINDINGS
 // ============================================================================
 
-int vector3_new(MobiusState* state, int arg_count) {
+int vector3_new(MobiusState* state, int arg_count, void* /*userdata*/) {
     double x = 0, y = 0, z = 0;
     
     if (arg_count >= 1 && mobius_stack_isNumber(state, -arg_count))
@@ -147,7 +147,7 @@ int vector3_new(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int vector3_length_fn(MobiusState* state, int arg_count) {
+int vector3_length_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "vector3_length() expects 1 argument");
     
@@ -161,7 +161,7 @@ int vector3_length_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int vector3_normalize_fn(MobiusState* state, int arg_count) {
+int vector3_normalize_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "vector3_normalize() expects 1 argument");
     
@@ -175,7 +175,7 @@ int vector3_normalize_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int vector3_add_fn(MobiusState* state, int arg_count) {
+int vector3_add_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "vector3_add() expects 2 arguments");
     
@@ -190,7 +190,7 @@ int vector3_add_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int vector3_dot_fn(MobiusState* state, int arg_count) {
+int vector3_dot_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "vector3_dot() expects 2 arguments");
     
@@ -205,7 +205,7 @@ int vector3_dot_fn(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int vector3_tostring_fn(MobiusState* state, int arg_count) {
+int vector3_tostring_fn(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "vector3_tostring() expects 1 argument");
     
@@ -223,7 +223,7 @@ int vector3_tostring_fn(MobiusState* state, int arg_count) {
 // PLAYER MOBIUS BINDINGS
 // ============================================================================
 
-int player_new(MobiusState* state, int arg_count) {
+int player_new(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "Player() expects 1 argument (name)");
     if (!mobius_stack_isString(state, -1))
@@ -237,7 +237,7 @@ int player_new(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int player_get_health(MobiusState* state, int arg_count) {
+int player_get_health(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "player_get_health() expects 1 argument");
     
@@ -251,7 +251,7 @@ int player_get_health(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int player_take_damage(MobiusState* state, int arg_count) {
+int player_take_damage(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2)
         return mobius_error(state, "player_take_damage() expects 2 arguments");
     
@@ -269,7 +269,7 @@ int player_take_damage(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int player_is_alive(MobiusState* state, int arg_count) {
+int player_is_alive(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "player_is_alive() expects 1 argument");
     
@@ -283,7 +283,7 @@ int player_is_alive(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int player_tostring(MobiusState* state, int arg_count) {
+int player_tostring(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "player_tostring() expects 1 argument");
     

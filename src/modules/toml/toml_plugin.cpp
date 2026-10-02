@@ -1235,7 +1235,7 @@ static bool toml_read_stringify_options(MobiusState* state, int options_idx,
 // toml.parse(string) -> table
 // ============================================================================
 
-static int toml_parse(MobiusState* state, int arg_count) {
+static int toml_parse(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "toml.parse() expects 1 argument (string)");
     if (!mobius_stack_isString(state, -1))
@@ -1264,7 +1264,7 @@ static int toml_parse(MobiusState* state, int arg_count) {
 // toml.parsefile(path) -> table
 // ============================================================================
 
-static int toml_parsefile(MobiusState* state, int arg_count) {
+static int toml_parsefile(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1)
         return mobius_error(state, "toml.parsefile() expects 1 argument (path)");
     if (!mobius_stack_isString(state, -1))
@@ -1304,7 +1304,7 @@ static int toml_parsefile(MobiusState* state, int arg_count) {
 // toml.stringify(table) -> string
 // ============================================================================
 
-static int toml_stringify(MobiusState* state, int arg_count) {
+static int toml_stringify(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2)
         return mobius_error(state, "toml.stringify() expects 1 or 2 arguments (table [, options])");
     if (!mobius_stack_isTable(state, -arg_count))

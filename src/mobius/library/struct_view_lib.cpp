@@ -483,7 +483,7 @@ static bool write_field_value(MobiusState* state, const StructFieldDesc& field,
     return write_scalar_value(state, field, buffer->data() + absolute, value);
 }
 
-static int layout_method_index(MobiusState* state, int arg_count) {
+static int layout_method_index(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("__index on struct layout expects key");
     StructLayout* layout = require_layout_self(state, "__index on struct layout requires layout self");
     if (!layout) return -1;
@@ -516,7 +516,7 @@ static int layout_method_index(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int view_method_index(MobiusState* state, int arg_count) {
+static int view_method_index(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("__index on struct view expects key");
     StructView* view = require_view_self(state, "__index on struct view requires struct view self");
     if (!view) return -1;
@@ -561,7 +561,7 @@ static int view_method_index(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int view_method_newindex(MobiusState* state, int arg_count) {
+static int view_method_newindex(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("__newindex on struct view expects key and value");
     StructView* view = require_view_self(state, "__newindex on struct view requires struct view self");
     if (!view) return -1;
@@ -580,7 +580,7 @@ static int view_method_newindex(MobiusState* state, int arg_count) {
     return write_field_value(state, view->layout->fields[it->second], view->buffer, view->base_offset, value) ? 0 : -1;
 }
 
-static int array_view_method_index(MobiusState* state, int arg_count) {
+static int array_view_method_index(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("__index on struct array view expects key");
     StructArrayView* view = require_array_view_self(state, "__index on struct array view requires self");
     if (!view) return -1;
@@ -634,7 +634,7 @@ static int array_view_method_index(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int array_view_method_newindex(MobiusState* state, int arg_count) {
+static int array_view_method_newindex(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("__newindex on struct array view expects key and value");
     StructArrayView* view = require_array_view_self(state, "__newindex on struct array view requires self");
     if (!view) return -1;
@@ -895,7 +895,7 @@ static bool build_layout_from_member_array(MobiusState* state, ArrayValue* membe
 
 } // namespace
 
-int lib_define_struct(MobiusState* state, int arg_count) {
+int lib_define_struct(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return state->error("__define_struct expects name and spec");
     }
@@ -962,7 +962,7 @@ int lib_define_struct(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_view_as(MobiusState* state, int arg_count) {
+int buffer_method_view_as(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3) {
         return state->error("buffer:view_as expects layout [, offset]");
     }
@@ -989,7 +989,7 @@ int buffer_method_view_as(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_array_view_as(MobiusState* state, int arg_count) {
+int buffer_method_array_view_as(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 4) {
         return state->error("buffer:array_view_as expects layout [, offset [, count]]");
     }

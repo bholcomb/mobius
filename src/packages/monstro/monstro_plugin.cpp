@@ -205,7 +205,7 @@ static const char* get_optional_string(MobiusState* state, int idx) {
     return mobius_stack_isNil(state, idx) ? nullptr : mobius_stack_asString(state, idx);
 }
 
-static int return_self(MobiusState* state, int arg_count) {
+static int return_self(MobiusState* state, int arg_count, void* /*userdata*/) {
     mobius_stack_copy(state, 0);
     mobius_stack_pop(state, arg_count);
     return 1;
@@ -239,7 +239,7 @@ static void context_object_destructor(void* ptr) {
     delete ctx_obj;
 }
 
-static int monstro_create_context(MobiusState* state, int arg_count) {
+static int monstro_create_context(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "create_context() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
 
@@ -257,7 +257,7 @@ static int monstro_create_context(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_close(MobiusState* state, int arg_count) {
+static int context_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:close() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:close() self is not a monstro context");
@@ -272,7 +272,7 @@ static int context_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_closed(MobiusState* state, int arg_count) {
+static int context_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_closed() expects no arguments");
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_closed() self is not a monstro context");
     if (!ctx_obj) return -1;
@@ -281,7 +281,7 @@ static int context_is_closed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_display_size(MobiusState* state, int arg_count) {
+static int context_set_display_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_display_size() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_display_size() self is not a monstro context");
@@ -290,10 +290,10 @@ static int context_set_display_size(MobiusState* state, int arg_count) {
     float width = (float)mobius_stack_asFloat64(state, 1);
     float height = (float)mobius_stack_asFloat64(state, 2);
     g_api.set_display_size(ctx_obj->handle, width, height);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_get_display_size(MobiusState* state, int arg_count) {
+static int context_get_display_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:get_display_size() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:get_display_size() self is not a monstro context");
@@ -310,7 +310,7 @@ static int context_get_display_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_begin_frame(MobiusState* state, int arg_count) {
+static int context_begin_frame(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:begin_frame() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:begin_frame() self is not a monstro context");
@@ -318,20 +318,20 @@ static int context_begin_frame(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     float delta_time = (float)mobius_stack_asFloat64(state, 1);
     g_api.begin_frame(ctx_obj->handle, delta_time);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_end_frame(MobiusState* state, int arg_count) {
+static int context_end_frame(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:end_frame() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:end_frame() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.end_frame(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_delta_time(MobiusState* state, int arg_count) {
+static int context_delta_time(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:delta_time() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:delta_time() self is not a monstro context");
@@ -342,7 +342,7 @@ static int context_delta_time(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_time(MobiusState* state, int arg_count) {
+static int context_time(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:time() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:time() self is not a monstro context");
@@ -353,7 +353,7 @@ static int context_time(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_push_id(MobiusState* state, int arg_count) {
+static int context_push_id(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:push_id() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:push_id() self is not a monstro context");
@@ -361,20 +361,20 @@ static int context_push_id(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:push_id() name must be a string");
     g_api.push_id(ctx_obj->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_pop_id(MobiusState* state, int arg_count) {
+static int context_pop_id(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:pop_id() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:pop_id() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.pop_id(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_get_id(MobiusState* state, int arg_count) {
+static int context_get_id(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:get_id() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:get_id() self is not a monstro context");
@@ -387,17 +387,17 @@ static int context_get_id(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_mouse_pos(MobiusState* state, int arg_count) {
+static int context_set_mouse_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_mouse_pos() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_mouse_pos() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_mouse_pos(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1), (float)mobius_stack_asFloat64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_mouse_button(MobiusState* state, int arg_count) {
+static int context_set_mouse_button(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_mouse_button() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_mouse_button() self is not a monstro context");
@@ -406,40 +406,40 @@ static int context_set_mouse_button(MobiusState* state, int arg_count) {
     int button = (int)mobius_stack_asInt64(state, 1);
     bool down = mobius_stack_asBool(state, 2);
     g_api.set_mouse_button(ctx_obj->handle, (MonstroMouseButton)button, down);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_mouse_wheel(MobiusState* state, int arg_count) {
+static int context_set_mouse_wheel(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_mouse_wheel() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_mouse_wheel() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_mouse_wheel(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1), (float)mobius_stack_asFloat64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_key(MobiusState* state, int arg_count) {
+static int context_set_key(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_key() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_key() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_key(ctx_obj->handle, (MonstroKey)mobius_stack_asInt64(state, 1), mobius_stack_asBool(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_key_mods(MobiusState* state, int arg_count) {
+static int context_set_key_mods(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_key_mods() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_key_mods() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_key_mods(ctx_obj->handle, (MonstroModFlags)mobius_stack_asInt64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_add_input_text(MobiusState* state, int arg_count) {
+static int context_add_input_text(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:add_input_text() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:add_input_text() self is not a monstro context");
@@ -447,10 +447,10 @@ static int context_add_input_text(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:add_input_text() text must be a string");
     g_api.add_input_text(ctx_obj->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_get_mouse_pos(MobiusState* state, int arg_count) {
+static int context_get_mouse_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:get_mouse_pos() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:get_mouse_pos() self is not a monstro context");
@@ -462,7 +462,7 @@ static int context_get_mouse_pos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_want_capture_mouse(MobiusState* state, int arg_count) {
+static int context_want_capture_mouse(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:want_capture_mouse() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:want_capture_mouse() self is not a monstro context");
@@ -473,7 +473,7 @@ static int context_want_capture_mouse(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_want_capture_keyboard(MobiusState* state, int arg_count) {
+static int context_want_capture_keyboard(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:want_capture_keyboard() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:want_capture_keyboard() self is not a monstro context");
@@ -484,7 +484,7 @@ static int context_want_capture_keyboard(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_want_text_input(MobiusState* state, int arg_count) {
+static int context_want_text_input(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:want_text_input() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:want_text_input() self is not a monstro context");
@@ -495,47 +495,47 @@ static int context_want_text_input(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_double_click_distance(MobiusState* state, int arg_count) {
+static int context_set_double_click_distance(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_double_click_distance() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_double_click_distance() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_double_click_distance(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_mouse_drag_threshold(MobiusState* state, int arg_count) {
+static int context_set_mouse_drag_threshold(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_mouse_drag_threshold() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_mouse_drag_threshold() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_mouse_drag_threshold(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_key_repeat_delay(MobiusState* state, int arg_count) {
+static int context_set_key_repeat_delay(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_key_repeat_delay() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_key_repeat_delay() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_key_repeat_delay(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_key_repeat_rate(MobiusState* state, int arg_count) {
+static int context_set_key_repeat_rate(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_key_repeat_rate() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_key_repeat_rate() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_key_repeat_rate(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_double_click_distance(MobiusState* state, int arg_count) {
+static int context_double_click_distance(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:double_click_distance() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:double_click_distance() self is not a monstro context");
@@ -546,7 +546,7 @@ static int context_double_click_distance(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_mouse_drag_threshold(MobiusState* state, int arg_count) {
+static int context_mouse_drag_threshold(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:mouse_drag_threshold() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:mouse_drag_threshold() self is not a monstro context");
@@ -557,7 +557,7 @@ static int context_mouse_drag_threshold(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_key_repeat_delay(MobiusState* state, int arg_count) {
+static int context_key_repeat_delay(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:key_repeat_delay() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:key_repeat_delay() self is not a monstro context");
@@ -568,7 +568,7 @@ static int context_key_repeat_delay(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_key_repeat_rate(MobiusState* state, int arg_count) {
+static int context_key_repeat_rate(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:key_repeat_rate() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:key_repeat_rate() self is not a monstro context");
@@ -579,7 +579,7 @@ static int context_key_repeat_rate(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_mouse_delta(MobiusState* state, int arg_count) {
+static int context_mouse_delta(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:mouse_delta() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:mouse_delta() self is not a monstro context");
@@ -591,7 +591,7 @@ static int context_mouse_delta(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_mouse_down(MobiusState* state, int arg_count) {
+static int context_is_mouse_down(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:is_mouse_down() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_mouse_down() self is not a monstro context");
@@ -603,7 +603,7 @@ static int context_is_mouse_down(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_mouse_clicked(MobiusState* state, int arg_count) {
+static int context_is_mouse_clicked(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2 && arg_count != 3) return mobius_error(state, "context:is_mouse_clicked() expects 1 or 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_mouse_clicked() self is not a monstro context");
@@ -616,7 +616,7 @@ static int context_is_mouse_clicked(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_mouse_released(MobiusState* state, int arg_count) {
+static int context_is_mouse_released(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:is_mouse_released() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_mouse_released() self is not a monstro context");
@@ -628,7 +628,7 @@ static int context_is_mouse_released(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_mouse_double_clicked(MobiusState* state, int arg_count) {
+static int context_is_mouse_double_clicked(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:is_mouse_double_clicked() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_mouse_double_clicked() self is not a monstro context");
@@ -640,7 +640,7 @@ static int context_is_mouse_double_clicked(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_mouse_dragging(MobiusState* state, int arg_count) {
+static int context_is_mouse_dragging(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:is_mouse_dragging() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_mouse_dragging() self is not a monstro context");
@@ -652,7 +652,7 @@ static int context_is_mouse_dragging(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_mouse_drag_delta(MobiusState* state, int arg_count) {
+static int context_mouse_drag_delta(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:mouse_drag_delta() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:mouse_drag_delta() self is not a monstro context");
@@ -664,7 +664,7 @@ static int context_mouse_drag_delta(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_mouse_wheel(MobiusState* state, int arg_count) {
+static int context_mouse_wheel(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:mouse_wheel() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:mouse_wheel() self is not a monstro context");
@@ -675,7 +675,7 @@ static int context_mouse_wheel(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_mouse_wheel_h(MobiusState* state, int arg_count) {
+static int context_mouse_wheel_h(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:mouse_wheel_h() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:mouse_wheel_h() self is not a monstro context");
@@ -686,7 +686,7 @@ static int context_mouse_wheel_h(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_key_down(MobiusState* state, int arg_count) {
+static int context_is_key_down(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:is_key_down() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_key_down() self is not a monstro context");
@@ -698,7 +698,7 @@ static int context_is_key_down(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_key_pressed(MobiusState* state, int arg_count) {
+static int context_is_key_pressed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2 && arg_count != 3) return mobius_error(state, "context:is_key_pressed() expects 1 or 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_key_pressed() self is not a monstro context");
@@ -711,7 +711,7 @@ static int context_is_key_pressed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_key_released(MobiusState* state, int arg_count) {
+static int context_is_key_released(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:is_key_released() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_key_released() self is not a monstro context");
@@ -723,7 +723,7 @@ static int context_is_key_released(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_key_mods(MobiusState* state, int arg_count) {
+static int context_key_mods(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:key_mods() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:key_mods() self is not a monstro context");
@@ -734,7 +734,7 @@ static int context_key_mods(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_input_text(MobiusState* state, int arg_count) {
+static int context_input_text(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:input_text() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:input_text() self is not a monstro context");
@@ -746,17 +746,17 @@ static int context_input_text(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_mouse_cursor(MobiusState* state, int arg_count) {
+static int context_set_mouse_cursor(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_mouse_cursor() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_mouse_cursor() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_mouse_cursor(ctx_obj->handle, (MonstroMouseCursor)mobius_stack_asInt64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_mouse_cursor(MobiusState* state, int arg_count) {
+static int context_mouse_cursor(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:mouse_cursor() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:mouse_cursor() self is not a monstro context");
@@ -767,7 +767,7 @@ static int context_mouse_cursor(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_next_window_pos(MobiusState* state, int arg_count) {
+static int context_set_next_window_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "context:set_next_window_pos() expects 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_next_window_pos() self is not a monstro context");
@@ -777,10 +777,10 @@ static int context_set_next_window_pos(MobiusState* state, int arg_count) {
                               (float)mobius_stack_asFloat64(state, 1),
                               (float)mobius_stack_asFloat64(state, 2),
                               (MonstroCondition)mobius_stack_asInt64(state, 3));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_next_window_size(MobiusState* state, int arg_count) {
+static int context_set_next_window_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "context:set_next_window_size() expects 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_next_window_size() self is not a monstro context");
@@ -790,20 +790,20 @@ static int context_set_next_window_size(MobiusState* state, int arg_count) {
                                (float)mobius_stack_asFloat64(state, 1),
                                (float)mobius_stack_asFloat64(state, 2),
                                (MonstroCondition)mobius_stack_asInt64(state, 3));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_next_window_focus(MobiusState* state, int arg_count) {
+static int context_set_next_window_focus(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:set_next_window_focus() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_next_window_focus() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_next_window_focus(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_begin_window(MobiusState* state, int arg_count) {
+static int context_begin_window(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 4) return mobius_error(state, "context:begin_window() expects 1 to 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:begin_window() self is not a monstro context");
@@ -839,17 +839,17 @@ static int context_begin_window(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_end_window(MobiusState* state, int arg_count) {
+static int context_end_window(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:end_window() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:end_window() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.end_window(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_window_rect(MobiusState* state, int arg_count) {
+static int context_window_rect(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:window_rect() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:window_rect() self is not a monstro context");
@@ -861,7 +861,7 @@ static int context_window_rect(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_window_pos(MobiusState* state, int arg_count) {
+static int context_window_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:window_pos() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:window_pos() self is not a monstro context");
@@ -873,7 +873,7 @@ static int context_window_pos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_window_size(MobiusState* state, int arg_count) {
+static int context_window_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:window_size() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:window_size() self is not a monstro context");
@@ -885,7 +885,7 @@ static int context_window_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_window_pos(MobiusState* state, int arg_count) {
+static int context_set_window_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "context:set_window_pos() expects 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_pos() self is not a monstro context");
@@ -895,10 +895,10 @@ static int context_set_window_pos(MobiusState* state, int arg_count) {
                          (float)mobius_stack_asFloat64(state, 1),
                          (float)mobius_stack_asFloat64(state, 2),
                          (MonstroCondition)mobius_stack_asInt64(state, 3));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_size(MobiusState* state, int arg_count) {
+static int context_set_window_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "context:set_window_size() expects 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_size() self is not a monstro context");
@@ -908,30 +908,30 @@ static int context_set_window_size(MobiusState* state, int arg_count) {
                           (float)mobius_stack_asFloat64(state, 1),
                           (float)mobius_stack_asFloat64(state, 2),
                           (MonstroCondition)mobius_stack_asInt64(state, 3));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_focus(MobiusState* state, int arg_count) {
+static int context_set_window_focus(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:set_window_focus() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_focus() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_window_focus(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_layout(MobiusState* state, int arg_count) {
+static int context_set_window_layout(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_window_layout() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_layout() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_window_layout(ctx_obj->handle, (MonstroLayoutDirection)mobius_stack_asInt64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_title(MobiusState* state, int arg_count) {
+static int context_set_window_title(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_window_title() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_title() self is not a monstro context");
@@ -939,10 +939,10 @@ static int context_set_window_title(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:set_window_title() title must be a string");
     g_api.set_window_title(ctx_obj->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_pos_named(MobiusState* state, int arg_count) {
+static int context_set_window_pos_named(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 5) return mobius_error(state, "context:set_window_pos_named() expects 4 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_pos_named() self is not a monstro context");
@@ -953,10 +953,10 @@ static int context_set_window_pos_named(MobiusState* state, int arg_count) {
                                (float)mobius_stack_asFloat64(state, 2),
                                (float)mobius_stack_asFloat64(state, 3),
                                (MonstroCondition)mobius_stack_asInt64(state, 4));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_size_named(MobiusState* state, int arg_count) {
+static int context_set_window_size_named(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 5) return mobius_error(state, "context:set_window_size_named() expects 4 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_size_named() self is not a monstro context");
@@ -967,10 +967,10 @@ static int context_set_window_size_named(MobiusState* state, int arg_count) {
                                 (float)mobius_stack_asFloat64(state, 2),
                                 (float)mobius_stack_asFloat64(state, 3),
                                 (MonstroCondition)mobius_stack_asInt64(state, 4));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_focus_named(MobiusState* state, int arg_count) {
+static int context_set_window_focus_named(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_window_focus_named() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_focus_named() self is not a monstro context");
@@ -978,10 +978,10 @@ static int context_set_window_focus_named(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:set_window_focus_named() name must be a string");
     g_api.set_window_focus_named(ctx_obj->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_layout_named(MobiusState* state, int arg_count) {
+static int context_set_window_layout_named(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_window_layout_named() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_layout_named() self is not a monstro context");
@@ -990,10 +990,10 @@ static int context_set_window_layout_named(MobiusState* state, int arg_count) {
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:set_window_layout_named() name must be a string");
     g_api.set_window_layout_named(ctx_obj->handle, mobius_stack_asString(state, 1),
                                   (MonstroLayoutDirection)mobius_stack_asInt64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_window_title_named(MobiusState* state, int arg_count) {
+static int context_set_window_title_named(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_window_title_named() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_window_title_named() self is not a monstro context");
@@ -1003,10 +1003,10 @@ static int context_set_window_title_named(MobiusState* state, int arg_count) {
         return mobius_error(state, "context:set_window_title_named() name and title must be strings");
     }
     g_api.set_window_title_named(ctx_obj->handle, mobius_stack_asString(state, 1), mobius_stack_asString(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_scroll_x(MobiusState* state, int arg_count) {
+static int context_scroll_x(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:scroll_x() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:scroll_x() self is not a monstro context");
@@ -1017,7 +1017,7 @@ static int context_scroll_x(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_scroll_y(MobiusState* state, int arg_count) {
+static int context_scroll_y(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:scroll_y() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:scroll_y() self is not a monstro context");
@@ -1028,27 +1028,27 @@ static int context_scroll_y(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_scroll_x(MobiusState* state, int arg_count) {
+static int context_set_scroll_x(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_scroll_x() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_scroll_x() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_scroll_x(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_set_scroll_y(MobiusState* state, int arg_count) {
+static int context_set_scroll_y(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:set_scroll_y() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_scroll_y() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_scroll_y(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_is_window_collapsed(MobiusState* state, int arg_count) {
+static int context_is_window_collapsed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_window_collapsed() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_window_collapsed() self is not a monstro context");
@@ -1059,7 +1059,7 @@ static int context_is_window_collapsed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_window_focused(MobiusState* state, int arg_count) {
+static int context_is_window_focused(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_window_focused() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_window_focused() self is not a monstro context");
@@ -1070,7 +1070,7 @@ static int context_is_window_focused(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_window_hovered(MobiusState* state, int arg_count) {
+static int context_is_window_hovered(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_window_hovered() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_window_hovered() self is not a monstro context");
@@ -1081,7 +1081,7 @@ static int context_is_window_hovered(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_begin_child(MobiusState* state, int arg_count) {
+static int context_begin_child(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 4 || arg_count > 5) return mobius_error(state, "context:begin_child() expects 3 or 4 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:begin_child() self is not a monstro context");
@@ -1097,27 +1097,27 @@ static int context_begin_child(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_end_child(MobiusState* state, int arg_count) {
+static int context_end_child(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:end_child() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:end_child() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.end_child(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_begin_layout(MobiusState* state, int arg_count) {
+static int context_begin_layout(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:begin_layout() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:begin_layout() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.begin_layout(ctx_obj->handle, (MonstroLayoutDirection)mobius_stack_asInt64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_begin_layout_at(MobiusState* state, int arg_count) {
+static int context_begin_layout_at(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "context:begin_layout_at() expects 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:begin_layout_at() self is not a monstro context");
@@ -1127,30 +1127,30 @@ static int context_begin_layout_at(MobiusState* state, int arg_count) {
                           (float)mobius_stack_asFloat64(state, 1),
                           (float)mobius_stack_asFloat64(state, 2),
                           (MonstroLayoutDirection)mobius_stack_asInt64(state, 3));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_end_layout(MobiusState* state, int arg_count) {
+static int context_end_layout(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:end_layout() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:end_layout() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.end_layout(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_add_item(MobiusState* state, int arg_count) {
+static int context_add_item(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:add_item() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:add_item() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.add_item(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1), (float)mobius_stack_asFloat64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_cursor_pos(MobiusState* state, int arg_count) {
+static int context_cursor_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:cursor_pos() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:cursor_pos() self is not a monstro context");
@@ -1162,17 +1162,17 @@ static int context_cursor_pos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_cursor_pos(MobiusState* state, int arg_count) {
+static int context_set_cursor_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_cursor_pos() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_cursor_pos() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_cursor_pos(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1), (float)mobius_stack_asFloat64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_cursor_screen_pos(MobiusState* state, int arg_count) {
+static int context_cursor_screen_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:cursor_screen_pos() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:cursor_screen_pos() self is not a monstro context");
@@ -1184,17 +1184,17 @@ static int context_cursor_screen_pos(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_set_cursor_screen_pos(MobiusState* state, int arg_count) {
+static int context_set_cursor_screen_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:set_cursor_screen_pos() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:set_cursor_screen_pos() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.set_cursor_screen_pos(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1), (float)mobius_stack_asFloat64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_content_region_avail(MobiusState* state, int arg_count) {
+static int context_content_region_avail(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:content_region_avail() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:content_region_avail() self is not a monstro context");
@@ -1206,47 +1206,47 @@ static int context_content_region_avail(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_indent(MobiusState* state, int arg_count) {
+static int context_indent(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:indent() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:indent() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.indent(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_unindent(MobiusState* state, int arg_count) {
+static int context_unindent(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:unindent() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:unindent() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.unindent(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_spacer(MobiusState* state, int arg_count) {
+static int context_spacer(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:spacer() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:spacer() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.spacer(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_dummy(MobiusState* state, int arg_count) {
+static int context_dummy(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:dummy() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:dummy() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.dummy(ctx_obj->handle, (float)mobius_stack_asFloat64(state, 1), (float)mobius_stack_asFloat64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_percent(MobiusState* state, int arg_count) {
+static int context_percent(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:percent() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:percent() self is not a monstro context");
@@ -1259,7 +1259,7 @@ static int context_percent(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_begin_columns(MobiusState* state, int arg_count) {
+static int context_begin_columns(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:begin_columns() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:begin_columns() self is not a monstro context");
@@ -1267,30 +1267,30 @@ static int context_begin_columns(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:begin_columns() id must be a string");
     g_api.begin_columns(ctx_obj->handle, mobius_stack_asString(state, 1), (int)mobius_stack_asInt64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_next_column(MobiusState* state, int arg_count) {
+static int context_next_column(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:next_column() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:next_column() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.next_column(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_end_columns(MobiusState* state, int arg_count) {
+static int context_end_columns(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:end_columns() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:end_columns() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.end_columns(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_is_item_hovered(MobiusState* state, int arg_count) {
+static int context_is_item_hovered(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_item_hovered() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_item_hovered() self is not a monstro context");
@@ -1301,7 +1301,7 @@ static int context_is_item_hovered(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_item_active(MobiusState* state, int arg_count) {
+static int context_is_item_active(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_item_active() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_item_active() self is not a monstro context");
@@ -1312,7 +1312,7 @@ static int context_is_item_active(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_item_clicked(MobiusState* state, int arg_count) {
+static int context_is_item_clicked(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:is_item_clicked() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_item_clicked() self is not a monstro context");
@@ -1324,7 +1324,7 @@ static int context_is_item_clicked(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_item_edited(MobiusState* state, int arg_count) {
+static int context_is_item_edited(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_item_edited() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_item_edited() self is not a monstro context");
@@ -1335,7 +1335,7 @@ static int context_is_item_edited(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_is_item_deactivated_after_edit(MobiusState* state, int arg_count) {
+static int context_is_item_deactivated_after_edit(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_item_deactivated_after_edit() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_item_deactivated_after_edit() self is not a monstro context");
@@ -1346,7 +1346,7 @@ static int context_is_item_deactivated_after_edit(MobiusState* state, int arg_co
     return 1;
 }
 
-static int context_item_rect(MobiusState* state, int arg_count) {
+static int context_item_rect(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:item_rect() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:item_rect() self is not a monstro context");
@@ -1358,7 +1358,7 @@ static int context_item_rect(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_item_rect_min(MobiusState* state, int arg_count) {
+static int context_item_rect_min(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:item_rect_min() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:item_rect_min() self is not a monstro context");
@@ -1370,7 +1370,7 @@ static int context_item_rect_min(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_item_rect_max(MobiusState* state, int arg_count) {
+static int context_item_rect_max(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:item_rect_max() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:item_rect_max() self is not a monstro context");
@@ -1382,7 +1382,7 @@ static int context_item_rect_max(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_item_rect_size(MobiusState* state, int arg_count) {
+static int context_item_rect_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:item_rect_size() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:item_rect_size() self is not a monstro context");
@@ -1394,27 +1394,27 @@ static int context_item_rect_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_begin_disabled(MobiusState* state, int arg_count) {
+static int context_begin_disabled(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:begin_disabled() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:begin_disabled() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.begin_disabled(ctx_obj->handle, mobius_stack_asBool(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_end_disabled(MobiusState* state, int arg_count) {
+static int context_end_disabled(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:end_disabled() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:end_disabled() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.end_disabled(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_is_disabled(MobiusState* state, int arg_count) {
+static int context_is_disabled(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:is_disabled() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:is_disabled() self is not a monstro context");
@@ -1425,7 +1425,7 @@ static int context_is_disabled(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_button(MobiusState* state, int arg_count) {
+static int context_button(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2 && arg_count != 3) return mobius_error(state, "context:button() expects 1 or 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:button() self is not a monstro context");
@@ -1439,7 +1439,7 @@ static int context_button(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_button_sized(MobiusState* state, int arg_count) {
+static int context_button_sized(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4 && arg_count != 5) return mobius_error(state, "context:button_sized() expects 3 or 4 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:button_sized() self is not a monstro context");
@@ -1456,7 +1456,7 @@ static int context_button_sized(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_label(MobiusState* state, int arg_count) {
+static int context_label(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:label() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:label() self is not a monstro context");
@@ -1464,10 +1464,10 @@ static int context_label(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:label() text must be a string");
     g_api.label(ctx_obj->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_label_sized(MobiusState* state, int arg_count) {
+static int context_label_sized(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "context:label_sized() expects 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:label_sized() self is not a monstro context");
@@ -1477,10 +1477,10 @@ static int context_label_sized(MobiusState* state, int arg_count) {
     g_api.label_sized(ctx_obj->handle, mobius_stack_asString(state, 1),
                       (float)mobius_stack_asFloat64(state, 2),
                       (float)mobius_stack_asFloat64(state, 3));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_label_wrapped(MobiusState* state, int arg_count) {
+static int context_label_wrapped(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "context:label_wrapped() expects 2 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:label_wrapped() self is not a monstro context");
@@ -1488,10 +1488,10 @@ static int context_label_wrapped(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:label_wrapped() text must be a string");
     g_api.label_wrapped(ctx_obj->handle, mobius_stack_asString(state, 1), (float)mobius_stack_asFloat64(state, 2));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_image(MobiusState* state, int arg_count) {
+static int context_image(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "context:image() expects 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:image() self is not a monstro context");
@@ -1500,10 +1500,10 @@ static int context_image(MobiusState* state, int arg_count) {
     g_api.image(ctx_obj->handle, mobius_stack_asUInt64(state, 1),
                 (float)mobius_stack_asFloat64(state, 2),
                 (float)mobius_stack_asFloat64(state, 3));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_checkbox(MobiusState* state, int arg_count) {
+static int context_checkbox(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3 && arg_count != 4) return mobius_error(state, "context:checkbox() expects 2 or 3 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:checkbox() self is not a monstro context");
@@ -1521,7 +1521,7 @@ static int context_checkbox(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_radio_button(MobiusState* state, int arg_count) {
+static int context_radio_button(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4 && arg_count != 5) return mobius_error(state, "context:radio_button() expects 3 or 4 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:radio_button() self is not a monstro context");
@@ -1540,7 +1540,7 @@ static int context_radio_button(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_slider_float(MobiusState* state, int arg_count) {
+static int context_slider_float(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 5 || arg_count > 7) return mobius_error(state, "context:slider_float() expects 4 to 6 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:slider_float() self is not a monstro context");
@@ -1561,7 +1561,7 @@ static int context_slider_float(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_slider_int(MobiusState* state, int arg_count) {
+static int context_slider_int(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 5 || arg_count > 7) return mobius_error(state, "context:slider_int() expects 4 to 6 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:slider_int() self is not a monstro context");
@@ -1582,7 +1582,7 @@ static int context_slider_int(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_slider_float_ex(MobiusState* state, int arg_count) {
+static int context_slider_float_ex(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 8 || arg_count > 10) return mobius_error(state, "context:slider_float_ex() expects 7 to 9 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:slider_float_ex() self is not a monstro context");
@@ -1608,7 +1608,7 @@ static int context_slider_float_ex(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_slider_int_ex(MobiusState* state, int arg_count) {
+static int context_slider_int_ex(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 8 || arg_count > 10) return mobius_error(state, "context:slider_int_ex() expects 7 to 9 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:slider_int_ex() self is not a monstro context");
@@ -1634,7 +1634,7 @@ static int context_slider_int_ex(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_knob(MobiusState* state, int arg_count) {
+static int context_knob(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 5 || arg_count > 7) return mobius_error(state, "context:knob() expects 4 to 6 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:knob() self is not a monstro context");
@@ -1656,7 +1656,7 @@ static int context_knob(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_knob_sized(MobiusState* state, int arg_count) {
+static int context_knob_sized(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 6 || arg_count > 8) return mobius_error(state, "context:knob_sized() expects 5 to 7 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:knob_sized() self is not a monstro context");
@@ -1680,7 +1680,7 @@ static int context_knob_sized(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_input_int(MobiusState* state, int arg_count) {
+static int context_input_int(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4 && arg_count != 5 && arg_count != 6) return mobius_error(state, "context:input_int() expects 3 to 5 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:input_int() self is not a monstro context");
@@ -1701,7 +1701,7 @@ static int context_input_int(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_input_float(MobiusState* state, int arg_count) {
+static int context_input_float(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 4 || arg_count > 7) return mobius_error(state, "context:input_float() expects 3 to 6 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:input_float() self is not a monstro context");
@@ -1722,7 +1722,7 @@ static int context_input_float(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_input_double(MobiusState* state, int arg_count) {
+static int context_input_double(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 4 || arg_count > 7) return mobius_error(state, "context:input_double() expects 3 to 6 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:input_double() self is not a monstro context");
@@ -1743,7 +1743,7 @@ static int context_input_double(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int context_progress_bar(MobiusState* state, int arg_count) {
+static int context_progress_bar(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4 && arg_count != 5) return mobius_error(state, "context:progress_bar() expects 3 or 4 arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:progress_bar() self is not a monstro context");
@@ -1755,10 +1755,10 @@ static int context_progress_bar(MobiusState* state, int arg_count) {
                        (float)mobius_stack_asFloat64(state, 2),
                        (float)mobius_stack_asFloat64(state, 3),
                        overlay);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_tooltip(MobiusState* state, int arg_count) {
+static int context_tooltip(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:tooltip() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:tooltip() self is not a monstro context");
@@ -1766,20 +1766,20 @@ static int context_tooltip(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:tooltip() text must be a string");
     g_api.tooltip(ctx_obj->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_separator(MobiusState* state, int arg_count) {
+static int context_separator(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:separator() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:separator() self is not a monstro context");
     if (!ctx_obj) return -1;
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     g_api.separator(ctx_obj->handle);
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_separator_text(MobiusState* state, int arg_count) {
+static int context_separator_text(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "context:separator_text() expects 1 argument");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:separator_text() self is not a monstro context");
@@ -1787,10 +1787,10 @@ static int context_separator_text(MobiusState* state, int arg_count) {
     if (ensure_context_open(state, ctx_obj, "monstro context has been destroyed") < 0) return -1;
     if (!mobius_stack_isString(state, 1)) return mobius_error(state, "context:separator_text() text must be a string");
     g_api.separator_text(ctx_obj->handle, mobius_stack_asString(state, 1));
-    return return_self(state, arg_count);
+    return return_self(state, arg_count, nullptr);
 }
 
-static int context_draw_data(MobiusState* state, int arg_count) {
+static int context_draw_data(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "context:draw_data() expects no arguments");
     if (!ensure_api_loaded(state)) return -1;
     ContextObject* ctx_obj = get_context_object(state, 0, "context:draw_data() self is not a monstro context");

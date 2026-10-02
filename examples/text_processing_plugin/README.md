@@ -56,7 +56,7 @@ native functions.
 Every plugin function uses the public stack API and `mobius_error`:
 
 ```cpp
-int text_word_count(MobiusState* state, int arg_count) {
+int text_word_count(MobiusState* state, int arg_count, void* userdata) {
     if (arg_count != 1)
         return mobius_error(state, "word_count() expects 1 argument");
     if (!mobius_stack_isString(state, -1))

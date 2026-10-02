@@ -268,7 +268,7 @@ static bool write_all(MobiusState* state, IoStream* s, const char* data, size_t 
 // io.open(path [, mode])
 // ---------------------------------------------------------------------------
 
-static int io_open(MobiusState* state, int arg_count) {
+static int io_open(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) return mobius_error(state, "io.open expects (path [, mode])");
     if (!mobius_stack_isString(state, 0)) return mobius_error(state, "io.open: path must be a string");
     size_t path_len = 0;
@@ -344,7 +344,7 @@ static bool check_writable(MobiusState* state, IoStream* s, const char* op, int*
 }
 
 // stream:read(n): up to n bytes as a buffer, or nil at end of stream.
-static int stream_read(MobiusState* state, int arg_count) {
+static int stream_read(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:read";
     if (arg_count != 2) return mobius_error(state, "stream:read expects (n)");
@@ -378,7 +378,7 @@ static int stream_read(MobiusState* state, int arg_count) {
 
 // stream:read_into(buffer): read up to the buffer's size; the count read,
 // 0 at end of stream. Waitable streams return what is available.
-static int stream_read_into(MobiusState* state, int arg_count) {
+static int stream_read_into(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:read_into";
     if (arg_count != 2) return mobius_error(state, "stream:read_into expects (buffer)");
@@ -400,7 +400,7 @@ static int stream_read_into(MobiusState* state, int arg_count) {
 }
 
 // stream:read_all(): the rest of the stream as a buffer (empty at EOF).
-static int stream_read_all(MobiusState* state, int arg_count) {
+static int stream_read_all(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:read_all";
     if (arg_count != 1) return mobius_error(state, "stream:read_all expects no arguments");
@@ -417,7 +417,7 @@ static int stream_read_all(MobiusState* state, int arg_count) {
 }
 
 // stream:read_text(): the rest of the stream as a string (empty at EOF).
-static int stream_read_text(MobiusState* state, int arg_count) {
+static int stream_read_text(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:read_text";
     if (arg_count != 1) return mobius_error(state, "stream:read_text expects no arguments");
@@ -436,7 +436,7 @@ static int stream_read_text(MobiusState* state, int arg_count) {
 // stream:read_line(): the next line without "\n" (or "\r\n"), or nil at end
 // of stream. A last line without a newline is still returned; an empty line
 // is "". Byte-exact: NUL bytes stay in the line.
-static int stream_read_line(MobiusState* state, int arg_count) {
+static int stream_read_line(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:read_line";
     if (arg_count != 1) return mobius_error(state, "stream:read_line expects no arguments");
@@ -456,7 +456,7 @@ static int stream_read_line(MobiusState* state, int arg_count) {
 
 // stream:write(data): write a string or buffer completely; returns the
 // number of bytes written.
-static int stream_write(MobiusState* state, int arg_count) {
+static int stream_write(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:write";
     if (arg_count != 2) return mobius_error(state, "stream:write expects (data)");
@@ -475,7 +475,7 @@ static int stream_write(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int stream_flush(MobiusState* state, int arg_count) {
+static int stream_flush(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:flush";
     if (arg_count != 1) return mobius_error(state, "stream:flush expects no arguments");
@@ -493,7 +493,7 @@ static int stream_flush(MobiusState* state, int arg_count) {
 // A fiber waiting on the stream is woken first (its call reports "stream is
 // closed"). A standard stream is flushed and marked closed, but the OS
 // stream stays open (print and child processes keep working).
-static int stream_close(MobiusState* state, int arg_count) {
+static int stream_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:close";
     if (arg_count != 1) return mobius_error(state, "stream:close expects no arguments");
@@ -521,7 +521,7 @@ static int stream_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int stream_is_closed(MobiusState* state, int arg_count) {
+static int stream_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     if (arg_count != 1) return mobius_error(state, "stream:is_closed expects no arguments");
     IoStream* s = self_stream(state, "stream:is_closed", &rc);
@@ -535,7 +535,7 @@ static int stream_is_closed(MobiusState* state, int arg_count) {
 // stream:seek(offset [, origin]): origin "set" (default), "cur" or "end".
 // Returns the new position. Errors on streams that can't seek (pipes,
 // terminals).
-static int stream_seek(MobiusState* state, int arg_count) {
+static int stream_seek(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:seek";
     if (arg_count < 2 || arg_count > 3) return mobius_error(state, "stream:seek expects (offset [, origin])");
@@ -564,7 +564,7 @@ static int stream_seek(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int stream_tell(MobiusState* state, int arg_count) {
+static int stream_tell(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "stream:tell";
     if (arg_count != 1) return mobius_error(state, "stream:tell expects no arguments");
@@ -580,7 +580,7 @@ static int stream_tell(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int stream_name(MobiusState* state, int arg_count) {
+static int stream_name(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     if (arg_count != 1) return mobius_error(state, "stream:name expects no arguments");
     IoStream* s = self_stream(state, "stream:name", &rc);
@@ -596,7 +596,7 @@ static int stream_name(MobiusState* state, int arg_count) {
 // destination in fixed-size chunks; returns the number of bytes copied.
 // ---------------------------------------------------------------------------
 
-static int io_copy(MobiusState* state, int arg_count) {
+static int io_copy(MobiusState* state, int arg_count, void* /*userdata*/) {
     int rc = 0;
     const char* op = "io.copy";
     if (arg_count != 2) return mobius_error(state, "io.copy expects (source, destination)");
@@ -629,7 +629,7 @@ static int io_copy(MobiusState* state, int arg_count) {
 
 // __set_stream_methods(table): install the stream method table (built by
 // io.mob) as the metatable for every stream.
-static int io_set_stream_methods(MobiusState* state, int arg_count) {
+static int io_set_stream_methods(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1 || !mobius_stack_isTable(state, 0)) {
         return mobius_error(state, "__set_stream_methods expects a table");
     }

@@ -51,7 +51,7 @@ static Table* extract_table_self(MobiusState* state, const char* err_msg, TableS
 // METHOD-STYLE TABLE FUNCTIONS (called via tbl:method() with self at base)
 // =============================================================================
 
-int table_method_remove(MobiusState* state, int arg_count) {
+int table_method_remove(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("tbl:remove expects 1 argument (key)");
 
     TableSelfAccess access;
@@ -67,7 +67,7 @@ int table_method_remove(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int table_method_has_key(MobiusState* state, int arg_count) {
+int table_method_has_key(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("tbl:has_key expects 1 argument (key)");
 
     TableSelfAccess access;
@@ -81,7 +81,7 @@ int table_method_has_key(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int table_method_size(MobiusState* state, int arg_count) {
+int table_method_size(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("tbl:size expects 0 arguments");
 
     TableSelfAccess access;
@@ -94,7 +94,7 @@ int table_method_size(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int table_method_pairs(MobiusState* state, int arg_count) {
+int table_method_pairs(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("tbl:pairs expects 0 arguments");
 
     TableSelfAccess access;
@@ -134,7 +134,7 @@ int table_method_pairs(MobiusState* state, int arg_count) {
 // GLOBAL TABLE FUNCTIONS (remain as globals)
 // =============================================================================
 
-int lib_setmetatable(MobiusState* state, int arg_count) {
+int lib_setmetatable(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return state->error("setmetatable expects exactly 2 arguments (table, metatable)");
     }
@@ -176,7 +176,7 @@ int lib_setmetatable(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_getmetatable(MobiusState* state, int arg_count) {
+int lib_getmetatable(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("getmetatable expects exactly 1 argument");
     }

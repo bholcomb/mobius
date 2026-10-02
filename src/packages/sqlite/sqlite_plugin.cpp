@@ -269,7 +269,7 @@ static void push_current_row(MobiusState* state, sqlite3_stmt* stmt) {
     }
 }
 
-static int sqlite_open(MobiusState* state, int arg_count) {
+static int sqlite_open(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite.open() expects 1 argument");
     if (!mobius_stack_isString(state, 0)) return mobius_error(state, "sqlite.open() expects a string path");
 
@@ -296,7 +296,7 @@ static int sqlite_open(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_close(MobiusState* state, int arg_count) {
+static int sqlite_database_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:close() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:close() self is not a database");
     if (!db_obj) return -1;
@@ -313,7 +313,7 @@ static int sqlite_database_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_is_closed(MobiusState* state, int arg_count) {
+static int sqlite_database_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:is_closed() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:is_closed() self is not a database");
     if (!db_obj) return -1;
@@ -324,7 +324,7 @@ static int sqlite_database_is_closed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_prepare(MobiusState* state, int arg_count) {
+static int sqlite_database_prepare(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite:prepare() expects 1 argument");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:prepare() self is not a database");
     if (!db_obj) return -1;
@@ -368,7 +368,7 @@ static int sqlite_database_prepare(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_interrupt(MobiusState* state, int arg_count) {
+static int sqlite_database_interrupt(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:interrupt() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:interrupt() self is not a database");
     if (!db_obj) return -1;
@@ -381,7 +381,7 @@ static int sqlite_database_interrupt(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_changes(MobiusState* state, int arg_count) {
+static int sqlite_database_changes(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:changes() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:changes() self is not a database");
     if (!db_obj) return -1;
@@ -393,7 +393,7 @@ static int sqlite_database_changes(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_total_changes(MobiusState* state, int arg_count) {
+static int sqlite_database_total_changes(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:total_changes() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:total_changes() self is not a database");
     if (!db_obj) return -1;
@@ -405,7 +405,7 @@ static int sqlite_database_total_changes(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_last_insert_rowid(MobiusState* state, int arg_count) {
+static int sqlite_database_last_insert_rowid(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:last_insert_rowid() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:last_insert_rowid() self is not a database");
     if (!db_obj) return -1;
@@ -417,7 +417,7 @@ static int sqlite_database_last_insert_rowid(MobiusState* state, int arg_count) 
     return 1;
 }
 
-static int sqlite_database_error_code(MobiusState* state, int arg_count) {
+static int sqlite_database_error_code(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:error_code() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:error_code() self is not a database");
     if (!db_obj) return -1;
@@ -429,7 +429,7 @@ static int sqlite_database_error_code(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_extended_error_code(MobiusState* state, int arg_count) {
+static int sqlite_database_extended_error_code(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:extended_error_code() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:extended_error_code() self is not a database");
     if (!db_obj) return -1;
@@ -441,7 +441,7 @@ static int sqlite_database_extended_error_code(MobiusState* state, int arg_count
     return 1;
 }
 
-static int sqlite_database_errmsg(MobiusState* state, int arg_count) {
+static int sqlite_database_errmsg(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:errmsg() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:errmsg() self is not a database");
     if (!db_obj) return -1;
@@ -453,7 +453,7 @@ static int sqlite_database_errmsg(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_autocommit(MobiusState* state, int arg_count) {
+static int sqlite_database_autocommit(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:autocommit() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:autocommit() self is not a database");
     if (!db_obj) return -1;
@@ -465,7 +465,7 @@ static int sqlite_database_autocommit(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_metrics(MobiusState* state, int arg_count) {
+static int sqlite_database_metrics(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite:metrics() expects 0 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:metrics() self is not a database");
     if (!db_obj) return -1;
@@ -477,7 +477,7 @@ static int sqlite_database_metrics(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_bind(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "sqlite_stmt:bind() expects 2 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind() self is not a statement");
     if (!stmt_obj) return -1;
@@ -500,7 +500,7 @@ static int sqlite_statement_bind(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_bind_null(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind_null(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite_stmt:bind_null() expects 1 argument");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind_null() self is not a statement");
     if (!stmt_obj) return -1;
@@ -523,7 +523,7 @@ static int sqlite_statement_bind_null(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_bind_int(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind_int(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "sqlite_stmt:bind_int() expects 2 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind_int() self is not a statement");
     if (!stmt_obj) return -1;
@@ -546,7 +546,7 @@ static int sqlite_statement_bind_int(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_bind_float(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind_float(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "sqlite_stmt:bind_float() expects 2 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind_float() self is not a statement");
     if (!stmt_obj) return -1;
@@ -569,7 +569,7 @@ static int sqlite_statement_bind_float(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_bind_text(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind_text(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "sqlite_stmt:bind_text() expects 2 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind_text() self is not a statement");
     if (!stmt_obj) return -1;
@@ -596,7 +596,7 @@ static int sqlite_statement_bind_text(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_bind_blob(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind_blob(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "sqlite_stmt:bind_blob() expects 2 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind_blob() self is not a statement");
     if (!stmt_obj) return -1;
@@ -631,7 +631,7 @@ static int sqlite_statement_bind_blob(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_bind_bool(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind_bool(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "sqlite_stmt:bind_bool() expects 2 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind_bool() self is not a statement");
     if (!stmt_obj) return -1;
@@ -654,7 +654,7 @@ static int sqlite_statement_bind_bool(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_step(MobiusState* state, int arg_count) {
+static int sqlite_statement_step(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:step() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:step() self is not a statement");
     if (!stmt_obj) return -1;
@@ -681,7 +681,7 @@ static int sqlite_statement_step(MobiusState* state, int arg_count) {
     return mobius_error(state, sqlite3_errmsg(db_obj->handle));
 }
 
-static int sqlite_statement_reset(MobiusState* state, int arg_count) {
+static int sqlite_statement_reset(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:reset() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:reset() self is not a statement");
     if (!stmt_obj) return -1;
@@ -701,7 +701,7 @@ static int sqlite_statement_reset(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_clear_bindings(MobiusState* state, int arg_count) {
+static int sqlite_statement_clear_bindings(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:clear_bindings() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:clear_bindings() self is not a statement");
     if (!stmt_obj) return -1;
@@ -720,7 +720,7 @@ static int sqlite_statement_clear_bindings(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_finalize(MobiusState* state, int arg_count) {
+static int sqlite_statement_finalize(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:finalize() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:finalize() self is not a statement");
     if (!stmt_obj) return -1;
@@ -741,7 +741,7 @@ static int sqlite_statement_finalize(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_is_finalized(MobiusState* state, int arg_count) {
+static int sqlite_statement_is_finalized(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:is_finalized() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:is_finalized() self is not a statement");
     if (!stmt_obj) return -1;
@@ -750,7 +750,7 @@ static int sqlite_statement_is_finalized(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_parameter_count(MobiusState* state, int arg_count) {
+static int sqlite_statement_parameter_count(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:parameter_count() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:parameter_count() self is not a statement");
     if (!stmt_obj) return -1;
@@ -764,7 +764,7 @@ static int sqlite_statement_parameter_count(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_parameter_name(MobiusState* state, int arg_count) {
+static int sqlite_statement_parameter_name(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite_stmt:parameter_name() expects 1 argument");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:parameter_name() self is not a statement");
     if (!stmt_obj) return -1;
@@ -782,7 +782,7 @@ static int sqlite_statement_parameter_name(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_column_count(MobiusState* state, int arg_count) {
+static int sqlite_statement_column_count(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:column_count() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:column_count() self is not a statement");
     if (!stmt_obj) return -1;
@@ -796,7 +796,7 @@ static int sqlite_statement_column_count(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_column_name(MobiusState* state, int arg_count) {
+static int sqlite_statement_column_name(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite_stmt:column_name() expects 1 argument");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:column_name() self is not a statement");
     if (!stmt_obj) return -1;
@@ -814,7 +814,7 @@ static int sqlite_statement_column_name(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_column_type(MobiusState* state, int arg_count) {
+static int sqlite_statement_column_type(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite_stmt:column_type() expects 1 argument");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:column_type() self is not a statement");
     if (!stmt_obj) return -1;
@@ -832,7 +832,7 @@ static int sqlite_statement_column_type(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_column_value(MobiusState* state, int arg_count) {
+static int sqlite_statement_column_value(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite_stmt:column_value() expects 1 argument");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:column_value() self is not a statement");
     if (!stmt_obj) return -1;
@@ -850,7 +850,7 @@ static int sqlite_statement_column_value(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_columns(MobiusState* state, int arg_count) {
+static int sqlite_statement_columns(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:columns() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:columns() self is not a statement");
     if (!stmt_obj) return -1;
@@ -872,7 +872,7 @@ static int sqlite_statement_columns(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_read_only(MobiusState* state, int arg_count) {
+static int sqlite_statement_read_only(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:read_only() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:read_only() self is not a statement");
     if (!stmt_obj) return -1;
@@ -886,7 +886,7 @@ static int sqlite_statement_read_only(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_sql(MobiusState* state, int arg_count) {
+static int sqlite_statement_sql(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:sql() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:sql() self is not a statement");
     if (!stmt_obj) return -1;
@@ -901,7 +901,7 @@ static int sqlite_statement_sql(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_expanded_sql(MobiusState* state, int arg_count) {
+static int sqlite_statement_expanded_sql(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:expanded_sql() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:expanded_sql() self is not a statement");
     if (!stmt_obj) return -1;
@@ -921,7 +921,7 @@ static int sqlite_statement_expanded_sql(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_metrics(MobiusState* state, int arg_count) {
+static int sqlite_statement_metrics(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:metrics() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:metrics() self is not a statement");
     if (!stmt_obj) return -1;
@@ -990,7 +990,7 @@ static int bind_params_collection(MobiusState* state, sqlite3_stmt* stmt, int pa
     return mobius_error(state, (std::string(context) + " params must be an array, table, or nil").c_str());
 }
 
-static int sqlite_statement_bind_all(MobiusState* state, int arg_count) {
+static int sqlite_statement_bind_all(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite_stmt:bind_all() expects 1 argument");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:bind_all() self is not a statement");
     if (!stmt_obj) return -1;
@@ -1009,7 +1009,7 @@ static int sqlite_statement_bind_all(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_statement_all(MobiusState* state, int arg_count) {
+static int sqlite_statement_all(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:all() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:all() self is not a statement");
     if (!stmt_obj) return -1;
@@ -1036,11 +1036,11 @@ static int sqlite_statement_all(MobiusState* state, int arg_count) {
     }
 }
 
-static int sqlite_statement_one(MobiusState* state, int arg_count) {
-    return sqlite_statement_step(state, arg_count);
+static int sqlite_statement_one(MobiusState* state, int arg_count, void* /*userdata*/) {
+    return sqlite_statement_step(state, arg_count, nullptr);
 }
 
-static int sqlite_statement_run(MobiusState* state, int arg_count) {
+static int sqlite_statement_run(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "sqlite_stmt:run() expects 0 arguments");
     StatementObject* stmt_obj = get_statement_object(state, 0, "sqlite_stmt:run() self is not a statement");
     if (!stmt_obj) return -1;
@@ -1059,7 +1059,7 @@ static int sqlite_statement_run(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int sqlite_database_exec(MobiusState* state, int arg_count) {
+static int sqlite_database_exec(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2 && arg_count != 3) return mobius_error(state, "sqlite:exec() expects 1 or 2 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:exec() self is not a database");
     if (!db_obj) return -1;
@@ -1097,7 +1097,7 @@ static int sqlite_database_exec(MobiusState* state, int arg_count) {
     }
 }
 
-static int sqlite_database_query_all(MobiusState* state, int arg_count) {
+static int sqlite_database_query_all(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2 && arg_count != 3) return mobius_error(state, "sqlite:query() expects 1 or 2 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:query() self is not a database");
     if (!db_obj) return -1;
@@ -1138,7 +1138,7 @@ static int sqlite_database_query_all(MobiusState* state, int arg_count) {
     }
 }
 
-static int sqlite_database_query_one(MobiusState* state, int arg_count) {
+static int sqlite_database_query_one(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2 && arg_count != 3) return mobius_error(state, "sqlite:query_one() expects 1 or 2 arguments");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:query_one() self is not a database");
     if (!db_obj) return -1;
@@ -1176,7 +1176,7 @@ static int sqlite_database_query_one(MobiusState* state, int arg_count) {
     return mobius_error(state, error.c_str());
 }
 
-static int sqlite_database_transaction(MobiusState* state, int arg_count) {
+static int sqlite_database_transaction(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "sqlite:transaction() expects 1 argument");
     DatabaseObject* db_obj = get_database_object(state, 0, "sqlite:transaction() self is not a database");
     if (!db_obj) return -1;

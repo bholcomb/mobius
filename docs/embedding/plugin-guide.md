@@ -42,7 +42,7 @@ A plugin must:
 ```c
 #include <mobius/mobius_plugin.h>
 
-int my_hello(MobiusState* state, int arg_count) {
+int my_hello(MobiusState* state, int arg_count, void* userdata) {
     mobius_stack_pushString(state, "hello from plugin!");
     return 1;
 }
@@ -86,7 +86,7 @@ arguments from the stack (last at `-1`), pop what you consume, push results, and
 return the count pushed — or return `mobius_error()` on failure.
 
 ```c
-int my_add(MobiusState* state, int arg_count) {
+int my_add(MobiusState* state, int arg_count, void* userdata) {
     if (arg_count != 2)
         return mobius_error(state, "add() expects 2 arguments");
     if (!mobius_stack_isNumber(state, -1) || !mobius_stack_isNumber(state, -2))
@@ -287,7 +287,9 @@ These values match the interpreter's internal enum numerically.
 2. **Pop what you consume** before pushing results, to keep the stack clean.
 3. **Use `SIZE_MAX`** as `arg_count` for variadic functions.
 4. **Keep names unique** — the plugin name is the script namespace.
-5. **Match `api_version`** to `MOBIUS_PLUGIN_API_VERSION`.
+5. **Match `api_version`** to `MOBIUS_PLUGIN_API_VERSION` (2 since native
+   functions take a `userdata` argument; plugins built for version 1 are
+   rejected with a version-mismatch error and must be rebuilt).
 6. **Free temporary allocations** after pushing a result (the push copies it).
 7. **Use lifecycle hooks** for resource setup/teardown and for adding constants
    in `post_init`.

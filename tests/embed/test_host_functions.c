@@ -13,8 +13,8 @@
 #define CHECK(cond, what) do { if (!(cond)) { printf("FAIL: %s\n", what); return 1; } } while (0)
 
 /* One dispatcher: the userdata says which "managed" function this is. */
-static int dispatcher(MobiusState* s, int argc) {
-    long which = (long)(intptr_t)mobius_function_userdata(s);
+static int dispatcher(MobiusState* s, int argc, void* userdata) {
+    long which = (long)(intptr_t)userdata;
     int64_t x = argc > 0 ? mobius_stack_getInt64(s, 0) : 0;
     mobius_stack_pop(s, argc);
     mobius_stack_pushInt64(s, which * 1000 + x);
@@ -25,7 +25,7 @@ static MobiusValueRef callback_ref;
 static int moved;
 
 /* Runs on a fiber; calls back into the script function in callback_ref. */
-static int hold(MobiusState* s, int argc) {
+static int hold(MobiusState* s, int argc, void* userdata) {
     mobius_stack_pop(s, argc);
     pthread_t before = pthread_self();
     int rc = mobius_call_ref(s, callback_ref, NULL, 0, 1);

@@ -55,7 +55,7 @@ from Mobius scripts:
 All game API functions use only the public stack API:
 
 ```cpp
-int game_get_player_health(MobiusState* state, int arg_count) {
+int game_get_player_health(MobiusState* state, int arg_count, void* userdata) {
     if (arg_count != 0)
         return mobius_error(state, "get_player_health takes no arguments");
     if (!g_game)

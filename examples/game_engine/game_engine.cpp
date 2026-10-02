@@ -59,7 +59,7 @@ static GameEngine* g_game = NULL;
 /**
  * Get player position: get_player_pos() -> string "x,y"
  */
-int game_get_player_pos(MobiusState* state, int arg_count) {
+int game_get_player_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return mobius_error(state, "get_player_pos takes no arguments");
     }
@@ -78,7 +78,7 @@ int game_get_player_pos(MobiusState* state, int arg_count) {
 /**
  * Set player position: set_player_pos(x, y)
  */
-int game_set_player_pos(MobiusState* state, int arg_count) {
+int game_set_player_pos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "set_player_pos requires 2 arguments");
     }
@@ -106,7 +106,7 @@ int game_set_player_pos(MobiusState* state, int arg_count) {
 /**
  * Get player health: get_player_health() -> integer
  */
-int game_get_player_health(MobiusState* state, int arg_count) {
+int game_get_player_health(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return mobius_error(state, "get_player_health takes no arguments");
     }
@@ -122,7 +122,7 @@ int game_get_player_health(MobiusState* state, int arg_count) {
 /**
  * Set player health: set_player_health(health)
  */
-int game_set_player_health(MobiusState* state, int arg_count) {
+int game_set_player_health(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "set_player_health requires 1 argument");
     }
@@ -150,7 +150,7 @@ int game_set_player_health(MobiusState* state, int arg_count) {
 /**
  * Get player score: get_score() -> integer
  */
-int game_get_score(MobiusState* state, int arg_count) {
+int game_get_score(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return mobius_error(state, "get_score takes no arguments");
     }
@@ -166,7 +166,7 @@ int game_get_score(MobiusState* state, int arg_count) {
 /**
  * Add to score: add_score(points)
  */
-int game_add_score(MobiusState* state, int arg_count) {
+int game_add_score(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "add_score requires 1 argument");
     }
@@ -191,7 +191,7 @@ int game_add_score(MobiusState* state, int arg_count) {
 /**
  * Spawn enemy: spawn_enemy(x, y, type)
  */
-int game_spawn_enemy(MobiusState* state, int arg_count) {
+int game_spawn_enemy(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) {
         return mobius_error(state, "spawn_enemy requires 3 arguments");
     }
@@ -230,7 +230,7 @@ int game_spawn_enemy(MobiusState* state, int arg_count) {
 /**
  * Get current level: get_level() -> integer
  */
-int game_get_level(MobiusState* state, int arg_count) {
+int game_get_level(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) {
         return mobius_error(state, "get_level takes no arguments");
     }
@@ -246,7 +246,7 @@ int game_get_level(MobiusState* state, int arg_count) {
 /**
  * Game log function: game_log(message)
  */
-int game_log(MobiusState* state, int arg_count) {
+int game_log(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "game_log requires 1 argument");
     }

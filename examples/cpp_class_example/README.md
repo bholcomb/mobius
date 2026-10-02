@@ -39,7 +39,7 @@ void vector3_destructor(void* ptr) {
 ### 2. Constructor Function
 
 ```cpp
-int vector3_new(MobiusState* state, int arg_count) {
+int vector3_new(MobiusState* state, int arg_count, void* userdata) {
     double x = 0, y = 0, z = 0;
     if (arg_count >= 1) x = mobius_stack_asFloat64(state, -arg_count);
     if (arg_count >= 2) y = mobius_stack_asFloat64(state, -arg_count + 1);
@@ -56,7 +56,7 @@ int vector3_new(MobiusState* state, int arg_count) {
 ### 3. Method Binding
 
 ```cpp
-int vector3_length_fn(MobiusState* state, int arg_count) {
+int vector3_length_fn(MobiusState* state, int arg_count, void* userdata) {
     if (arg_count != 1)
         return mobius_error(state, "vector3_length() expects 1 argument");
 

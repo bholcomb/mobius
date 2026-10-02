@@ -71,7 +71,7 @@ static BufferValue* make_buffer_copy(size_t size, uint8_t fill = 0, bool fixed =
     return buffer;
 }
 
-int lib_buffer_create(MobiusState* state, int arg_count) {
+int lib_buffer_create(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) {
         return state->error("buffer_create expects 1 or 2 arguments (size [, fill_byte])");
     }
@@ -95,7 +95,7 @@ int lib_buffer_create(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int lib_buffer_from_string(MobiusState* state, int arg_count) {
+int lib_buffer_from_string(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return state->error("buffer_from_string expects 1 argument (string)");
     }
@@ -116,7 +116,7 @@ int lib_buffer_from_string(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_get(MobiusState* state, int arg_count) {
+int buffer_method_get(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("buffer:get expects 1 argument (index)");
 
     BufferSelfAccess access;
@@ -138,7 +138,7 @@ int buffer_method_get(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_set(MobiusState* state, int arg_count) {
+int buffer_method_set(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("buffer:set expects 2 arguments (index, byte)");
 
     BufferSelfAccess access;
@@ -169,7 +169,7 @@ int buffer_method_set(MobiusState* state, int arg_count) {
     return 0;
 }
 
-int buffer_method_length(MobiusState* state, int arg_count) {
+int buffer_method_length(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("buffer:length expects 0 arguments");
     BufferSelfAccess access;
     BufferValue* buffer = extract_buffer_self(state, "buffer:length: self is not a buffer", &access);
@@ -179,7 +179,7 @@ int buffer_method_length(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_resize(MobiusState* state, int arg_count) {
+int buffer_method_resize(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3) {
         return state->error("buffer:resize expects 1 or 2 arguments (size [, fill_byte])");
     }
@@ -208,7 +208,7 @@ int buffer_method_resize(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_reserve(MobiusState* state, int arg_count) {
+int buffer_method_reserve(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("buffer:reserve expects 1 argument (capacity)");
 
     BufferSelfAccess access;
@@ -227,7 +227,7 @@ int buffer_method_reserve(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_append(MobiusState* state, int arg_count) {
+int buffer_method_append(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return state->error("buffer:append expects 1 argument");
 
     BufferSelfAccess access;
@@ -260,7 +260,7 @@ int buffer_method_append(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_copy(MobiusState* state, int arg_count) {
+int buffer_method_copy(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("buffer:copy expects 0 arguments");
     BufferSelfAccess access;
     BufferValue* buffer = extract_buffer_self(state, "buffer:copy: self is not a buffer", &access);
@@ -272,7 +272,7 @@ int buffer_method_copy(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_slice(MobiusState* state, int arg_count) {
+int buffer_method_slice(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return state->error("buffer:slice expects 2 arguments (start, end)");
 
     BufferSelfAccess access;
@@ -308,7 +308,7 @@ int buffer_method_slice(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_to_string(MobiusState* state, int arg_count) {
+int buffer_method_to_string(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("buffer:to_string expects 0 arguments");
     BufferSelfAccess access;
     BufferValue* buffer = extract_buffer_self(state, "buffer:to_string: self is not a buffer", &access);
@@ -319,7 +319,7 @@ int buffer_method_to_string(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_address(MobiusState* state, int arg_count) {
+int buffer_method_address(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("buffer:address expects 0 arguments");
     BufferSelfAccess access;
     BufferValue* buffer = extract_buffer_self(state, "buffer:address: self is not a buffer", &access);
@@ -329,7 +329,7 @@ int buffer_method_address(MobiusState* state, int arg_count) {
     return 1;
 }
 
-int buffer_method_is_fixed(MobiusState* state, int arg_count) {
+int buffer_method_is_fixed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return state->error("buffer:is_fixed expects 0 arguments");
     BufferSelfAccess access;
     BufferValue* buffer = extract_buffer_self(state, "buffer:is_fixed: self is not a buffer", &access);

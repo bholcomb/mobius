@@ -1195,7 +1195,7 @@ static bool zstd_decompress_file(const std::string& input_path, const std::strin
 }
 #endif
 
-static int compression_inspect_native(MobiusState* state, int arg_count) {
+static int compression_inspect_native(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) {
         return mobius_error(state, "__inspect_native() expects path and optional options");
     }
@@ -1227,7 +1227,7 @@ static int compression_inspect_native(MobiusState* state, int arg_count) {
     return push_inspect_table(state, path, info);
 }
 
-static int compression_list_native(MobiusState* state, int arg_count) {
+static int compression_list_native(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) {
         return mobius_error(state, "__list_native() expects path and optional options");
     }
@@ -1259,7 +1259,7 @@ static int compression_list_native(MobiusState* state, int arg_count) {
     return push_entry_list(state, entries);
 }
 
-static int compression_extract_native(MobiusState* state, int arg_count) {
+static int compression_extract_native(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3) {
         return mobius_error(state, "__extract_native() expects path, destination, and optional options");
     }
@@ -1293,7 +1293,7 @@ static int compression_extract_native(MobiusState* state, int arg_count) {
     return push_summary_table(state, info.format, destination, 0, files_written);
 }
 
-static int compression_create_native(MobiusState* state, int arg_count) {
+static int compression_create_native(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3) {
         return mobius_error(state, "__create_native() expects output_path, inputs, and optional options");
     }
@@ -1351,7 +1351,7 @@ static int compression_create_native(MobiusState* state, int arg_count) {
     return push_summary_table(state, info.format, output_path, file_size_or_zero(output_path), files_written);
 }
 
-static int compression_compress_native(MobiusState* state, int arg_count) {
+static int compression_compress_native(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3) {
         return mobius_error(state, "__compress_native() expects input_path, output_path, and optional options");
     }
@@ -1406,7 +1406,7 @@ static int compression_compress_native(MobiusState* state, int arg_count) {
     return mobius_error(state, "__compress_native() supports only gzip and zstd stream formats");
 }
 
-static int compression_decompress_native(MobiusState* state, int arg_count) {
+static int compression_decompress_native(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3) {
         return mobius_error(state, "__decompress_native() expects input_path, output_path, and optional options");
     }

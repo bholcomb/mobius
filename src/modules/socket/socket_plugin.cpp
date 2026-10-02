@@ -239,7 +239,7 @@ static int push_socket_userdata(MobiusState* state, mobius_socket_handle handle,
     return 1;
 }
 
-static int socket_connect(MobiusState* state, int arg_count) {
+static int socket_connect(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "socket.connect() expects 2 arguments (host, port)");
     if (!mobius_stack_isString(state, -2)) return mobius_error(state, "socket.connect() host must be a string");
 
@@ -290,7 +290,7 @@ static int socket_connect(MobiusState* state, int arg_count) {
     return push_socket_userdata(state, handle, SocketKind::tcp_socket, TCP_SOCKET_TYPE);
 }
 
-static int socket_listen(MobiusState* state, int arg_count) {
+static int socket_listen(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 2 || arg_count > 3) {
         return mobius_error(state, "socket.listen() expects 2 or 3 arguments (host, port [, backlog])");
     }
@@ -349,7 +349,7 @@ static int socket_listen(MobiusState* state, int arg_count) {
     return push_socket_userdata(state, handle, SocketKind::tcp_listener, TCP_LISTENER_TYPE);
 }
 
-static int socket_udp(MobiusState* state, int arg_count) {
+static int socket_udp(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::string host;
     int64_t port = 0;
     if (arg_count != 0 && arg_count != 2) {
@@ -402,7 +402,7 @@ static int socket_udp(MobiusState* state, int arg_count) {
     return push_socket_userdata(state, handle, SocketKind::udp_socket, UDP_SOCKET_TYPE);
 }
 
-static int socket_base_close(MobiusState* state, int arg_count) {
+static int socket_base_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "socket:close() expects 0 arguments");
     const char* type_name = nullptr;
     SocketObject* obj = static_cast<SocketObject*>(mobius_stack_getUserdata(state, 0, &type_name));
@@ -417,7 +417,7 @@ static int socket_base_close(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int socket_base_is_closed(MobiusState* state, int arg_count) {
+static int socket_base_is_closed(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "socket:is_closed() expects 0 arguments");
     const char* type_name = nullptr;
     SocketObject* obj = static_cast<SocketObject*>(mobius_stack_getUserdata(state, 0, &type_name));
@@ -427,7 +427,7 @@ static int socket_base_is_closed(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int socket_base_set_timeout(MobiusState* state, int arg_count) {
+static int socket_base_set_timeout(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "socket:set_timeout() expects 1 argument (milliseconds)");
     const char* type_name = nullptr;
     SocketObject* obj = static_cast<SocketObject*>(mobius_stack_getUserdata(state, 0, &type_name));
@@ -443,7 +443,7 @@ static int socket_base_set_timeout(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int socket_base_local_addr(MobiusState* state, int arg_count) {
+static int socket_base_local_addr(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "socket:local_addr() expects 0 arguments");
     const char* type_name = nullptr;
     SocketObject* obj = static_cast<SocketObject*>(mobius_stack_getUserdata(state, 0, &type_name));
@@ -453,7 +453,7 @@ static int socket_base_local_addr(MobiusState* state, int arg_count) {
     return get_socket_name_table(state, obj, false);
 }
 
-static int socket_base_peer_addr(MobiusState* state, int arg_count) {
+static int socket_base_peer_addr(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "socket:peer_addr() expects 0 arguments");
     const char* type_name = nullptr;
     SocketObject* obj = static_cast<SocketObject*>(mobius_stack_getUserdata(state, 0, &type_name));
@@ -465,7 +465,7 @@ static int socket_base_peer_addr(MobiusState* state, int arg_count) {
     return get_socket_name_table(state, obj, true);
 }
 
-static int tcp_socket_send(MobiusState* state, int arg_count) {
+static int tcp_socket_send(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "socket:send() expects 1 argument");
     SocketObject* obj = get_socket_object(state, 0, TCP_SOCKET_TYPE);
     if (!obj) return mobius_error(state, "socket:send() self is not a tcp socket");
@@ -505,7 +505,7 @@ static int tcp_socket_send(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int tcp_socket_recv(MobiusState* state, int arg_count) {
+static int tcp_socket_recv(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "socket:recv() expects 1 argument (max_bytes)");
     SocketObject* obj = get_socket_object(state, 0, TCP_SOCKET_TYPE);
     if (!obj) return mobius_error(state, "socket:recv() self is not a tcp socket");
@@ -535,7 +535,7 @@ static int tcp_socket_recv(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int tcp_socket_shutdown(MobiusState* state, int arg_count) {
+static int tcp_socket_shutdown(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 3) {
         return mobius_error(state, "socket:shutdown() expects 0, 1, or 2 boolean arguments");
     }
@@ -573,7 +573,7 @@ static int tcp_socket_shutdown(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int tcp_listener_accept(MobiusState* state, int arg_count) {
+static int tcp_listener_accept(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) return mobius_error(state, "socket:accept() expects 0 arguments");
     SocketObject* obj = get_socket_object(state, 0, TCP_LISTENER_TYPE);
     if (!obj) return mobius_error(state, "socket:accept() self is not a tcp listener");
@@ -596,7 +596,7 @@ static int tcp_listener_accept(MobiusState* state, int arg_count) {
     return push_socket_userdata(state, client, SocketKind::tcp_socket, TCP_SOCKET_TYPE);
 }
 
-static int udp_socket_connect(MobiusState* state, int arg_count) {
+static int udp_socket_connect(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) return mobius_error(state, "socket:connect() expects 2 arguments (host, port)");
     SocketObject* obj = get_socket_object(state, 0, UDP_SOCKET_TYPE);
     if (!obj) return mobius_error(state, "socket:connect() self is not a udp socket");
@@ -630,7 +630,7 @@ static int udp_socket_connect(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int udp_socket_send(MobiusState* state, int arg_count) {
+static int udp_socket_send(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "socket:send() expects 1 argument");
     SocketObject* obj = get_socket_object(state, 0, UDP_SOCKET_TYPE);
     if (!obj) return mobius_error(state, "socket:send() self is not a udp socket");
@@ -653,7 +653,7 @@ static int udp_socket_send(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int udp_socket_recv(MobiusState* state, int arg_count) {
+static int udp_socket_recv(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "socket:recv() expects 1 argument (max_bytes)");
     SocketObject* obj = get_socket_object(state, 0, UDP_SOCKET_TYPE);
     if (!obj) return mobius_error(state, "socket:recv() self is not a udp socket");
@@ -677,7 +677,7 @@ static int udp_socket_recv(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int udp_socket_send_to(MobiusState* state, int arg_count) {
+static int udp_socket_send_to(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 4) return mobius_error(state, "socket:send_to() expects 3 arguments (host, port, data)");
     SocketObject* obj = get_socket_object(state, 0, UDP_SOCKET_TYPE);
     if (!obj) return mobius_error(state, "socket:send_to() self is not a udp socket");
@@ -722,7 +722,7 @@ static int udp_socket_send_to(MobiusState* state, int arg_count) {
     return 1;
 }
 
-static int udp_socket_recv_from(MobiusState* state, int arg_count) {
+static int udp_socket_recv_from(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) return mobius_error(state, "socket:recv_from() expects 1 argument (max_bytes)");
     SocketObject* obj = get_socket_object(state, 0, UDP_SOCKET_TYPE);
     if (!obj) return mobius_error(state, "socket:recv_from() self is not a udp socket");

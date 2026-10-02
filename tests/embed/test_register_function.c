@@ -7,14 +7,14 @@
 
 #define CHECK(cond, what) do { if (!(cond)) { printf("FAIL: %s\n", what); return 1; } } while (0)
 
-static int add_one(MobiusState* s, int argc) {
+static int add_one(MobiusState* s, int argc, void* userdata) {
     int64_t v = mobius_stack_getInt64(s, 0);
     mobius_stack_pop(s, argc);
     mobius_stack_pushInt64(s, v + 1);
     return 1;
 }
 
-static int add_two(MobiusState* s, int argc) {
+static int add_two(MobiusState* s, int argc, void* userdata) {
     int64_t v = mobius_stack_getInt64(s, 0);
     mobius_stack_pop(s, argc);
     mobius_stack_pushInt64(s, v + 2);
