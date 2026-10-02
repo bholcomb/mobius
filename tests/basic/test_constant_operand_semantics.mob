@@ -1,0 +1,46 @@
+// An operator with a constant operand behaves like the same operator with
+// two variables. The compiler's immediate and inline-constant instruction
+// forms only did numeric arithmetic: on a string they errored or returned
+// the constant, and comparisons ignored table metamethods.
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var s = opaque("v")
+    check("string + int", s + 1, "v1")
+    check("int + string", 1 + s, "1v")
+    check("string + float", s + 1.5, "v1.5")
+    check("float + string", 2.5 + s, "2.5v")
+    check("string + large int", s + 100000, "v100000")
+
+    var mt = {
+        __lt: func(a, b) { return true },
+        __le: func(a, b) { return true },
+        __add: func(a, b) { return "added" },
+        __eq: func(a, b) { return true }
+    }
+    var t = setmetatable({}, mt)
+    var branch = ""
+    if (t < 5) { branch = branch + "lt " }
+    if (t <= 5) { branch = branch + "le " }
+    if (5 < t) { branch = branch + "rev " }
+    check("comparisons with a literal use metamethods", branch, "lt le rev ")
+    check("table + literal uses __add", t + 1, "added")
+    check("literal * table falls back to the error path",
+          (func() { try { return 2 * t } catch e { return "error" } })(), "error")
+
+    // Numeric code still works.
+    var n = opaque(10)
+    check("int arithmetic", n + 1 + n * 2 - 3, 28)
+    check("float arithmetic", opaque(1.5) * 2, 3.0)
+    var c = 0
+    for (var i = 0; i < 10; i++) { if (i < 5) { c++ } }
+    check("int compare", c, 5)
+}
+main()
+print("constant operand semantics: PASS")
