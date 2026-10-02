@@ -1,0 +1,28 @@
+// Shifts by 64 or more shift every bit out, and a negative count is an
+// error. These were undefined in C++ (x86 masked the count: 1 << 64 gave 1).
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var one = opaque(1)
+    check("1 << 63", one << 63, -9223372036854775807 - 1)
+    check("1 << 64", one << 64, 0)
+    check("1 << 200", one << 200, 0)
+    check("8 >> 64", opaque(8) >> 64, 0)
+    check("-8 >> 64 fills with the sign", opaque(-8) >> 64, -1)
+    check("-8 >> 1 is arithmetic", opaque(-8) >> 1, -4)
+    var u = opaque(18446744073709551615)
+    check("uint64 >> 64", u >> 64, opaque(18446744073709551615) - u)
+    check("ordinary shift", opaque(3) << 4, 48)
+
+    var caught = ""
+    try { var x = one << opaque(-1) } catch e { caught = e }
+    check("negative count", caught, "Shift count cannot be negative")
+}
+main()
+print("shift counts: PASS")

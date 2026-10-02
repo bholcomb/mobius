@@ -162,6 +162,10 @@ Dividing by zero is an error.
 
 `++` and `--` work on any number: a float steps by `1.0`.
 
+Shifting by 64 or more bits shifts every bit out: `<<` gives `0`, and `>>` gives
+`0`, or `-1` for a negative `int64` (`>>` copies the sign bit). A negative shift
+count is an error.
+
 ## Literals
 
 **Integers** — decimal, hexadecimal (`0x`), and binary (`0b`):
