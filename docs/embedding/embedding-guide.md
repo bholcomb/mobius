@@ -114,7 +114,7 @@ MobiusState* state = mobius_new_state(&config);
 | `main_fiber_stack_size`   | `size_t`                 | `8388608` (8 MiB)      | C stack size for the top-level script fiber, which hosts the whole script and its deep native calls; `0` falls back to `fiber_stack_size` |
 | `initial_fiber_pool_size` | `size_t`                 | `16`                   | Fibers pre-allocated on first spawn |
 | `max_fiber_pool_size`     | `size_t`                 | `256`                  | Hard cap on pooled fibers |
-| `max_worker_threads`      | `int`                    | `hardware_concurrency() / 2` (≥ 1) | Extra worker threads; `0` = single-threaded cooperative. The calling thread always participates, so total workers = this value + 1. |
+| `max_worker_threads`      | `int`                    | `hardware_concurrency() / 2 - 1` (≥ 1) | Extra worker threads; `0` = single-threaded cooperative. The calling thread always participates, so total workers = this value + 1. |
 | `string_pool_buckets`     | `size_t`                 | `65536`                | Initial string-intern hash buckets (rounded to a power of two; grows as needed). `0` = default. See [Footprint](#footprint). |
 | `global_slot_capacity`    | `size_t`                 | `16384`                | Preallocated global-variable slots. **Also the hard cap** — exceeding it is a runtime error, so include headroom for stdlib registrations. `0` = default. |
 
@@ -597,7 +597,11 @@ MobiusState* state = mobius_new_state(&config);
 Threading model:
 
 - Each state maintains a pool of worker threads (`max_worker_threads`); the
-  calling thread also participates as a worker.
+  calling thread also participates as a worker: during `mobius_exec_string`
+  it runs ready fibers (usually the main script fiber) until the script
+  finishes. With `max_worker_threads = 0` it is the only worker, and fibers
+  the script spawned but never awaited continue during the next call into
+  the state.
 - The **top-level script runs on a dedicated main fiber** with its own,
   larger stack (`main_fiber_stack_size`, default 8 MiB). Pooled worker fibers
   use `fiber_stack_size` (default 512 KiB). Because native calls the script
