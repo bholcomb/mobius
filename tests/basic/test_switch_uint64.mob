@@ -1,0 +1,29 @@
+// switch cases and ranges match uint64 values. The compatibility guard
+// counted only int64 and float64 as numbers, so a uint64 matched no
+// numeric case or range.
+func opaque(x) { return x }
+func u64(n) { return opaque(18446744073709551615) - opaque(18446744073709551615) + n }
+func classify(v) {
+    switch (v) {
+        case 18446744073709551600..18446744073709551615: return "top"
+        case 0..10: return "small"
+        case 42: return "answer"
+        case 9223372036854775807..18446744073709551599: return "high"
+        default: return "none"
+    }
+}
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + want + ", got " + got)
+        exit(1)
+    }
+}
+var biggest = opaque(18446744073709551615)
+check("top end", classify(biggest), "top")
+check("inside top", classify(biggest - opaque(5)), "top")
+check("high", classify(biggest - opaque(100)), "high")
+check("small uint64", classify(u64(3)), "small")
+check("value case", classify(u64(42)), "answer")
+check("int64 still works", classify(opaque(7)), "small")
+check("no match", classify(u64(20)), "none")
+print("switch on uint64: PASS")

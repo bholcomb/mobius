@@ -2746,8 +2746,10 @@ MOBIUS_FORCEINLINE static int vm_op_typecompat(MobiusVM* vm, VMFrame& f, uint32_
     Value lhs_s, rhs_s;
     const Value& lhs = shared_peek(RKB(inst), lhs_s);
     const Value& rhs = shared_peek(RKC(inst), rhs_s);
-    bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_FLOAT64);
-    bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_FLOAT64);
+    // uint64 is a number too: a uint64 value used to be "incompatible" with
+    // every range, so `case 1..10:` never matched it.
+    bool l_num = (lhs.type == VAL_INT64 || lhs.type == VAL_UINT64 || lhs.type == VAL_FLOAT64);
+    bool r_num = (rhs.type == VAL_INT64 || rhs.type == VAL_UINT64 || rhs.type == VAL_FLOAT64);
     bool compat = (l_num && r_num) || (lhs.type == VAL_STRING && rhs.type == VAL_STRING);
     if (compat != (a != 0)) f.ip++;
     return 0;
