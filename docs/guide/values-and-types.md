@@ -166,6 +166,9 @@ Shifting by 64 or more bits shifts every bit out: `<<` gives `0`, and `>>` gives
 `0`, or `-1` for a negative `int64` (`>>` copies the sign bit). A negative shift
 count is an error.
 
+Comparisons between `int64` and `uint64` use the mathematical values: every
+`uint64` is greater than every negative `int64`.
+
 ## Literals
 
 **Integers** — decimal, hexadecimal (`0x`), and binary (`0b`):

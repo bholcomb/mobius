@@ -2282,6 +2282,25 @@ MOBIUS_FORCEINLINE static int vm_op_eq(MobiusVM* vm, VMFrame& f, uint32_t inst) 
     return 0;
 }
 
+// Exact three-way comparison of two integers (int64 or uint64): a uint64 is
+// greater than every negative int64. Comparing both as uint64 made
+// 18446744073709551615 > -1 false (-1 became 2^64 - 1).
+static MOBIUS_FORCEINLINE int compare_integers(const Value& l, const Value& r) {
+    if (l.type == VAL_UINT64 && r.type == VAL_INT64) {
+        if (r.as.i64 < 0) return 1;
+        uint64_t rv = (uint64_t)r.as.i64;
+        return l.as.u64 < rv ? -1 : l.as.u64 > rv;
+    }
+    if (l.type == VAL_INT64 && r.type == VAL_UINT64) {
+        if (l.as.i64 < 0) return -1;
+        uint64_t lv = (uint64_t)l.as.i64;
+        return lv < r.as.u64 ? -1 : lv > r.as.u64;
+    }
+    if (l.type == VAL_UINT64)
+        return l.as.u64 < r.as.u64 ? -1 : l.as.u64 > r.as.u64;
+    return l.as.i64 < r.as.i64 ? -1 : l.as.i64 > r.as.i64;
+}
+
 MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) {
     int a = DECODE_A(inst);
     Value lhs_s, rhs_s;
@@ -2292,10 +2311,7 @@ MOBIUS_FORCEINLINE static int vm_op_lt(MobiusVM* vm, VMFrame& f, uint32_t inst) 
     bool lt;
     if (l_num && r_num) {
         if (lhs.type != VAL_FLOAT64 && rhs.type != VAL_FLOAT64) {
-            if (MobiusVM::vm_use_unsigned(lhs, rhs))
-                lt = MobiusVM::vm_extract_uint64(lhs) < MobiusVM::vm_extract_uint64(rhs);
-            else
-                lt = MobiusVM::vm_extract_int64(lhs) < MobiusVM::vm_extract_int64(rhs);
+            lt = compare_integers(lhs, rhs) < 0;
         } else {
             lt = MobiusVM::vm_extract_double(lhs) < MobiusVM::vm_extract_double(rhs);
         }
@@ -2329,10 +2345,7 @@ MOBIUS_FORCEINLINE static int vm_op_le(MobiusVM* vm, VMFrame& f, uint32_t inst) 
     bool le;
     if (l_num && r_num) {
         if (lhs.type != VAL_FLOAT64 && rhs.type != VAL_FLOAT64) {
-            if (MobiusVM::vm_use_unsigned(lhs, rhs))
-                le = MobiusVM::vm_extract_uint64(lhs) <= MobiusVM::vm_extract_uint64(rhs);
-            else
-                le = MobiusVM::vm_extract_int64(lhs) <= MobiusVM::vm_extract_int64(rhs);
+            le = compare_integers(lhs, rhs) <= 0;
         } else {
             le = MobiusVM::vm_extract_double(lhs) <= MobiusVM::vm_extract_double(rhs);
         }
@@ -2364,7 +2377,7 @@ MOBIUS_FORCEINLINE static int name(MobiusVM* vm, VMFrame& f, uint32_t inst) { \
     int imm = DECODE_sBx(inst); \
     bool result; \
     if (lhs.type == VAL_INT64) result = lhs.as.i64 cmp_op imm; \
-    else if (lhs.type == VAL_UINT64) result = (imm < 0) ? (0 cmp_op 1) : lhs.as.u64 cmp_op (uint64_t)imm; \
+    else if (lhs.type == VAL_UINT64) result = (imm < 0) ? (1 cmp_op 0) : lhs.as.u64 cmp_op (uint64_t)imm; \
     else if (lhs.type == VAL_FLOAT64) result = lhs.as.double_val cmp_op (double)imm; \
     else { VM_ERROR(vm, f, err_msg " requires numeric operand"); return -1; } \
     if (result) f.ip++; \

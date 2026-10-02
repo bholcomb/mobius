@@ -1,0 +1,34 @@
+// A uint64 compares with an int64 by mathematical value: every uint64 is
+// greater than every negative int64. Both used to be compared as uint64,
+// so -1 counted as 2^64 - 1 (and the immediate forms had it backwards).
+func opaque(x) { return x }
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func main() {
+    var big = opaque(18446744073709551615)
+    var five_u = opaque(18446744073709551615) - opaque(18446744073709551610)
+    var neg = opaque(-1)
+    check("uint64 is a uint64", typeof(big), "uint64")
+    check("big > -1", big > neg, true)
+    check("big >= -1", big >= neg, true)
+    check("-1 < big", neg < big, true)
+    check("-1 <= big", neg <= big, true)
+    check("big < -1", big < neg, false)
+    check("big == -1", big == neg, false)
+    check("immediate: big > -1", big > -1, true)
+    check("immediate: big < -5", big < -5, false)
+    check("immediate: big >= -5", big >= -5, true)
+    check("uint 5 == int 5", five_u == opaque(5), true)
+    check("uint 5 < int 6", five_u < opaque(6), true)
+    check("int 4 < uint 5", opaque(4) < five_u, true)
+    var branch = ""
+    if (neg < big) { branch = "taken" }
+    check("in a condition", branch, "taken")
+}
+main()
+print("uint64 vs int64 comparison: PASS")
