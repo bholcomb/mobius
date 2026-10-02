@@ -1,0 +1,170 @@
+// cli module: argument parsing and generated help.
+import "cli"
+import "os"
+import "process"
+
+var failures = 0
+func check(name, got, want) {
+    if (str(got) != str(want)) {
+        failures++
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+    }
+}
+func usage_error(f) {
+    try { f() } catch e {
+        if (typeof(e) == "table" and e.kind == "usage") { return e.message }
+        return "not a usage error: " + str(e)
+    }
+    return "no error"
+}
+func decl_error(f) {
+    try { f() } catch e { return str(e) }
+    return "no error"
+}
+
+func make_parser() {
+    var p = cli.parser({name: "gen", description: "Generate files", version: "1.2.3"})
+    p:argument("input", {help: "Input schema"})
+    p:argument("rest", {nargs: "*"})
+    p:option("--output", {short: "-o", default: "out", help: "Output directory"})
+    p:option("--jobs", {short: "-j", type: "int", default: 4})
+    p:option("--ratio", {type: "float"})
+    p:option("--strict", {type: "bool"})
+    p:option("--mode", {choices: ["fast", "safe"], default: "safe"})
+    p:option("--include", {short: "-I", multiple: true})
+    p:option("--dry-run-dir")
+    p:flag("--watch", {short: "-w"})
+    p:flag("--verbose", {short: "-v", count: true})
+    p:flag("--color", {negatable: false})
+    return p
+}
+var p = make_parser()
+
+// Defaults.
+var d = p:parse(["in.yaml"])
+check("positional", d.input, "in.yaml")
+check("default option", d.output, "out")
+check("int default", d.jobs, 4)
+check("no default is nil", d.ratio, nil)
+check("flag default", d.watch, false)
+check("count default", d.verbose, 0)
+check("multiple default", d.include, [])
+check("star default", d.rest, [])
+check("dash to underscore", d.dry_run_dir, nil)
+
+// Every way to give values.
+var a = p:parse(["in.yaml", "x", "y", "--output", "o1", "-j", "8", "--ratio=0.5", "--strict", "yes",
+                 "--mode=fast", "-I", "a", "-Ib", "--include=c", "-wvv", "--dry-run-dir", "/tmp"])
+check("rest", a.rest, ["x", "y"])
+check("long option", a.output, "o1")
+check("short option", a.jobs, 8)
+check("--name=value float", a.ratio, 0.5)
+check("bool option", a.strict, true)
+check("choice", a.mode, "fast")
+check("repeated option", a.include, ["a", "b", "c"])
+check("grouped flags", a.watch, true)
+check("count", a.verbose, 2)
+check("dashed dest", a.dry_run_dir, "/tmp")
+check("attached short value", p:parse(["i", "-ofile"]).output, "file")
+check("short value ends a group", p:parse(["i", "-wj3"]).jobs, 3)
+check("--no-flag", p:parse(["i", "-w", "--no-watch"]).watch, false)
+check("non-negatable flag", usage_error(func() { return p:parse(["i", "--no-color"]) }), "unrecognized option: --no-color")
+check("-- ends options", p:parse(["i", "--", "-w", "--x"]).rest, ["-w", "--x"])
+check("negative number is a value", p:parse(["-5"]).input, "-5")
+check("negative option value", p:parse(["i", "-j", "-3"]).jobs, -3)
+
+// Usage errors.
+check("missing positional", usage_error(func() { return p:parse([]) }), "the following argument is required: input")
+check("unknown long", usage_error(func() { return p:parse(["i", "--nope"]) }), "unrecognized option: --nope")
+check("unknown short", usage_error(func() { return p:parse(["i", "-z"]) }), "unrecognized option: -z")
+check("no abbreviations", usage_error(func() { return p:parse(["i", "--out", "x"]) }), "unrecognized option: --out")
+check("missing value", usage_error(func() { return p:parse(["i", "--output"]) }), "option --output expects a value")
+check("bad int", usage_error(func() { return p:parse(["i", "-j", "many"]) }), "argument --jobs: invalid int value: 'many'")
+check("bad bool", usage_error(func() { return p:parse(["i", "--strict", "maybe"]) }), "argument --strict: invalid bool value: 'maybe' (use true or false)")
+check("bad choice", usage_error(func() { return p:parse(["i", "--mode", "slow"]) }), "argument --mode: invalid choice: 'slow' (choose from fast, safe)")
+check("flag with value", usage_error(func() { return p:parse(["i", "--watch=1"]) }), "option --watch does not take a value")
+var err_table = nil
+try { p:parse([]) } catch e { err_table = e }
+check("usage line in error", err_table.usage, "usage: gen [options] <input> [rest...]")
+
+// Help and version are results, not exits.
+var h = p:parse(["--help"])
+check("help result", h.help, true)
+check("help mentions option", contains(h.text, "-o, --output OUTPUT"), true)
+check("help shows default", contains(h.text, "(default: out)"), true)
+check("help in declaration order", find(h.text, "--output") < find(h.text, "--jobs"), true)
+check("-h", p:parse(["-h"]).help, true)
+check("version", p:parse(["--version"]).text, "gen 1.2.3\n")
+check("help() method", p:help(), h.text)
+
+// Required options and nargs.
+var q = cli.parser({name: "q"})
+q:option("--key", {required: true})
+q:argument("first", {type: "int"})
+q:argument("maybe", {nargs: "?", default: "none"})
+q:argument("last")
+check("required option", usage_error(func() { return q:parse(["1", "z"]) }), "the following option is required: --key")
+var qq = q:parse(["--key", "k", "1", "z"])
+check("? skipped to cover a later required", qq.maybe, "none")
+check("required after ?", qq.last, "z")
+check("? taken when available", q:parse(["--key", "k", "1", "m", "z"]).maybe, "m")
+check("typed positional", q:parse(["--key", "k", "7", "z"]).first, 7)
+check("extra positionals", usage_error(func() { return q:parse(["--key", "k", "1", "a", "b", "c"]) }), "unrecognized arguments: c")
+var plus = cli.parser({name: "plus"})
+plus:argument("files", {nargs: "+"})
+check("+ needs one", usage_error(func() { return plus:parse([]) }), "argument files: expected at least one value")
+check("+ takes all", plus:parse(["a", "b"]).files, ["a", "b"])
+
+// Subcommands.
+var git = cli.parser({name: "git"})
+git:flag("--quiet", {short: "-q"})
+var commit = git:command("commit", {help: "Record changes"})
+commit:option("--message", {short: "-m", required: true})
+commit:flag("--all", {short: "-a"})
+var push = git:command("push", {help: "Upload"})
+push:argument("remote", {nargs: "?", default: "origin"})
+var c = git:parse(["-q", "commit", "-am", "fix"])
+check("command name", c.command, "commit")
+check("parent option before command", c.quiet, true)
+check("command flag", c.all, true)
+check("command option", c.message, "fix")
+check("other command", git:parse(["push"]).remote, "origin")
+check("command required", usage_error(func() { return git:parse([]) }), "a command is required")
+check("unknown command", usage_error(func() { return git:parse(["pull"]) }), "unknown command: 'pull' (choose from commit, push)")
+check("command help", contains(git:parse(["commit", "--help"]).text, "usage: git commit"), true)
+var git_help_lines = split(git:help(), "\n")
+var commit_line = ""
+for (var line in git_help_lines) { if (startswith(line, "  commit ")) { commit_line = line } }
+check("commands listed in help", endswith(commit_line, "Record changes"), true)
+
+// Declaration mistakes are plain errors.
+var bad = cli.parser()
+check("option without --", decl_error(func() { return bad:option("output") }), "option('output'): the name must start with '--', e.g. \"--output\"")
+check("bad short", decl_error(func() { return bad:option("--x", {short: "x"}) }), "option('--x'): short must be a dash and one character, e.g. \"-o\"")
+check("bad type", decl_error(func() { return bad:option("--y", {type: "number"}) }), "option('--y'): unknown type 'number' (use string, int, float or bool)")
+bad:option("--z")
+check("duplicate", decl_error(func() { return bad:option("--z") }), "option('--z'): '--z' is already declared")
+check("bad nargs", decl_error(func() { return bad:argument("a", {nargs: 2}) }), "argument('a'): nargs must be \"?\", \"*\" or \"+\"")
+
+// parse_or_exit, through child processes.
+var dir = os.join(os.tmpdir(), "mobius_cli_" + str(os.getpid()))
+os.mkdirp(dir)
+var tool = os.join(dir, "tool.mob")
+writefile(tool, "import \"cli\"\nvar p = cli.parser({name: \"tool\"})\np:argument(\"name\")\nvar a = p:parse_or_exit(argv)\nprint(\"hello \" + a.name)\n")
+var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
+var ok = process.run([mobius_bin, tool, "bob"])
+check("parse_or_exit success", ok.stdout, "hello bob\n")
+var help = process.run([mobius_bin, tool, "--help"])
+check("help exit code", help.exit_code, 0)
+check("help to stdout", startswith(help.stdout, "usage: tool [options] <name>"), true)
+var wrong = process.run([mobius_bin, tool])
+check("usage error exit code", wrong.exit_code, 2)
+check("usage error to stderr", wrong.stderr, "usage: tool [options] <name>\ntool: error: the following argument is required: name\n")
+check("nothing on stdout", wrong.stdout, "")
+os.system("rm -rf \"" + dir + "\"")
+
+if (failures > 0) {
+    print("cli module: " + str(failures) + " failures")
+    exit(1)
+}
+print("cli module: PASS")

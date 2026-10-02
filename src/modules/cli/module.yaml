@@ -1,0 +1,8 @@
+name: cli
+version: 0.1.0
+entry:
+  script: cli.mob
+dependencies:
+  mobius_modules: [io]
+metadata:
+  description: Command-line argument parsing with generated help

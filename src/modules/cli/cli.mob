@@ -1,0 +1,528 @@
+// cli: command-line argument parsing with generated help.
+//
+//     import "cli"
+//     var parser = cli.parser({name: "gen", description: "Generate files"})
+//     parser:argument("input", {help: "Input schema"})
+//     parser:option("--output", {short: "-o", default: "out", help: "Output directory"})
+//     parser:flag("--watch", {short: "-w"})
+//     var args = parser:parse_or_exit(argv)
+//     print(args.input, args.output, args.watch)
+//
+// Declarations are kept in arrays, so help lists them in declaration order.
+// Mistakes in the declarations themselves raise plain string errors; bad
+// user input raises {kind: "usage", message, usage} from parse().
+import "io" as __io
+
+var __TYPES = {string: true, int: true, float: true, bool: true}
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+
+func __dest(name) {
+    var s = name
+    while (startswith(s, "-")) { s = substr(s, 1, size(s)) }
+    return replace(s, "-", "_")
+}
+
+func __pad(s, width) {
+    if (size(s) >= width) { return s }
+    return s + repeat(" ", width - size(s))
+}
+
+func __is_number(s) {
+    if (size(s) < 2 or substr(s, 0, 1) != "-") { return false }
+    var digits = 0
+    var dots = 0
+    for (var i = 1; i < size(s); i++) {
+        var c = substr(s, i, 1)
+        if (c == ".") { dots++ }
+        elif (c >= "0" and c <= "9") { digits++ }
+        else { return false }
+    }
+    return digits > 0 and dots <= 1
+}
+
+func __usage_error(parser, message) {
+    throw {kind: "usage", message: message, usage: __usage_line(parser)}
+}
+
+func __convert(parser, label, kind, raw) {
+    if (kind == "string") { return raw }
+    if (kind == "int") {
+        var v = nil
+        try { v = int(raw) } catch e { __usage_error(parser, label + ": invalid int value: '" + raw + "'") }
+        return v
+    }
+    if (kind == "float") {
+        var f = nil
+        try { f = float(raw) } catch e { __usage_error(parser, label + ": invalid float value: '" + raw + "'") }
+        return f
+    }
+    var low = lower(raw)
+    if (low == "true" or low == "yes" or low == "1" or low == "on") { return true }
+    if (low == "false" or low == "no" or low == "0" or low == "off") { return false }
+    __usage_error(parser, label + ": invalid bool value: '" + raw + "' (use true or false)")
+}
+
+func __check_choice(parser, label, choices, value) {
+    if (choices == nil) { return value }
+    for (var c in choices) {
+        if (c == value) { return value }
+    }
+    var shown = []
+    for (var c in choices) { shown:push(str(c)) }
+    __usage_error(parser, label + ": invalid choice: '" + str(value) + "' (choose from " + join(shown, ", ") + ")")
+}
+
+func __options_table(options, what) {
+    if (options == nil) { return {} }
+    if (typeof(options) != "table") { throw what + ": options must be a table" }
+    return options
+}
+
+func __check_type(kind, what) {
+    if (!__TYPES:has_key(kind)) {
+        throw what + ": unknown type '" + str(kind) + "' (use string, int, float or bool)"
+    }
+}
+
+func __check_unused(parser, dest, what) {
+    if (parser.__dests:has_key(dest)) {
+        throw what + ": '" + dest + "' is already declared"
+    }
+    parser.__dests[dest] = true
+}
+
+// ---------------------------------------------------------------------------
+// Declarations
+// ---------------------------------------------------------------------------
+
+// parser:argument(name [, options]): a positional argument.
+//   help, type ("string", "int", "float", "bool"), choices, default,
+//   nargs: "?" (optional), "*" (zero or more) or "+" (one or more).
+func __argument(self, name, options = nil) {
+    var what = "argument('" + str(name) + "')"
+    if (typeof(name) != "string" or name == "" or startswith(name, "-")) {
+        throw "argument: the name must be a non-empty string not starting with '-'"
+    }
+    var o = __options_table(options, what)
+    var kind = o.type == nil ? "string" : o.type
+    __check_type(kind, what)
+    var nargs = o.nargs
+    if (nargs != nil and nargs != "?" and nargs != "*" and nargs != "+") {
+        throw what + ": nargs must be \"?\", \"*\" or \"+\""
+    }
+    if (size(self.__commands) > 0) {
+        throw what + ": a parser with commands cannot also take positional arguments"
+    }
+    var dest = __dest(name)
+    __check_unused(self, dest, what)
+    self.__positionals:push({name: name, dest: dest, help: o.help, type: kind,
+                             choices: o.choices, default: o.default, nargs: nargs})
+    return self
+}
+
+func __add_option(self, long, o, is_flag, what) {
+    if (typeof(long) != "string" or !startswith(long, "--") or size(long) < 3) {
+        throw what + ": the name must start with '--', e.g. \"--output\""
+    }
+    if (self.__by_long:has_key(long)) { throw what + ": '" + long + "' is already declared" }
+    var short = o.short
+    if (short != nil) {
+        if (typeof(short) != "string" or size(short) != 2 or substr(short, 0, 1) != "-" or short == "--") {
+            throw what + ": short must be a dash and one character, e.g. \"-o\""
+        }
+        if (self.__by_short:has_key(short)) { throw what + ": '" + short + "' is already declared" }
+    }
+    var dest = o.dest == nil ? __dest(long) : o.dest
+    __check_unused(self, dest, what)
+    var spec = {long: long, short: short, dest: dest, help: o.help, flag: is_flag}
+    self.__by_long[long] = spec
+    if (short != nil) { self.__by_short[short] = spec }
+    self.__options:push(spec)
+    return spec
+}
+
+// parser:option(name [, options]): an option that takes a value.
+//   short, help, type, choices, default, required, multiple (collect
+//   repeats into an array), metavar (name of the value in help), dest.
+func __option(self, long, options = nil) {
+    var what = "option('" + str(long) + "')"
+    var o = __options_table(options, what)
+    var kind = o.type == nil ? "string" : o.type
+    __check_type(kind, what)
+    var spec = __add_option(self, long, o, false, what)
+    spec.type = kind
+    spec.choices = o.choices
+    spec.default = o.default
+    spec.required = o.required == true
+    spec.multiple = o.multiple == true
+    spec.metavar = o.metavar == nil ? upper(spec.dest) : o.metavar
+    return self
+}
+
+// parser:flag(name [, options]): an option without a value. true when
+//   given, false otherwise; --no-NAME sets it false. With count: true it
+//   counts repetitions (-vvv is 3) instead.
+func __flag(self, long, options = nil) {
+    var what = "flag('" + str(long) + "')"
+    var o = __options_table(options, what)
+    var spec = __add_option(self, long, o, true, what)
+    spec.count = o.count == true
+    spec.default = o.default
+    if (spec.default == nil) { spec.default = spec.count ? 0 : false }
+    spec.negatable = !spec.count and o.negatable != false
+    if (spec.negatable) {
+        var neg = "--no-" + substr(long, 2, size(long))
+        if (self.__by_long:has_key(neg)) { throw what + ": '" + neg + "' is already declared" }
+        self.__by_long[neg] = {negates: spec}
+    }
+    return self
+}
+
+// parser:command(name [, options]): a subcommand; returns its own parser
+//   for declaring the command's arguments. The chosen command's name is
+//   args.command, and its arguments join the same result table.
+func __command(self, name, options = nil) {
+    var what = "command('" + str(name) + "')"
+    if (typeof(name) != "string" or name == "" or startswith(name, "-")) {
+        throw what + ": the name must be a non-empty string not starting with '-'"
+    }
+    if (size(self.__positionals) > 0) {
+        throw what + ": a parser with positional arguments cannot also have commands"
+    }
+    for (var c in self.__commands) {
+        if (c.name == name) { throw what + ": already declared" }
+    }
+    var o = __options_table(options, what)
+    var sub = parser({name: self.name + " " + name, description: o.description})
+    sub.__dests = self.__dests
+    self.__commands:push({name: name, help: o.help, parser: sub})
+    return sub
+}
+
+// ---------------------------------------------------------------------------
+// Help
+// ---------------------------------------------------------------------------
+
+func __positional_usage(p) {
+    var n = "<" + p.name + ">"
+    if (p.nargs == "?") { return "[" + p.name + "]" }
+    if (p.nargs == "*") { return "[" + p.name + "...]" }
+    if (p.nargs == "+") { return n + "..." }
+    return n
+}
+
+func __usage_line(self) {
+    var parts = ["usage: " + self.name]
+    if (size(self.__options) > 0) { parts:push("[options]") }
+    for (var spec in self.__options) {
+        if (!spec.flag and spec.required) { parts:push(spec.long + " " + spec.metavar) }
+    }
+    for (var p in self.__positionals) { parts:push(__positional_usage(p)) }
+    if (size(self.__commands) > 0) { parts:push("<command> ...") }
+    return join(parts, " ")
+}
+
+func __option_label(spec) {
+    var label = spec.short != nil ? spec.short + ", " + spec.long : "    " + spec.long
+    if (!spec.flag) { label = label + " " + spec.metavar }
+    if (spec.flag and !spec.count and spec.builtin == nil and spec.negatable) {
+        label = label + " / --no-" + substr(spec.long, 2, size(spec.long))
+    }
+    return label
+}
+
+func __describe(help, spec) {
+    var text = help == nil ? "" : help
+    var extra = []
+    if (spec.choices != nil) {
+        var shown = []
+        for (var c in spec.choices) { shown:push(str(c)) }
+        extra:push("choices: " + join(shown, ", "))
+    }
+    if (!spec.flag and spec.default != nil) { extra:push("default: " + str(spec.default)) }
+    if (spec.required == true) { extra:push("required") }
+    if (spec.multiple == true) { extra:push("repeatable") }
+    if (size(extra) > 0) {
+        text = text + (text == "" ? "" : " ") + "(" + join(extra, "; ") + ")"
+    }
+    return text
+}
+
+// parser:help(): the help text.
+func __help(self) {
+    var rows = []    // [section, label, text]
+    for (var p in self.__positionals) { rows:push(["arguments", "  " + p.name, __describe(p.help, p)]) }
+    for (var spec in self.__options) { rows:push(["options", "  " + __option_label(spec), __describe(spec.help, spec)]) }
+    for (var c in self.__commands) { rows:push(["commands", "  " + c.name, c.help == nil ? "" : c.help]) }
+    var width = 0
+    for (var r in rows) { if (size(r[1]) > width) { width = size(r[1]) } }
+    width = width + 2
+    var out = [__usage_line(self)]
+    if (self.description != nil) { out:push(""); out:push(self.description) }
+    var section = ""
+    for (var r in rows) {
+        if (r[0] != section) {
+            section = r[0]
+            out:push("")
+            out:push(section + ":")
+        }
+        out:push(r[2] == "" ? r[1] : __pad(r[1], width) + r[2])
+    }
+    if (self.epilog != nil) { out:push(""); out:push(self.epilog) }
+    return join(out, "\n") + "\n"
+}
+
+// ---------------------------------------------------------------------------
+// Parsing
+// ---------------------------------------------------------------------------
+
+func __set_option(self, result, spec, raw) {
+    var label = "argument " + spec.long
+    var value = __check_choice(self, label, spec.choices, __convert(self, label, spec.type, raw))
+    if (spec.multiple) {
+        result[spec.dest]:push(value)
+    } else {
+        result[spec.dest] = value
+    }
+}
+
+func __set_flag(result, spec, on) {
+    if (spec.count) {
+        result[spec.dest] = result[spec.dest] + 1
+    } else {
+        result[spec.dest] = on
+    }
+}
+
+// Assign positional values in order. "?" takes one value only if the
+// required arguments after it are still covered; "*" and "+" take what is
+// left after reserving one value for each later required argument.
+func __assign_positionals(self, result, values) {
+    var specs = self.__positionals
+    var pos = 0
+    for (var i = 0; i < size(specs); i++) {
+        var p = specs[i]
+        var later = 0
+        for (var j = i + 1; j < size(specs); j++) {
+            if (specs[j].nargs == nil or specs[j].nargs == "+") { later++ }
+        }
+        var available = size(values) - pos - later
+        var label = "argument " + p.name
+        if (p.nargs == nil) {
+            if (pos >= size(values)) { __usage_error(self, "the following argument is required: " + p.name) }
+            result[p.dest] = __check_choice(self, label, p.choices, __convert(self, label, p.type, values[pos]))
+            pos++
+        } elif (p.nargs == "?") {
+            if (available > 0) {
+                result[p.dest] = __check_choice(self, label, p.choices, __convert(self, label, p.type, values[pos]))
+                pos++
+            } else {
+                result[p.dest] = p.default
+            }
+        } else {
+            if (p.nargs == "+" and available < 1) {
+                __usage_error(self, "argument " + p.name + ": expected at least one value")
+            }
+            var list = []
+            for (var k = 0; k < available; k++) {
+                list:push(__check_choice(self, label, p.choices, __convert(self, label, p.type, values[pos])))
+                pos++
+            }
+            result[p.dest] = list
+        }
+    }
+    if (pos < size(values)) {
+        var extra = []
+        for (var k = pos; k < size(values); k++) { extra:push(values[k]) }
+        __usage_error(self, "unrecognized arguments: " + join(extra, " "))
+    }
+}
+
+func __defaults(self, result) {
+    for (var spec in self.__options) {
+        if (spec.builtin != nil) { continue }
+        if (spec.flag) { result[spec.dest] = spec.default }
+        elif (spec.multiple) { result[spec.dest] = spec.default == nil ? [] : spec.default }
+        else { result[spec.dest] = spec.default }
+    }
+}
+
+func __parse_into(self, args, start, result) {
+    __defaults(self, result)
+    var given = {}
+    var positionals = []
+    var i = start
+    var only_positionals = false
+    while (i < size(args)) {
+        var tok = args[i]
+        i++
+        if (typeof(tok) != "string") { throw "parse: argv must contain only strings" }
+        if (only_positionals) { positionals:push(tok); continue }
+        if (tok == "--") { only_positionals = true; continue }
+
+        if (startswith(tok, "--")) {
+            var name = tok
+            var inline = nil
+            var eq = find(tok, "=")
+            if (eq >= 0) {
+                name = substr(tok, 0, eq)
+                inline = substr(tok, eq + 1, size(tok))
+            }
+            if (name == "--help" and self.__by_long[name].builtin == "help") {
+                return {help: true, text: __help(self)}
+            }
+            if (name == "--version" and self.__by_long:has_key(name) and self.__by_long[name].builtin == "version") {
+                return {version: true, text: self.name + " " + self.version + "\n"}
+            }
+            if (!self.__by_long:has_key(name)) { __usage_error(self, "unrecognized option: " + name) }
+            var spec = self.__by_long[name]
+            if (spec.negates != nil) {
+                if (inline != nil) { __usage_error(self, "option " + name + " does not take a value") }
+                __set_flag(result, spec.negates, false)
+                continue
+            }
+            if (spec.flag) {
+                if (inline != nil) { __usage_error(self, "option " + name + " does not take a value") }
+                __set_flag(result, spec, true)
+                continue
+            }
+            if (inline == nil) {
+                if (i >= size(args)) { __usage_error(self, "option " + name + " expects a value") }
+                inline = args[i]
+                i++
+            }
+            __set_option(self, result, spec, inline)
+            given[spec.dest] = true
+            continue
+        }
+
+        // Short options, possibly grouped (-abc) or with an attached value
+        // (-ofile). A negative number is a value unless it names an option.
+        if (startswith(tok, "-") and size(tok) > 1 and !(__is_number(tok) and !self.__by_short:has_key(substr(tok, 0, 2)))) {
+            var k = 1
+            while (k < size(tok)) {
+                var short = "-" + substr(tok, k, 1)
+                k++
+                if (short == "-h" and self.__by_short:has_key(short) and self.__by_short[short].builtin == "help") {
+                    return {help: true, text: __help(self)}
+                }
+                if (!self.__by_short:has_key(short)) { __usage_error(self, "unrecognized option: " + short) }
+                var spec = self.__by_short[short]
+                if (spec.flag) {
+                    __set_flag(result, spec, true)
+                    continue
+                }
+                var value = nil
+                if (k < size(tok)) {
+                    value = substr(tok, k, size(tok))
+                } else {
+                    if (i >= size(args)) { __usage_error(self, "option " + short + " expects a value") }
+                    value = args[i]
+                    i++
+                }
+                __set_option(self, result, spec, value)
+                given[spec.dest] = true
+                break
+            }
+            continue
+        }
+
+        // A command name hands the remaining arguments to its parser.
+        if (size(self.__commands) > 0) {
+            for (var c in self.__commands) {
+                if (c.name == tok) {
+                    result.command = tok
+                    __check_required(self, given)
+                    return __parse_into(c.parser, args, i, result)
+                }
+            }
+            var names = []
+            for (var c in self.__commands) { names:push(c.name) }
+            __usage_error(self, "unknown command: '" + tok + "' (choose from " + join(names, ", ") + ")")
+        }
+        positionals:push(tok)
+    }
+    if (size(self.__commands) > 0 and result.command == nil) {
+        __usage_error(self, "a command is required")
+    }
+    __check_required(self, given)
+    __assign_positionals(self, result, positionals)
+    return result
+}
+
+func __check_required(self, given) {
+    for (var spec in self.__options) {
+        if (!spec.flag and spec.required and !given:has_key(spec.dest)) {
+            __usage_error(self, "the following option is required: " + spec.long)
+        }
+    }
+}
+
+// parser:parse(argv): the parsed arguments as a table. For --help it
+// returns {help: true, text}, for --version {version: true, text}; bad
+// input raises {kind: "usage", message, usage}.
+func __parse(self, args) {
+    if (typeof(args) != "array") { throw "parse: argv must be an array of strings" }
+    return __parse_into(self, args, 0, {})
+}
+
+// parser:parse_or_exit(argv): like parse, for standalone tools. Prints help
+// or the version and exits 0; prints a usage error to stderr and exits 2.
+func __parse_or_exit(self, args) {
+    var result = nil
+    try {
+        result = __parse(self, args)
+    } catch e {
+        if (typeof(e) == "table" and e.kind == "usage") {
+            __io.stderr:write(e.usage + "\n" + self.name + ": error: " + e.message + "\n")
+            exit(2)
+        }
+        throw e
+    }
+    if (result.help == true or result.version == true) {
+        __io.stdout:write(result.text)
+        exit(0)
+    }
+    return result
+}
+
+// cli.parser([options]): a new parser.
+//   name (default "program"), description, epilog, version (adds
+//   --version).
+func parser(options = nil) {
+    var o = __options_table(options, "parser")
+    var p = {
+        name: o.name == nil ? "program" : o.name,
+        description: o.description,
+        epilog: o.epilog,
+        version: o.version,
+        __positionals: [],
+        __options: [],
+        __commands: [],
+        __by_long: {},
+        __by_short: {},
+        __dests: {},
+        argument: __argument,
+        option: __option,
+        flag: __flag,
+        command: __command,
+        help: __help,
+        parse: __parse,
+        parse_or_exit: __parse_or_exit
+    }
+    var help_spec = {long: "--help", short: "-h", dest: "help", help: "Show this help and exit",
+                     flag: true, count: false, builtin: "help"}
+    p.__options:push(help_spec)
+    p.__by_long["--help"] = help_spec
+    p.__by_short["-h"] = help_spec
+    if (o.version != nil) {
+        var version_spec = {long: "--version", short: nil, dest: "version",
+                            help: "Show the version and exit", flag: true, count: false, builtin: "version"}
+        p.__options:push(version_spec)
+        p.__by_long["--version"] = version_spec
+    }
+    return p
+}

@@ -65,6 +65,10 @@ staging:
     - folder: "bin/modules/process/native/linux-x86_64"
       files:
         - "${out_dir}/bin/process.so"
+    - folder: "bin/modules/cli"
+      files:
+        - "src/modules/cli/module.yaml"
+        - "src/modules/cli/cli.mob"
     - folder: "bin/modules/math"
       files:
         - "src/modules/math/module.yaml"
