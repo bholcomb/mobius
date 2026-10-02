@@ -1,0 +1,42 @@
+// A struct view passed to a fiber views the fiber's copy of the buffer,
+// like the buffer itself would be copied. It kept pointing at the parent's
+// buffer, so the fiber's writes changed the parent's data.
+struct P packed {
+    x: uint8
+    y: uint8
+}
+
+func check(name, got, want) {
+    if (got != want) {
+        print("FAIL: " + name + ": expected " + str(want) + ", got " + str(got))
+        exit(1)
+    }
+}
+
+func write_view(v) {
+    v.x = 99
+    return v.x
+}
+
+func write_both(v, buf) {
+    v.y = 7
+    return buf[1]      // the view and the buffer share one copy
+}
+
+func main() {
+    var buf = buffer_create(P.size)
+    var v = buf:view_as(P)
+    v.x = 1
+    check("fiber sees its write", await spawn write_view(v), 99)
+    check("parent view unchanged", v.x, 1)
+    check("parent buffer unchanged", buf[0], 1)
+
+    var items = buf:array_view_as(P)
+    await spawn write_view(items[0])
+    check("array element view copied", v.x, 1)
+
+    check("view and buffer alias in the fiber", await spawn write_both(v, buf), 7)
+    check("parent untouched", buf[1], 0)
+}
+main()
+print("struct views are copied for fibers: PASS")
