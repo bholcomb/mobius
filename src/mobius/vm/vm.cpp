@@ -3588,6 +3588,25 @@ MOBIUS_FORCEINLINE static int vm_op_tforloop(MobiusVM* vm, VMFrame& f, uint32_t 
         return 0;
     }
 
+    // A span iterates like the array range it views. It used to fall through
+    // to the function-iterator path ("Attempt to call a non-function value").
+    if (iter_val.type == VAL_ARRAY_SLICE && iter_val.as.array_slice) {
+        ArraySlice* span = iter_val.as.array_slice;
+        int64_t idx = (f.regs[a + 2].type == VAL_NIL) ? 0 : f.regs[a + 2].as.i64 + 1;
+        if (idx >= (int64_t)span->length()) {
+            return 0;
+        }
+        f.regs[a + 2] = make_int64_value(idx);
+        if (c >= 2) {
+            f.regs[a + 3] = make_int64_value(idx);
+            f.regs[a + 4] = span->get((size_t)idx);
+        } else {
+            f.regs[a + 3] = span->get((size_t)idx);
+        }
+        f.ip++;
+        return 0;
+    }
+
     if (iter_val.type == VAL_TABLE && iter_val.as.table) {
         Table* tbl = iter_val.as.table;
         int64_t slot = (f.regs[a + 2].type == VAL_NIL) ? 0 : f.regs[a + 2].as.i64 + 1;

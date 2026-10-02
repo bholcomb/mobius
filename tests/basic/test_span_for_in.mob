@@ -1,0 +1,16 @@
+// for-in iterates a span over the range it views, like an array.
+var a = [10, 20, 30, 40, 50]
+var s = a:span(1, 4)
+var total = 0
+var count = 0
+for (var v in s) { total = total + v
+    count++ }
+var idx_sum = 0
+for (var i, v in s) { idx_sum = idx_sum + i }
+var empty_count = 0
+for (var v in a:span(2, 2)) { empty_count++ }
+if (total != 90 or count != 3 or idx_sum != 3 or empty_count != 0) {
+    print("FAIL: total " + str(total) + " count " + str(count) + " idx " + str(idx_sum) + " empty " + str(empty_count))
+    exit(1)
+}
+print("for-in over spans: PASS")
