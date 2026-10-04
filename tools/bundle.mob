@@ -8,6 +8,11 @@
 //   entry: main.mob         # the script to run
 //   files: [lib, data]      # more scripts and data: files or directories
 //   modules: [json, io]     # installed modules it imports (dependencies follow)
+//   module_paths: [vendor]  # more directories holding installed modules
+//
+// Modules are looked up in the runtime's modules/ directory, the packages/
+// directory beside the runtime (where packages such as sqlite are staged),
+// then the module_paths.
 //
 // The result is the runtime's launcher with an archive appended: the core
 // library, the modules (as installed, native libraries included), the entry
@@ -107,12 +112,23 @@ func want_module(m) {
 if (manifest.modules != nil) {
     for (var m in manifest.modules) { want_module(m) }
 }
+var module_dirs = [os.join(runtime, "modules"), os.join(os.dirname(runtime), "packages")]
+if (manifest.module_paths != nil) {
+    for (var mp in manifest.module_paths) { module_dirs:push(os.join(base_dir, mp)) }
+}
+func find_module(m) {
+    for (var d in module_dirs) {
+        var candidate = os.join(d, m)
+        if (os.is_file(os.join(candidate, "module.yaml"))) { return candidate }
+    }
+    fail("module " + m + " is not installed in any of: " + join(module_dirs, ", "))
+}
+
 var mi = 0
 while (mi < size(module_names)) {
     var m = module_names[mi]
     mi++
-    var dir = os.join(runtime, "modules", m)
-    if (!os.is_dir(dir)) { fail("module " + m + " is not installed in " + os.join(runtime, "modules")) }
+    var dir = find_module(m)
     var spec = yaml.parsefile(os.join(dir, "module.yaml"))
     if (spec.dependencies != nil && spec.dependencies.mobius_modules != nil) {
         for (var dep in spec.dependencies.mobius_modules) { want_module(dep) }
