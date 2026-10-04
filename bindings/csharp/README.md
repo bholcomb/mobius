@@ -85,9 +85,14 @@ Errors (syntax, runtime, or a C# exception thrown by a registered function)
 come back as `MobiusException` with `File` and `Line`. A C# exception thrown in
 a registered function becomes a script error the script can catch.
 
-Registered functions run on the interpreter's worker threads, possibly
-concurrently; with `new MobiusState(workerThreads: 0)` everything runs on the
-calling thread. A registered function that calls back into a script may not
-wait for another fiber there (`await` and friends raise an error).
+Threading: a registered function runs on whichever thread is running the
+script fiber that called it. That can be any of the interpreter's worker
+threads (spawned fibers run there in parallel, and the main script may move to
+one after it waits), and several calls can run at once. Mobius does not move
+calls to a particular thread: functions you register must be safe to call from
+any thread, which is the host's responsibility. (With
+`new MobiusState(workerThreads: 0)`, everything runs on the thread that calls
+`Execute`/`Resume`.) A registered function that calls back into a script may
+not wait for another fiber there (`await` and friends raise an error).
 
 Tests: `./test.sh` builds and runs `Mobius.Tests` against `../../bin`.
