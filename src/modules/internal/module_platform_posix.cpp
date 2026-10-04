@@ -18,6 +18,10 @@ int64_t module_platform_timegm(struct tm* value) {
     return (int64_t)timegm(value);
 }
 
+FILE* module_platform_fopen(const std::string& path, const char* mode) {
+    return fopen(path.c_str(), mode);
+}
+
 bool module_platform_random(uint8_t* data, size_t len) {
     if (len == 0) return true;
     FILE* fp = fopen("/dev/urandom", "rb");

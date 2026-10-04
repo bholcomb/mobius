@@ -19,10 +19,14 @@
 #define MINIZ_NO_ZLIB_COMPATIBLE_NAMES
 #include "miniz/miniz.c"
 #include "microtar/microtar.c"
+#include "modules/internal/module_platform.h"
 
 namespace {
 
 namespace fs = std::filesystem;
+
+// A path as UTF-8 (path.string() is in the ANSI code page on Windows).
+static std::string path_string(const fs::path& path) { return path.u8string(); }
 
 constexpr size_t kChunkSize = 64 * 1024;
 
@@ -500,9 +504,9 @@ static std::string unique_temp_path(const std::string& suffix) {
         fs::path candidate = fs::temp_directory_path() /
             ("mobius_compression_" + std::to_string(now) + "_" + std::to_string(attempt) + suffix);
         std::error_code ec;
-        if (!fs::exists(candidate, ec)) return candidate.string();
+        if (!fs::exists(candidate, ec)) return path_string(candidate);
     }
-    return (fs::temp_directory_path() / ("mobius_compression_fallback" + suffix)).string();
+    return path_string(fs::temp_directory_path() / ("mobius_compression_fallback" + suffix));
 }
 
 static bool collect_input_entries(const std::vector<std::string>& inputs, const CommonOptions& options,
@@ -559,11 +563,70 @@ static mz_uint miniz_level_from_options(const CommonOptions& options) {
     return static_cast<mz_uint>(std::clamp(options.compression_level, 0, 10));
 }
 
+// Files are opened here, by UTF-8 path, and handed to miniz and microtar
+// as FILE*: their own opens take narrow paths, which Windows reads in the
+// ANSI code page.
+struct CFile {
+    FILE* f;
+    explicit CFile(FILE* file) : f(file) {}
+    ~CFile() { if (f) fclose(f); }
+    CFile(const CFile&) = delete;
+    CFile& operator=(const CFile&) = delete;
+};
+
+static FILE* open_file(const std::string& path, const char* mode) {
+    return module_platform_fopen(path, mode);
+}
+
+// A file's modification time as time_t (C++17 has no clock conversion).
+static bool file_mtime(const fs::path& path, MZ_TIME_T* out) {
+    std::error_code ec;
+    auto ft = fs::last_write_time(path, ec);
+    if (ec) return false;
+    auto sys = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
+        ft - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
+    *out = std::chrono::system_clock::to_time_t(sys);
+    return true;
+}
+
+static void set_file_mtime(const fs::path& path, MZ_TIME_T t) {
+    auto sys = std::chrono::system_clock::from_time_t(t);
+    auto ft = std::chrono::time_point_cast<fs::file_time_type::duration>(
+        sys - std::chrono::system_clock::now() + fs::file_time_type::clock::now());
+    std::error_code ec;
+    fs::last_write_time(path, ft, ec);
+}
+
+// mtar_open with a UTF-8 path. mode: "rb" or "wb".
+static int tar_open(mtar_t* tar, const std::string& path, const char* mode) {
+    std::memset(tar, 0, sizeof(*tar));
+    tar->write = file_write;
+    tar->read = file_read;
+    tar->seek = file_seek;
+    tar->close = file_close;
+    tar->stream = open_file(path, mode);
+    if (!tar->stream) return MTAR_EOPENFAIL;
+    if (mode[0] == 'r') {
+        mtar_header_t h;
+        int err = mtar_read_header(tar, &h);   // a valid first header
+        if (err != MTAR_ESUCCESS) {
+            mtar_close(tar);
+            return err;
+        }
+    }
+    return MTAR_ESUCCESS;
+}
+
 static bool write_zip_archive(const std::string& output_path, const std::vector<LocalInputEntry>& entries,
                               const CommonOptions& options, uint64_t& files_written, std::string& error) {
+    CFile out(open_file(output_path, "wb"));
+    if (!out.f) {
+        error = "unable to open output file";
+        return false;
+    }
     mz_zip_archive zip;
     std::memset(&zip, 0, sizeof(zip));
-    if (!mz_zip_writer_init_file_v2(&zip, output_path.c_str(), 0, MZ_ZIP_FLAG_WRITE_ZIP64)) {
+    if (!mz_zip_writer_init_cfile(&zip, out.f, MZ_ZIP_FLAG_WRITE_ZIP64)) {
         error = mz_zip_get_error_string(mz_zip_get_last_error(&zip));
         return false;
     }
@@ -576,8 +639,17 @@ static bool write_zip_archive(const std::string& output_path, const std::vector<
             std::string dir_name = ensure_trailing_slash(entry.archive_path);
             ok = mz_zip_writer_add_mem(&zip, dir_name.c_str(), &kEmpty, 0, MZ_NO_COMPRESSION);
         } else {
-            ok = mz_zip_writer_add_file(&zip, entry.archive_path.c_str(), entry.disk_path.string().c_str(),
-                                        nullptr, 0, level);
+            CFile src(open_file(path_string(entry.disk_path), "rb"));
+            MZ_TIME_T mtime = 0;
+            std::error_code ec;
+            uint64_t size = fs::file_size(entry.disk_path, ec);
+            if (!src.f || ec || !file_mtime(entry.disk_path, &mtime)) {
+                error = "unable to read " + path_string(entry.disk_path);
+                mz_zip_writer_end(&zip);
+                return false;
+            }
+            ok = mz_zip_writer_add_cfile(&zip, entry.archive_path.c_str(), src.f, size, &mtime,
+                                         nullptr, 0, level, nullptr, 0, nullptr, 0);
         }
         if (!ok) {
             error = mz_zip_get_error_string(mz_zip_get_last_error(&zip));
@@ -601,9 +673,14 @@ static bool write_zip_archive(const std::string& output_path, const std::vector<
 
 static bool list_zip_archive(const std::string& path, std::vector<ArchiveEntry>& entries,
                              uint64_t* total_uncompressed, std::string& error) {
+    CFile in(open_file(path, "rb"));
+    if (!in.f) {
+        error = "unable to open input file";
+        return false;
+    }
     mz_zip_archive zip;
     std::memset(&zip, 0, sizeof(zip));
-    if (!mz_zip_reader_init_file(&zip, path.c_str(), 0)) {
+    if (!mz_zip_reader_init_cfile(&zip, in.f, 0, 0)) {
         error = mz_zip_get_error_string(mz_zip_get_last_error(&zip));
         return false;
     }
@@ -643,9 +720,14 @@ static bool extract_zip_archive(const std::string& path, const std::string& dest
     fs::path destination_root = fs::u8path(destination).lexically_normal();
     if (!create_directory_tree(destination_root, error)) return false;
 
+    CFile in(open_file(path, "rb"));
+    if (!in.f) {
+        error = "unable to open input file";
+        return false;
+    }
     mz_zip_archive zip;
     std::memset(&zip, 0, sizeof(zip));
-    if (!mz_zip_reader_init_file(&zip, path.c_str(), 0)) {
+    if (!mz_zip_reader_init_cfile(&zip, in.f, 0, 0)) {
         error = mz_zip_get_error_string(mz_zip_get_last_error(&zip));
         return false;
     }
@@ -679,16 +761,24 @@ static bool extract_zip_archive(const std::string& path, const std::string& dest
             mz_zip_reader_end(&zip);
             return false;
         }
-        if (path_exists(dest_path.string()) && options.overwrite != "replace") {
+        if (path_exists(path_string(dest_path)) && options.overwrite != "replace") {
             error = "destination file already exists";
             mz_zip_reader_end(&zip);
             return false;
         }
-        if (!mz_zip_reader_extract_to_file(&zip, i, dest_path.string().c_str(), 0)) {
+        bool extracted;
+        {
+            CFile dest(open_file(path_string(dest_path), "wb"));
+            extracted = dest.f && mz_zip_reader_extract_to_cfile(&zip, i, dest.f, 0);
+        }
+        if (!extracted) {
             error = mz_zip_get_error_string(mz_zip_get_last_error(&zip));
             mz_zip_reader_end(&zip);
             return false;
         }
+#ifndef MINIZ_NO_TIME
+        set_file_mtime(dest_path, stat.m_time);
+#endif
         files_written++;
     }
 
@@ -699,7 +789,7 @@ static bool extract_zip_archive(const std::string& path, const std::string& dest
 static bool write_tar_archive(const std::string& output_path, const std::vector<LocalInputEntry>& entries,
                               uint64_t& files_written, std::string& error) {
     mtar_t tar;
-    int rc = mtar_open(&tar, output_path.c_str(), "w");
+    int rc = tar_open(&tar, output_path, "wb");
     if (rc != MTAR_ESUCCESS) {
         error = mtar_strerror(rc);
         return false;
@@ -718,7 +808,7 @@ static bool write_tar_archive(const std::string& output_path, const std::vector<
             continue;
         }
 
-        uint64_t size = file_size_or_zero(entry.disk_path.string());
+        uint64_t size = file_size_or_zero(path_string(entry.disk_path));
         if (size > std::numeric_limits<unsigned>::max()) {
             error = "microtar backend currently supports files up to 4GiB";
             mtar_close(&tar);
@@ -766,7 +856,7 @@ static bool write_tar_archive(const std::string& output_path, const std::vector<
 static bool list_tar_archive(const std::string& path, std::vector<ArchiveEntry>& entries,
                              uint64_t* total_uncompressed, std::string& error) {
     mtar_t tar;
-    int rc = mtar_open(&tar, path.c_str(), "r");
+    int rc = tar_open(&tar, path, "rb");
     if (rc != MTAR_ESUCCESS) {
         error = mtar_strerror(rc);
         return false;
@@ -815,7 +905,7 @@ static bool extract_tar_archive(const std::string& path, const std::string& dest
     if (!create_directory_tree(destination_root, error)) return false;
 
     mtar_t tar;
-    int rc = mtar_open(&tar, path.c_str(), "r");
+    int rc = tar_open(&tar, path, "rb");
     if (rc != MTAR_ESUCCESS) {
         error = mtar_strerror(rc);
         return false;
@@ -875,7 +965,7 @@ static bool extract_tar_archive(const std::string& path, const std::string& dest
             mtar_close(&tar);
             return false;
         }
-        if (path_exists(dest_path.string()) && options.overwrite != "replace") {
+        if (path_exists(path_string(dest_path)) && options.overwrite != "replace") {
             error = "destination file already exists";
             mtar_close(&tar);
             return false;
@@ -935,7 +1025,7 @@ static bool with_temp_tar_from_compressed(const std::string& path, const FormatI
                                           std::string& error) {
     temp_tar.path = fs::u8path(unique_temp_path(".tar"));
     if (info.format == "tar.gz") {
-        return gzip_decompress_file(path, temp_tar.path.string(), error);
+        return gzip_decompress_file(path, path_string(temp_tar.path), error);
     }
     error = "unsupported compressed tar format";
     return false;
@@ -949,7 +1039,7 @@ static bool list_archive_entries(const std::string& path, const FormatInfo& info
     if (info.format == "tar.gz") {
         ScopedTempFile temp_tar;
         if (!with_temp_tar_from_compressed(path, info, temp_tar, error)) return false;
-        return list_tar_archive(temp_tar.path.string(), entries, total_uncompressed, error);
+        return list_tar_archive(path_string(temp_tar.path), entries, total_uncompressed, error);
     }
     error = "format does not support archive listing";
     return false;
@@ -962,7 +1052,7 @@ static bool extract_archive(const std::string& path, const std::string& destinat
     if (info.format == "tar.gz") {
         ScopedTempFile temp_tar;
         if (!with_temp_tar_from_compressed(path, info, temp_tar, error)) return false;
-        return extract_tar_archive(temp_tar.path.string(), destination, options, files_written, error);
+        return extract_tar_archive(path_string(temp_tar.path), destination, options, files_written, error);
     }
     error = "format does not support archive extraction";
     return false;
@@ -977,9 +1067,9 @@ static bool create_archive(const std::string& output_path, const std::vector<Loc
         ScopedTempFile temp_tar;
         temp_tar.path = fs::u8path(unique_temp_path(".tar"));
         uint64_t temp_files_written = 0;
-        if (!write_tar_archive(temp_tar.path.string(), entries, temp_files_written, error)) return false;
+        if (!write_tar_archive(path_string(temp_tar.path), entries, temp_files_written, error)) return false;
         files_written = temp_files_written;
-        return gzip_compress_file(temp_tar.path.string(), output_path, options.compression_level, error);
+        return gzip_compress_file(path_string(temp_tar.path), output_path, options.compression_level, error);
     }
     error = "format does not support archive creation";
     return false;
