@@ -1079,6 +1079,35 @@ static bool create_archive(const std::string& output_path, const std::vector<Loc
 // CRC-32 and size of the uncompressed data. Several members may follow one
 // another; decompressing joins them, as gunzip does.
 
+// CRC-32 (gzip's checksum), eight bytes per step ("slicing-by-8"): several
+// times faster than miniz's byte-at-a-time mz_crc32, which took most of the
+// time of compressing and decompressing.
+static uint32_t crc32_update(uint32_t crc, const unsigned char* p, size_t n) {
+    static uint32_t table[8][256];
+    static const bool ready = [] {
+        for (uint32_t i = 0; i < 256; i++) {
+            uint32_t c = i;
+            for (int k = 0; k < 8; k++) c = (c & 1) ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            table[0][i] = c;
+        }
+        for (uint32_t i = 0; i < 256; i++)
+            for (int s = 1; s < 8; s++) table[s][i] = (table[s - 1][i] >> 8) ^ table[0][table[s - 1][i] & 0xFF];
+        return true;
+    }();
+    (void)ready;
+    crc = ~crc;
+    while (n >= 8) {
+        uint32_t a = crc ^ ((uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
+        uint32_t b = (uint32_t)p[4] | ((uint32_t)p[5] << 8) | ((uint32_t)p[6] << 16) | ((uint32_t)p[7] << 24);
+        crc = table[7][a & 0xFF] ^ table[6][(a >> 8) & 0xFF] ^ table[5][(a >> 16) & 0xFF] ^ table[4][a >> 24] ^
+              table[3][b & 0xFF] ^ table[2][(b >> 8) & 0xFF] ^ table[1][(b >> 16) & 0xFF] ^ table[0][b >> 24];
+        p += 8;
+        n -= 8;
+    }
+    while (n--) crc = table[0][(crc ^ *p++) & 0xFF] ^ (crc >> 8);
+    return ~crc;
+}
+
 static void put_le32(std::vector<unsigned char>& out, uint32_t v) {
     for (int i = 0; i < 4; i++) out.push_back((unsigned char)(v >> (8 * i)));
 }
@@ -1113,13 +1142,13 @@ static bool gzip_compress_file(const std::string& input_path, const std::string&
     out.write(reinterpret_cast<const char*>(header), sizeof(header));
 
     std::vector<unsigned char> inbuf(kChunkSize), outbuf(kChunkSize);
-    mz_ulong crc = MZ_CRC32_INIT;
+    uint32_t crc = 0;
     uint32_t size = 0;
     bool done = false;
     while (!done) {
         in.read(reinterpret_cast<char*>(inbuf.data()), static_cast<std::streamsize>(inbuf.size()));
         size_t got = static_cast<size_t>(in.gcount());
-        crc = mz_crc32(crc, inbuf.data(), got);
+        crc = crc32_update(crc, inbuf.data(), got);
         size += static_cast<uint32_t>(got);
         int flush = in ? MZ_NO_FLUSH : MZ_FINISH;
         zs.next_in = inbuf.data();
@@ -1200,7 +1229,7 @@ static bool gzip_decompress_file(const std::string& input_path, const std::strin
             error = "failed to start gzip decompression";
             return false;
         }
-        mz_ulong crc = MZ_CRC32_INIT;
+        uint32_t crc = 0;
         uint32_t size = 0;
         size_t consumed = p;
         int rc = MZ_OK;
@@ -1220,7 +1249,7 @@ static bool gzip_decompress_file(const std::string& input_path, const std::strin
                 error = rc == MZ_DATA_ERROR ? "corrupt gzip data" : "truncated gzip data";
                 return false;
             }
-            crc = mz_crc32(crc, outbuf.data(), produced);
+            crc = crc32_update(crc, outbuf.data(), produced);
             size += static_cast<uint32_t>(produced);
             out.write(reinterpret_cast<const char*>(outbuf.data()), static_cast<std::streamsize>(produced));
         }
