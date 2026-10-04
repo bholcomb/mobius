@@ -3,6 +3,23 @@ project:
   description: "Mobius interpreter library and CLI"
 
 targets:
+  # The OS layer (platform/mobius_platform.h), linked into the core and the
+  # executables. Position-independent (it goes into the core library) and
+  # hidden (the core doesn't export it).
+  static_libraries:
+    - name: mobius-platform
+      language: cpp
+      sources:
+        - linux: ["mobius/platform/mobius_platform_posix.cpp", "mobius/platform/mobius_platform_linux.cpp"]
+        - macos: ["mobius/platform/mobius_platform_posix.cpp", "mobius/platform/mobius_platform_macos.cpp"]
+        - windows: ["mobius/platform/mobius_platform_win32.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src/mobius"
+      flags:
+        - linux: ["-fPIC", "-fvisibility=hidden"]
+        - macos: ["-fPIC", "-fvisibility=hidden"]
+
   shared_libraries:
     - name: mobius-core
       language: cpp
@@ -17,9 +34,6 @@ targets:
         - "mobius/util/*.cpp"
         - "mobius/vm/*.cpp"
         - "mobius/repl.cpp"
-        - linux: ["mobius/platform/mobius_platform_linux.cpp"]
-        - macos: ["mobius/platform/mobius_platform_macos.cpp"]
-        - windows: ["mobius/platform/mobius_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -35,32 +49,31 @@ targets:
         flags:
           - linux: ["-Wl,-soname,libmobius-core.so"]
           - macos: ["-Wl,-install_name,@rpath/libmobius-core.dylib"]
-      libs: [{linux: ["pthread", "dl"]}, {windows: ["ws2_32"]}]
+      lib_dirs: ["${workspace}/build/${platform}-${arch}-${config}/lib"]
+      libs: ["mobius-platform", {linux: ["pthread", "dl"]}, {windows: ["ws2_32"]}]
+      depends_on:
+        targets: ["mobius-platform"]
 
   executables:
     - name: mobius-launcher
       language: cpp
-      sources:
-        - "launcher/launcher.cpp"
-        - linux: ["mobius/platform/mobius_platform_linux.cpp"]
-        - macos: ["mobius/platform/mobius_platform_macos.cpp"]
-        - windows: ["mobius/platform/mobius_platform_win32.cpp"]
+      sources: ["launcher/launcher.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src/mobius"
-      libs: [{linux: ["dl"]}]
+      lib_dirs: ["${workspace}/build/${platform}-${arch}-${config}/lib"]
+      libs: ["mobius-platform", {linux: ["dl"]}, {windows: ["ws2_32"]}]
+      depends_on:
+        targets: ["mobius-platform"]
 
     - name: mobius
       language: cpp
-      sources:
-        - "main.cpp"
-        - linux: ["mobius/platform/mobius_platform_linux.cpp"]
-        - macos: ["mobius/platform/mobius_platform_macos.cpp"]
-        - windows: ["mobius/platform/mobius_platform_win32.cpp"]
+      sources: ["main.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius-core", {linux: ["m", "dl", "pthread"]}]
+      lib_dirs: ["${workspace}/build/${platform}-${arch}-${config}/lib"]
+      libs: ["mobius-core", "mobius-platform", {linux: ["m", "dl", "pthread"]}, {windows: ["ws2_32"]}]
       depends_on:
-        targets: ["mobius-core"]
+        targets: ["mobius-core", "mobius-platform"]
