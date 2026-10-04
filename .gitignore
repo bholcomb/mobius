@@ -40,3 +40,4 @@ build/
 
 
 benchmarks/__pycache__/
+dist/

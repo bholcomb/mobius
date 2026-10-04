@@ -1,0 +1,206 @@
+// bundle: make a standalone executable from a Mobius application.
+//
+//   mobius tools/bundle.mob app.yaml [-o output] [--runtime dir]
+//
+// app.yaml (paths relative to it):
+//
+//   name: mytool            # output file name (default: the entry's name)
+//   entry: main.mob         # the script to run
+//   files: [lib, data]      # more scripts and data: files or directories
+//   modules: [json, io]     # installed modules it imports (dependencies follow)
+//
+// The result is the runtime's launcher with an archive appended: the core
+// library, the modules (as installed, native libraries included), the entry
+// script and the files. It needs nothing else on the target machine but
+// the C and C++ runtime libraries. On first run it extracts itself to a
+// per-bundle cache directory (~/.cache/mobius/bundles/<hash>) and runs the
+// entry script there with its arguments; scripts find their bundled files
+// under the global `bundle_dir`.
+//
+// The runtime defaults to dist/portable/bin, built by
+// tools/build_portable.sh for any x86-64-v2 CPU.
+
+import "cli"
+import "io"
+import "os"
+import "yaml"
+import "crypto"
+
+const PLATFORM = "linux-x86_64"
+
+func fail(message) {
+    io.stderr:write("bundle: " + message + "\n")
+    exit(1)
+}
+
+// ---- Arguments and manifest ----------------------------------------------
+
+var parser = cli.parser({name: "bundle", description: "Make a standalone executable from a Mobius application"})
+parser:argument("manifest", {help: "The application's app.yaml"})
+parser:option("--output", {short: "-o", help: "Output file (default: the manifest's name, next to it)"})
+parser:option("--runtime", {help: "Runtime directory (default: dist/portable/bin)"})
+var args = parser:parse_or_exit(argv)
+
+var manifest_path = os.realpath(args.manifest)
+if (manifest_path == nil || !os.is_file(manifest_path)) { fail("no such manifest: " + args.manifest) }
+var base_dir = os.dirname(manifest_path)
+var manifest = yaml.parsefile(manifest_path)
+if (typeof(manifest) != "table") { fail("the manifest must be a YAML mapping") }
+if (typeof(manifest.entry) != "string") { fail("the manifest needs an entry script (entry: main.mob)") }
+
+var runtime = args.runtime
+if (runtime == nil) {
+    var repo = os.dirname(os.dirname(os.executable()))
+    runtime = os.join(repo, "dist", "portable", "bin")
+}
+var launcher = os.join(runtime, "mobius-launcher")
+var core = os.join(runtime, "libmobius-core.so")
+if (!os.is_file(launcher) || !os.is_file(core)) {
+    fail("no runtime in " + runtime + " (build it with tools/build_portable.sh, or pass --runtime)")
+}
+
+var name = manifest.name
+if (typeof(name) != "string") { name = os.basename(manifest.entry) }
+if (endswith(name, ".mob")) { name = substr(name, 0, size(name) - 4) }
+var output = args.output
+if (output == nil) { output = os.join(base_dir, name) }
+
+// ---- What goes in --------------------------------------------------------
+
+// Each entry: {path: where in the bundle, source: file to copy, mode}.
+var entries = []
+var seen = {}
+
+func add(path, source) {
+    if (seen[path] != nil) { return }
+    seen[path] = true
+    var st = os.stat(source)
+    entries:push({path: path, source: source, mode: st.mode % 4096, size: st.size})
+}
+
+// A file or a directory (everything under it), at its path relative to the
+// manifest.
+func add_tree(rel) {
+    var source = os.join(base_dir, rel)
+    if (os.is_file(source)) {
+        add(rel, source)
+    } else if (os.is_dir(source)) {
+        for (var p in os.walkdir(source)) {
+            if (os.is_file(p)) { add(rel + substr(p, size(source), size(p) - size(source)), p) }
+        }
+    } else {
+        fail("no such file or directory: " + rel)
+    }
+}
+
+add("libmobius-core.so", core)
+
+// Modules from the runtime, with their dependencies, as installed. Native
+// libraries for other platforms are left out.
+var module_names = []
+var queued = {}
+func want_module(m) {
+    if (queued[m] != nil) { return }
+    queued[m] = true
+    module_names:push(m)
+}
+if (manifest.modules != nil) {
+    for (var m in manifest.modules) { want_module(m) }
+}
+var mi = 0
+while (mi < size(module_names)) {
+    var m = module_names[mi]
+    mi++
+    var dir = os.join(runtime, "modules", m)
+    if (!os.is_dir(dir)) { fail("module " + m + " is not installed in " + os.join(runtime, "modules")) }
+    var spec = yaml.parsefile(os.join(dir, "module.yaml"))
+    if (spec.dependencies != nil && spec.dependencies.mobius_modules != nil) {
+        for (var dep in spec.dependencies.mobius_modules) { want_module(dep) }
+    }
+    for (var p in os.walkdir(dir)) {
+        if (!os.is_file(p)) { continue }
+        var rel = substr(p, size(dir) + 1, size(p) - size(dir) - 1)
+        if (startswith(rel, "native/") && !startswith(rel, "native/" + PLATFORM + "/")) { continue }
+        add("modules/" + m + "/" + rel, p)
+    }
+}
+
+add_tree(manifest.entry)
+if (manifest.files != nil) {
+    for (var f in manifest.files) { add_tree(f) }
+}
+
+// ---- Writing it ------------------------------------------------------------
+
+// Little-endian integers into `buf` at `pos`.
+func put_u32(buf, pos, n) {
+    for (var i = 0; i < 4; i++) { buf:set(pos + i, (n >> (8 * i)) & 255) }
+}
+func put_u64(buf, pos, n) {
+    for (var i = 0; i < 8; i++) { buf:set(pos + i, (n >> (8 * i)) & 255) }
+}
+
+// The entry script's path, as a file the launcher reads.
+var entry_data = manifest.entry
+
+// The content hash names the cache directory: it covers every path and
+// file, so any change makes a new extraction.
+var digests = []
+for (var e in entries) { digests:push(e.path + ":" + crypto.sha256_hex(readfile(e.source))) }
+digests:push("__entry__:" + entry_data)
+var hash = substr(crypto.sha256_hex(join(digests, "\n")), 0, 24)
+
+var out = io.open(output, "w")
+var src = io.open(launcher, "r")
+var offset = io.copy(src, out)
+src:close()
+
+var index_size = 0
+for (var e in entries) {
+    e.offset = offset
+    var f = io.open(e.source, "r")
+    var copied = io.copy(f, out)
+    f:close()
+    if (copied != e.size) { fail("size changed while bundling " + e.source) }
+    offset = offset + copied
+    index_size = index_size + 4 + size(e.path) + 20
+}
+// __entry__ goes last, from memory.
+var entry_offset = offset
+out:write(entry_data)
+offset = offset + size(entry_data)
+index_size = index_size + 4 + size("__entry__") + 20
+
+var index = buffer_create(index_size)
+var pos = 0
+func index_entry(path, off, len, mode) {
+    put_u32(index, pos, size(path))
+    pos = pos + 4
+    var bytes = buffer_from_string(path)
+    for (var i = 0; i < bytes:size(); i++) { index:set(pos + i, bytes:get(i)) }
+    pos = pos + size(path)
+    put_u64(index, pos, off)
+    put_u64(index, pos + 8, len)
+    put_u32(index, pos + 16, mode)
+    pos = pos + 20
+}
+for (var e in entries) { index_entry(e.path, e.offset, e.size, e.mode) }
+index_entry("__entry__", entry_offset, size(entry_data), 420)
+var index_offset = offset
+out:write(index)
+
+var trailer = buffer_create(64)
+var magic = buffer_from_string("MOBIUS-BUNDLE-01")
+for (var i = 0; i < 16; i++) { trailer:set(i, magic:get(i)) }
+put_u64(trailer, 16, index_offset)
+put_u64(trailer, 24, index_size)
+put_u64(trailer, 32, size(entries) + 1)
+var hash_bytes = buffer_from_string(hash)
+for (var i = 0; i < hash_bytes:size(); i++) { trailer:set(40 + i, hash_bytes:get(i)) }
+out:write(trailer)
+out:close()
+os.chmod(output, 493)   // 0755
+
+var total = os.filesize(output)
+print("bundle: " + output + " (" + str(size(entries) + 1) + " files, " + str(int(total / 1024)) + " KB, modules: " +
+      (size(module_names) > 0 ? join(module_names, ", ") : "none") + ")")

@@ -24,9 +24,19 @@ targets:
       flags:
         - "-fvisibility=hidden"
         - "-DMOBIUS_BUILDING"
+      # The SONAME lets plugins (which name libmobius-core.so as a needed
+      # library) bind to a copy already loaded from any path, e.g. by a
+      # standalone bundle's launcher.
+      link:
+        flags: ["-Wl,-soname,libmobius-core.so"]
       libs: ["pthread"]
 
   executables:
+    - name: mobius-launcher
+      language: cpp
+      sources: ["launcher/launcher.cpp"]
+      libs: ["dl"]
+
     - name: mobius
       language: cpp
       sources: ["main.cpp"]
