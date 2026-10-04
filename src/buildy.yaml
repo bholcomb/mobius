@@ -17,6 +17,9 @@ targets:
         - "mobius/util/*.cpp"
         - "mobius/vm/*.cpp"
         - "mobius/repl.cpp"
+        - linux: ["mobius/platform/mobius_platform_linux.cpp"]
+        - macos: ["mobius/platform/mobius_platform_macos.cpp"]
+        - windows: ["mobius/platform/mobius_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -37,12 +40,23 @@ targets:
   executables:
     - name: mobius-launcher
       language: cpp
-      sources: ["launcher/launcher.cpp"]
+      sources:
+        - "launcher/launcher.cpp"
+        - linux: ["mobius/platform/mobius_platform_linux.cpp"]
+        - macos: ["mobius/platform/mobius_platform_macos.cpp"]
+        - windows: ["mobius/platform/mobius_platform_win32.cpp"]
+      include_dirs:
+        - "${workspace}/include"
+        - "${workspace}/src/mobius"
       libs: [{linux: ["dl"]}]
 
     - name: mobius
       language: cpp
-      sources: ["main.cpp"]
+      sources:
+        - "main.cpp"
+        - linux: ["mobius/platform/mobius_platform_linux.cpp"]
+        - macos: ["mobius/platform/mobius_platform_macos.cpp"]
+        - windows: ["mobius/platform/mobius_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"

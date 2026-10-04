@@ -16,28 +16,20 @@
 // Offsets are from the start of the file. The hash names the cache
 // directory, so a changed bundle never reuses an old extraction.
 
-#if !defined(__linux__)
-// Standalone bundles are Linux-only for now: elsewhere this program only
-// says so (it is still built, as a target of every platform).
-#include <cstdio>
-int main() {
-    fprintf(stderr, "mobius bundle: standalone bundles are supported on Linux only for now\n");
-    return 1;
-}
-#else
-
-#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
+#include <system_error>
 #include <vector>
 
-#include <dlfcn.h>
-#include <limits.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "platform/mobius_platform.h"
+
+namespace fs = std::filesystem;
 
 namespace {
 
@@ -65,47 +57,41 @@ uint32_t read_u32(const unsigned char* p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-std::string self_path() {
-    char buf[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (n <= 0) die("cannot locate the executable");
-    buf[n] = '\0';
-    return buf;
-}
+// Paths are UTF-8.
+fs::path to_path(const std::string& s) { return fs::u8path(s); }
 
-bool read_at(FILE* f, uint64_t offset, void* out, size_t size) {
-    return fseeko(f, (off_t)offset, SEEK_SET) == 0 && fread(out, 1, size, f) == size;
+bool read_at(std::ifstream& f, uint64_t offset, void* out, size_t size) {
+    f.clear();
+    f.seekg((std::streamoff)offset);
+    f.read((char*)out, (std::streamsize)size);
+    return (size_t)f.gcount() == size;
 }
 
 bool mkdirs(const std::string& path) {
-    for (size_t i = 1; i <= path.size(); i++) {
-        if (i == path.size() || path[i] == '/') {
-            std::string part = path.substr(0, i);
-            if (mkdir(part.c_str(), 0755) != 0 && errno != EEXIST) return false;
-        }
-    }
-    return true;
+    std::error_code ec;
+    fs::create_directories(to_path(path), ec);
+    return fs::is_directory(to_path(path), ec);
 }
 
 bool exists(const std::string& path) {
-    struct stat st;
-    return stat(path.c_str(), &st) == 0;
+    std::error_code ec;
+    return fs::exists(to_path(path), ec);
 }
 
 std::string cache_root() {
     if (const char* c = getenv("MOBIUS_BUNDLE_CACHE")) if (*c) return c;
-    if (const char* x = getenv("XDG_CACHE_HOME")) if (*x) return std::string(x) + "/mobius/bundles";
-    if (const char* h = getenv("HOME")) if (*h) return std::string(h) + "/.cache/mobius/bundles";
-    return "/tmp/mobius-bundles-" + std::to_string(getuid());
+    std::string user = platform_user_cache_dir();
+    if (user.empty()) die("no per-user cache directory (set MOBIUS_BUNDLE_CACHE)");
+    return user + "/mobius/bundles";
 }
 
 // Paths come from the bundle's own index; refuse anything that would land
 // outside the cache directory.
 bool safe_path(const std::string& p) {
-    if (p.empty() || p[0] == '/') return false;
+    if (p.empty() || p[0] == '/' || p[0] == '\\' || p.find(':') != std::string::npos) return false;
     size_t start = 0;
     while (start <= p.size()) {
-        size_t slash = p.find('/', start);
+        size_t slash = p.find_first_of("/\\", start);
         std::string part = p.substr(start, slash == std::string::npos ? std::string::npos : slash - start);
         if (part == "..") return false;
         if (slash == std::string::npos) break;
@@ -117,35 +103,39 @@ bool safe_path(const std::string& p) {
 // Extract every entry into a fresh directory, then rename it into place:
 // a concurrent first run of the same bundle either wins the rename or finds
 // the finished directory.
-void extract(FILE* f, const std::vector<Entry>& entries, const std::string& dir) {
-    std::string tmp = dir + ".tmp-" + std::to_string(getpid());
-    if (!mkdirs(tmp)) die("cannot create " + tmp + ": " + strerror(errno));
+void extract(std::ifstream& f, const std::vector<Entry>& entries, const std::string& dir) {
+    std::string tmp = dir + ".tmp-" + std::to_string(platform_process_id());
+    if (!mkdirs(tmp)) die("cannot create " + tmp);
     std::vector<char> chunk(1 << 16);
     for (const Entry& e : entries) {
         std::string out_path = tmp + "/" + e.path;
-        size_t slash = out_path.rfind('/');
-        if (!mkdirs(out_path.substr(0, slash))) die("cannot create directories for " + e.path);
-        FILE* out = fopen(out_path.c_str(), "wb");
-        if (!out) die("cannot write " + out_path + ": " + strerror(errno));
-        if (fseeko(f, (off_t)e.offset, SEEK_SET) != 0) die("corrupt bundle (bad offset)");
+        if (!mkdirs(to_path(out_path).parent_path().u8string())) die("cannot create directories for " + e.path);
+        std::ofstream out(to_path(out_path), std::ios::binary | std::ios::trunc);
+        if (!out) die("cannot write " + out_path);
+        f.clear();
+        f.seekg((std::streamoff)e.offset);
+        if (!f) die("corrupt bundle (bad offset)");
         uint64_t left = e.size;
         while (left > 0) {
             size_t n = left < chunk.size() ? (size_t)left : chunk.size();
-            if (fread(chunk.data(), 1, n, f) != n) die("corrupt bundle (short data)");
-            if (fwrite(chunk.data(), 1, n, out) != n) die("cannot write " + out_path);
+            f.read(chunk.data(), (std::streamsize)n);
+            if ((size_t)f.gcount() != n) die("corrupt bundle (short data)");
+            out.write(chunk.data(), (std::streamsize)n);
+            if (!out) die("cannot write " + out_path);
             left -= n;
         }
-        fclose(out);
-        chmod(out_path.c_str(), (mode_t)(e.mode & 0777));
+        out.close();
+        std::error_code ec;
+        fs::permissions(to_path(out_path), (fs::perms)(e.mode & 0777), ec);
     }
-    FILE* done = fopen((tmp + "/.complete").c_str(), "wb");
-    if (done) fclose(done);
-    if (rename(tmp.c_str(), dir.c_str()) != 0) {
-        // Another run finished first: use its copy, and remove our files
-        // (best effort; empty directories may remain).
-        if (!exists(dir + "/.complete")) die("cannot install " + dir + ": " + strerror(errno));
-        for (auto it = entries.rbegin(); it != entries.rend(); ++it) unlink((tmp + "/" + it->path).c_str());
-        unlink((tmp + "/.complete").c_str());
+    { std::ofstream done(to_path(tmp + "/.complete"), std::ios::binary); }
+    std::error_code ec;
+    fs::rename(to_path(tmp), to_path(dir), ec);
+    if (ec) {
+        // Another run finished first: use its copy, and remove ours.
+        if (!exists(dir + "/.complete")) die("cannot install " + dir + ": " + ec.message());
+        std::error_code ignored;
+        fs::remove_all(to_path(tmp), ignored);
     }
 }
 
@@ -168,7 +158,7 @@ struct Api {
 
 template <typename T>
 void bind(void* lib, T& fn, const char* name) {
-    fn = reinterpret_cast<T>(dlsym(lib, name));
+    fn = reinterpret_cast<T>(platform_library_symbol(lib, name));
     if (!fn) die(std::string("the bundled core library lacks ") + name);
 }
 
@@ -181,15 +171,16 @@ void on_exit_call(void*, int code, void*) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    std::string exe = self_path();
-    FILE* f = fopen(exe.c_str(), "rb");
+    std::string exe = platform_executable_path();
+    if (exe.empty()) die("cannot locate the executable");
+    std::ifstream f(to_path(exe), std::ios::binary);
     if (!f) die("cannot read " + exe);
 
     // Trailer
-    if (fseeko(f, 0, SEEK_END) != 0) die("cannot read " + exe);
-    off_t file_size = ftello(f);
+    f.seekg(0, std::ios::end);
+    uint64_t file_size = (uint64_t)f.tellg();
     unsigned char trailer[kTrailerSize];
-    if (file_size < (off_t)kTrailerSize || !read_at(f, (uint64_t)file_size - kTrailerSize, trailer, kTrailerSize) ||
+    if (!f || file_size < kTrailerSize || !read_at(f, file_size - kTrailerSize, trailer, kTrailerSize) ||
         memcmp(trailer, kMagic, sizeof(kMagic)) != 0) {
         die("this program has no bundle attached (make one with tools/bundle.mob)");
     }
@@ -220,24 +211,22 @@ int main(int argc, char* argv[]) {
     // Cache
     std::string dir = cache_root() + "/" + hash;
     if (!exists(dir + "/.complete")) {
-        if (!mkdirs(cache_root())) die("cannot create " + cache_root() + ": " + strerror(errno));
+        if (!mkdirs(cache_root())) die("cannot create " + cache_root());
         extract(f, entries, dir);
     }
-    fclose(f);
+    f.close();
 
     std::string entry_script;
     {
-        FILE* ef = fopen((dir + "/__entry__").c_str(), "rb");
+        std::ifstream ef(to_path(dir + "/__entry__"), std::ios::binary);
         if (!ef) die("bundle has no entry script");
-        char buf[PATH_MAX] = {0};
-        size_t n = fread(buf, 1, sizeof(buf) - 1, ef);
-        fclose(ef);
-        entry_script.assign(buf, n);
+        entry_script.assign(std::istreambuf_iterator<char>(ef), std::istreambuf_iterator<char>());
     }
 
     // Core
-    void* lib = dlopen((dir + "/libmobius-core.so").c_str(), RTLD_NOW | RTLD_GLOBAL);
-    if (!lib) die(std::string("cannot load the core library: ") + dlerror());
+    std::string load_error;
+    void* lib = platform_library_open(dir + "/" + platform_core_library_name(), true, &load_error);
+    if (!lib) die("cannot load the core library: " + load_error);
     Api api;
     bind(lib, api.default_config_into, "mobius_default_config_into");
     bind(lib, api.new_state, "mobius_new_state");
@@ -282,4 +271,3 @@ int main(int argc, char* argv[]) {
     return rc == 0 ? 0 : 1;
 }
 
-#endif // __linux__

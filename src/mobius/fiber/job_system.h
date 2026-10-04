@@ -3,7 +3,7 @@
 
 #include "fiber/fiber.h"
 #include "fiber/fiber_pool.h"
-#include "fiber/fiber_context.h"
+#include "platform/mobius_platform.h"
 #include <mobius/mobius.h>
 
 #include <atomic>
@@ -148,7 +148,7 @@ private:
     MobiusFiber* dedicated_main_fiber_ = nullptr;
 
     static thread_local MobiusFiber* t_current_fiber_;
-    static thread_local FiberContext t_scheduler_ctx_;
+    static thread_local PlatformFiber* t_scheduler_ctx_;   // this thread's own context
 };
 
 // Scope guard for a fiber's wait loop. Registers the fiber as blocked for

@@ -1,4 +1,4 @@
-#include "util/platform.h"
+#include "platform/mobius_platform.h"
 #include "vm/vm.h"
 #include "state/mobius_state.h"
 #include "data/table.h"
@@ -303,17 +303,12 @@ bool MobiusVM::cStackExhausted() const {
     // isn't under AddressSanitizer, which can move locals to a heap "fake
     // stack", so the check never fired there.
     char* here = MOBIUS_FRAME_ADDRESS();
-    if (fiber && fiber->stack_memory) {
-        // Stacks grow down toward stack_memory (guard page first, then the
-        // usable stack), so the distance from it is the space left.
-        char* low = (char*)fiber->stack_memory;
-        if (here > low && (size_t)(here - low) <= fiber->stack_size + 2 * 65536) {
-            return (size_t)(here - low) < C_STACK_RESERVE;
-        }
-    }
-    // Stacks the OS allocated (Windows fibers): ask it where the stack ends.
     char* low = nullptr;
-    if (platform_stack_low(&low) && here > low) return (size_t)(here - low) < C_STACK_RESERVE;
+    char* high = nullptr;
+    if (fiber && platform_stack_bounds(&low, &high) && here > low && here <= high) {
+        // Stacks grow down toward `low`: the distance to it is the space left.
+        return (size_t)(here - low) < C_STACK_RESERVE;
+    }
     return native_depth_ > MAX_NATIVE_NESTING;
 }
 

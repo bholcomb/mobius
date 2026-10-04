@@ -1,4 +1,4 @@
-#include "util/platform.h"
+#include "platform/mobius_platform.h"
 #include "util/file_io.h"
 #include "state/mobius_state.h"
 
