@@ -40,12 +40,11 @@ g++ -o my_app my_app.cpp -lmobius-core -ldl
 12. [Output and exit](#output-and-exit)
 13. [Files](#files)
 14. [Sandboxing](#sandboxing)
-15. [Time limits, pausing and abort](#time-limits-pausing-and-abort)
-16. [Loading plugins](#loading-plugins)
-17. [Type metatables](#type-metatables)
-18. [Multiple interpreters](#multiple-interpreters)
-19. [Concurrency and fibers](#concurrency-and-fibers)
-20. [Metrics](#metrics)
+15. [Loading plugins](#loading-plugins)
+16. [Type metatables](#type-metatables)
+17. [Multiple interpreters](#multiple-interpreters)
+18. [Concurrency and fibers](#concurrency-and-fibers)
+19. [Metrics](#metrics)
 
 ---
 
@@ -627,47 +626,8 @@ mobius_stack_pushNewTable(state, 8);
 mobius_register_module(state, "game");
 ```
 
-Limits on what a script may consume are separate from the sandbox: see
-[time limits](#time-limits-pausing-and-abort).
-
----
-
-## Time limits, pausing and abort
-
-A script that runs too long can't hang the host. Give each call a time
-budget, and the script pauses when it runs out instead of being killed:
-
-```c
-mobius_set_time_limit(state, 5);            // ms per exec / resume call; 0 = none
-
-int rc = mobius_exec_string(state, code);   // MOBIUS_OK, an error, or MOBIUS_PAUSED
-// ... next frame ...
-if (rc == MOBIUS_PAUSED) rc = mobius_resume(state);
-```
-
-When the limit is hit, the call returns `MOBIUS_PAUSED` and a warning goes to
-the state's error output. The script, and every fiber of the state, stops at
-its next safe point (a loop iteration) and stays exactly where it was;
-`mobius_resume` continues it with a fresh budget. While an execution is
-paused, the state accepts only `mobius_resume` and `mobius_abort` (other exec
-calls return `MOBIUS_ERROR_BUSY`).
-
-`mobius_pause(state)` asks for the same pause from any thread, for example a
-watchdog. `mobius_abort(state)` stops the execution and all its fibers for
-good: scripts can't catch it, `finally` blocks don't run, and fibers waiting
-on I/O or timers are woken. A paused execution is discarded before
-`mobius_abort` returns; one running on another thread returns
-`MOBIUS_ERROR_ABORTED` from its exec call. The state stays usable afterwards,
-and globals keep what was assigned before the abort.
-
-Details:
-
-- A script never pauses inside a host function it called (the host's frames
-  would be suspended with it); it pauses once the function returns.
-- Code that recurses without looping is not paused until it reaches a loop;
-  runaway recursion ends at `max_call_depth`.
-- Without a time limit, the checks cost one global flag test per loop
-  iteration.
+Limits on what a script may consume (CPU time, memory) are separate from
+the sandbox.
 
 ---
 

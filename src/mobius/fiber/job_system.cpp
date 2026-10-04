@@ -210,8 +210,6 @@ MobiusFiber* JobSystem::currentFiber() const {
 }
 
 MobiusFiber* JobSystem::dequeueReadyFiber() {
-    if (paused()) return nullptr;   // the state is paused: start nothing
-
     wakeWaiters();
 
     // Interleave: convert ONE pending job into a fiber each time we dequeue,
@@ -302,19 +300,12 @@ void JobSystem::spawnWorkerIfNeeded() {
 // it accordingly. The thread must have a scheduler context (t_scheduler_ctx_).
 void JobSystem::runFiber(MobiusFiber* fiber) {
     MobiusVM* outer_vm = MobiusVM::t_current_vm;
-    running_.fetch_add(1, std::memory_order_acq_rel);
     t_current_fiber_ = fiber;
     fiber->state = FiberState::Running;
     if (fiber->vm) MobiusVM::t_current_vm = fiber->vm;
     fiber_context_swap(&t_scheduler_ctx_, &fiber->context);
     t_current_fiber_ = nullptr;
     MobiusVM::t_current_vm = outer_vm;
-    if (running_.fetch_sub(1, std::memory_order_acq_rel) == 1 && paused()) {
-        // The last running fiber of a paused state stopped: wake the
-        // thread waiting to report the pause.
-        { std::lock_guard<std::mutex> lock(ready_mutex_); }
-        ready_cv_.notify_all();
-    }
 
     if (fiber->state == FiberState::Dead) {
         metrics_->total_jobs_executed++;
@@ -437,65 +428,27 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
     // Start a worker for spawned fibers (none with max_worker_threads = 0).
     spawnWorkerIfNeeded();
 
-    main_from_pool_ = from_pool;
-    return runMainUntilDoneOrPaused();
-}
-
-void JobSystem::runUntilNoJobs() {
-    ensureInitialized();
-    spawnWorkerIfNeeded();
-    fiber_context_convert_thread(&t_scheduler_ctx_);
-    while (outstandingJobs() > 0) {
-        MobiusFiber* next = dequeueReadyFiber();
-        if (next) {
-            runFiber(next);
-            continue;
-        }
-        std::unique_lock<std::mutex> lock(ready_mutex_);
-        if (ready_queue_.empty() && outstandingJobs() > 0)
-            ready_cv_.wait_for(lock, std::chrono::milliseconds(2));
-    }
-}
-
-int JobSystem::resumeMainFiber() {
-    if (!main_fiber_) return 0;
-    setPaused(false);
-    return runMainUntilDoneOrPaused();
-}
-
-void JobSystem::setPaused(bool paused) {
-    paused_.store(paused, std::memory_order_release);
-    if (!paused) {
-        { std::lock_guard<std::mutex> lock(ready_mutex_); }
-        ready_cv_.notify_all();
-    }
-}
-
-// The calling thread is a worker too: it runs ready fibers (usually the main
-// fiber itself) until the main fiber completes. With no other workers it
-// runs everything. Spawned fibers still unfinished when the main fiber ends
-// continue on the workers, or with no workers, during the next call into
-// the state. If the state is paused, returns kMainPaused as soon as none of
-// its fibers is running (the main fiber stays pending for resumeMainFiber).
-int JobSystem::runMainUntilDoneOrPaused() {
+    // The calling thread is a worker too: it runs ready fibers (usually the
+    // main fiber itself) until the main fiber completes. With no other
+    // workers it runs everything. Spawned fibers still unfinished when the
+    // main fiber ends continue on the workers, or with no workers, during
+    // the next call into the state.
     fiber_context_convert_thread(&t_scheduler_ctx_);
     while (!mainFiberDone()) {
-        if (paused() && running_.load(std::memory_order_acquire) == 0) return kMainPaused;
         MobiusFiber* next = dequeueReadyFiber();
         if (next) {
             runFiber(next);
             continue;
         }
         std::unique_lock<std::mutex> lock(ready_mutex_);
-        if (ready_queue_.empty() && !mainFiberDone() &&
-            !(paused() && running_.load(std::memory_order_acquire) == 0))
+        if (ready_queue_.empty() && !mainFiberDone())
             ready_cv_.wait_for(lock, std::chrono::milliseconds(10));
     }
 
     // Only pooled fallback fibers go back to the pool; the dedicated main
     // fiber is cached and freed in the destructor.
-    if (main_from_pool_) {
-        fiber_pool_->release(main_fiber_);
+    if (from_pool) {
+        fiber_pool_->release(fiber);
     }
     main_fiber_ = nullptr;
 

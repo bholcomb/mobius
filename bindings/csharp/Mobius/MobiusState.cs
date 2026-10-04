@@ -10,15 +10,6 @@ using System.Runtime.InteropServices;
 
 namespace Mobius;
 
-/// <summary>How a call into the interpreter ended.</summary>
-public enum RunResult
-{
-    /// <summary>The script ran to the end.</summary>
-    Completed,
-    /// <summary>The time limit ran out (or Pause was called): call Resume to continue.</summary>
-    Paused,
-}
-
 /// <summary>A script error: syntax, runtime, or a C# exception raised in a host function.</summary>
 public sealed class MobiusException : Exception
 {
@@ -114,37 +105,17 @@ public sealed unsafe class MobiusState : IDisposable
     // ------------------------------------------------------------------
 
     /// <summary>Run source code. <paramref name="name"/> labels errors (e.g. the script's path).</summary>
-    public RunResult Execute(string code, string? name = null) =>
+    public void Execute(string code, string? name = null) =>
         Check(Native.mobius_exec_string_named(S, code, name));
 
     /// <summary>Run a script file (read through <see cref="FileSystem"/> if set).</summary>
-    public RunResult ExecuteFile(string path) => Check(Native.mobius_exec_file(S, path));
+    public void ExecuteFile(string path) => Check(Native.mobius_exec_file(S, path));
 
-    /// <summary>Maximum running time per Execute/Resume call, in milliseconds (0: none). When exceeded, the script pauses and a warning is written.</summary>
-    public uint TimeLimitMs { set => Native.mobius_set_time_limit(S, value); }
-
-    public bool IsPaused => Native.mobius_is_paused(S) != 0;
-
-    /// <summary>Continue a paused script.</summary>
-    public RunResult Resume() => Check(Native.mobius_resume(S));
-
-    /// <summary>Ask a running script to pause (any thread).</summary>
-    public void Pause() => Native.mobius_pause(S);
-
-    /// <summary>Stop the script and all its fibers for good (any thread).</summary>
-    public void Abort() => Native.mobius_abort(S);
-
-    private RunResult Check(int rc)
+    private void Check(int rc)
     {
-        if (rc == Native.MOBIUS_OK) { TakeError(); return RunResult.Completed; }
-        if (rc == Native.MOBIUS_PAUSED) return RunResult.Paused;
-        var error = TakeError() ?? new MobiusException(rc, rc switch
-        {
-            Native.MOBIUS_ERROR_BUSY => "The state has a paused script: Resume or Abort it first",
-            Native.MOBIUS_ERROR_ABORTED => "The script was aborted",
-            _ => $"Mobius error {rc}",
-        });
-        throw error;
+        var error = TakeError();
+        if (rc == Native.MOBIUS_OK) return;
+        throw error ?? new MobiusException(rc, $"Mobius error {rc}");
     }
 
     private MobiusException? TakeError()

@@ -56,11 +56,8 @@ mobius.RegisterModule("game", new Dictionary<string, object?>
     ["play_sound"] = (Func<object?[], object?>)(args => { audio.Play((string)args[0]!); return null; }),
 });
 
-// A runaway script pauses after 5 ms instead of hanging the frame.
-mobius.TimeLimitMs = 5;
-var result = mobius.Execute(source, "mods/foo/main.mob");
-// ... next frame:
-if (result == RunResult.Paused) result = mobius.Resume();
+// Load the mod (runs its top level; throws MobiusException on errors).
+mobius.Execute(source, "mods/foo/main.mob");
 
 // Calling into scripts.
 mobius.Call("on_update", deltaTime);
