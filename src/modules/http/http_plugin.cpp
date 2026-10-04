@@ -863,21 +863,21 @@ static const char* http_depends_on[] = {
 };
 
 static MobiusPlugin http_plugin = {
-    .metadata = {
-        .name = "http",
-        .version = "1.0.0",
-        .description = "Dependency-free HTTP protocol parsing and transport helpers",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT",
-        .depends_on = http_depends_on,
-        .depends_on_count = sizeof(http_depends_on) / sizeof(http_depends_on[0]),
+    {
+        "http" /* name */,
+        "1.0.0" /* version */,
+        "Dependency-free HTTP protocol parsing and transport helpers" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        http_depends_on /* depends_on */,
+        sizeof(http_depends_on) / sizeof(http_depends_on[0]) /* depends_on_count */
     },
-    .functions = http_functions,
-    .function_count = sizeof(http_functions) / sizeof(http_functions[0]),
-    .init_plugin = init_http_plugin,
-    .cleanup_plugin = cleanup_http_plugin,
-    .post_init = nullptr,
+    http_functions /* functions */,
+    sizeof(http_functions) / sizeof(http_functions[0]) /* function_count */,
+    init_http_plugin /* init_plugin */,
+    cleanup_http_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

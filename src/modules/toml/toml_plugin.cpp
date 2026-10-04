@@ -1352,19 +1352,21 @@ static MobiusPluginFunction toml_functions[] = {
 };
 
 static MobiusPlugin toml_plugin = {
-    .metadata = {
-        .name = "toml",
-        .version = "1.0.0",
-        .description = "TOML Parser and Serializer",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "toml" /* name */,
+        "1.0.0" /* version */,
+        "TOML Parser and Serializer" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = toml_functions,
-    .function_count = sizeof(toml_functions) / sizeof(toml_functions[0]),
-    .init_plugin = init_toml_plugin,
-    .cleanup_plugin = cleanup_toml_plugin,
-    .post_init = nullptr,
+    toml_functions /* functions */,
+    sizeof(toml_functions) / sizeof(toml_functions[0]) /* function_count */,
+    init_toml_plugin /* init_plugin */,
+    cleanup_toml_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

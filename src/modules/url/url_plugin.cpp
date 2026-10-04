@@ -356,19 +356,21 @@ static MobiusPluginFunction url_functions[] = {
 };
 
 static MobiusPlugin url_plugin = {
-    .metadata = {
-        .name = "url",
-        .version = "1.0.0",
-        .description = "URL parsing and encoding helpers",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "url" /* name */,
+        "1.0.0" /* version */,
+        "URL parsing and encoding helpers" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = url_functions,
-    .function_count = sizeof(url_functions) / sizeof(url_functions[0]),
-    .init_plugin = init_url_plugin,
-    .cleanup_plugin = cleanup_url_plugin,
-    .post_init = nullptr,
+    url_functions /* functions */,
+    sizeof(url_functions) / sizeof(url_functions[0]) /* function_count */,
+    init_url_plugin /* init_plugin */,
+    cleanup_url_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

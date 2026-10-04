@@ -1351,19 +1351,21 @@ static MobiusPluginFunction sqlite_functions[] = {
 };
 
 static MobiusPlugin sqlite_plugin = {
-    .metadata = {
-        .name = "sqlite",
-        .version = "0.2.0",
-        .description = "SQLite database bindings for Mobius",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "sqlite" /* name */,
+        "0.2.0" /* version */,
+        "SQLite database bindings for Mobius" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = sqlite_functions,
-    .function_count = sizeof(sqlite_functions) / sizeof(sqlite_functions[0]),
-    .init_plugin = nullptr,
-    .cleanup_plugin = nullptr,
-    .post_init = sqlite_post_init,
+    sqlite_functions /* functions */,
+    sizeof(sqlite_functions) / sizeof(sqlite_functions[0]) /* function_count */,
+    nullptr /* init_plugin */,
+    nullptr /* cleanup_plugin */,
+    sqlite_post_init /* post_init */
 };
 
 } // namespace

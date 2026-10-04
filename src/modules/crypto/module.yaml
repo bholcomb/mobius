@@ -3,6 +3,12 @@ version: 0.1.0
 platforms:
   linux-x86_64:
     module_library: native/linux-x86_64/crypto.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/crypto.dll
+  macos-arm64:
+    module_library: native/macos-arm64/crypto.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/crypto.dylib
 dependencies:
   mobius_modules: []
 metadata:

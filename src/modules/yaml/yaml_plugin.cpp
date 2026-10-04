@@ -737,19 +737,21 @@ static MobiusPluginFunction yaml_functions[] = {
 };
 
 static MobiusPlugin yaml_plugin = {
-    .metadata = {
-        .name = "yaml",
-        .version = "1.0.0",
-        .description = "Dependency-free YAML subset parser and serializer",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "yaml" /* name */,
+        "1.0.0" /* version */,
+        "Dependency-free YAML subset parser and serializer" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = yaml_functions,
-    .function_count = sizeof(yaml_functions) / sizeof(yaml_functions[0]),
-    .init_plugin = init_yaml_plugin,
-    .cleanup_plugin = cleanup_yaml_plugin,
-    .post_init = nullptr,
+    yaml_functions /* functions */,
+    sizeof(yaml_functions) / sizeof(yaml_functions[0]) /* function_count */,
+    init_yaml_plugin /* init_plugin */,
+    cleanup_yaml_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

@@ -411,19 +411,21 @@ static MobiusPluginFunction datetime_functions[] = {
 };
 
 static MobiusPlugin datetime_plugin = {
-    .metadata = {
-        .name = "datetime",
-        .version = "1.0.0",
-        .description = "Structured date and time helpers",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "datetime" /* name */,
+        "1.0.0" /* version */,
+        "Structured date and time helpers" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = datetime_functions,
-    .function_count = sizeof(datetime_functions) / sizeof(datetime_functions[0]),
-    .init_plugin = init_datetime_plugin,
-    .cleanup_plugin = cleanup_datetime_plugin,
-    .post_init = nullptr,
+    datetime_functions /* functions */,
+    sizeof(datetime_functions) / sizeof(datetime_functions[0]) /* function_count */,
+    init_datetime_plugin /* init_plugin */,
+    cleanup_datetime_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

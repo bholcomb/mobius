@@ -2223,19 +2223,21 @@ static MobiusPluginFunction monstro_functions[] = {
 };
 
 static MobiusPlugin monstro_plugin = {
-    .metadata = {
-        .name = "monstro",
-        .version = "0.1.0",
-        .description = "Monstro UI context and widget bindings for Mobius",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "monstro" /* name */,
+        "0.1.0" /* version */,
+        "Monstro UI context and widget bindings for Mobius" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = monstro_functions,
-    .function_count = sizeof(monstro_functions) / sizeof(monstro_functions[0]),
-    .init_plugin = nullptr,
-    .cleanup_plugin = cleanup_monstro_plugin,
-    .post_init = monstro_post_init,
+    monstro_functions /* functions */,
+    sizeof(monstro_functions) / sizeof(monstro_functions[0]) /* function_count */,
+    nullptr /* init_plugin */,
+    cleanup_monstro_plugin /* cleanup_plugin */,
+    monstro_post_init /* post_init */
 };
 
 } // namespace

@@ -52,30 +52,36 @@ staging:
   contents:
     - folder: "bin"
       files:
-        - "${out_dir}/bin/mobius"
-        - "${out_dir}/bin/mobius-launcher"
-        - "${out_dir}/bin/libmobius-core.so"
+        - linux: ["${out_dir}/bin/mobius", "${out_dir}/bin/mobius-launcher", "${out_dir}/bin/libmobius-core.so"]
+        - macos: ["${out_dir}/bin/mobius", "${out_dir}/bin/libmobius-core.dylib"]
+        - windows: ["${out_dir}/bin/mobius.exe", "${out_dir}/bin/mobius-core.dll"]
     - folder: "bin/modules/compression"
       files:
         - "src/modules/compression/module.yaml"
         - "src/modules/compression/compression.mob"
-    - folder: "bin/modules/compression/native/linux-x86_64"
+    - folder: "bin/modules/compression/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/compression.so"
+        - linux: ["${out_dir}/bin/compression.so"]
+        - windows: ["${out_dir}/bin/compression.dll"]
+        - macos: ["${out_dir}/bin/compression.dylib"]
     - folder: "bin/modules/io"
       files:
         - "src/modules/io/module.yaml"
         - "src/modules/io/io.mob"
-    - folder: "bin/modules/io/native/linux-x86_64"
+    - folder: "bin/modules/io/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/io.so"
+        - linux: ["${out_dir}/bin/io.so"]
+        - windows: ["${out_dir}/bin/io.dll"]
+        - macos: ["${out_dir}/bin/io.dylib"]
     - folder: "bin/modules/process"
       files:
         - "src/modules/process/module.yaml"
         - "src/modules/process/process.mob"
-    - folder: "bin/modules/process/native/linux-x86_64"
+    - folder: "bin/modules/process/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/process.so"
+        - linux: ["${out_dir}/bin/process.so"]
+        - windows: ["${out_dir}/bin/process.dll"]
+        - macos: ["${out_dir}/bin/process.dylib"]
     - folder: "bin/modules/cli"
       files:
         - "src/modules/cli/module.yaml"
@@ -83,64 +89,84 @@ staging:
     - folder: "bin/modules/math"
       files:
         - "src/modules/math/module.yaml"
-    - folder: "bin/modules/math/native/linux-x86_64"
+    - folder: "bin/modules/math/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/math.so"
+        - linux: ["${out_dir}/bin/math.so"]
+        - windows: ["${out_dir}/bin/math.dll"]
+        - macos: ["${out_dir}/bin/math.dylib"]
     - folder: "bin/modules/os"
       files:
         - "src/modules/os/module.yaml"
-    - folder: "bin/modules/os/native/linux-x86_64"
+    - folder: "bin/modules/os/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/os.so"
+        - linux: ["${out_dir}/bin/os.so"]
+        - windows: ["${out_dir}/bin/os.dll"]
+        - macos: ["${out_dir}/bin/os.dylib"]
     - folder: "bin/modules/regex"
       files:
         - "src/modules/regex/module.yaml"
-    - folder: "bin/modules/regex/native/linux-x86_64"
+    - folder: "bin/modules/regex/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/regex.so"
+        - linux: ["${out_dir}/bin/regex.so"]
+        - windows: ["${out_dir}/bin/regex.dll"]
+        - macos: ["${out_dir}/bin/regex.dylib"]
     - folder: "bin/modules/json"
       files:
         - "src/modules/json/module.yaml"
-    - folder: "bin/modules/json/native/linux-x86_64"
+    - folder: "bin/modules/json/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/json.so"
+        - linux: ["${out_dir}/bin/json.so"]
+        - windows: ["${out_dir}/bin/json.dll"]
+        - macos: ["${out_dir}/bin/json.dylib"]
     - folder: "bin/modules/toml"
       files:
         - "src/modules/toml/module.yaml"
-    - folder: "bin/modules/toml/native/linux-x86_64"
+    - folder: "bin/modules/toml/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/toml.so"
+        - linux: ["${out_dir}/bin/toml.so"]
+        - windows: ["${out_dir}/bin/toml.dll"]
+        - macos: ["${out_dir}/bin/toml.dylib"]
     - folder: "bin/modules/datetime"
       files:
         - "src/modules/datetime/module.yaml"
-    - folder: "bin/modules/datetime/native/linux-x86_64"
+    - folder: "bin/modules/datetime/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/datetime.so"
+        - linux: ["${out_dir}/bin/datetime.so"]
+        - windows: ["${out_dir}/bin/datetime.dll"]
+        - macos: ["${out_dir}/bin/datetime.dylib"]
     - folder: "bin/modules/url"
       files:
         - "src/modules/url/module.yaml"
-    - folder: "bin/modules/url/native/linux-x86_64"
+    - folder: "bin/modules/url/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/url.so"
+        - linux: ["${out_dir}/bin/url.so"]
+        - windows: ["${out_dir}/bin/url.dll"]
+        - macos: ["${out_dir}/bin/url.dylib"]
     - folder: "bin/modules/crypto"
       files:
         - "src/modules/crypto/module.yaml"
-    - folder: "bin/modules/crypto/native/linux-x86_64"
+    - folder: "bin/modules/crypto/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/crypto.so"
+        - linux: ["${out_dir}/bin/crypto.so"]
+        - windows: ["${out_dir}/bin/crypto.dll"]
+        - macos: ["${out_dir}/bin/crypto.dylib"]
     - folder: "bin/modules/yaml"
       files:
         - "src/modules/yaml/module.yaml"
-    - folder: "bin/modules/yaml/native/linux-x86_64"
+    - folder: "bin/modules/yaml/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/yaml.so"
+        - linux: ["${out_dir}/bin/yaml.so"]
+        - windows: ["${out_dir}/bin/yaml.dll"]
+        - macos: ["${out_dir}/bin/yaml.dylib"]
     - folder: "bin/modules/http"
       files:
         - "src/modules/http/module.yaml"
         - "src/modules/http/http.mob"
-    - folder: "bin/modules/http/native/linux-x86_64"
+    - folder: "bin/modules/http/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/http.so"
+        - linux: ["${out_dir}/bin/http.so"]
+        - windows: ["${out_dir}/bin/http.dll"]
+        - macos: ["${out_dir}/bin/http.dylib"]
     - folder: "bin/modules/web"
       files:
         - "src/modules/web/module.yaml"
@@ -149,23 +175,28 @@ staging:
       files:
         - "src/modules/websocket/module.yaml"
         - "src/modules/websocket/websocket.mob"
-    - folder: "bin/modules/websocket/native/linux-x86_64"
+    - folder: "bin/modules/websocket/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/websocket.so"
+        - linux: ["${out_dir}/bin/websocket.so"]
+        - windows: ["${out_dir}/bin/websocket.dll"]
+        - macos: ["${out_dir}/bin/websocket.dylib"]
     - folder: "bin/modules/socket"
       files:
         - "src/modules/socket/module.yaml"
-    - folder: "bin/modules/socket/native/linux-x86_64"
+    - folder: "bin/modules/socket/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/socket.so"
+        - linux: ["${out_dir}/bin/socket.so"]
+        - windows: ["${out_dir}/bin/socket.dll"]
+        - macos: ["${out_dir}/bin/socket.dylib"]
     - folder: "packages/sqlite"
       files:
         - "src/packages/sqlite/module.yaml"
         - "src/packages/sqlite/sqlite.mob"
-    - folder: "packages/sqlite/native/linux-x86_64"
+    - folder: "packages/sqlite/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/sqlite.so"
-        - ".buildy_cache/deps/sqlite3/build/${platform}-${arch}-${config}/bin/libsqlite3.so"
+        - linux: ["${out_dir}/bin/sqlite.so", ".buildy_cache/deps/sqlite3/build/${platform}-${arch}-${config}/bin/libsqlite3.so"]
+        - windows: ["${out_dir}/bin/sqlite.dll", ".buildy_cache/deps/sqlite3/build/${platform}-${arch}-${config}/bin/sqlite3.dll"]
+        - macos: ["${out_dir}/bin/sqlite.dylib", ".buildy_cache/deps/sqlite3/build/${platform}-${arch}-${config}/bin/libsqlite3.dylib"]
     - folder: "packages/stencil"
       files:
         - "src/packages/stencil/module.yaml"
@@ -174,9 +205,11 @@ staging:
       files:
         - "src/packages/glfw/module.yaml"
         - "src/packages/glfw/glfw.mob"
-    - folder: "packages/glfw/native/linux-x86_64"
+    - folder: "packages/glfw/native/${platform}-${arch}"
       files:
-        - "${out_dir}/bin/glfw.so"
+        - linux: ["${out_dir}/bin/glfw.so"]
+        - windows: ["${out_dir}/bin/glfw.dll"]
+        - macos: ["${out_dir}/bin/glfw.dylib"]
           #    - folder: "packages/vulkease"
           #      files:
           #        - "src/packages/vulkease/module.yaml"

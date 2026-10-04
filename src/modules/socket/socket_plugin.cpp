@@ -1088,19 +1088,21 @@ static MobiusPluginFunction socket_functions[] = {
 };
 
 static MobiusPlugin socket_plugin = {
-    .metadata = {
-        .name = "socket",
-        .version = "1.0.0",
-        .description = "Plain TCP and UDP socket helpers",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "socket" /* name */,
+        "1.0.0" /* version */,
+        "Plain TCP and UDP socket helpers" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = socket_functions,
-    .function_count = sizeof(socket_functions) / sizeof(socket_functions[0]),
-    .init_plugin = init_socket_plugin,
-    .cleanup_plugin = cleanup_socket_plugin,
-    .post_init = socket_post_init,
+    socket_functions /* functions */,
+    sizeof(socket_functions) / sizeof(socket_functions[0]) /* function_count */,
+    init_socket_plugin /* init_plugin */,
+    cleanup_socket_plugin /* cleanup_plugin */,
+    socket_post_init /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

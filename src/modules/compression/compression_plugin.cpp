@@ -1474,19 +1474,21 @@ static MobiusPluginFunction compression_functions[] = {
 };
 
 static MobiusPlugin compression_plugin = {
-    .metadata = {
-        .name = "compression",
-        .version = "0.1.0",
-        .description = "Compression and archive primitives",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "compression" /* name */,
+        "0.1.0" /* version */,
+        "Compression and archive primitives" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = compression_functions,
-    .function_count = sizeof(compression_functions) / sizeof(compression_functions[0]),
-    .init_plugin = init_compression_plugin,
-    .cleanup_plugin = cleanup_compression_plugin,
-    .post_init = nullptr,
+    compression_functions /* functions */,
+    sizeof(compression_functions) / sizeof(compression_functions[0]) /* function_count */,
+    init_compression_plugin /* init_plugin */,
+    cleanup_compression_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 }  // namespace

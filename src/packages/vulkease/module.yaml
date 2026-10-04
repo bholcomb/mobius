@@ -7,6 +7,18 @@ platforms:
     module_library: native/linux-x86_64/vulkease.so
     runtime_libraries:
       - native/linux-x86_64/libvulkease.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/vulkease.dll
+    runtime_libraries:
+      - native/windows-x86_64/vulkease.dll
+  macos-arm64:
+    module_library: native/macos-arm64/vulkease.dylib
+    runtime_libraries:
+      - native/macos-arm64/libvulkease.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/vulkease.dylib
+    runtime_libraries:
+      - native/macos-x86_64/libvulkease.dylib
 dependencies:
   mobius_modules: []
 metadata:

@@ -3,6 +3,12 @@ version: 0.1.0
 platforms:
   linux-x86_64:
     module_library: native/linux-x86_64/yaml.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/yaml.dll
+  macos-arm64:
+    module_library: native/macos-arm64/yaml.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/yaml.dylib
 dependencies:
   mobius_modules: []
 metadata:

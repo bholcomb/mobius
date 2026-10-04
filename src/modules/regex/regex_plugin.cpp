@@ -624,19 +624,21 @@ static MobiusPluginFunction regex_functions[] = {
 };
 
 static MobiusPlugin regex_plugin = {
-    .metadata = {
-        .name = "regex",
-        .version = "1.0.0",
-        .description = "Regular Expression Support",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "regex" /* name */,
+        "1.0.0" /* version */,
+        "Regular Expression Support" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = regex_functions,
-    .function_count = sizeof(regex_functions) / sizeof(regex_functions[0]),
-    .init_plugin = init_regex_plugin,
-    .cleanup_plugin = cleanup_regex_plugin,
-    .post_init = nullptr,
+    regex_functions /* functions */,
+    sizeof(regex_functions) / sizeof(regex_functions[0]) /* function_count */,
+    init_regex_plugin /* init_plugin */,
+    cleanup_regex_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

@@ -3,6 +3,12 @@ version: 0.1.0
 platforms:
   linux-x86_64:
     module_library: native/linux-x86_64/regex.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/regex.dll
+  macos-arm64:
+    module_library: native/macos-arm64/regex.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/regex.dylib
 dependencies:
   mobius_modules: []
 metadata:
