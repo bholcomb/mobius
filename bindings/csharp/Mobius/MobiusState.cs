@@ -1,7 +1,11 @@
+// A convenience layer over the C API mirror in Native.cs: one interpreter
+// with C#-friendly execution, errors, hooks and value conversion. Code that
+// wants the C API itself can use Native directly (MobiusState.Handle gives
+// the state pointer).
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Mobius;
@@ -77,7 +81,7 @@ public sealed unsafe class MobiusState : IDisposable
     /// <param name="workerThreads">Extra worker threads for fibers; null keeps the default, 0 runs everything on the calling thread.</param>
     public MobiusState(int? workerThreads = null)
     {
-        Native.Config config;
+        MobiusConfig config;
         Native.mobius_default_config_into(&config);
         if (workerThreads.HasValue) config.max_worker_threads = workerThreads.Value;
         _state = Native.mobius_new_state(&config);
@@ -92,10 +96,16 @@ public sealed unsafe class MobiusState : IDisposable
         if (_state == IntPtr.Zero) return;
         Native.mobius_free_state(_state);
         _state = IntPtr.Zero;
-        foreach (var h in _functions) h.Free();
-        _functions.Clear();
+        lock (_functions)
+        {
+            foreach (var h in _functions) h.Free();
+            _functions.Clear();
+        }
         _self.Free();
     }
+
+    /// <summary>The MobiusState* for calling the C API (Native) directly.</summary>
+    public IntPtr Handle => S;
 
     private IntPtr S => _state != IntPtr.Zero ? _state : throw new ObjectDisposedException(nameof(MobiusState));
 
@@ -104,23 +114,11 @@ public sealed unsafe class MobiusState : IDisposable
     // ------------------------------------------------------------------
 
     /// <summary>Run source code. <paramref name="name"/> labels errors (e.g. the script's path).</summary>
-    public RunResult Execute(string code, string? name = null)
-    {
-        var c = new Utf8(code);
-        var n = new Utf8(name);
-        int rc;
-        fixed (byte* cp = c) fixed (byte* np = n) rc = Native.mobius_exec_string_named(S, cp, np);
-        return Check(rc);
-    }
+    public RunResult Execute(string code, string? name = null) =>
+        Check(Native.mobius_exec_string_named(S, code, name));
 
     /// <summary>Run a script file (read through <see cref="FileSystem"/> if set).</summary>
-    public RunResult ExecuteFile(string path)
-    {
-        var p = new Utf8(path);
-        int rc;
-        fixed (byte* pp = p) rc = Native.mobius_exec_file(S, pp);
-        return Check(rc);
-    }
+    public RunResult ExecuteFile(string path) => Check(Native.mobius_exec_file(S, path));
 
     /// <summary>Maximum running time per Execute/Resume call, in milliseconds (0: none). When exceeded, the script pauses and a warning is written.</summary>
     public uint TimeLimitMs { set => Native.mobius_set_time_limit(S, value); }
@@ -138,12 +136,12 @@ public sealed unsafe class MobiusState : IDisposable
 
     private RunResult Check(int rc)
     {
-        if (rc == Native.OK) { TakeError(); return RunResult.Completed; }
-        if (rc == Native.PAUSED) return RunResult.Paused;
+        if (rc == Native.MOBIUS_OK) { TakeError(); return RunResult.Completed; }
+        if (rc == Native.MOBIUS_PAUSED) return RunResult.Paused;
         var error = TakeError() ?? new MobiusException(rc, rc switch
         {
-            Native.ERROR_BUSY => "The state has a paused script: Resume or Abort it first",
-            Native.ERROR_ABORTED => "The script was aborted",
+            Native.MOBIUS_ERROR_BUSY => "The state has a paused script: Resume or Abort it first",
+            Native.MOBIUS_ERROR_ABORTED => "The script was aborted",
             _ => $"Mobius error {rc}",
         });
         throw error;
@@ -155,11 +153,11 @@ public sealed unsafe class MobiusState : IDisposable
     }
 
     [UnmanagedCallersOnly]
-    private static void OnError(IntPtr state, Native.Error* error, IntPtr userdata)
+    private static void OnError(IntPtr state, MobiusError* error, IntPtr userdata)
     {
-        var self = (MobiusState)GCHandle.FromIntPtr(userdata).Target!;
-        var e = new MobiusException(error->code, Utf8.Read(error->message) ?? "Unknown error",
-                                    Utf8.Read(error->filename), error->line);
+        var self = From(userdata);
+        var e = new MobiusException(error->code, Native.Utf8(error->message) ?? "Unknown error",
+                                    Native.Utf8(error->filename), error->line);
         lock (self._errorLock) self._lastError = e;
     }
 
@@ -199,7 +197,7 @@ public sealed unsafe class MobiusState : IDisposable
         {
             _fileSystem = value;
             if (value == null) { Native.mobius_set_file_system(S, null, IntPtr.Zero); return; }
-            var fs = new Native.FileSystem { read = &OnRead, write = &OnWrite, exists = &OnExists };
+            var fs = new MobiusFileSystem { read = &OnRead, write = &OnWrite, exists = &OnExists };
             Native.mobius_set_file_system(S, &fs, GCHandle.ToIntPtr(_self));
         }
     }
@@ -210,23 +208,19 @@ public sealed unsafe class MobiusState : IDisposable
     /// </summary>
     public void Sandbox(bool allowConsoleOutput = false, bool allowRealFiles = false)
     {
-        uint allow = (allowConsoleOutput ? Native.CAP_OUTPUT : 0) | (allowRealFiles ? Native.CAP_FILES : 0);
+        uint allow = (allowConsoleOutput ? Native.MOBIUS_CAP_OUTPUT : 0) | (allowRealFiles ? Native.MOBIUS_CAP_FILES : 0);
         Native.mobius_sandbox(S, allow);
     }
 
     /// <summary>Where `import "name"` looks for name.mob (through the file system).</summary>
-    public void AddScriptDirectory(string path)
-    {
-        var p = new Utf8(path);
-        fixed (byte* pp = p) Native.mobius_add_plugin_directory(S, pp);
-    }
+    public void AddScriptDirectory(string path) => Native.mobius_add_plugin_directory(S, path);
 
     private static MobiusState From(IntPtr userdata) => (MobiusState)GCHandle.FromIntPtr(userdata).Target!;
 
     [UnmanagedCallersOnly]
     private static void OnOutput(IntPtr state, int stream, byte* data, nuint length, IntPtr userdata)
     {
-        try { From(userdata)._output?.Invoke(Utf8.Read(data, length), stream == Native.STDERR); }
+        try { From(userdata)._output?.Invoke(Native.Utf8(data, length), stream == Native.MOBIUS_STDERR); }
         catch { /* a throwing handler must not take down the interpreter */ }
     }
 
@@ -242,11 +236,11 @@ public sealed unsafe class MobiusState : IDisposable
     {
         try
         {
-            byte[] data = From(userdata)._fileSystem!.Read(Utf8.Read(path)!);
+            byte[] data = From(userdata)._fileSystem!.Read(Native.Utf8(path)!);
             fixed (byte* d = data) Native.mobius_file_set_data(request, d, (nuint)data.Length);
-            return Native.OK;
+            return Native.MOBIUS_OK;
         }
-        catch (Exception e) { SetFileError(request, e); return 1; }
+        catch (Exception e) { Native.mobius_file_set_error(request, e.Message); return 1; }
     }
 
     [UnmanagedCallersOnly]
@@ -254,23 +248,17 @@ public sealed unsafe class MobiusState : IDisposable
     {
         try
         {
-            From(userdata)._fileSystem!.Write(Utf8.Read(path)!, new ReadOnlySpan<byte>(data, checked((int)length)), append != 0);
-            return Native.OK;
+            From(userdata)._fileSystem!.Write(Native.Utf8(path)!, new ReadOnlySpan<byte>(data, checked((int)length)), append != 0);
+            return Native.MOBIUS_OK;
         }
-        catch (Exception e) { SetFileError(request, e); return 1; }
+        catch (Exception e) { Native.mobius_file_set_error(request, e.Message); return 1; }
     }
 
     [UnmanagedCallersOnly]
     private static int OnExists(IntPtr state, byte* path, IntPtr userdata)
     {
-        try { return From(userdata)._fileSystem!.Exists(Utf8.Read(path)!) ? 1 : 0; }
+        try { return From(userdata)._fileSystem!.Exists(Native.Utf8(path)!) ? 1 : 0; }
         catch { return 0; }
-    }
-
-    private static void SetFileError(IntPtr request, Exception e)
-    {
-        var m = new Utf8(e.Message);
-        fixed (byte* mp = m) Native.mobius_file_set_error(request, mp);
     }
 
     // ------------------------------------------------------------------
@@ -280,14 +268,12 @@ public sealed unsafe class MobiusState : IDisposable
     public void SetGlobal(string name, object? value)
     {
         Push(value);
-        var n = new Utf8(name);
-        fixed (byte* np = n) Native.mobius_stack_setGlobal(S, np);
+        Native.mobius_stack_setGlobal(S, name);
     }
 
     public object? GetGlobal(string name)
     {
-        var n = new Utf8(name);
-        fixed (byte* np = n) Native.mobius_stack_getGlobal(S, np);
+        Native.mobius_stack_getGlobal(S, name);
         object? value = Read(-1);
         Native.mobius_stack_pop(S, 1);
         return value;
@@ -299,12 +285,8 @@ public sealed unsafe class MobiusState : IDisposable
     /// its result is converted back. An exception becomes a script error.
     /// It may run on any interpreter thread, concurrently.
     /// </summary>
-    public void Register(string name, Func<object?[], object?> function)
-    {
-        IntPtr handle = Keep(function);
-        var n = new Utf8(name);
-        fixed (byte* np = n) Native.mobius_register_function(S, np, &Dispatch, handle);
-    }
+    public void Register(string name, Func<object?[], object?> function) =>
+        Native.mobius_register_function(S, name, &Dispatch, Keep(function));
 
     public void Register(string name, Action<object?[]> action) =>
         Register(name, args => { action(args); return null; });
@@ -316,17 +298,14 @@ public sealed unsafe class MobiusState : IDisposable
     public void RegisterModule(string name, IDictionary<string, object?> members)
     {
         Push(members);
-        var n = new Utf8(name);
-        int rc;
-        fixed (byte* np = n) rc = Native.mobius_register_module(S, np);
-        if (rc != Native.OK) throw new MobiusException(rc, "Could not register module " + name);
+        int rc = Native.mobius_register_module(S, name);
+        if (rc != Native.MOBIUS_OK) throw new MobiusException(rc, "Could not register module " + name);
     }
 
     /// <summary>Call a global script function.</summary>
     public object? Call(string functionName, params object?[] args)
     {
-        var n = new Utf8(functionName);
-        fixed (byte* np = n) Native.mobius_stack_getGlobal(S, np);
+        Native.mobius_stack_getGlobal(S, functionName);
         return CallOnStack(args);
     }
 
@@ -356,7 +335,7 @@ public sealed unsafe class MobiusState : IDisposable
             int before = Native.mobius_stack_size(s);
             int rc;
             fixed (ulong* r = refs) rc = Native.mobius_call_ref(s, fn, r, (nuint)args.Length, 1);
-            if (rc < 0) throw TakeError() ?? new MobiusException(2, "Script function call failed");
+            if (rc < 0) throw TakeError() ?? new MobiusException(Native.MOBIUS_ERROR_RUNTIME, "Script function call failed");
             int pushed = Native.mobius_stack_size(s) - before;
             object? result = pushed > 0 ? Read(-pushed) : null;
             if (pushed > 0) Native.mobius_stack_pop(s, pushed);
@@ -376,9 +355,9 @@ public sealed unsafe class MobiusState : IDisposable
         reference = 0;
     }
 
-    private IntPtr Keep(Delegate d)
+    private IntPtr Keep(Func<object?[], object?> function)
     {
-        var h = GCHandle.Alloc(new HostFunction(this, d));
+        var h = GCHandle.Alloc(new HostFunction(this, function));
         lock (_functions) _functions.Add(h);   // host functions may push functions on worker threads
         return GCHandle.ToIntPtr(h);
     }
@@ -387,11 +366,7 @@ public sealed unsafe class MobiusState : IDisposable
     {
         public readonly MobiusState Owner;
         public readonly Func<object?[], object?> Function;
-        public HostFunction(MobiusState owner, Delegate d)
-        {
-            Owner = owner;
-            Function = d as Func<object?[], object?> ?? throw new ArgumentException("Unsupported delegate type");
-        }
+        public HostFunction(MobiusState owner, Func<object?[], object?> function) { Owner = owner; Function = function; }
     }
 
     // One entry point for every registered C# function: the userdata (a
@@ -411,8 +386,7 @@ public sealed unsafe class MobiusState : IDisposable
         }
         catch (Exception e)
         {
-            var m = new Utf8(e.Message);
-            fixed (byte* mp = m) return Native.mobius_error(state, mp);
+            return Native.mobius_error(state, e.Message);
         }
     }
 
@@ -441,7 +415,7 @@ public sealed unsafe class MobiusState : IDisposable
             case float or double: Native.mobius_stack_pushFloat64(s, Convert.ToDouble(value)); break;
             case string str:
             {
-                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(str);
+                byte[] bytes = System.Text.Encoding.UTF8.GetBytes(str);   // with its length: NULs survive
                 fixed (byte* p = bytes) Native.mobius_stack_pushStringLength(s, p, (nuint)bytes.Length);
                 break;
             }
@@ -455,18 +429,14 @@ public sealed unsafe class MobiusState : IDisposable
                 Native.mobius_stack_pushFunction(s, &Dispatch, self.Keep(fn));
                 break;
             case IDictionary dict:
-            {
                 Native.mobius_stack_pushNewTable(s, (nuint)dict.Count);
                 foreach (DictionaryEntry e in dict)
                 {
                     Push(self, s, e.Value);
-                    var key = new Utf8(e.Key.ToString());
-                    fixed (byte* kp = key) Native.mobius_stack_setTableField(s, -2, kp);
+                    Native.mobius_stack_setTableField(s, -2, e.Key.ToString()!);
                 }
                 break;
-            }
             case IEnumerable list:
-            {
                 Native.mobius_stack_pushNewArray(s, 8);
                 foreach (object? item in list)
                 {
@@ -474,7 +444,6 @@ public sealed unsafe class MobiusState : IDisposable
                     Native.mobius_stack_arrayPush(s, -2);
                 }
                 break;
-            }
             default:
                 throw new ArgumentException($"Can't pass a {value.GetType().Name} to Mobius");
         }
@@ -485,24 +454,24 @@ public sealed unsafe class MobiusState : IDisposable
         if (idx < 0) idx = Native.mobius_stack_size(s) + idx;   // absolute: we push temporaries
         switch (Native.mobius_stack_type(s, idx))
         {
-            case Native.VAL_NIL: return null;
-            case Native.VAL_BOOL: return Native.mobius_stack_getBool(s, idx);
-            case Native.VAL_INT64: return Native.mobius_stack_getInt64(s, idx);
-            case Native.VAL_UINT64: return Native.mobius_stack_getUInt64(s, idx);
-            case Native.VAL_FLOAT64: return Native.mobius_stack_getFloat64(s, idx);
-            case Native.VAL_STRING:
+            case MobiusValueType.Nil: return null;
+            case MobiusValueType.Bool: return Native.mobius_stack_getBool(s, idx);
+            case MobiusValueType.Int64: return Native.mobius_stack_getInt64(s, idx);
+            case MobiusValueType.UInt64: return Native.mobius_stack_getUInt64(s, idx);
+            case MobiusValueType.Float64: return Native.mobius_stack_getFloat64(s, idx);
+            case MobiusValueType.String:
             {
                 nuint len;
                 byte* p = Native.mobius_stack_getStringData(s, idx, &len);
-                return Utf8.Read(p, len);
+                return Native.Utf8(p, len);
             }
-            case Native.VAL_BUFFER:
+            case MobiusValueType.Buffer:
             {
                 nuint size;
                 byte* p = (byte*)Native.mobius_stack_getBufferData(s, idx, &size);
                 return new ReadOnlySpan<byte>(p, checked((int)size)).ToArray();
             }
-            case Native.VAL_ARRAY:
+            case MobiusValueType.Array:
             {
                 int n = checked((int)Native.mobius_stack_getArrayLength(s, idx));
                 var items = new object?[n];
@@ -514,7 +483,7 @@ public sealed unsafe class MobiusState : IDisposable
                 }
                 return items;
             }
-            case Native.VAL_TABLE:
+            case MobiusValueType.Table:
             {
                 var table = new Dictionary<string, object?>();
                 Native.mobius_stack_getTableKeys(s, idx);
@@ -525,8 +494,7 @@ public sealed unsafe class MobiusState : IDisposable
                     Native.mobius_stack_getArrayElement(s, keys, (nuint)i);
                     if (Read(self, s, -1) is string key)
                     {
-                        var k = new Utf8(key);
-                        fixed (byte* kp = k) Native.mobius_stack_getTableField(s, idx, kp);
+                        Native.mobius_stack_getTableField(s, idx, key);
                         table[key] = Read(self, s, -1);
                         Native.mobius_stack_pop(s, 1);
                     }
@@ -535,11 +503,11 @@ public sealed unsafe class MobiusState : IDisposable
                 Native.mobius_stack_pop(s, 1);
                 return table;
             }
-            case Native.VAL_FUNCTION:
-            case Native.VAL_NATIVE_FUNCTION:
+            case MobiusValueType.Function:
+            case MobiusValueType.NativeFunction:
                 return new MobiusFunction(self, Native.mobius_ref_value(s, idx));
             default:
-                return Utf8.Read(Native.mobius_stack_asString(s, idx));
+                return Native.Utf8(Native.mobius_stack_asString(s, idx));
         }
     }
 }

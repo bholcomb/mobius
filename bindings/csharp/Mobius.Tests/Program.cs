@@ -135,6 +135,9 @@ using (var m = new MobiusState(workerThreads: 0))
     Check("single-threaded", other == 0);
 }
 
+// The C API directly, through Native.
+RawApi.Run(Check);
+
 Console.WriteLine(failures == 0 ? "C# binding: PASS" : $"C# binding: {failures} failures");
 return failures == 0 ? 0 : 1;
 
@@ -159,4 +162,107 @@ class MemoryFileSystem : IMobiusFileSystem
         lock (Files) Files[path] = append && Files.TryGetValue(path, out var old) ? old + text : text;
     }
     public bool Exists(string path) { lock (Files) return Files.ContainsKey(path); }
+}
+
+static unsafe class RawApi
+{
+    static int destroyed;
+
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    static int Scale(IntPtr s, int argc, IntPtr userdata)
+    {
+        long factor = (long)userdata;
+        long x = Native.mobius_stack_getInt64(s, 0);
+        Native.mobius_stack_pop(s, argc);
+        Native.mobius_stack_pushInt64(s, x * factor);
+        return 1;
+    }
+
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    static void Destroy(void* ptr) => Interlocked.Increment(ref destroyed);
+
+    // A method for "probe" userdata: returns the pointer's value.
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    static int ProbeValue(IntPtr s, int argc, IntPtr userdata)
+    {
+        byte* type;
+        void* ptr = Native.mobius_stack_getUserdata(s, 0, &type);
+        Native.mobius_stack_pop(s, argc);
+        Native.mobius_stack_pushInt64(s, (long)ptr);
+        return 1;
+    }
+
+    public static void Run(Action<string, bool> check)
+    {
+        // Config layout matches C: known defaults read back through the struct.
+        MobiusConfig cfg;
+        Native.mobius_default_config_into(&cfg);
+        MobiusConfig byValue = Native.mobius_default_config();
+        check("config layout", cfg.max_call_depth == 200000 && cfg.global_slot_capacity == 16384 &&
+                               cfg.string_pool_buckets == 65536 && cfg.override_behavior == MobiusOverrideBehavior.Error &&
+                               byValue.max_call_depth == cfg.max_call_depth && byValue.global_slot_capacity == cfg.global_slot_capacity);
+
+        cfg.max_worker_threads = 1;
+        IntPtr s = Native.mobius_new_state(&cfg);
+        Native.mobius_init_stdlib(s);
+
+        // A raw native with userdata.
+        Native.mobius_register_function(s, "triple", &Scale, (IntPtr)3);
+        Native.mobius_stack_pushFunction(s, &Scale, (IntPtr)10);
+        Native.mobius_stack_setGlobal(s, "tenfold");
+        check("raw exec", Native.mobius_exec_string(s, "var r = triple(5) + tenfold(2)") == Native.MOBIUS_OK);
+        Native.mobius_stack_getGlobal(s, "r");
+        check("raw native userdata", Native.mobius_stack_type(s, -1) == MobiusValueType.Int64 && Native.mobius_stack_getInt64(s, -1) == 35);
+        Native.mobius_stack_pop(s, 1);
+
+        // Userdata values with a destructor, and methods for their type (the
+        // type's table holds the methods directly).
+        Native.mobius_stack_pushNewTable(s, 4);
+        Native.mobius_stack_pushFunction(s, &ProbeValue, IntPtr.Zero);
+        Native.mobius_stack_setTableField(s, -2, "value");
+        Native.mobius_set_userdata_type_metatable(s, "probe");   // consumes the table
+        Native.mobius_stack_pushUserdata(s, (void*)1234, &Destroy, "probe", 0);
+        Native.mobius_stack_setGlobal(s, "p");
+        check("userdata method", Native.mobius_exec_string(s, "var pv = p:value()") == Native.MOBIUS_OK);
+        Native.mobius_stack_getGlobal(s, "pv");
+        check("userdata pointer", Native.mobius_stack_getInt64(s, -1) == 1234);
+        Native.mobius_stack_pop(s, 1);
+
+        // Enums.
+        Native.mobius_stack_pushNewEnum(s, "Color");
+        check("enum members", Native.mobius_stack_enumAddMember(s, -1, "red", 1) && Native.mobius_stack_enumAddAutoMember(s, -1, "green"));
+        Native.mobius_stack_setGlobal(s, "Color");
+        check("enum in script", Native.mobius_exec_string(s, "var c = Color.green") == Native.MOBIUS_OK);
+
+        // A buffer over C# memory.
+        byte[] bytes = { 7, 8, 9 };
+        fixed (byte* b = bytes)
+        {
+            Native.mobius_stack_pushBufferExternal(s, b, 3, null, IntPtr.Zero, true);
+            Native.mobius_stack_setGlobal(s, "ext");
+            Native.mobius_exec_string(s, "var e1 = ext[1]");
+            Native.mobius_stack_getGlobal(s, "e1");
+            check("external buffer", Native.mobius_stack_asInt64(s, -1) == 8);
+            Native.mobius_stack_pop(s, 1);
+            Native.mobius_remove_global(s, "ext");
+        }
+
+        // Refs, strings with their length, metrics.
+        Native.mobius_stack_pushString(s, "héllo");
+        ulong r = Native.mobius_ref_value(s, -1);
+        Native.mobius_stack_pop(s, 1);
+        check("push ref", Native.mobius_push_ref(s, r));
+        nuint len;
+        byte* data = Native.mobius_stack_getStringData(s, -1, &len);
+        check("string data", Native.Utf8(data, len) == "héllo" && len == 6);
+        Native.mobius_stack_pop(s, 1);
+        check("unref", Native.mobius_unref_value(s, r));
+        MobiusMetrics m;
+        Native.mobius_get_metrics(s, &m);
+        check("metrics", m.peak_globals > 0 && m.total_fibers_spawned > 0 && m.total_execution_time_ns > 0);
+
+        Native.mobius_remove_global(s, "p");
+        Native.mobius_free_state(s);
+        check("userdata destructor ran", destroyed == 1);
+    }
 }
