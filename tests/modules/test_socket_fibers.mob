@@ -1,0 +1,122 @@
+// Fiber-aware sockets: a fiber waiting on the network parks instead of
+// holding a worker thread, so many connections wait at once while other
+// fibers keep running; timeouts, fiber.cancel and close() wake a waiter.
+import "socket"
+
+var failures = 0
+func check(name, ok) {
+    if (!ok) {
+        failures++
+        print("FAIL: " + name)
+    }
+}
+func error_of(f) {
+    var msg = ""
+    try { f() } catch e { msg = str(e) }
+    return msg
+}
+func elapsed_ms(start) { return int((clock() - start) / 1000000) }
+
+var listener = socket.listen("127.0.0.1", 0)
+const port = listener:local_addr().port
+
+// An echo server: one fiber per connection, all waiting in recv at once.
+func handle(conn) {
+    var data = conn:recv(64)
+    if (data != nil) { conn:send(data) }
+    conn:close()
+    return 1
+}
+func serve(listener, n) {
+    var handlers = []
+    for (var i = 0; i < n; i++) { handlers:push(spawn handle(listener:accept())) }
+    var served = 0
+    for (var h in handlers) { served = served + await h }
+    return served
+}
+// Each client connects, then waits before sending: every handler is
+// parked in recv at the same time, far more of them than worker threads.
+func client(i) {
+    var c = socket.connect("127.0.0.1", port)
+    fiber.sleep(150)
+    c:send("msg" + str(i))
+    var reply = c:recv(64)
+    c:close()
+    return reply:to_string() == "msg" + str(i) ? 1 : 0
+}
+var conns = 48
+var start = clock()
+var server = spawn serve(listener, conns)
+var clients = []
+for (var i = 0; i < conns; i++) { clients:push(spawn client(i)) }
+var good = 0
+for (var c in clients) { good = good + await c }
+check("all echoes", good == conns)
+check("all served", await server == conns)
+check("connections waited together", elapsed_ms(start) < 2000)
+
+// A timeout is a per-call deadline.
+func silent_peer(listener) {
+    var conn = listener:accept()
+    fiber.sleep(600)
+    conn:close()
+}
+var peer_fiber = spawn silent_peer(listener)
+var quiet = socket.connect("127.0.0.1", port)
+quiet:set_timeout(100)
+start = clock()
+var msg = error_of(func() { return quiet:recv(16) })
+var waited = elapsed_ms(start)
+check("recv timed out: " + msg, contains(msg, "timed out"))
+check("timeout near its deadline", waited >= 80 && waited < 500)
+quiet:close()
+await peer_fiber
+
+// fiber.cancel wakes a fiber parked in accept.
+func accept_one(listener) { return listener:accept() }
+var acceptor = spawn accept_one(listener)
+fiber.sleep(50)
+start = clock()
+fiber.cancel(acceptor)
+msg = error_of(func() { return await acceptor })
+check("cancel wakes accept: " + msg, contains(msg, "CancellationError"))
+check("cancel is prompt", elapsed_ms(start) < 500)
+
+// close() wakes a fiber parked in recv on the same socket.
+func hold_open(listener) {
+    var conn = listener:accept()
+    fiber.sleep(800)
+    conn:close()
+}
+var holder = spawn hold_open(listener)
+var shared_conn = socket.connect("127.0.0.1", port)
+func read_it(s) { return s:recv(16) }
+var reader = spawn read_it(shared_conn)
+fiber.sleep(50)
+start = clock()
+shared_conn:close()
+msg = error_of(func() { return await reader })
+check("close wakes recv: " + msg, contains(msg, "socket is closed"))
+check("close is prompt", elapsed_ms(start) < 500)
+await holder
+
+// UDP: a fiber waiting in recv_from gets a datagram sent later.
+var rx = socket.udp("127.0.0.1", 0)
+var rx_port = rx:local_addr().port
+func receive_one(s) { return s:recv_from(64) }
+var udp_reader = spawn receive_one(rx)
+fiber.sleep(50)
+var tx = socket.udp()
+tx:send_to("127.0.0.1", rx_port, "ping")
+var dgram = await udp_reader
+check("udp datagram", dgram.payload:to_string() == "ping")
+rx:close()
+tx:close()
+
+// Connecting to a closed port still reports the failure.
+var free_port = port
+listener:close()
+msg = error_of(func() { return socket.connect("127.0.0.1", free_port) })
+check("refused connect: " + msg, contains(msg, "socket.connect()"))
+
+if (failures == 0) { print("socket fibers: PASS") } else { exit(1) }

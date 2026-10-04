@@ -9,8 +9,8 @@ import "socket"
 [← Module reference](index.md)
 
 The `socket` module provides the plain transport layer for Mobius. It is
-intentionally small and blocking: the goal is to establish the base API for
-`http` and `websocket` transports before adding TLS.
+intentionally small: the base API for the `http`, `websocket` and `web`
+transports.
 
 Current scope:
 
@@ -33,7 +33,7 @@ Functions:
 - `sock:send(data)` sends a `buffer` or `string` and returns bytes written
 - `sock:recv(max_bytes)` returns a `buffer`, or `nil` on clean EOF
 - `sock:shutdown([read [, write]])` shuts down one or both directions
-- `sock:set_timeout(milliseconds)` applies send/recv timeouts
+- `sock:set_timeout(milliseconds)` limits each send/recv call to that long (`0`: no limit)
 - `sock:local_addr()` returns `{ host, port, family }`
 - `sock:peer_addr()` returns `{ host, port, family }`
 - `sock:close()` closes the socket
@@ -42,7 +42,7 @@ Functions:
 `TcpListener` methods:
 
 - `listener:accept()` waits for a connection and returns a `TcpSocket`
-- `listener:set_timeout(milliseconds)` applies accept timeouts
+- `listener:set_timeout(milliseconds)` limits each accept call to that long (`0`: no limit)
 - `listener:local_addr()` returns `{ host, port, family }`
 - `listener:close()` closes the listener
 - `listener:is_closed()` reports closure state
@@ -54,7 +54,7 @@ Functions:
 - `sock:recv(max_bytes)` receives a datagram from the connected peer as a `buffer`
 - `sock:send_to(host, port, data)` sends a datagram without connecting first
 - `sock:recv_from(max_bytes)` returns `{ payload, host, port, family, text? }`
-- `sock:set_timeout(milliseconds)` applies send/recv timeouts
+- `sock:set_timeout(milliseconds)` limits each send/recv call to that long (`0`: no limit)
 - `sock:local_addr()` returns `{ host, port, family }`
 - `sock:peer_addr()` returns `{ host, port, family }` after `connect(...)`
 - `sock:close()` closes the socket
@@ -64,8 +64,13 @@ Notes:
 
 - This module is plain TCP only. HTTPS and secure WebSocket support will layer on
   later with TLS.
-- Calls are blocking. They work well with Mobius fibers when other worker
-  threads are available, but this is not yet a nonblocking event-loop API.
+- Calls look blocking but don't hold a thread (Linux): a fiber waiting to
+  connect, accept, send or receive is set aside until the socket is ready, and
+  the worker threads run other fibers meanwhile, so a server can have a fiber
+  per connection. `fiber.cancel` interrupts a waiting call with a
+  `CancellationError`, and closing a socket wakes any fiber waiting on it (its
+  call fails with "socket is closed"). Host name lookup still blocks its
+  thread. On Windows, calls currently block their worker thread.
 - `recv()` is buffer-first by design so higher-level protocols can decide how to
   decode the payload.
 - UDP `recv_from()` is also buffer-first and includes a `text` helper for valid
