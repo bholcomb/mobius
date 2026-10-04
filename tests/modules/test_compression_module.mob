@@ -80,6 +80,16 @@ try { compression.decompress(joined_gz, joined_out + ".damaged", { format: "gzip
 assert_test("gzip damage detected", contains(damage_error, "checksum"))
 for (var f in [part_path, part_gz, joined_gz, joined_out, joined_out + ".damaged"]) { if (os.exists(f)) { os.remove(f) } }
 
+// Options reach the native code: an existing output is an error unless
+// overwrite is "replace".
+var exists_error = ""
+try { compression.compress(input_path, gzip_path, { format: "gzip" }) } catch e { exists_error = str(e) }
+assert_test("existing output is an error", contains(exists_error, "already exists"))
+var replaced = compression.compress(input_path, gzip_path, { format: "gzip", overwrite: "replace" })
+assert_test("overwrite replace", replaced.ok == true)
+var redecoded = compression.decompress(gzip_path, gzip_roundtrip, { overwrite: "replace" })
+assert_test("overwrite replace on decompress", redecoded.ok == true && readfile(gzip_roundtrip) == readfile(input_path))
+
 var archive_root = os.tmpdir() + "/mobius_compression_" + str(os.getpid())
 var source_dir = archive_root + "/payload"
 var nested_dir = source_dir + "/nested"
