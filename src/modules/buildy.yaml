@@ -13,7 +13,7 @@ targets:
         - "${workspace}/src"
         - "${workspace}/src/mobius"
         - "${workspace}/src/modules/compression"
-      libs: ["mobius-core", "zstd", {linux: ["dl"]}]
+      libs: ["mobius-core", {linux: ["dl"]}]
       depends_on:
         targets: ["mobius-core"]
 

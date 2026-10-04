@@ -12,5 +12,5 @@ The current module integrates:
 - `miniz` for zip reading/writing/extraction
 - `microtar` for tar reading/writing/extraction
 
-Combined `tar.gz` and `tar.zst` flows are built on top of the tar backend plus
-the native gzip/zstd stream support.
+Combined `tar.gz` flows are built on top of the tar backend plus gzip, which
+is written here around miniz's DEFLATE. Nothing is linked from the system.

@@ -18,7 +18,7 @@ resolves modules and how packages are installed.
 | Module | Summary |
 |--------|---------|
 | [`cli`](cli.md)                 | Command-line argument parsing with generated help |
-| [`compression`](compression.md) | Archive and stream compression (`zip`, `tar`, `gzip`, `zstd`) with a high-level API |
+| [`compression`](compression.md) | Archive and stream compression (`zip`, `tar`, `gzip`) with a high-level API |
 | [`crypto`](crypto.md)           | Dependency-free hashing, HMAC, encoding, checksums, UUID, and secure random |
 | [`datetime`](datetime.md)       | Structured date/time tables, formatting, and ISO-8601 parsing |
 | [`fiber`](fiber.md)             | Channels, futures helpers, sleep, cancellation, and array slices — a builtin global, **no import** |
