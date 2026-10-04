@@ -1,3 +1,4 @@
+#include "util/platform.h"
 #include "vm/vm.h"
 #include "state/mobius_state.h"
 #include "data/table.h"
@@ -53,9 +54,7 @@ void Upvalue::operator delete(void* p, const std::nothrow_t&) noexcept {
     if (p) gc_object_free(GC_UPVALUE, p);
 }
 static uint64_t get_time_ns_vm() {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    return platform_monotonic_ns();
 }
 
 // ============================================================================
@@ -300,18 +299,21 @@ static const int MAX_NATIVE_NESTING = 200;
 bool MobiusVM::cStackExhausted() const {
     JobSystem* js = state_->jobSystem();
     MobiusFiber* fiber = js ? js->currentFiber() : nullptr;
+    // The frame address is the real stack position; the address of a local
+    // isn't under AddressSanitizer, which can move locals to a heap "fake
+    // stack", so the check never fired there.
+    char* here = MOBIUS_FRAME_ADDRESS();
     if (fiber && fiber->stack_memory) {
         // Stacks grow down toward stack_memory (guard page first, then the
-        // usable stack), so the distance from it is the space left. The
-        // frame address is the real stack position; the address of a local
-        // isn't under AddressSanitizer, which can move locals to a heap
-        // "fake stack", so the check never fired there.
+        // usable stack), so the distance from it is the space left.
         char* low = (char*)fiber->stack_memory;
-        char* here = (char*)__builtin_frame_address(0);
         if (here > low && (size_t)(here - low) <= fiber->stack_size + 2 * 65536) {
             return (size_t)(here - low) < C_STACK_RESERVE;
         }
     }
+    // Stacks the OS allocated (Windows fibers): ask it where the stack ends.
+    char* low = nullptr;
+    if (platform_stack_low(&low) && here > low) return (size_t)(here - low) < C_STACK_RESERVE;
     return native_depth_ > MAX_NATIVE_NESTING;
 }
 
@@ -825,8 +827,8 @@ struct VMFrame {
     uint32_t*   ip;
     Prototype*  proto;
     int         base;
-    Value* __restrict__      regs;
-    ValueType* __restrict__  tags;
+    Value* MOBIUS_RESTRICT      regs;
+    ValueType* MOBIUS_RESTRICT  tags;
 };
 
 static MOBIUS_FORCEINLINE GlobalEnvironment* frame_globals(MobiusVM* vm, const VMFrame& f) {

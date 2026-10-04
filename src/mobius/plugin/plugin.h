@@ -26,7 +26,13 @@ typedef struct {
 } PluginLoadResult;
 
 // Convenience macros for plugin authors
-#define MOBIUS_PLUGIN_EXPORT __attribute__((visibility("default")))
+#ifndef MOBIUS_PLUGIN_EXPORT
+#  if defined(_WIN32)
+#    define MOBIUS_PLUGIN_EXPORT __declspec(dllexport)
+#  else
+#    define MOBIUS_PLUGIN_EXPORT __attribute__((visibility("default")))
+#  endif
+#endif
 
 #define MOBIUS_PLUGIN_FUNCTION(func_name, func_ptr, arg_count) \
     {func_name, func_ptr, arg_count}

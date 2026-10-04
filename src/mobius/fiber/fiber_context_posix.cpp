@@ -48,4 +48,8 @@ void fiber_context_convert_thread(FiberContext* ctx) {
     getcontext(&ctx->uctx);
 }
 
+void fiber_context_release_thread() {}
+
+void fiber_context_destroy(FiberContext* ctx) { (void)ctx; }
+
 #endif // !_WIN32

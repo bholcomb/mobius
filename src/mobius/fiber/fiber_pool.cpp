@@ -72,8 +72,12 @@ FiberPool::~FiberPool() {
 
 MobiusFiber* FiberPool::allocateFiber() {
     size_t page_size = get_page_size();
-    void* mem = alloc_stack(fiber_stack_size_, page_size);
-    if (!mem) return nullptr;
+    // Windows fibers get OS-allocated stacks (see fiber_context.h).
+    void* mem = nullptr;
+    if (kFiberStacksFromPool) {
+        mem = alloc_stack(fiber_stack_size_, page_size);
+        if (!mem) return nullptr;
+    }
 
     MobiusFiber* fiber = new MobiusFiber();
     fiber->id = next_id_++;
@@ -89,6 +93,7 @@ MobiusFiber* FiberPool::allocateFiber() {
 }
 
 void FiberPool::deallocateFiber(MobiusFiber* fiber) {
+    fiber_context_destroy(&fiber->context);
     if (fiber->stack_memory) {
         free_stack(fiber->stack_memory, fiber->stack_size, get_page_size());
     }
@@ -126,8 +131,11 @@ void FiberPool::release(MobiusFiber* fiber) {
 MobiusFiber* FiberPool::createDetachedFiber(size_t stack_size) {
     size_t page_size = get_page_size();
     size_t usable = align_up(stack_size, page_size);
-    void* mem = alloc_stack(usable, page_size);
-    if (!mem) return nullptr;
+    void* mem = nullptr;
+    if (kFiberStacksFromPool) {
+        mem = alloc_stack(usable, page_size);
+        if (!mem) return nullptr;
+    }
 
     MobiusFiber* fiber = new MobiusFiber();
     {

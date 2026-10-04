@@ -1,4 +1,5 @@
 
+#include "util/platform.h"
 #include <mobius/mobius.h>
 #include "plugin/module_registry.h"
 #include "state/mobius_state.h"
@@ -18,9 +19,6 @@
 #include <sstream>
 #include <thread>
 #include <unordered_set>
-#include <libgen.h>
-#include <dlfcn.h>
-#include <sys/stat.h>
 
 // ============================================================================
 // Loaded native libraries: process-wide
@@ -40,8 +38,8 @@ static void unload_libraries() {
     if (!g_libraries) return;
     for (auto& mod : *g_libraries) {
         if (mod && mod->plugin && mod->plugin->cleanup_plugin) mod->plugin->cleanup_plugin();
-        if (mod && mod->handle) dlclose(mod->handle);
-        if (mod) for (void* extra : mod->extra_handles) if (extra) dlclose(extra);
+        if (mod && mod->handle) platform_library_close(mod->handle);
+        if (mod) for (void* extra : mod->extra_handles) platform_library_close(extra);
     }
     delete g_libraries;
     g_libraries = nullptr;
@@ -154,8 +152,7 @@ static std::string strip_quotes(std::string value) {
 }
 
 static bool is_regular_file_path(const std::string& path) {
-    struct stat st;
-    return stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+    return platform_is_regular_file(path);
 }
 
 static const char* native_module_extension() {
@@ -251,7 +248,11 @@ static bool parse_package_manifest(const std::string& manifest_path, PackageMani
         if (indent == 2 && saw_platforms) {
             if (!trimmed.empty() && trimmed.back() == ':') {
                 std::string platform_key = trim_copy(trimmed.substr(0, trimmed.size() - 1));
-                in_wanted_platform = (platform_key == wanted_platform);
+                // Apple Silicon is spelled both ways (arm64, aarch64).
+                in_wanted_platform = platform_key == wanted_platform ||
+                    (wanted_platform == "macos-aarch64" && platform_key == "macos-arm64") ||
+                    (wanted_platform == "windows-aarch64" && platform_key == "windows-arm64") ||
+                    (wanted_platform == "linux-aarch64" && platform_key == "linux-arm64");
                 section = in_wanted_platform ? Section::current_platform : Section::platforms;
             }
             continue;
@@ -662,8 +663,8 @@ LoadedModule* ModuleRegistry::loadLibrary(const char* path,
 
     std::vector<void*> extra_handles;
     auto fail = [&](void* handle, const std::string& message) -> LoadedModule* {
-        for (void* extra : extra_handles) if (extra) dlclose(extra);
-        if (handle) dlclose(handle);
+        for (void* extra : extra_handles) platform_library_close(extra);
+        platform_library_close(handle);
         last_error_ = message;
         result->error_message = last_error_.c_str();
         return nullptr;
@@ -671,17 +672,19 @@ LoadedModule* ModuleRegistry::loadLibrary(const char* path,
 
     if (preload_paths) {
         for (const std::string& preload_path : *preload_paths) {
-            void* extra = dlopen(preload_path.c_str(), RTLD_LAZY | RTLD_GLOBAL);
-            if (!extra) return fail(nullptr, std::string("Failed to preload runtime library: ") + dlerror());
+            std::string load_error;
+            void* extra = platform_library_open(preload_path, true, &load_error);
+            if (!extra) return fail(nullptr, std::string("Failed to preload runtime library: ") + load_error);
             extra_handles.push_back(extra);
         }
     }
 
-    void* handle = dlopen(path, RTLD_LAZY);
-    if (!handle) return fail(nullptr, std::string("Failed to load library: ") + dlerror());
+    std::string load_error;
+    void* handle = platform_library_open(path, false, &load_error);
+    if (!handle) return fail(nullptr, std::string("Failed to load library: ") + load_error);
 
     union { void* obj; PluginInfoFunc func; } plugin_info_ptr;
-    plugin_info_ptr.obj = dlsym(handle, "mobius_plugin_info");
+    plugin_info_ptr.obj = platform_library_symbol(handle, "mobius_plugin_info");
     PluginInfoFunc get_plugin_info = plugin_info_ptr.func;
     if (!get_plugin_info) return fail(handle, "Plugin does not export mobius_plugin_info function");
 
