@@ -1,5 +1,6 @@
 import "compression"
 import "os"
+import "io"
 
 var pass_count = 0
 var fail_count = 0
@@ -45,6 +46,41 @@ assert_test("gzip inspect compression format", gzip_info.compression_format == "
 var gzip_decode = compression.decompress(gzip_path, gzip_roundtrip, { overwrite: "replace" })
 assert_test("gzip decompress ok", gzip_decode.ok == true)
 assert_test("gzip roundtrip contents", readfile(gzip_roundtrip) == readfile(input_path))
+
+// Joined gzip members decompress as one stream; damage is detected.
+func read_bytes(path) {
+    var f = io.open(path, "r")
+    var data = f:read_all()
+    f:close()
+    return data
+}
+func write_bytes(path, data) {
+    var f = io.open(path, "w")
+    f:write(data)
+    f:close()
+}
+var part_path = input_path + ".part"
+var part_gz = input_path + ".part.gz"
+var joined_gz = input_path + ".joined.gz"
+var joined_out = input_path + ".joined.out"
+write_bytes(part_path, "second part\n")
+compression.compress(part_path, part_gz, { format: "gzip", overwrite: "replace" })
+var first_bytes = read_bytes(gzip_path)
+var second_bytes = read_bytes(part_gz)
+var joined = buffer_create(first_bytes:size() + second_bytes:size())
+for (var i = 0; i < first_bytes:size(); i++) { joined:set(i, first_bytes:get(i)) }
+for (var i = 0; i < second_bytes:size(); i++) { joined:set(first_bytes:size() + i, second_bytes:get(i)) }
+write_bytes(joined_gz, joined)
+compression.decompress(joined_gz, joined_out, { format: "gzip", overwrite: "replace" })
+assert_test("gzip joined members", readfile(joined_out) == readfile(input_path) + "second part\n")
+
+var damaged = read_bytes(gzip_path)
+damaged:set(damaged:size() - 6, (damaged:get(damaged:size() - 6) + 1) % 256)   // the CRC
+write_bytes(joined_gz, damaged)
+var damage_error = ""
+try { compression.decompress(joined_gz, joined_out + ".damaged", { format: "gzip" }) } catch e { damage_error = str(e) }
+assert_test("gzip damage detected", contains(damage_error, "checksum"))
+for (var f in [part_path, part_gz, joined_gz, joined_out, joined_out + ".damaged"]) { if (os.exists(f)) { os.remove(f) } }
 
 var zstd_summary = compression.compress(input_path, zstd_path, { format: "zstd", overwrite: "replace" })
 assert_test("zstd summary ok", zstd_summary.ok == true)
