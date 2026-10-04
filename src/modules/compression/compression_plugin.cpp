@@ -20,13 +20,6 @@
 #include "miniz/miniz.c"
 #include "microtar/microtar.c"
 
-#if __has_include(<zlib.h>)
-#include <zlib.h>
-#define MOBIUS_COMPRESSION_HAS_ZLIB 1
-#else
-#define MOBIUS_COMPRESSION_HAS_ZLIB 0
-#endif
-
 #if __has_include(<zstd.h>)
 #include <zstd.h>
 #define MOBIUS_COMPRESSION_HAS_ZSTD 1
@@ -154,7 +147,7 @@ static bool create_directory_tree(const fs::path& path, std::string& error) {
 }
 
 static bool write_entire_file(const std::string& path, const std::vector<unsigned char>& data, std::string& error) {
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    std::ofstream out(fs::u8path(path), std::ios::binary | std::ios::trunc);
     if (!out) {
         error = "unable to open output file";
         return false;
@@ -170,7 +163,7 @@ static bool write_entire_file(const std::string& path, const std::vector<unsigne
 }
 
 static bool read_prefix(const std::string& path, std::vector<unsigned char>& out, size_t max_bytes) {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(fs::u8path(path), std::ios::binary);
     if (!in) return false;
     out.resize(max_bytes);
     in.read(reinterpret_cast<char*>(out.data()), static_cast<std::streamsize>(max_bytes));
@@ -179,7 +172,7 @@ static bool read_prefix(const std::string& path, std::vector<unsigned char>& out
 }
 
 static bool read_entire_file(const std::string& path, std::vector<unsigned char>& out, std::string& error) {
-    std::ifstream in(path, std::ios::binary);
+    std::ifstream in(fs::u8path(path), std::ios::binary);
     if (!in) {
         error = "unable to open input file";
         return false;
@@ -233,7 +226,7 @@ static FormatInfo format_from_name(const std::string& raw) {
         info.format = "gzip";
         info.kind = "compressed_stream";
         info.compression_format = "gzip";
-        info.supported = MOBIUS_COMPRESSION_HAS_ZLIB;
+        info.supported = true;
     } else if (fmt == "zstd" || fmt == "zst") {
         info.format = "zstd";
         info.kind = "compressed_stream";
@@ -449,12 +442,10 @@ static bool ensure_can_write(const std::string& path, const CommonOptions& optio
     return false;
 }
 
-#if MOBIUS_COMPRESSION_HAS_ZLIB
 static bool gzip_compress_file(const std::string& input_path, const std::string& output_path,
                                int level, std::string& error);
 static bool gzip_decompress_file(const std::string& input_path, const std::string& output_path,
                                  std::string& error);
-#endif
 
 #if MOBIUS_COMPRESSION_HAS_ZSTD
 static bool zstd_compress_file(const std::string& input_path, const std::string& output_path,
@@ -975,12 +966,7 @@ static bool with_temp_tar_from_compressed(const std::string& path, const FormatI
                                           std::string& error) {
     temp_tar.path = fs::u8path(unique_temp_path(".tar"));
     if (info.format == "tar.gz") {
-#if MOBIUS_COMPRESSION_HAS_ZLIB
         return gzip_decompress_file(path, temp_tar.path.string(), error);
-#else
-        error = "gzip support is unavailable in this build";
-        return false;
-#endif
     }
     if (info.format == "tar.zst") {
 #if MOBIUS_COMPRESSION_HAS_ZSTD
@@ -1033,12 +1019,7 @@ static bool create_archive(const std::string& output_path, const std::vector<Loc
         if (!write_tar_archive(temp_tar.path.string(), entries, temp_files_written, error)) return false;
         files_written = temp_files_written;
         if (info.format == "tar.gz") {
-#if MOBIUS_COMPRESSION_HAS_ZLIB
             return gzip_compress_file(temp_tar.path.string(), output_path, options.compression_level, error);
-#else
-            error = "gzip support is unavailable in this build";
-            return false;
-#endif
         }
         if (info.format == "tar.zst") {
 #if MOBIUS_COMPRESSION_HAS_ZSTD
@@ -1053,37 +1034,77 @@ static bool create_archive(const std::string& output_path, const std::vector<Loc
     return false;
 }
 
-#if MOBIUS_COMPRESSION_HAS_ZLIB
+// gzip (RFC 1952): a 10-byte header, raw DEFLATE data (miniz), then the
+// CRC-32 and size of the uncompressed data. Several members may follow one
+// another; decompressing joins them, as gunzip does.
+
+static void put_le32(std::vector<unsigned char>& out, uint32_t v) {
+    for (int i = 0; i < 4; i++) out.push_back((unsigned char)(v >> (8 * i)));
+}
+
+static uint32_t get_le32(const unsigned char* p) {
+    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+}
+
 static bool gzip_compress_file(const std::string& input_path, const std::string& output_path,
                                int level, std::string& error) {
-    std::ifstream in(input_path, std::ios::binary);
+    std::ifstream in(fs::u8path(input_path), std::ios::binary);
     if (!in) {
         error = "unable to open input file";
         return false;
     }
-    gzFile out = gzopen(output_path.c_str(), "wb");
+    std::ofstream out(fs::u8path(output_path), std::ios::binary | std::ios::trunc);
     if (!out) {
         error = "unable to open output file";
         return false;
     }
-    if (level >= 0) gzsetparams(out, std::max(0, std::min(level, 9)), Z_DEFAULT_STRATEGY);
 
-    std::vector<char> buf(kChunkSize);
-    while (in) {
-        in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
-        std::streamsize got = in.gcount();
-        if (got <= 0) break;
-        int written = gzwrite(out, buf.data(), static_cast<unsigned int>(got));
-        if (written == 0) {
-            int err_no = Z_OK;
-            const char* msg = gzerror(out, &err_no);
-            error = msg ? msg : "gzip write failed";
-            gzclose(out);
-            return false;
-        }
+    mz_stream zs;
+    std::memset(&zs, 0, sizeof(zs));
+    int lvl = level >= 0 ? std::min(level, 9) : MZ_DEFAULT_LEVEL;
+    if (mz_deflateInit2(&zs, lvl, MZ_DEFLATED, -MZ_DEFAULT_WINDOW_BITS, 9, MZ_DEFAULT_STRATEGY) != MZ_OK) {
+        error = "failed to start gzip compression";
+        return false;
     }
-    if (gzclose(out) != Z_OK) {
-        error = "failed closing gzip output stream";
+
+    // Header: magic, DEFLATE, no flags, no time, unknown OS.
+    static const unsigned char header[10] = {0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255};
+    out.write(reinterpret_cast<const char*>(header), sizeof(header));
+
+    std::vector<unsigned char> inbuf(kChunkSize), outbuf(kChunkSize);
+    mz_ulong crc = MZ_CRC32_INIT;
+    uint32_t size = 0;
+    bool done = false;
+    while (!done) {
+        in.read(reinterpret_cast<char*>(inbuf.data()), static_cast<std::streamsize>(inbuf.size()));
+        size_t got = static_cast<size_t>(in.gcount());
+        crc = mz_crc32(crc, inbuf.data(), got);
+        size += static_cast<uint32_t>(got);
+        int flush = in ? MZ_NO_FLUSH : MZ_FINISH;
+        zs.next_in = inbuf.data();
+        zs.avail_in = static_cast<unsigned int>(got);
+        do {
+            zs.next_out = outbuf.data();
+            zs.avail_out = static_cast<unsigned int>(outbuf.size());
+            int rc = mz_deflate(&zs, flush);
+            if (rc != MZ_OK && rc != MZ_STREAM_END && rc != MZ_BUF_ERROR) {
+                mz_deflateEnd(&zs);
+                error = "gzip compression failed";
+                return false;
+            }
+            out.write(reinterpret_cast<const char*>(outbuf.data()),
+                      static_cast<std::streamsize>(outbuf.size() - zs.avail_out));
+            if (rc == MZ_STREAM_END) done = true;
+        } while (zs.avail_out == 0 && !done);
+    }
+    mz_deflateEnd(&zs);
+
+    std::vector<unsigned char> trailer;
+    put_le32(trailer, static_cast<uint32_t>(crc));
+    put_le32(trailer, size);
+    out.write(reinterpret_cast<const char*>(trailer.data()), static_cast<std::streamsize>(trailer.size()));
+    if (!out) {
+        error = "failed writing gzip output";
         return false;
     }
     return true;
@@ -1091,40 +1112,95 @@ static bool gzip_compress_file(const std::string& input_path, const std::string&
 
 static bool gzip_decompress_file(const std::string& input_path, const std::string& output_path,
                                  std::string& error) {
-    gzFile in = gzopen(input_path.c_str(), "rb");
-    if (!in) {
-        error = "unable to open gzip input file";
-        return false;
-    }
-    std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+    std::vector<unsigned char> data;
+    if (!read_entire_file(input_path, data, error)) return false;
+    std::ofstream out(fs::u8path(output_path), std::ios::binary | std::ios::trunc);
     if (!out) {
-        gzclose(in);
         error = "unable to open output file";
         return false;
     }
 
-    std::vector<char> buf(kChunkSize);
-    while (true) {
-        int read_n = gzread(in, buf.data(), static_cast<unsigned int>(buf.size()));
-        if (read_n < 0) {
-            int err_no = Z_OK;
-            const char* msg = gzerror(in, &err_no);
-            error = msg ? msg : "gzip read failed";
-            gzclose(in);
+    std::vector<unsigned char> outbuf(kChunkSize);
+    size_t pos = 0;
+    int members = 0;
+    while (pos < data.size()) {
+        const unsigned char* d = data.data();
+        size_t left = data.size() - pos;
+        // Anything after the last member that isn't another member is ignored.
+        if (left < 18 || d[pos] != 0x1f || d[pos + 1] != 0x8b) {
+            if (members > 0) break;
+            error = "not a gzip file";
             return false;
         }
-        if (read_n == 0) break;
-        out.write(buf.data(), read_n);
-        if (!out) {
-            gzclose(in);
-            error = "failed writing decompressed output";
+        if (d[pos + 2] != 8) {
+            error = "unsupported gzip compression method";
             return false;
         }
+        unsigned flags = d[pos + 3];
+        size_t p = pos + 10;
+        if (flags & 4) {   // FEXTRA
+            if (p + 2 > data.size()) { error = "truncated gzip header"; return false; }
+            p += 2 + (size_t)(d[p] | (d[p + 1] << 8));
+        }
+        for (unsigned flag : {8u, 16u}) {   // FNAME, FCOMMENT: zero-terminated
+            if (!(flags & flag)) continue;
+            while (p < data.size() && d[p] != 0) p++;
+            p++;
+        }
+        if (flags & 2) p += 2;   // FHCRC
+        if (p > data.size()) {
+            error = "truncated gzip header";
+            return false;
+        }
+
+        mz_stream zs;
+        std::memset(&zs, 0, sizeof(zs));
+        if (mz_inflateInit2(&zs, -MZ_DEFAULT_WINDOW_BITS) != MZ_OK) {
+            error = "failed to start gzip decompression";
+            return false;
+        }
+        mz_ulong crc = MZ_CRC32_INIT;
+        uint32_t size = 0;
+        size_t consumed = p;
+        int rc = MZ_OK;
+        while (rc != MZ_STREAM_END) {
+            size_t avail = data.size() - consumed;
+            zs.next_in = d + consumed;
+            zs.avail_in = static_cast<unsigned int>(std::min<size_t>(avail, 1u << 30));
+            zs.next_out = outbuf.data();
+            zs.avail_out = static_cast<unsigned int>(outbuf.size());
+            unsigned int before = zs.avail_in;
+            rc = mz_inflate(&zs, MZ_NO_FLUSH);
+            consumed += before - zs.avail_in;
+            size_t produced = outbuf.size() - zs.avail_out;
+            if ((rc != MZ_OK && rc != MZ_STREAM_END && rc != MZ_BUF_ERROR) ||
+                (rc != MZ_STREAM_END && produced == 0 && consumed >= data.size())) {
+                mz_inflateEnd(&zs);
+                error = rc == MZ_DATA_ERROR ? "corrupt gzip data" : "truncated gzip data";
+                return false;
+            }
+            crc = mz_crc32(crc, outbuf.data(), produced);
+            size += static_cast<uint32_t>(produced);
+            out.write(reinterpret_cast<const char*>(outbuf.data()), static_cast<std::streamsize>(produced));
+        }
+        mz_inflateEnd(&zs);
+        if (consumed + 8 > data.size()) {
+            error = "truncated gzip data";
+            return false;
+        }
+        if (get_le32(d + consumed) != static_cast<uint32_t>(crc) || get_le32(d + consumed + 4) != size) {
+            error = "gzip checksum mismatch";
+            return false;
+        }
+        pos = consumed + 8;
+        members++;
     }
-    gzclose(in);
+    if (!out) {
+        error = "failed writing decompressed output";
+        return false;
+    }
     return true;
 }
-#endif
 
 #if MOBIUS_COMPRESSION_HAS_ZSTD
 static bool zstd_compress_file(const std::string& input_path, const std::string& output_path,
@@ -1141,7 +1217,7 @@ static bool zstd_compress_file(const std::string& input_path, const std::string&
         return false;
     }
 
-    std::ofstream file(output_path, std::ios::binary | std::ios::trunc);
+    std::ofstream file(fs::u8path(output_path), std::ios::binary | std::ios::trunc);
     if (!file) {
         error = "unable to open output file";
         return false;
@@ -1165,7 +1241,7 @@ static bool zstd_decompress_file(const std::string& input_path, const std::strin
         return false;
     }
 
-    std::ofstream out(output_path, std::ios::binary | std::ios::trunc);
+    std::ofstream out(fs::u8path(output_path), std::ios::binary | std::ios::trunc);
     if (!out) {
         ZSTD_freeDCtx(dctx);
         error = "unable to open output file";
@@ -1383,14 +1459,10 @@ static int compression_compress_native(MobiusState* state, int arg_count, void* 
     }
 
     if (info.format == "gzip") {
-#if MOBIUS_COMPRESSION_HAS_ZLIB
         if (!gzip_compress_file(input_path, output_path, options.compression_level, error)) {
             return mobius_error(state, error.c_str());
         }
         return push_summary_table(state, "gzip", output_path, file_size_or_zero(output_path), 1);
-#else
-        return mobius_error(state, "__compress_native() gzip support is unavailable in this build");
-#endif
     }
 
     if (info.format == "zstd") {
@@ -1438,14 +1510,10 @@ static int compression_decompress_native(MobiusState* state, int arg_count, void
     }
 
     if (info.format == "gzip") {
-#if MOBIUS_COMPRESSION_HAS_ZLIB
         if (!gzip_decompress_file(input_path, output_path, error)) {
             return mobius_error(state, error.c_str());
         }
         return push_summary_table(state, "gzip", output_path, file_size_or_zero(output_path), 1);
-#else
-        return mobius_error(state, "__decompress_native() gzip support is unavailable in this build");
-#endif
     }
 
     if (info.format == "zstd") {
