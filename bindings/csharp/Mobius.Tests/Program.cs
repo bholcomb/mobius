@@ -23,7 +23,7 @@ void Throws(string name, Action action, string needle)
 // Running code, globals and value conversion.
 using (var m = new MobiusState())
 {
-    Check("execute", m.Execute("var answer = 6 * 7") == RunResult.Completed);
+    m.Execute("var answer = 6 * 7");
     Check("int global", m.GetGlobal("answer") is long n && n == 42);
 
     m.SetGlobal("config", new Dictionary<string, object?>
@@ -106,24 +106,6 @@ using (var m = new MobiusState())
     Check("file error", ((string?)m.GetGlobal("msg"))!.Contains("no such file"));
     m.Execute("var bad = false\ntry { import \"json\" } catch e { bad = true }");
     Check("no native plugins", (bool)m.GetGlobal("bad")!);
-}
-
-// Time limits pause; Resume continues; Abort ends.
-using (var m = new MobiusState())
-{
-    var warnings = new StringBuilder();
-    m.Output = (text, isError) => { if (isError) lock (warnings) warnings.Append(text); };
-    m.TimeLimitMs = 20;
-    var result = m.Execute("var total = 0\nfor (var i = 0; i < 30000000; i++) { total = total + 1 }");
-    int slices = 1;
-    while (result == RunResult.Paused && slices < 1000) { result = m.Resume(); slices++; }
-    Check("resumed to the end", result == RunResult.Completed && slices > 1 && (long)m.GetGlobal("total")! == 30000000);
-    Check("pause warning", warnings.ToString().Contains("time limit"));
-
-    Check("runaway pauses", m.Execute("while (true) { }") == RunResult.Paused && m.IsPaused);
-    Throws("busy while paused", () => m.Execute("var x = 1"), "paused");
-    m.Abort();
-    Check("abort", !m.IsPaused && m.Execute("var y = 2") == RunResult.Completed);
 }
 
 // No worker threads: everything on the calling thread.

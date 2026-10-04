@@ -117,9 +117,6 @@ public static unsafe class Native
     public const int MOBIUS_ERROR_MEMORY = 5;
     public const int MOBIUS_ERROR_FILE = 6;
     public const int MOBIUS_ERROR_PLUGIN = 7;
-    public const int MOBIUS_ERROR_BUSY = 8;
-    public const int MOBIUS_ERROR_ABORTED = 9;
-    public const int MOBIUS_PAUSED = 10;
 
     public const int MOBIUS_STDOUT = 1;
     public const int MOBIUS_STDERR = 2;
@@ -161,14 +158,9 @@ public static unsafe class Native
     [DllImport(Lib)] public static extern void mobius_file_set_data(IntPtr request, byte* data, nuint length);
     [DllImport(Lib)] public static extern void mobius_file_set_error(IntPtr request, [MarshalAs(UnmanagedType.LPUTF8Str)] string message);
 
-    // ---- Sandbox, time limits, pausing ------------------------------------
+    // ---- Sandbox ------------------------------------------------------------
 
     [DllImport(Lib)] public static extern void mobius_sandbox(IntPtr state, uint allow);
-    [DllImport(Lib)] public static extern void mobius_set_time_limit(IntPtr state, uint milliseconds);
-    [DllImport(Lib)] public static extern void mobius_pause(IntPtr state);
-    [DllImport(Lib)] public static extern int mobius_resume(IntPtr state);
-    [DllImport(Lib)] public static extern int mobius_abort(IntPtr state);
-    [DllImport(Lib)] public static extern int mobius_is_paused(IntPtr state);
 
     // ---- Lifecycle and execution -----------------------------------------
 

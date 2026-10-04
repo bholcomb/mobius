@@ -76,20 +76,6 @@ public:
     void beginPark();
     void park();
     void cancelPark();
-
-    // Pausing (mobius_pause / time limits): while paused, no fiber of this
-    // state is started; running ones yield at their next safe point.
-    // executeAsMainFiber returns kMainPaused once none is running, and
-    // resumeMainFiber continues it.
-    static constexpr int kMainPaused = -1000;
-    void setPaused(bool paused);
-    bool paused() const { return paused_.load(std::memory_order_acquire); }
-    bool mainFiberPending() const { return main_fiber_ != nullptr; }
-    int resumeMainFiber();
-    int runningFibers() const { return running_.load(std::memory_order_acquire); }
-    // Run ready fibers on this thread (with the workers) until no spawned
-    // job is left. Used to finish an abort.
-    void runUntilNoJobs();
     void wakeFiber(MobiusFiber* fiber);
 
     // Run `fn` as the main fiber. Blocks the calling thread until it completes.
@@ -156,11 +142,6 @@ private:
     MobiusFiber* main_fiber_ = nullptr;
     int main_fiber_result_ = 0;
     bool main_fiber_done_ = false;
-    bool main_from_pool_ = false;
-
-    std::atomic<bool> paused_{false};
-    std::atomic<int> running_{0};   // fibers of this state running right now
-    int runMainUntilDoneOrPaused();
 
     // Dedicated, larger-stacked fiber for the top-level script (see
     // executeAsMainFiber). Created lazily, reused across calls, freed in dtor.
