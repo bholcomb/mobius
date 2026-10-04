@@ -56,13 +56,53 @@ private:
     struct Node;
     class Parser;
 
+    // The threads alive at one input position (see search).
+    struct ThreadList {
+        std::vector<int> pcs;
+        std::vector<ptrdiff_t> caps;   // pcs.size() * ncap
+        std::vector<uint32_t> mark;    // per instruction: == gen if already added
+        uint32_t gen = 1;
+        size_t count = 0;
+        void init(size_t prog_size, size_t ncap);
+        void clear();
+    };
+    struct StackEntry { int pc; int slot; ptrdiff_t value; };   // slot >= 0: restore caps[slot]
+
     void emit_node(const Node& node);
     int emit(Inst inst);
+    void compute_first_bytes();
+
+    // One pass of the matcher. With end < 0: find the leftmost-longest
+    // match at or after start, tracking only where each attempt began
+    // (captures false) or every group (true). With end >= 0: the match is
+    // known to be [start, end); find its groups.
+    bool run(const char* s, size_t len, size_t start, ptrdiff_t end, bool captures,
+             std::vector<ptrdiff_t>* out) const;
 
     std::vector<Inst> prog_;
     std::vector<ByteSet> sets_;
     size_t groups_ = 0;
     bool too_big_ = false;
+
+    // The bytes a match can start with, when it can't be empty: a search
+    // skips ahead to the next one instead of trying every position.
+    bool can_skip_ = false;
+    ByteSet first_bytes_;
+    int single_first_byte_ = -1;   // when there is only one
+
+    // For the first pass (no captures): from each instruction a thread can
+    // continue at, the instructions it reaches without consuming input, in
+    // priority order, when that doesn't depend on the position (no
+    // assertion on the way). Precomputed for patterns up to a size limit.
+    std::vector<std::vector<int>> closures_;
+    std::vector<bool> closure_known_;
+    void compute_closures();
+
+    // Matching scratch, kept between searches (a Regex is used by one
+    // thread at a time).
+    mutable ThreadList lists_[2];
+    mutable std::vector<ptrdiff_t> work_;
+    mutable std::vector<StackEntry> stack_;
 };
 
 } // namespace mobius_regex

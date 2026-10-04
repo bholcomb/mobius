@@ -4,6 +4,9 @@
 
 #include "regex_engine.h"
 
+#include <algorithm>
+#include <cstring>
+
 namespace mobius_regex {
 
 namespace {
@@ -443,6 +446,8 @@ bool Regex::compile(const std::string& pattern, bool ignore_case, std::string* e
         prog_.clear();
         return false;
     }
+    compute_first_bytes();
+    compute_closures();
     return true;
 }
 
@@ -455,43 +460,115 @@ bool Regex::compile(const std::string& pattern, bool ignore_case, std::string* e
 // from it the longest wins.
 // ---------------------------------------------------------------------------
 
-namespace {
+void Regex::ThreadList::init(size_t prog_size, size_t ncap) {
+    pcs.resize(prog_size);
+    caps.resize(prog_size * ncap);
+    if (mark.size() != prog_size) mark.assign(prog_size, 0);
+}
 
-struct ThreadList {
-    std::vector<int> pcs;
-    std::vector<ptrdiff_t> caps;   // pcs.size() * ncap
-    std::vector<uint32_t> mark;    // per instruction: == gen if already added
-    uint32_t gen = 1;
-    size_t count = 0;
-
-    void init(size_t prog_size, size_t ncap) {
-        pcs.resize(prog_size);
-        caps.resize(prog_size * ncap);
-        mark.assign(prog_size, 0);
+void Regex::ThreadList::clear() {
+    count = 0;
+    if (++gen == 0) {   // wrapped: reset the marks
+        std::fill(mark.begin(), mark.end(), 0);
+        gen = 1;
     }
-    void clear() {
-        count = 0;
-        if (++gen == 0) {   // wrapped: reset the marks
-            std::fill(mark.begin(), mark.end(), 0);
-            gen = 1;
+}
+
+void Regex::compute_closures() {
+    closures_.assign(prog_.size(), {});
+    closure_known_.assign(prog_.size(), false);
+    if (prog_.size() > 4096) return;   // memory grows with size squared
+    std::vector<bool> roots(prog_.size(), false);
+    roots[0] = true;
+    for (size_t pc = 0; pc + 1 < prog_.size(); pc++) {
+        Op op = prog_[pc].op;
+        if (op == BYTE || op == SET || op == ANY) roots[pc + 1] = true;
+    }
+    std::vector<int> seen(prog_.size(), -1);
+    std::vector<int> todo;
+    for (size_t root = 0; root < prog_.size(); root++) {
+        if (!roots[root]) continue;
+        bool known = true;
+        std::vector<int>& out = closures_[root];
+        todo.assign(1, (int)root);
+        while (!todo.empty() && known) {
+            int pc = todo.back();
+            todo.pop_back();
+            if (seen[(size_t)pc] == (int)root) continue;
+            seen[(size_t)pc] = (int)root;
+            const Inst& inst = prog_[(size_t)pc];
+            switch (inst.op) {
+                case JMP: todo.push_back(inst.arg); break;
+                case SPLIT: todo.push_back(inst.arg2); todo.push_back(inst.arg); break;
+                case SAVE: todo.push_back(pc + 1); break;
+                case ASSERT: known = false; break;
+                default: out.push_back(pc); break;
+            }
+        }
+        closure_known_[root] = known;
+        if (!known) out.clear();
+    }
+}
+
+// The bytes a match can begin with: those reachable from the start without
+// consuming input (assertions are assumed to hold). A match that can be
+// empty, or begin with any byte, disables skipping.
+void Regex::compute_first_bytes() {
+    can_skip_ = true;
+    first_bytes_ = ByteSet();
+    std::vector<bool> seen(prog_.size(), false);
+    std::vector<int> todo = {0};
+    while (!todo.empty() && can_skip_) {
+        int pc = todo.back();
+        todo.pop_back();
+        if (seen[(size_t)pc]) continue;
+        seen[(size_t)pc] = true;
+        const Inst& inst = prog_[(size_t)pc];
+        switch (inst.op) {
+            case JMP: todo.push_back(inst.arg); break;
+            case SPLIT: todo.push_back(inst.arg); todo.push_back(inst.arg2); break;
+            case SAVE: case ASSERT: todo.push_back(pc + 1); break;
+            case BYTE: first_bytes_.add(inst.byte); break;
+            case SET:
+                for (int k = 0; k < 4; k++) first_bytes_.bits[k] |= sets_[(size_t)inst.arg].bits[k];
+                break;
+            case ANY: case MATCH: can_skip_ = false; break;
         }
     }
-};
+    single_first_byte_ = -1;
+    if (!can_skip_) return;
+    int count = 0;
+    for (int b = 0; b < 256; b++) {
+        if (first_bytes_.has((uint8_t)b)) { count++; single_first_byte_ = b; }
+    }
+    if (count != 1) single_first_byte_ = -1;
+    if (count == 256) can_skip_ = false;
+}
 
-} // namespace
-
+// Finding a match tracks only where each attempt began, which is cheap;
+// only a pattern with groups then reruns over the match to find them. The
+// rerun finds the same match: an attempt the first pass dropped (another
+// that began earlier reached the same place) could never have matched.
 bool Regex::search(const char* s, size_t len, size_t start, std::vector<ptrdiff_t>* out) const {
     if (prog_.empty() || start > len) return false;
-    const size_t ncap = 2 * (groups_ + 1);
-    ThreadList lists[2];
-    lists[0].init(prog_.size(), ncap);
-    lists[1].init(prog_.size(), ncap);
-    ThreadList* clist = &lists[0];
-    ThreadList* nlist = &lists[1];
+    if (!run(s, len, start, -1, false, out)) return false;
+    if (groups_ == 0) return true;
+    ptrdiff_t match_start = (*out)[0], match_end = (*out)[1];
+    return run(s, len, (size_t)match_start, match_end, true, out);
+}
 
-    std::vector<ptrdiff_t> work(ncap);
-    struct StackEntry { int pc; int slot; ptrdiff_t value; };   // slot >= 0: restore caps[slot]
-    std::vector<StackEntry> stack;
+bool Regex::run(const char* s, size_t len, size_t start, ptrdiff_t end, bool captures,
+                std::vector<ptrdiff_t>* out) const {
+    const bool known = end >= 0;   // finding the groups of [start, end)
+    const size_t ncap = captures ? 2 * (groups_ + 1) : 2;
+    lists_[0].init(prog_.size(), ncap);
+    lists_[1].init(prog_.size(), ncap);
+    ThreadList* clist = &lists_[0];
+    ThreadList* nlist = &lists_[1];
+    std::vector<ptrdiff_t>& work = work_;
+    work.resize(ncap);
+    std::vector<StackEntry>& stack = stack_;
+    stack.clear();
 
     auto is_word_at = [&](size_t pos) { return pos < len && is_word((uint8_t)s[pos]); };
     auto holds = [&](int kind, size_t pos) {
@@ -511,6 +588,17 @@ bool Regex::search(const char* s, size_t len, size_t start, std::vector<ptrdiff_
     // Add the thread at `pc` (captures in `work`) and everything it reaches
     // without consuming input, in priority order. `work` is restored after.
     auto add_thread = [&](ThreadList* list, int pc0, size_t pos) {
+        if (!captures && closure_known_[(size_t)pc0]) {
+            for (int pc : closures_[(size_t)pc0]) {
+                if (list->mark[(size_t)pc] == list->gen) continue;
+                list->mark[(size_t)pc] = list->gen;
+                size_t k = list->count++;
+                list->pcs[k] = pc;
+                list->caps[k * 2] = work[0];
+                list->caps[k * 2 + 1] = work[1];
+            }
+            return;
+        }
         stack.push_back({pc0, -1, 0});
         while (!stack.empty()) {
             StackEntry e = stack.back();
@@ -529,8 +617,10 @@ bool Regex::search(const char* s, size_t len, size_t start, std::vector<ptrdiff_
                     stack.push_back({inst.arg, -1, 0});   // explored first
                     break;
                 case SAVE:
-                    stack.push_back({0, inst.arg, work[(size_t)inst.arg]});
-                    work[(size_t)inst.arg] = (ptrdiff_t)pos;
+                    if (captures) {
+                        stack.push_back({0, inst.arg, work[(size_t)inst.arg]});
+                        work[(size_t)inst.arg] = (ptrdiff_t)pos;
+                    }
                     stack.push_back({pc + 1, -1, 0});
                     break;
                 case ASSERT:
@@ -553,13 +643,24 @@ bool Regex::search(const char* s, size_t len, size_t start, std::vector<ptrdiff_
 
     clist->clear();
     for (size_t pos = start; ; pos++) {
-        if (!matched) {
+        if (!matched && clist->count == 0 && can_skip_ && !known) {
+            // Nothing in progress: go to where a match could begin.
+            if (single_first_byte_ >= 0) {
+                const void* hit = pos < len ? memchr(s + pos, single_first_byte_, len - pos) : nullptr;
+                if (!hit) return false;
+                pos = (size_t)((const char*)hit - s);
+            } else {
+                while (pos < len && !first_bytes_.has((uint8_t)s[pos])) pos++;
+                if (pos >= len) return false;
+            }
+        }
+        if (!matched && (!known || pos == start)) {
             // A new thread starting here, after (below) the older ones.
             std::fill(work.begin(), work.end(), -1);
             work[0] = (ptrdiff_t)pos;
             add_thread(clist, 0, pos);
         }
-        if (clist->count == 0 && (matched || pos >= len)) break;
+        if (clist->count == 0 && (matched || pos >= len || known)) break;
 
         nlist->clear();
         for (size_t t = 0; t < clist->count; t++) {
@@ -572,6 +673,15 @@ bool Regex::search(const char* s, size_t len, size_t start, std::vector<ptrdiff_
                 case SET:  advance = pos < len && sets_[(size_t)inst.arg].has((uint8_t)s[pos]); break;
                 case ANY:  advance = pos < len && s[pos] != '\0'; break;
                 case MATCH:
+                    if (known) {
+                        // The first (highest priority) way to the known end.
+                        if (!matched && (ptrdiff_t)pos == end) {
+                            matched = true;
+                            std::copy(tc, tc + ncap, best.begin());
+                            best[1] = (ptrdiff_t)pos;
+                        }
+                        break;
+                    }
                     if (!matched || tc[0] < best_start || (tc[0] == best_start && (ptrdiff_t)pos > best_end)) {
                         matched = true;
                         best_start = tc[0];
@@ -588,6 +698,7 @@ bool Regex::search(const char* s, size_t len, size_t start, std::vector<ptrdiff_
             }
         }
         std::swap(clist, nlist);
+        if (known && (matched || (ptrdiff_t)pos >= end)) break;
         if (pos >= len) {
             // Threads past the end can only be MATCHes left in clist.
             if (clist->count == 0) break;
