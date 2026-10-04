@@ -278,15 +278,15 @@ MOBIUS_API int mobius_call_ref(MobiusState* state, MobiusValueRef function_ref,
                                int nresults);
 
 /* ====================================================================== */
-/*  Waiting for I/O without blocking the worker thread (Linux)             */
+/*  Waiting for I/O without blocking the worker thread                     */
 /* ====================================================================== */
 
 #define MOBIUS_IO_READ  1
 #define MOBIUS_IO_WRITE 2
 
 typedef struct {
-    int fd;
-    int events;   /* MOBIUS_IO_READ and/or MOBIUS_IO_WRITE */
+    intptr_t fd;   /* a file descriptor; on Windows a SOCKET */
+    int events;    /* MOBIUS_IO_READ and/or MOBIUS_IO_WRITE */
 } MobiusIoWait;
 
 #define MOBIUS_IO_TIMEOUT   (-1)  /* timeout_ms passed */
@@ -311,7 +311,7 @@ MOBIUS_API int mobius_io_wait(MobiusState* state, const MobiusIoWait* waits, int
  * Wake every fiber waiting on `fd` with MOBIUS_IO_CLOSED. Call it before
  * closing a descriptor that another fiber may be waiting on.
  */
-MOBIUS_API void mobius_io_wake_fd(int fd);
+MOBIUS_API void mobius_io_wake_fd(intptr_t fd);
 
 /* ====================================================================== */
 /*  Table operations (on values already on the stack)                      */

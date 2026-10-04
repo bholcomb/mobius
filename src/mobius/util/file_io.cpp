@@ -1,10 +1,10 @@
+#include "util/platform.h"
 #include "util/file_io.h"
 #include "state/mobius_state.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 // Read entire file into memory
 FileResult read_file(const char* path) {
@@ -73,8 +73,7 @@ void free_file_result(FileResult* result) {
 bool file_exists(const char* path) {
     if (!path) return false;
     
-    struct stat st;
-    return stat(path, &st) == 0 && S_ISREG(st.st_mode);
+    return platform_is_regular_file(path);
 }
 
 // Get file extension

@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 199309L 
 
+#include "util/platform.h"
 #include "frontend/diagnostics.h"
 #include <chrono>
 #include <mobius/mobius_plugin.h>
@@ -104,9 +105,7 @@ MobiusConfig mobius_default_config(void) {
 // ============================================================================
 
 static uint64_t get_time_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+    return platform_monotonic_ns();
 }
 
 // ============================================================================

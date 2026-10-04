@@ -96,7 +96,7 @@ public unsafe struct MobiusFileSystem
 [StructLayout(LayoutKind.Sequential)]
 public struct MobiusIoWait
 {
-    public int fd;
+    public nint fd;      // a file descriptor; on Windows a SOCKET
     public int events;
 }
 
@@ -296,10 +296,10 @@ public static unsafe class Native
     /// <summary>Call a referenced function with referenced arguments (works on the host thread too); results are pushed.</summary>
     [DllImport(Lib)] public static extern int mobius_call_ref(IntPtr state, ulong function_ref, ulong* arg_refs, nuint nargs, int nresults);
 
-    // ---- Waiting for I/O (Linux) -----------------------------------------------
+    // ---- Waiting for I/O --------------------------------------------------------
 
     [DllImport(Lib)] public static extern int mobius_io_wait(IntPtr state, MobiusIoWait* waits, int count, long timeout_ms);
-    [DllImport(Lib)] public static extern void mobius_io_wake_fd(int fd);
+    [DllImport(Lib)] public static extern void mobius_io_wake_fd(nint fd);
 
     // ---- Tables and arrays (on values already on the stack) ---------------------
 

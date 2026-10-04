@@ -230,7 +230,7 @@ MobiusFiber* JobSystem::dequeueReadyFiber() {
                     metrics_->peak_fibers = active;
 
                 size_t page_size = 4096;
-                void* stack_top = static_cast<char*>(f->stack_memory) + page_size;
+                void* stack_top = f->stack_memory ? static_cast<char*>(f->stack_memory) + page_size : nullptr;
                 FiberStartData* data = new FiberStartData{this, std::move(job), true};
                 fiber_context_init(&f->context, stack_top, f->stack_size,
                                    fiberEntryTrampoline, data);
@@ -364,6 +364,7 @@ void JobSystem::workerThreadEntry() {
                 int count = active_worker_count_.load(std::memory_order_relaxed);
                 if (count > 1) {
                     active_worker_count_.fetch_sub(1, std::memory_order_relaxed);
+                    fiber_context_release_thread();
                     return;
                 }
             }
@@ -371,6 +372,7 @@ void JobSystem::workerThreadEntry() {
     }
 
     active_worker_count_.fetch_sub(1, std::memory_order_relaxed);
+    fiber_context_release_thread();
 }
 
 int JobSystem::executeAsMainFiber(std::function<int()> fn) {
@@ -415,7 +417,7 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
     };
 
     size_t page_size = 4096;
-    void* stack_top = static_cast<char*>(fiber->stack_memory) + page_size;
+    void* stack_top = fiber->stack_memory ? static_cast<char*>(fiber->stack_memory) + page_size : nullptr;
     FiberStartData* data = new FiberStartData{this, std::move(job), false};
     fiber_context_init(&fiber->context, stack_top, fiber->stack_size,
                        fiberEntryTrampoline, data);
@@ -451,6 +453,8 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
         fiber_pool_->release(fiber);
     }
     main_fiber_ = nullptr;
+    // The host's thread stops being a fiber (Windows) until its next call.
+    fiber_context_release_thread();
 
     return main_fiber_result_;
 }
