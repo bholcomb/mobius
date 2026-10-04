@@ -1,13 +1,15 @@
 #ifndef MOBIUS_PLATFORM_H
 #define MOBIUS_PLATFORM_H
 
-// Everything Mobius needs from the operating system. Each platform has one
-// file implementing all of it, and the build compiles the one for its
-// target:
+// Everything Mobius needs from the operating system. The build compiles
+// the implementation for its target:
 //
-//   mobius_platform_linux.cpp   Linux
-//   mobius_platform_macos.cpp   macOS
-//   mobius_platform_win32.cpp   Windows
+//   Linux    mobius_platform_posix.cpp + mobius_platform_linux.cpp
+//   macOS    mobius_platform_posix.cpp + mobius_platform_macos.cpp
+//   Windows  mobius_platform_win32.cpp
+//
+// The posix file holds what Linux and macOS share; their own files hold
+// only what differs.
 //
 // No other Mobius code uses OS headers or tests which OS it is on. Paths are
 // UTF-8 everywhere; a platform converts them as its APIs require.
