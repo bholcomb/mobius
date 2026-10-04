@@ -113,7 +113,13 @@ name: mytool            # output file name (default: the entry script's name)
 entry: main.mob         # the script to run
 files: [lib, data]      # more scripts and data files: files or directories
 modules: [json, process]  # installed modules it imports; dependencies are added
+module_paths: [vendor]  # optional: more directories holding installed modules
 ```
+
+Modules are looked up in the runtime's `modules/` directory, then the
+`packages/` directory beside it (where packages such as `sqlite` and `glfw`
+are staged), then `module_paths`. A package's own native dependencies (for
+`sqlite`, `libsqlite3.so`) are part of the package and travel with it.
 
 Build the distribution runtime once, then bundle:
 

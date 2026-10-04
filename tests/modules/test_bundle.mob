@@ -74,6 +74,22 @@ r = run_bundle(exe, [])
 check("changed bundle", contains(r.stdout, "changed"))
 check("new extraction for new content", size(os.listdir(cache)) == 2)
 
+// A package with its own native dependency (sqlite and libsqlite3), found
+// in the packages directory beside the runtime.
+if (os.is_dir(os.join(os.dirname(bin_dir), "packages", "sqlite"))) {
+    os.mkdirp(os.join(work, "sq"))
+    write("sq/main.mob", "import \"sqlite\"\nvar db = sqlite.open(\":memory:\")\n" +
+          "db:exec(\"create table t (n integer)\")\ndb:exec(\"insert into t values (41), (1)\")\n" +
+          "var total = 0\nfor (var row in db:query(\"select n from t\")) { total = total + row.n }\n" +
+          "print(total)\ndb:close()\n")
+    write("sq/app.yaml", "entry: main.mob\nmodules: [sqlite]\n")
+    var sq = os.join(work, "sqltool")
+    made = bundle("sq/app.yaml", sq)
+    check("bundle sqlite: " + made.stderr, made.exit_code == 0)
+    r = run_bundle(sq, [])
+    check("sqlite bundle runs: " + r.stderr, r.exit_code == 0 && r.stdout == "42\n")
+}
+
 // Errors at bundle time.
 write("app/bad.yaml", "entry: main.mob\nmodules: [no_such_module]\n")
 made = bundle("app/bad.yaml", os.join(work, "bad"))
