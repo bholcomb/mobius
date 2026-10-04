@@ -1,6 +1,6 @@
 // bundle: make a standalone executable from a Mobius application.
 //
-//   mobius tools/bundle.mob app.yaml [-o output] [--runtime dir]
+//   mobius tools/bundle.mob app.yaml [-o output] [--runtime dir] [--platform name]
 //
 // app.yaml (paths relative to it):
 //
@@ -15,23 +15,25 @@
 // then the module_paths.
 //
 // The result is the runtime's launcher with an archive appended: the core
-// library, the modules (as installed, native libraries included), the entry
-// script and the files. It needs nothing else on the target machine but
-// the C and C++ runtime libraries. On first run it extracts itself to a
-// per-bundle cache directory (~/.cache/mobius/bundles/<hash>) and runs the
-// entry script there with its arguments; scripts find their bundled files
-// under the global `bundle_dir`.
+// library, the modules (as installed, with the target platform's native
+// libraries), the entry script and the files. It needs nothing else on the
+// target machine but the C and C++ runtime libraries. On first run it
+// extracts itself to a per-bundle cache directory (under ~/.cache on Linux,
+// ~/Library/Caches on macOS, %LOCALAPPDATA% on Windows) and runs the entry
+// script there with its arguments; scripts find their bundled files under
+// the global `bundle_dir`.
 //
-// The runtime defaults to dist/portable/bin, built by
-// tools/build_portable.sh for any x86-64-v2 CPU.
+// The executable is for one platform: by default this machine's, from the
+// runtime in dist/portable/bin (built by tools/build_portable.mob). Nothing
+// is compiled, so an executable for another platform can be made here from
+// that platform's runtime: --platform windows-x86_64 --runtime <its bin/>.
+// (Packages must then include that platform's native libraries.)
 
 import "cli"
 import "io"
 import "os"
 import "yaml"
 import "crypto"
-
-const PLATFORM = "linux-x86_64"
 
 func fail(message) {
     io.stderr:write("bundle: " + message + "\n")
@@ -44,7 +46,37 @@ var parser = cli.parser({name: "bundle", description: "Make a standalone executa
 parser:argument("manifest", {help: "The application's app.yaml"})
 parser:option("--output", {short: "-o", help: "Output file (default: the manifest's name, next to it)"})
 parser:option("--runtime", {help: "Runtime directory (default: dist/portable/bin)"})
+parser:option("--platform", {help: "Target platform, such as windows-x86_64 (default: this machine's; another needs --runtime)"})
 var args = parser:parse_or_exit(argv)
+
+// The target platform, and its file names.
+var platform = args.platform == nil ? os.platform : args.platform
+var target_os = split(platform, "-")[0]
+var launcher_name = "mobius-launcher"
+var core_name = nil
+if (target_os == "linux") {
+    core_name = "libmobius-core.so"
+} else if (target_os == "macos") {
+    core_name = "libmobius-core.dylib"
+} else if (target_os == "windows") {
+    launcher_name = "mobius-launcher.exe"
+    core_name = "mobius-core.dll"
+} else {
+    fail("unknown platform: " + platform + " (use linux-, macos- or windows- with x86_64 or aarch64)")
+}
+if (args.platform != nil && args.platform != os.platform && args.runtime == nil) {
+    fail("--platform " + platform + " needs --runtime: that platform's runtime directory")
+}
+
+// Native library folders for the platform; Apple Silicon (and other ARM)
+// folders may be named arm64 or aarch64.
+var native_dirs = ["native/" + platform + "/"]
+if (endswith(platform, "-aarch64")) { native_dirs:push("native/" + replace(platform, "-aarch64", "-arm64") + "/") }
+if (endswith(platform, "-arm64")) { native_dirs:push("native/" + replace(platform, "-arm64", "-aarch64") + "/") }
+func is_native_for_target(rel) {
+    for (var d in native_dirs) { if (startswith(rel, d)) { return true } }
+    return false
+}
 
 var manifest_path = os.realpath(args.manifest)
 if (manifest_path == nil || !os.is_file(manifest_path)) { fail("no such manifest: " + args.manifest) }
@@ -58,10 +90,11 @@ if (runtime == nil) {
     var repo = os.dirname(os.dirname(os.executable()))
     runtime = os.join(repo, "dist", "portable", "bin")
 }
-var launcher = os.join(runtime, "mobius-launcher")
-var core = os.join(runtime, "libmobius-core.so")
+var launcher = os.join(runtime, launcher_name)
+var core = os.join(runtime, core_name)
 if (!os.is_file(launcher) || !os.is_file(core)) {
-    fail("no runtime in " + runtime + " (build it with tools/build_portable.sh, or pass --runtime)")
+    fail("no " + platform + " runtime in " + runtime + " (no " + launcher_name + " and " + core_name +
+         "; build it with tools/build_portable.mob, or pass --runtime)")
 }
 
 var name = manifest.name
@@ -69,6 +102,7 @@ if (typeof(name) != "string") { name = os.basename(manifest.entry) }
 if (endswith(name, ".mob")) { name = substr(name, 0, size(name) - 4) }
 var output = args.output
 if (output == nil) { output = os.join(base_dir, name) }
+if (target_os == "windows" && !endswith(lower(output), ".exe")) { output = output + ".exe" }
 
 // ---- What goes in --------------------------------------------------------
 
@@ -83,22 +117,29 @@ func add(path, source) {
     entries:push({path: path, source: source, mode: st.mode % 4096, size: st.size})
 }
 
+// A path inside the archive: always '/'-separated (walking a directory on
+// Windows gives '\\').
+func archive_path(rel) {
+    if (os.separator == "\\") { return replace(rel, "\\", "/") }
+    return rel
+}
+
 // A file or a directory (everything under it), at its path relative to the
 // manifest.
 func add_tree(rel) {
     var source = os.join(base_dir, rel)
     if (os.is_file(source)) {
-        add(rel, source)
+        add(archive_path(rel), source)
     } else if (os.is_dir(source)) {
         for (var p in os.walkdir(source)) {
-            if (os.is_file(p)) { add(rel + substr(p, size(source), size(p) - size(source)), p) }
+            if (os.is_file(p)) { add(archive_path(rel + substr(p, size(source), size(p) - size(source))), p) }
         }
     } else {
         fail("no such file or directory: " + rel)
     }
 }
 
-add("libmobius-core.so", core)
+add(core_name, core)
 
 // Modules from the runtime, with their dependencies, as installed. Native
 // libraries for other platforms are left out.
@@ -135,8 +176,8 @@ while (mi < size(module_names)) {
     }
     for (var p in os.walkdir(dir)) {
         if (!os.is_file(p)) { continue }
-        var rel = substr(p, size(dir) + 1, size(p) - size(dir) - 1)
-        if (startswith(rel, "native/") && !startswith(rel, "native/" + PLATFORM + "/")) { continue }
+        var rel = archive_path(substr(p, size(dir) + 1, size(p) - size(dir) - 1))
+        if (startswith(rel, "native/") && !is_native_for_target(rel)) { continue }
         add("modules/" + m + "/" + rel, p)
     }
 }

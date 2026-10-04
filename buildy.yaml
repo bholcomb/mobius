@@ -13,24 +13,36 @@ environment:
     debug:
       optimization: none
       symbols: true
+    # GCC/Clang flags on Linux and macOS; on Windows (MSVC) the build
+    # tool's own optimization settings apply.
     release:
       optimization: speed
       defines: ["NDEBUG"]
       compile:
         remove_flags: ["-O2"]
-        flags: ["-O3", "-march=native", "-funroll-loops", "-flto"]
+        flags:
+          - linux: ["-O3", "-march=native", "-funroll-loops", "-flto"]
+          - macos: ["-O3", "-funroll-loops", "-flto"]
       link:
-        flags: ["-flto", "-Wl,-O1"]
-    # Release build for distribution (standalone bundles): a CPU baseline
-    # any x86-64 machine from ~2009 on supports, instead of this machine's.
+        flags:
+          - linux: ["-flto", "-Wl,-O1"]
+          - macos: ["-flto"]
+    # Release build for distribution (standalone bundles). On Linux, a CPU
+    # baseline any x86-64 machine from ~2009 on supports, instead of this
+    # machine's; elsewhere the same as release, which already targets the
+    # platform's baseline.
     portable:
       optimization: speed
       defines: ["NDEBUG"]
       compile:
         remove_flags: ["-O2"]
-        flags: ["-O3", "-march=x86-64-v2", "-funroll-loops", "-flto"]
+        flags:
+          - linux: ["-O3", "-march=x86-64-v2", "-funroll-loops", "-flto"]
+          - macos: ["-O3", "-funroll-loops", "-flto"]
       link:
-        flags: ["-flto", "-Wl,-O1"]
+        flags:
+          - linux: ["-flto", "-Wl,-O1"]
+          - macos: ["-flto"]
 
 workspace:
   modules:

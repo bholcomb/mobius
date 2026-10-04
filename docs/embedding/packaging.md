@@ -120,20 +120,24 @@ Modules are looked up in the runtime's `modules/` directory, then the
 `packages/` directory beside it (where packages such as `sqlite` and `glfw`
 are staged), then `module_paths`. A package's own native dependencies (for
 `sqlite`, `libsqlite3.so`) are part of the package and travel with it.
+Only the target platform's native libraries are bundled.
 
 Build the distribution runtime once, then bundle:
 
 ```sh
-tools/build_portable.sh                       # dist/portable/bin, for any x86-64-v2 CPU
+bin/mobius tools/build_portable.mob           # dist/portable/bin
 bin/mobius tools/bundle.mob app.yaml -o mytool
 ./mytool arg1 arg2
 ```
 
+On Windows the result is `mytool.exe` (`.exe` is added if missing).
+
 The bundle is a small launcher with an archive appended: the core library,
 the listed modules (as installed, native libraries included), the entry
 script and the files. On first run it extracts the archive to
-`~/.cache/mobius/bundles/<hash>/` (`$XDG_CACHE_HOME` and
-`MOBIUS_BUNDLE_CACHE` are honored) and runs the entry script there; later
+`mobius/bundles/<hash>/` in the user's cache directory (`~/.cache` or
+`$XDG_CACHE_HOME` on Linux, `~/Library/Caches` on macOS, `%LOCALAPPDATA%` on
+Windows; `MOBIUS_BUNDLE_CACHE` overrides it) and runs the entry script there; later
 runs reuse that directory, and a bundle with different content gets its own.
 Native libraries must be files to be loaded, so extracting is how a bundle
 carries them.
@@ -149,11 +153,34 @@ Inside a bundle:
   are read as `readfile(bundle_dir + "/data/config.toml")`. Keep files a
   program writes elsewhere (the extraction directory is a cache).
 
-The target machine needs the C and C++ runtime libraries (`libc`,
-`libstdc++`) and a CPU at least at x86-64-v2 (any x86-64 CPU from about 2009
-on). The regular build in `bin/` is tuned for the build machine's CPU
-(`-march=native`), which is why bundles use `dist/portable`. Bundles are
-Linux-only for now, and stored uncompressed.
+The target machine needs the C and C++ runtime libraries: `libc` and
+`libstdc++` on Linux, the system libraries on macOS, and the Visual C++
+Redistributable on Windows (most machines have it). On Linux the regular
+build in `bin/` is tuned for the build machine's CPU (`-march=native`), so
+bundles use `dist/portable`, built for any x86-64-v2 CPU (any x86-64 CPU from
+about 2009 on); on macOS and Windows the portable build is the release build.
+Bundles are stored uncompressed.
+
+### Executables for other platforms
+
+A bundle is one platform's executable. Nothing is compiled when bundling, so
+executables for other platforms can be made on one machine, given each
+platform's runtime (its `dist/portable/bin`, built on that platform):
+
+```sh
+bin/mobius tools/bundle.mob app.yaml --platform windows-x86_64 --runtime runtimes/windows-x86_64
+bin/mobius tools/bundle.mob app.yaml --platform macos-aarch64 --runtime runtimes/macos-aarch64
+```
+
+Packages used by the app must include that platform's native libraries.
+
+### macOS signing
+
+A bundle appends its archive to the launcher, after the launcher's code
+signature. It runs on the machine that made it, but `codesign --verify`
+fails and it can't be notarized, so a copy downloaded elsewhere is stopped
+by Gatekeeper until its quarantine flag is cleared
+(`xattr -d com.apple.quarantine mytool`).
 
 ## Notes
 
