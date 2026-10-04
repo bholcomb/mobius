@@ -1,0 +1,82 @@
+// build_portable: build the distribution runtime into dist/portable/ (the
+// "portable" configuration), staged with the same layout as bin/.
+// Standalone bundles (tools/bundle.mob) are made from it.
+//
+//   bin/mobius tools/build_portable.mob [buildy options...]
+//
+// On Linux the portable build targets an x86-64-v2 CPU instead of this
+// machine's; on macOS and Windows it is the release build, which already
+// targets the platform's baseline.
+//
+// The build tool stages every configuration into the destination named in
+// buildy.yaml (bin/), and only reads the workspace from a file named
+// buildy.yaml. So for this build the staging destination in buildy.yaml is
+// switched to dist/portable, and restored afterwards, whatever happens.
+
+import "io"
+import "os"
+import "process"
+
+func fail(message) {
+    io.stderr:write("build_portable: " + message + "\n")
+    exit(1)
+}
+
+// The repository: this runs as <repo>/bin/mobius.
+var repo = os.dirname(os.dirname(os.executable()))
+var buildy = os.join(repo, startswith(os.platform, "windows") ? "buildy.exe" : "buildy")
+if (!os.is_file(buildy)) { fail("no build tool at " + buildy) }
+var jobs = os.getenv("JOBS")
+if (jobs == nil) { jobs = str(os.cpu_count()) }
+
+func run_buildy(dir, extra) {
+    var cmd = [buildy, "-c", "portable", "-j", jobs]
+    for (var a in extra) { cmd:push(a) }
+    var r = process.run(cmd, {cwd: dir, stdin: "inherit", stdout: "inherit", stderr: "inherit"})
+    return r.exit_code
+}
+
+// Dependencies are built per configuration only when first fetched, so
+// build the portable variant of each one that lacks it.
+for (var dep in ["sqlite3", "glfw3"]) {
+    var dir = os.join(repo, ".buildy_cache", "deps", dep)
+    var override = os.join(repo, "buildy_config", "dependencies", dep + "_build.yaml")
+    if (!os.is_dir(dir) || !os.is_file(override)) { continue }
+    var built = false
+    var build_dir = os.join(dir, "build")
+    if (os.is_dir(build_dir)) {
+        for (var name in os.listdir(build_dir)) { if (endswith(name, "-portable")) { built = true } }
+    }
+    if (built) { continue }
+    print("Building " + dep + " (portable)")
+    var dep_yaml = os.join(dir, "buildy.yaml")
+    os.cp(override, dep_yaml)
+    var code = run_buildy(dir, [])
+    os.remove(dep_yaml)
+    if (code != 0) { fail("building " + dep + " failed") }
+}
+
+var yaml_path = os.join(repo, "buildy.yaml")
+var original = readfile(yaml_path)
+var from = "destination: \"${workspace}\""
+if (find(original, from) < 0) { fail("staging destination not found in buildy.yaml") }
+
+func write_yaml(text) {
+    var f = io.open(yaml_path, "w")
+    f:write(text)
+    f:close()
+}
+
+var code = 1
+var problem = nil
+try {
+    write_yaml(replace(original, from, "destination: \"${workspace}/dist/portable\""))
+    code = run_buildy(repo, argv)
+} catch e {
+    problem = e
+} finally {
+    write_yaml(original)
+}
+if (problem != nil) { fail(str(problem)) }
+if (code != 0) { exit(code) }
+print("Portable runtime: " + os.join(repo, "dist", "portable", "bin"))

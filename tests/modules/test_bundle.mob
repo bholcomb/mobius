@@ -15,6 +15,8 @@ func check(name, ok) {
     }
 }
 
+var windows = startswith(os.platform, "windows")
+var exe_suffix = windows ? ".exe" : ""
 var mobius = os.executable()
 var bin_dir = os.dirname(mobius)
 var bundler = os.join(os.dirname(bin_dir), "tools", "bundle.mob")
@@ -31,7 +33,7 @@ write("app/main.mob", "import \"json\"\nimport \"process\"\nimport \"util\"\n" +
       "print(json.stringify(argv))\n" +
       "print(util.greet(\"bundle\"))\n" +
       "print(trim(readfile(bundle_dir + \"/data/message.txt\")))\n" +
-      "print(trim(process.run([\"echo\", \"child\"]).stdout))\n" +
+      "print(trim(process.run(\"echo child\", {shell: true}).stdout))\n" +
       "exit(size(argv))\n")
 write("app/util.mob", "func greet(who) { return \"hello \" + who }\n")
 write("app/data/message.txt", "from data\n")
@@ -46,7 +48,7 @@ func run_bundle(exe, args) {
     return process.run(cmd, {env: {MOBIUS_BUNDLE_CACHE: cache}})
 }
 
-var exe = os.join(work, "hello")
+var exe = os.join(work, "hello" + exe_suffix)
 var made = bundle("app/app.yaml", exe)
 check("bundle succeeds: " + made.stderr, made.exit_code == 0)
 
@@ -63,8 +65,8 @@ check("still one extraction", size(os.listdir(cache)) == 1)
 // The executable works when moved: it carries everything.
 var moved = os.join(work, "elsewhere")
 os.mkdirp(moved)
-os.rename(exe, os.join(moved, "tool"))
-r = run_bundle(os.join(moved, "tool"), ["x"])
+os.rename(exe, os.join(moved, "tool" + exe_suffix))
+r = run_bundle(os.join(moved, "tool" + exe_suffix), ["x"])
 check("moved bundle runs", r.exit_code == 1 && contains(r.stdout, "from data"))
 
 // Changed content gets its own extraction.
@@ -83,7 +85,7 @@ if (os.is_dir(os.join(os.dirname(bin_dir), "packages", "sqlite"))) {
           "var total = 0\nfor (var row in db:query(\"select n from t\")) { total = total + row.n }\n" +
           "print(total)\ndb:close()\n")
     write("sq/app.yaml", "entry: main.mob\nmodules: [sqlite]\n")
-    var sq = os.join(work, "sqltool")
+    var sq = os.join(work, "sqltool" + exe_suffix)
     made = bundle("sq/app.yaml", sq)
     check("bundle sqlite: " + made.stderr, made.exit_code == 0)
     r = run_bundle(sq, [])
@@ -98,9 +100,37 @@ write("app/noentry.yaml", "entry: missing.mob\n")
 made = bundle("app/noentry.yaml", os.join(work, "bad"))
 check("missing entry refused", made.exit_code != 0 && contains(made.stderr, "missing.mob"))
 
+// Another platform's executable, from that platform's runtime (here a fake
+// one): its launcher and core names, and only its native libraries.
+func make_file(path, text) {
+    os.mkdirp(os.dirname(os.join(work, path)))
+    write(path, text)
+}
+make_file("winrt/mobius-launcher.exe", "LAUNCHER")
+make_file("winrt/mobius-core.dll", "CORE")
+make_file("winrt/modules/fake/module.yaml", "name: fake\nversion: 1.0.0\nentry:\n  script: fake.mob\n")
+make_file("winrt/modules/fake/fake.mob", "var x = 1\n")
+make_file("winrt/modules/fake/native/windows-x86_64/fake.dll", "WINDOWS NATIVE")
+make_file("winrt/modules/fake/native/linux-x86_64/fake.so", "LINUX NATIVE")
+write("app/cross.yaml", "name: cross\nentry: main.mob\nmodules: [fake]\n")
+made = process.run([mobius, bundler, os.join(work, "app", "cross.yaml"),
+                    "--platform", "windows-x86_64", "--runtime", os.join(work, "winrt")])
+check("cross bundle: " + made.stderr, made.exit_code == 0)
+var cross_bytes = readfile(os.join(work, "app", "cross.exe"))
+check("cross bundle gets .exe", cross_bytes != nil && startswith(cross_bytes, "LAUNCHER"))
+check("cross bundle has the windows core", contains(cross_bytes, "mobius-core.dll"))
+check("cross bundle has windows natives", contains(cross_bytes, "WINDOWS NATIVE"))
+check("cross bundle leaves out linux natives", !contains(cross_bytes, "LINUX NATIVE"))
+made = process.run([mobius, bundler, os.join(work, "app", "cross.yaml"), "--platform", "windows-x86_64"])
+check("other platform needs --runtime", made.exit_code != 0 && contains(made.stderr, "needs --runtime"))
+
 // The launcher alone is not a bundle.
-r = process.run([os.join(bin_dir, "mobius-launcher")])
+r = process.run([os.join(bin_dir, "mobius-launcher" + exe_suffix)])
 check("bare launcher explains itself", r.exit_code == 1 && contains(r.stderr, "no bundle attached"))
 
-process.run(["rm", "-rf", work])
+// Clean up: files, then directories deepest first.
+var paths = os.walkdir(work)
+for (var i = size(paths) - 1; i >= 0; i--) { if (os.is_file(paths[i])) { os.remove(paths[i]) } }
+for (var i = size(paths) - 1; i >= 0; i--) { if (os.is_dir(paths[i])) { os.rmdir(paths[i]) } }
+os.rmdir(work)
 if (failures == 0) { print("bundle: PASS") } else { exit(1) }
