@@ -2153,6 +2153,18 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
             direct_target = resolveDirectCallTarget(name);
             use_direct_call = direct_target.valid;
         }
+        // A direct call never loads the function into its register. With an
+        // argument count outside the target's range, compile an ordinary
+        // call instead, which loads the function and reports the count
+        // ("expects N arguments"); deciding later left the register nil
+        // ("Attempt to call a non-function value").
+        if (use_direct_call) {
+            const Prototype* target = direct_target.proto;
+            int total = target->num_params;
+            int required = target->min_params < 0 ? total : target->min_params;
+            int passed = (int)expr->arg_count;
+            if (passed < required || passed > total) use_direct_call = false;
+        }
     }
 
     if (use_direct_call) {
@@ -2196,20 +2208,14 @@ int Compiler::compileCall(CallExpr* expr, int dest) {
     }
 
     // A direct call to a function with default parameters passes nil for
-    // the omitted ones, so the call sees its full parameter count. A count
-    // outside the allowed range takes the ordinary call, which reports it.
+    // the omitted ones, so the call sees its full parameter count. (A count
+    // outside the allowed range took the ordinary call above.)
     size_t passed = expr->arg_count;
     if (use_direct_call && !is_method) {
-        const Prototype* target = direct_target.proto;
-        int total = target->num_params;
-        int required = target->min_params < 0 ? total : target->min_params;
-        if ((int)passed < required || (int)passed > total) {
-            use_direct_call = false;
-        } else {
-            for (; (int)passed < total; passed++) {
-                int pad = allocReg();
-                emitABC(OP_LOADNIL, (uint8_t)pad, 0, 0);
-            }
+        int total = direct_target.proto->num_params;
+        for (; (int)passed < total; passed++) {
+            int pad = allocReg();
+            emitABC(OP_LOADNIL, (uint8_t)pad, 0, 0);
         }
     }
 
