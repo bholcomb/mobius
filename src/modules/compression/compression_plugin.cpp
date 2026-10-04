@@ -1164,7 +1164,7 @@ static int compression_inspect_native(MobiusState* state, int arg_count, void* /
 
     std::string error;
     CommonOptions options;
-    if (arg_count == 2 && !parse_common_options(state, -1, options, error)) {
+    if (arg_count == 2 && !parse_common_options(state, arg_count - 1, options, error)) {
         return mobius_error(state, error.c_str());
     }
 
@@ -1196,7 +1196,7 @@ static int compression_list_native(MobiusState* state, int arg_count, void* /*us
 
     std::string error;
     CommonOptions options;
-    if (arg_count == 2 && !parse_common_options(state, -1, options, error)) {
+    if (arg_count == 2 && !parse_common_options(state, arg_count - 1, options, error)) {
         return mobius_error(state, error.c_str());
     }
 
@@ -1228,7 +1228,7 @@ static int compression_extract_native(MobiusState* state, int arg_count, void* /
 
     std::string error;
     CommonOptions options;
-    if (arg_count == 3 && !parse_common_options(state, -1, options, error)) {
+    if (arg_count == 3 && !parse_common_options(state, arg_count - 1, options, error)) {
         return mobius_error(state, error.c_str());
     }
 
@@ -1262,7 +1262,7 @@ static int compression_create_native(MobiusState* state, int arg_count, void* /*
 
     std::string error;
     CommonOptions options;
-    if (arg_count == 3 && !parse_common_options(state, -1, options, error)) {
+    if (arg_count == 3 && !parse_common_options(state, arg_count - 1, options, error)) {
         return mobius_error(state, error.c_str());
     }
 
@@ -1319,7 +1319,7 @@ static int compression_compress_native(MobiusState* state, int arg_count, void* 
 
     std::string error;
     CommonOptions options;
-    if (arg_count == 3 && !parse_common_options(state, -1, options, error)) {
+    if (arg_count == 3 && !parse_common_options(state, arg_count - 1, options, error)) {
         return mobius_error(state, error.c_str());
     }
 
@@ -1360,7 +1360,7 @@ static int compression_decompress_native(MobiusState* state, int arg_count, void
 
     std::string error;
     CommonOptions options;
-    if (arg_count == 3 && !parse_common_options(state, -1, options, error)) {
+    if (arg_count == 3 && !parse_common_options(state, arg_count - 1, options, error)) {
         return mobius_error(state, error.c_str());
     }
 
