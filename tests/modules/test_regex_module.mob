@@ -193,6 +193,68 @@ var e4 = regex.replace("(\\w+)", "hello world", "[\\0]")
 assert_test("replace with backreference", e4 == "[hello] [world]")
 
 // ============================================================================
+// The engine: POSIX extended syntax, leftmost-longest, no backtracking
+// ============================================================================
+
+func regex_error(f) {
+    var msg = ""
+    try { f() } catch e { msg = str(e) }
+    return msg
+}
+
+// Leftmost-longest: the longest alternative wins, not the first.
+var p1 = regex.search("a|ab|abc", "xabcd")
+assert_test("longest alternative", p1.match == "abc" && p1.start == 1)
+var p2 = regex.search("(a|ab)(c|bcd)", "abcd")
+assert_test("longest overall match", p2.match == "abcd")
+
+assert_test("anchors", regex.search("^ab$", "ab") != nil && regex.search("^b", "ab") == nil)
+assert_test("dot matches newline", regex.match("a.b", "a\nb") != nil)
+assert_test("interval exact", regex.match("a{3}", "aaa") != nil && regex.match("a{3}", "aa") == nil)
+assert_test("interval range", regex.search("a{2,3}", "aaaa").match == "aaa")
+assert_test("interval open", regex.match("a{2,}", "aaaaa") != nil)
+assert_test("question mark", regex.match("colou?r", "color") != nil)
+assert_test("bracket class", regex.findall("[[:digit:]]+", "a1b22c333")[2].match == "333")
+assert_test("negated bracket", regex.search("[^a-z ]+", "abc DEF").match == "DEF")
+assert_test("bracket literal ]", regex.search("[]x]+", "a]x]b").match == "]x]")
+assert_test("bracket trailing -", regex.search("[a-]+", "x-a-y").match == "-a-")
+assert_test("bracket backslash literal", regex.search("[\\\\]", "a\\b").match == "\\")
+assert_test("word escapes", regex.search("\\W+", "ab, cd").match == ", ")
+assert_test("word boundary", size(regex.findall("\\bcat\\b", "cat concat cat")) == 2)
+assert_test("word start and end", regex.search("\\<c\\w*\\>", "a concat b").match == "concat")
+assert_test("escaped special", regex.match("a\\.b\\*", "a.b*") != nil)
+assert_test("other escapes are literal", regex.match("\\d", "d") != nil)
+assert_test("unmatched ) is literal", regex.match("a)", "a)") != nil)
+assert_test("ignore case class", regex.match("[[:upper:]]+", "abC", "i") != nil)
+assert_test("ignore case range", regex.match("[a-c]+", "ABC", "i") != nil)
+assert_test("groups of nested quantifier", regex.search("((a)b)+", "ababc").groups[0] == "ab")
+
+// No match recursion: long input on a fiber's stack.
+func long_match() {
+    var s = ""
+    var chunk = "abababababababababababababababababababababababababababababababab"
+    for (var i = 0; i < 3125; i++) { s = s + chunk }   // 200,000 bytes
+    var m = regex.search("(a|b)*c", s + "c")
+    return m == nil ? -1 : size(m.match)
+}
+assert_test("long input in a fiber", fiber.all([spawn long_match()])[0] == 200001)
+
+// Errors
+assert_test("error unmatched (", contains(regex_error(func() { regex.search("(a", "a") }), "Unmatched ( or \\("))
+assert_test("error unmatched [", contains(regex_error(func() { regex.search("[a", "a") }), "Unmatched [ or [:"))
+assert_test("error leading *", contains(regex_error(func() { regex.search("*a", "a") }), "Invalid preceding regular expression"))
+assert_test("error bad class", contains(regex_error(func() { regex.search("[[:foo:]]", "a") }), "Invalid character class name"))
+assert_test("error bad range", contains(regex_error(func() { regex.search("[z-a]", "a") }), "Invalid range end"))
+assert_test("error bad interval", contains(regex_error(func() { regex.search("a{2,1}", "a") }), "Invalid content"))
+assert_test("error {,n} not supported", contains(regex_error(func() { regex.search("a{,2}", "a") }), "Invalid content"))
+assert_test("error too big", contains(regex_error(func() { regex.search("a{40000}", "a") }), "too big"))
+assert_test("error back-reference", contains(regex_error(func() { regex.search("(a)\\1", "aa") }), "Back-references are not supported"))
+
+// Empty matches advance one byte; none is reported twice.
+assert_test("findall empty matches", size(regex.findall("\\b", " a b")) == 4)
+assert_test("replace empty matches", regex.replace("x*", "abc", "-") == "-a-b-c-")
+
+// ============================================================================
 // Summary
 // ============================================================================
 

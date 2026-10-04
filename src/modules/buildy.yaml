@@ -83,9 +83,7 @@ targets:
       output_prefix: ""
       sources:
         - "regex/regex_plugin.cpp"
-        - linux: ["regex/regex_platform_posix.cpp"]
-        - macos: ["regex/regex_platform_posix.cpp"]
-        - windows: ["regex/regex_platform_win32.cpp"]
+        - "regex/regex_engine.cpp"
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"

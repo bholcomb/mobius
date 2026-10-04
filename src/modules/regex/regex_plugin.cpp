@@ -4,11 +4,24 @@
 #include <string>
 #include <vector>
 
-#include "regex_platform.h"
+#include "regex_engine.h"
 
 // ============================================================================
 // INTERNAL HELPERS
 // ============================================================================
+
+struct RegexOptions {
+    bool ignore_case = false;
+};
+
+struct MatchResult {
+    bool matched = false;
+    std::string full;
+    std::vector<std::string> groups;
+    size_t start = 0;
+    size_t end = 0;
+};
+
 
 static bool apply_flag_string(const char* flags, RegexOptions& options, std::string& error) {
     for (const char* p = flags; *p; ++p) {
@@ -72,7 +85,7 @@ static bool read_regex_options(MobiusState* state, int idx, RegexOptions& option
     return true;
 }
 
-void append_replacement_template(const char* replacement, const MatchResult& match, std::string& out) {
+static void append_replacement_template(const char* replacement, const MatchResult& match, std::string& out) {
     for (const char* r = replacement; *r; ++r) {
         if (*r == '\\' && r[1] != '\0') {
             char next = r[1];
@@ -133,6 +146,106 @@ static void push_match_table(MobiusState* state, const MatchResult& mr) {
 }
 
 // ============================================================================
+// MATCHING (regex_engine.h)
+// ============================================================================
+
+static bool compile_regex(const char* pattern, const RegexOptions& options,
+                          mobius_regex::Regex* re, std::string* error) {
+    return re->compile(pattern, options.ignore_case, error);
+}
+
+// The match in `caps` as a MatchResult. Groups are listed up to the first
+// one that took no part in the match.
+static MatchResult to_match(const char* subject, const std::vector<ptrdiff_t>& caps, size_t groups) {
+    MatchResult mr;
+    mr.matched = true;
+    mr.start = (size_t)caps[0];
+    mr.end = (size_t)caps[1];
+    mr.full.assign(subject + caps[0], (size_t)(caps[1] - caps[0]));
+    for (size_t g = 1; g <= groups; g++) {
+        if (caps[2 * g] < 0) break;
+        mr.groups.emplace_back(subject + caps[2 * g], (size_t)(caps[2 * g + 1] - caps[2 * g]));
+    }
+    return mr;
+}
+
+static bool compile_and_match(const char* pattern, const char* subject,
+                              MatchResult& result, const RegexOptions& options, std::string* error) {
+    mobius_regex::Regex re;
+    if (!compile_regex(pattern, options, &re, error)) return false;
+    std::vector<ptrdiff_t> caps;
+    if (re.search(subject, strlen(subject), 0, &caps)) result = to_match(subject, caps, re.group_count());
+    else result.matched = false;
+    return true;
+}
+
+static bool find_all_matches(const char* pattern, const char* subject,
+                             std::vector<MatchResult>& results, const RegexOptions& options,
+                             std::string* error) {
+    mobius_regex::Regex re;
+    if (!compile_regex(pattern, options, &re, error)) return false;
+    size_t len = strlen(subject);
+    std::vector<ptrdiff_t> caps;
+    size_t pos = 0;
+    while (pos <= len && re.search(subject, len, pos, &caps)) {
+        results.push_back(to_match(subject, caps, re.group_count()));
+        // After an empty match, look again one byte further on.
+        pos = caps[1] > caps[0] ? (size_t)caps[1] : (size_t)caps[1] + 1;
+    }
+    return true;
+}
+
+static bool regex_replace_all(const char* pattern, const char* subject,
+                              const char* replacement, std::string& out,
+                              const RegexOptions& options, std::string* error) {
+    mobius_regex::Regex re;
+    if (!compile_regex(pattern, options, &re, error)) return false;
+    size_t len = strlen(subject);
+    std::vector<ptrdiff_t> caps;
+    out.clear();
+    size_t pos = 0;
+    while (pos <= len && re.search(subject, len, pos, &caps)) {
+        size_t ms = (size_t)caps[0], me = (size_t)caps[1];
+        out.append(subject + pos, ms - pos);
+        append_replacement_template(replacement, to_match(subject, caps, re.group_count()), out);
+        if (me > ms) {
+            pos = me;
+        } else {
+            // An empty match: keep the byte after it, and look again past it.
+            if (ms < len) out.push_back(subject[ms]);
+            pos = ms + 1;
+        }
+    }
+    if (pos < len) out.append(subject + pos);
+    return true;
+}
+
+static bool regex_split_impl(const char* pattern, const char* subject,
+                             std::vector<std::string>& parts, const RegexOptions& options,
+                             std::string* error) {
+    mobius_regex::Regex re;
+    if (!compile_regex(pattern, options, &re, error)) return false;
+    size_t len = strlen(subject);
+    std::vector<ptrdiff_t> caps;
+    size_t pos = 0;
+    while (re.search(subject, len, pos, &caps)) {
+        size_t ms = (size_t)caps[0], me = (size_t)caps[1];
+        parts.push_back(std::string(subject + pos, ms - pos));
+        if (me == pos) {
+            // An empty match where the part began: it doesn't split; the
+            // byte joins the part.
+            if (pos >= len) break;
+            parts.back().push_back(subject[pos]);
+            pos += 1;
+        } else {
+            pos = me;
+        }
+    }
+    parts.push_back(std::string(subject + (pos < len ? pos : len)));
+    return true;
+}
+
+// ============================================================================
 // regex.match(pattern, string) -> table | nil
 // ============================================================================
 
@@ -156,8 +269,9 @@ static int regex_match(MobiusState* state, int arg_count, void* /*userdata*/) {
     const char* subject = mobius_stack_asString(state, 1 - arg_count);
 
     MatchResult mr;
-    if (!compile_and_match(pattern, subject, mr, options))
-        return mobius_error(state, "regex.match() invalid regex pattern");
+    std::string error;
+    if (!compile_and_match(pattern, subject, mr, options, &error))
+        return mobius_error(state, ("regex.match() invalid regex pattern: " + error).c_str());
 
     mobius_stack_pop(state, arg_count);
 
@@ -198,8 +312,9 @@ static int regex_search(MobiusState* state, int arg_count, void* /*userdata*/) {
     const char* subject = mobius_stack_asString(state, 1 - arg_count);
 
     MatchResult mr;
-    if (!compile_and_match(pattern, subject, mr, options))
-        return mobius_error(state, "regex.search() invalid regex pattern");
+    std::string error;
+    if (!compile_and_match(pattern, subject, mr, options, &error))
+        return mobius_error(state, ("regex.search() invalid regex pattern: " + error).c_str());
 
     mobius_stack_pop(state, arg_count);
 
@@ -235,8 +350,9 @@ static int regex_findall(MobiusState* state, int arg_count, void* /*userdata*/) 
     const char* subject = mobius_stack_asString(state, 1 - arg_count);
 
     std::vector<MatchResult> results;
-    if (!find_all_matches(pattern, subject, results, options))
-        return mobius_error(state, "regex.findall() invalid regex pattern");
+    std::string error;
+    if (!find_all_matches(pattern, subject, results, options, &error))
+        return mobius_error(state, ("regex.findall() invalid regex pattern: " + error).c_str());
 
     mobius_stack_pop(state, arg_count);
 
@@ -277,8 +393,9 @@ static int regex_replace(MobiusState* state, int arg_count, void* /*userdata*/) 
     const char* replacement = mobius_stack_asString(state, 2 - arg_count);
 
     std::string out;
-    if (!regex_replace_all(pattern, subject, replacement, out, options))
-        return mobius_error(state, "regex.replace() invalid regex pattern");
+    std::string error;
+    if (!regex_replace_all(pattern, subject, replacement, out, options, &error))
+        return mobius_error(state, ("regex.replace() invalid regex pattern: " + error).c_str());
 
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushString(state, out.c_str());
@@ -309,8 +426,9 @@ static int regex_split(MobiusState* state, int arg_count, void* /*userdata*/) {
     const char* subject = mobius_stack_asString(state, 1 - arg_count);
 
     std::vector<std::string> parts;
-    if (!regex_split_impl(pattern, subject, parts, options))
-        return mobius_error(state, "regex.split() invalid regex pattern");
+    std::string error;
+    if (!regex_split_impl(pattern, subject, parts, options, &error))
+        return mobius_error(state, ("regex.split() invalid regex pattern: " + error).c_str());
 
     mobius_stack_pop(state, arg_count);
 
