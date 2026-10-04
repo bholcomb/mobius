@@ -13,7 +13,6 @@
 #include <limits>
 #include <sstream>
 #include <string>
-#include <sys/stat.h>
 #include <system_error>
 #include <vector>
 
@@ -87,8 +86,8 @@ struct ScopedTempFile {
 };
 
 static bool file_exists(const std::string& path) {
-    struct stat st;
-    return ::stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode);
+    std::error_code ec;
+    return fs::is_regular_file(fs::u8path(path), ec);
 }
 
 static bool path_exists(const std::string& path) {
@@ -97,9 +96,11 @@ static bool path_exists(const std::string& path) {
 }
 
 static uint64_t file_size_or_zero(const std::string& path) {
-    struct stat st;
-    if (::stat(path.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) return 0;
-    return static_cast<uint64_t>(st.st_size);
+    std::error_code ec;
+    fs::path p = fs::u8path(path);
+    if (!fs::is_regular_file(p, ec)) return 0;
+    uintmax_t size = fs::file_size(p, ec);
+    return ec ? 0 : static_cast<uint64_t>(size);
 }
 
 static std::string lower_copy(std::string s) {

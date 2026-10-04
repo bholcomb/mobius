@@ -27,10 +27,6 @@
 #include <string>
 #include <vector>
 
-#include <climits>
-#include <fcntl.h>
-#include <sys/stat.h>
-
 #include "io_stream.h"
 
 namespace {
@@ -64,7 +60,7 @@ static IoStream* self_stream(MobiusState* state, const char* op, int* rc) {
 // scripts never have to.
 static void switch_to(IoStream* s, LastOp next) {
     if (s->last == LastOp::write && next == LastOp::read) fflush(s->fp);
-    else if (s->last == LastOp::read && next == LastOp::write) io_fseek(s->fp, 0, SEEK_CUR);
+    else if (s->last == LastOp::read && next == LastOp::write) io_platform_seek(s->fp, 0, SEEK_CUR);
     s->last = next;
 }
 
@@ -95,12 +91,16 @@ static int report(MobiusState* state, const char* op, IoStream* s, const IoResul
     return os_error(state, op, s->name, r.os_errno ? r.os_errno : EIO);
 }
 
-// Wait until a waitable stream's descriptor is ready (parks the fiber).
+// A blocking pipe takes at least this many bytes without blocking once it
+// reports writable (POSIX's smallest PIPE_BUF).
+static const size_t ATOMIC_PIPE_WRITE = 512;
+
+// Wait until a waitable stream's handle is ready (parks the fiber).
 static bool wait_ready(MobiusState* state, IoStream* s, int events, IoResult* r) {
     while (true) {
         if (s->closing.load(std::memory_order_acquire)) { r->err = IoErr::closed; return false; }
-        MobiusIoWait w = {s->fd, events};
-        int rc = mobius_io_wait(state, &w, 1, -1);
+        MobiusIoWait w = {s->handle, events};
+        int rc = io_platform_wait(state, &w, 1, -1);
         if (rc >= 0) return true;
         if (rc == MOBIUS_IO_CLOSED) { r->err = IoErr::closed; return false; }
         if (rc == MOBIUS_IO_CANCELLED) { r->err = IoErr::cancelled; return false; }
@@ -116,19 +116,19 @@ static bool waitable_fill(MobiusState* state, IoStream* s, IoResult* r) {
     if (s->rpos > 0 && s->rpos == s->rbuf.size()) { s->rbuf.clear(); s->rpos = 0; }
     char chunk[COPY_CHUNK];
     while (!s->eof) {
-        // A descriptor we don't own (standard input) stays blocking: wait for
-        // it to be readable first, then read what is there.
+        // A handle we don't own (standard input) stays blocking: wait for it
+        // to be readable first, then read what is there.
         if (!s->nonblocking && !wait_ready(state, s, MOBIUS_IO_READ, r)) return false;
-        ssize_t n = read(s->fd, chunk, sizeof(chunk));
+        int e = 0;
+        long long n = io_platform_read(s->handle, chunk, sizeof(chunk), &e);
         if (n > 0) { s->rbuf.append(chunk, (size_t)n); return true; }
         if (n == 0) { s->eof = true; return true; }
-        if (errno == EINTR) continue;
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (n == IO_PLATFORM_WOULD_BLOCK) {
             if (!wait_ready(state, s, MOBIUS_IO_READ, r)) return false;
             continue;
         }
         r->err = IoErr::os;
-        r->os_errno = errno;
+        r->os_errno = e;
         return false;
     }
     return true;
@@ -187,15 +187,7 @@ static bool read_line(MobiusState* state, IoStream* s, std::string& line, bool* 
     bool newline = false;
     if (!s->waitable) {
         switch_to(s, LastOp::read);
-        bool got_any = false;
-        io_lock_file(s->fp);
-        int c;
-        while ((c = io_getc_unlocked(s->fp)) != EOF) {
-            got_any = true;
-            if (c == '\n') { newline = true; break; }
-            line.push_back((char)c);
-        }
-        io_unlock_file(s->fp);
+        bool got_any = io_platform_read_line(s->fp, line, &newline);
         if (!got_any && ferror(s->fp)) {
             r->err = IoErr::os;
             r->os_errno = errno;
@@ -243,22 +235,22 @@ static bool write_all(MobiusState* state, IoStream* s, const char* data, size_t 
     }
     size_t done = 0;
     while (done < len) {
-        // A blocking descriptor is written PIPE_BUF bytes at a time after a
-        // readiness wait (a writable pipe takes that much without blocking).
+        // A blocking handle is written a little at a time after a readiness
+        // wait (a writable pipe takes that much without blocking).
         size_t chunk = len - done;
         if (!s->nonblocking) {
             if (!wait_ready(state, s, MOBIUS_IO_WRITE, r)) return false;
-            if (chunk > PIPE_BUF) chunk = PIPE_BUF;
+            if (chunk > ATOMIC_PIPE_WRITE) chunk = ATOMIC_PIPE_WRITE;
         }
-        ssize_t n = write(s->fd, data + done, chunk);
+        int e = 0;
+        long long n = io_platform_write(s->handle, data + done, chunk, &e);
         if (n > 0) { done += (size_t)n; continue; }
-        if (n < 0 && errno == EINTR) continue;
-        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        if (n == IO_PLATFORM_WOULD_BLOCK || n == 0) {
             if (!wait_ready(state, s, MOBIUS_IO_WRITE, r)) return false;
             continue;
         }
         r->err = IoErr::os;
-        r->os_errno = n < 0 ? errno : EIO;
+        r->os_errno = e ? e : EIO;
         return false;
     }
     return true;
@@ -302,26 +294,15 @@ static int io_open(MobiusState* state, int arg_count, void* /*userdata*/) {
 
     // A FIFO blocks in open() until the other side opens it; that wait is
     // not fiber-aware.
-    errno = 0;
-    FILE* fp = fopen(path.c_str(), cmode);
-    if (!fp) return os_error(state, "io.open", path, errno);
+    int open_err = 0;
+    FILE* fp = io_platform_fopen(path, cmode, &open_err);
+    if (!fp) return os_error(state, "io.open", path, open_err);
 
     IoStream* s = new IoStream();
     s->name = path;
     s->readable = readable;
     s->writable = writable;
-    struct stat st;
-    if (fstat(fileno(fp), &st) == 0 && !S_ISREG(st.st_mode) && !S_ISBLK(st.st_mode)) {
-        // A FIFO or device: use the descriptor, non-blocking (we own it).
-        s->waitable = true;
-        s->fd = dup(fileno(fp));
-        fclose(fp);
-        fcntl(s->fd, F_SETFL, fcntl(s->fd, F_GETFL) | O_NONBLOCK);
-        fcntl(s->fd, F_SETFD, FD_CLOEXEC);
-        s->nonblocking = true;
-    } else {
-        s->fp = fp;
-    }
+    io_platform_attach_file(s, fp);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushUserdata(state, s, stream_destructor, STREAM_TYPE, sizeof(IoStream));
     return 1;
@@ -500,13 +481,13 @@ static int stream_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     IoStream* s = self_stream(state, op, &rc);
     if (!s) return rc;
     s->closing.store(true, std::memory_order_release);
-    if (s->waitable && s->fd >= 0) mobius_io_wake_fd(s->fd);
+    if (s->waitable && s->handle != -1) mobius_io_wake_fd(s->handle);
     std::lock_guard<FiberMutex> lock(s->mu);
     int err = 0;
     if (!s->closed) {
         if (s->waitable) {
-            if (!s->is_std && close(s->fd) != 0) err = errno;
-            s->fd = -1;
+            if (!s->is_std) err = io_platform_close(s->handle);
+            s->handle = -1;
         } else if (s->is_std) {
             if (fflush(s->fp) != 0) err = errno;
         } else {
@@ -555,9 +536,9 @@ static int stream_seek(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::lock_guard<FiberMutex> lock(s->mu);
     if (s->closed) return op_error(state, op, s->name, "stream is closed");
     if (s->waitable) return os_error(state, op, s->name, ESPIPE);
-    if (io_fseek(s->fp, offset, whence) != 0) return os_error(state, op, s->name, errno);
+    if (io_platform_seek(s->fp, offset, whence) != 0) return os_error(state, op, s->name, errno);
     s->last = LastOp::none;   // a seek satisfies both direction switches
-    int64_t pos = (int64_t)io_ftell(s->fp);
+    int64_t pos = (int64_t)io_platform_tell(s->fp);
     if (pos < 0) return os_error(state, op, s->name, errno);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushInt64(state, pos);
@@ -573,7 +554,7 @@ static int stream_tell(MobiusState* state, int arg_count, void* /*userdata*/) {
     std::lock_guard<FiberMutex> lock(s->mu);
     if (s->closed) return op_error(state, op, s->name, "stream is closed");
     if (s->waitable) return os_error(state, op, s->name, ESPIPE);
-    int64_t pos = (int64_t)io_ftell(s->fp);
+    int64_t pos = (int64_t)io_platform_tell(s->fp);
     if (pos < 0) return os_error(state, op, s->name, errno);
     mobius_stack_pop(state, arg_count);
     mobius_stack_pushInt64(state, pos);
@@ -645,28 +626,13 @@ static void push_std_stream(MobiusState* state, int module_idx, FILE* fp,
     s->readable = readable;
     s->writable = !readable;
     s->is_std = true;
-    struct stat st;
-    if (readable && fstat(fileno(fp), &st) == 0 && !S_ISREG(st.st_mode)) {
-        // Standard input from a pipe or terminal: wait for it in the
-        // reactor. The descriptor stays blocking (it is shared with the
-        // parent process, e.g. a shell's terminal) and is read only once
-        // it reports readable.
-        s->waitable = true;
-        s->fd = fileno(fp);
-    } else {
-        s->fp = fp;
-    }
+    io_platform_attach_std(s, fp);
     mobius_stack_pushUserdata(state, s, stream_destructor, STREAM_TYPE, sizeof(IoStream));
     mobius_stack_setTableField(state, module_idx, key);
 }
 
 static int io_post_init(MobiusState* state) {
-#ifdef _WIN32
-    // Byte-exact standard streams: no CRLF translation.
-    _setmode(_fileno(stdin), _O_BINARY);
-    _setmode(_fileno(stdout), _O_BINARY);
-    _setmode(_fileno(stderr), _O_BINARY);
-#endif
+    io_platform_init_std();
     const int module_idx = 0;
     push_std_stream(state, module_idx, stdin, "stdin", "<stdin>", true);
     push_std_stream(state, module_idx, stdout, "stdout", "<stdout>", false);

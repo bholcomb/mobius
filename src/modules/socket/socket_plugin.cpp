@@ -1,13 +1,13 @@
 // socket: TCP and UDP sockets.
 //
-// On Linux every socket is non-blocking, and an operation that would block
-// parks the calling fiber in the I/O reactor (mobius_io_wait) until the
+// Every socket is non-blocking, and an operation that would block parks
+// the calling fiber in the I/O reactor (mobius_io_wait) until the
 // socket is ready, so a fiber waiting on the network doesn't hold a worker
 // thread. set_timeout() is a per-call deadline, fiber.cancel interrupts a
 // wait, and close() wakes fibers waiting on the socket (their calls report
 // "socket is closed"). Outside a fiber, waits block the calling thread.
-// Address resolution (getaddrinfo) still blocks. On Windows, sockets stay
-// blocking for now.
+// Address resolution (getaddrinfo) still blocks. What differs between
+// platforms is in socket_platform.h (socket/posix/ or socket/win32/).
 
 #include <mobius/mobius_plugin.h>
 
@@ -20,27 +20,7 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-  #define WIN32_LEAN_AND_MEAN
-  #include <winsock2.h>
-  #include <ws2tcpip.h>
-  #ifdef _MSC_VER
-    #pragma comment(lib, "Ws2_32.lib")
-  #endif
-  typedef SOCKET mobius_socket_handle;
-  static const mobius_socket_handle MOBIUS_INVALID_SOCKET_HANDLE = INVALID_SOCKET;
-#else
-  #include <arpa/inet.h>
-  #include <fcntl.h>
-  #include <netdb.h>
-  #include <netinet/in.h>
-  #include <netinet/tcp.h>
-  #include <sys/socket.h>
-  #include <sys/types.h>
-  #include <unistd.h>
-  typedef int mobius_socket_handle;
-  static const mobius_socket_handle MOBIUS_INVALID_SOCKET_HANDLE = -1;
-#endif
+#include "socket_platform.h"
 
 namespace {
 
@@ -75,79 +55,6 @@ struct SocketUse {
     ~SocketUse() { obj->in_flight.fetch_sub(1, std::memory_order_acq_rel); }
 };
 
-#ifdef _WIN32
-static bool g_winsock_initialized = false;
-#endif
-
-static bool socket_platform_init() {
-#ifdef _WIN32
-    if (g_winsock_initialized) return true;
-    WSADATA wsa_data;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa_data) != 0) return false;
-    g_winsock_initialized = true;
-#endif
-    return true;
-}
-
-static void socket_platform_cleanup() {
-#ifdef _WIN32
-    if (g_winsock_initialized) {
-        WSACleanup();
-        g_winsock_initialized = false;
-    }
-#endif
-}
-
-static int socket_last_error_code() {
-#ifdef _WIN32
-    return WSAGetLastError();
-#else
-    return errno;
-#endif
-}
-
-static bool socket_error_is_timeout(int code) {
-#ifdef _WIN32
-    return code == WSAETIMEDOUT;
-#else
-    return code == EAGAIN || code == EWOULDBLOCK || code == ETIMEDOUT;
-#endif
-}
-
-static void socket_close_handle(mobius_socket_handle handle) {
-    if (handle == MOBIUS_INVALID_SOCKET_HANDLE) return;
-#ifdef _WIN32
-    closesocket(handle);
-#else
-    close(handle);
-#endif
-}
-
-static void socket_set_nonblocking(mobius_socket_handle handle) {
-#ifndef _WIN32
-    int flags = fcntl(handle, F_GETFL);
-    if (flags >= 0) fcntl(handle, F_SETFL, flags | O_NONBLOCK);
-    fcntl(handle, F_SETFD, FD_CLOEXEC);
-#else
-    (void)handle;   // Windows: blocking for now
-#endif
-}
-
-static bool socket_would_block(int code) {
-#ifndef _WIN32
-    return code == EAGAIN || code == EWOULDBLOCK;
-#else
-    (void)code;
-    return false;
-#endif
-}
-
-#ifdef MSG_NOSIGNAL
-static const int SEND_FLAGS = MSG_NOSIGNAL;   // a closed peer is an error, not SIGPIPE
-#else
-static const int SEND_FLAGS = 0;
-#endif
-
 static int64_t now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -158,7 +65,6 @@ enum class WaitResult { ready, timeout, closed, cancelled, error };
 // Wait until the socket is ready for `events` (MOBIUS_IO_READ/WRITE) or
 // `deadline` (ms on the monotonic clock; -1: none) passes. Parks the fiber.
 static WaitResult socket_wait(MobiusState* state, SocketObject* obj, int events, int64_t deadline) {
-#ifndef _WIN32
     while (true) {
         if (obj->closing.load(std::memory_order_acquire)) return WaitResult::closed;
         int64_t left = -1;
@@ -166,7 +72,7 @@ static WaitResult socket_wait(MobiusState* state, SocketObject* obj, int events,
             left = deadline - now_ms();
             if (left <= 0) return WaitResult::timeout;
         }
-        MobiusIoWait w = {obj->handle, events};
+        MobiusIoWait w = {(intptr_t)obj->handle, events};
         int rc = mobius_io_wait(state, &w, 1, left);
         if (rc >= 0) return obj->closing.load(std::memory_order_acquire) ? WaitResult::closed : WaitResult::ready;
         if (rc == MOBIUS_IO_TIMEOUT) continue;   // re-checks the deadline
@@ -174,10 +80,6 @@ static WaitResult socket_wait(MobiusState* state, SocketObject* obj, int events,
         if (rc == MOBIUS_IO_CANCELLED) return WaitResult::cancelled;
         return WaitResult::error;
     }
-#else
-    (void)state; (void)obj; (void)events; (void)deadline;
-    return WaitResult::error;
-#endif
 }
 
 static int64_t socket_deadline(const SocketObject* obj) {
@@ -203,13 +105,7 @@ static void socket_object_destructor(void* ptr) {
 }
 
 static std::string socket_error_message(const char* prefix, int code) {
-    char buffer[256];
-#ifdef _WIN32
-    snprintf(buffer, sizeof(buffer), "%s failed (code %d)", prefix, code);
-#else
-    snprintf(buffer, sizeof(buffer), "%s failed: %s", prefix, strerror(code));
-#endif
-    return std::string(buffer);
+    return std::string(prefix) + " failed: " + socket_error_text(code);
 }
 
 static bool socket_object_is_listener(const SocketObject* obj) {
@@ -310,23 +206,6 @@ static bool resolve_socket_addresses(const std::string& host, int64_t port,
     return true;
 }
 
-#ifdef _WIN32
-static int apply_socket_timeout(SocketObject* obj, int64_t timeout_ms) {
-#ifdef _WIN32
-    DWORD timeout = (timeout_ms < 0) ? 0 : (DWORD)timeout_ms;
-    int rc1 = setsockopt(obj->handle, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
-    int rc2 = setsockopt(obj->handle, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
-#else
-    timeval tv;
-    tv.tv_sec = timeout_ms / 1000;
-    tv.tv_usec = (int)((timeout_ms % 1000) * 1000);
-    int rc1 = setsockopt(obj->handle, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-    int rc2 = setsockopt(obj->handle, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-#endif
-    return (rc1 == 0 && rc2 == 0) ? 0 : -1;
-}
-#endif
-
 static int push_socket_userdata(MobiusState* state, mobius_socket_handle handle,
                                 SocketKind kind, const char* type_name) {
     SocketObject* obj = new (std::nothrow) SocketObject();
@@ -380,8 +259,7 @@ static int socket_connect(MobiusState* state, int arg_count, void* /*userdata*/)
             break;
         }
         last_error = socket_last_error_code();
-#ifndef _WIN32
-        if (last_error == EINPROGRESS) {
+        if (socket_connect_pending(last_error)) {
             // Wait (parked) for the handshake, then read its outcome.
             SocketObject pending;
             pending.handle = handle;
@@ -389,13 +267,12 @@ static int socket_connect(MobiusState* state, int arg_count, void* /*userdata*/)
             if (wr == WaitResult::ready) {
                 int so_error = 0;
                 socklen_t len = sizeof(so_error);
-                if (getsockopt(handle, SOL_SOCKET, SO_ERROR, &so_error, &len) == 0 && so_error == 0) break;
+                if (getsockopt(handle, SOL_SOCKET, SO_ERROR, (char*)&so_error, &len) == 0 && so_error == 0) break;
                 last_error = so_error ? so_error : socket_last_error_code();
             } else if (wr == WaitResult::cancelled) {
                 cancelled = true;
             }
         }
-#endif
         socket_close_handle(handle);
         handle = MOBIUS_INVALID_SOCKET_HANDLE;
     }
@@ -535,13 +412,11 @@ static int socket_base_close(MobiusState* state, int arg_count, void* /*userdata
     if (!obj || !type_name) return mobius_error(state, "socket:close() self is not a socket");
     mobius_stack_pop(state, 1);
     if (!obj->closed && !obj->closing.exchange(true, std::memory_order_acq_rel)) {
-#ifndef _WIN32
         // Wake fibers waiting on it, then let operations in flight finish
         // before the descriptor (and its number) is released.
-        mobius_io_wake_fd(obj->handle);
+        mobius_io_wake_fd((intptr_t)obj->handle);
         while (obj->in_flight.load(std::memory_order_acquire) > 0)
             mobius_io_wait(state, nullptr, 0, 1);
-#endif
         socket_close_handle(obj->handle);
         obj->handle = MOBIUS_INVALID_SOCKET_HANDLE;
         obj->closed = true;
@@ -569,11 +444,6 @@ static int socket_base_set_timeout(MobiusState* state, int arg_count, void* /*us
     if (timeout_ms < 0) return mobius_error(state, "socket:set_timeout() timeout must be >= 0");
     if (obj->closed) return mobius_error(state, "socket:set_timeout() socket is closed");
     obj->timeout_ms = timeout_ms == 0 ? -1 : timeout_ms;   // 0: no timeout, as before
-#ifdef _WIN32
-    if (apply_socket_timeout(obj, timeout_ms) != 0) {
-        return mobius_error(state, socket_error_message("socket:set_timeout()", socket_last_error_code()).c_str());
-    }
-#endif
     mobius_stack_copy(state, 0);
     mobius_stack_pop(state, 2);
     return 1;
@@ -626,14 +496,10 @@ static int tcp_socket_send(MobiusState* state, int arg_count, void* /*userdata*/
     int64_t deadline = socket_deadline(obj);
     size_t sent = 0;
     while (sent < bytes.size()) {
-#ifdef _WIN32
-        int rc = send(obj->handle, (const char*)bytes.data() + sent, (int)(bytes.size() - sent), 0);
-#else
-        ssize_t rc = send(obj->handle, bytes.data() + sent, bytes.size() - sent, SEND_FLAGS);
-#endif
+        long long rc = sock_send(obj->handle, bytes.data() + sent, bytes.size() - sent, SEND_FLAGS);
         if (rc <= 0) {
             int err = socket_last_error_code();
-            if (rc < 0 && err == EINTR) continue;
+            if (rc < 0 && socket_interrupted(err)) continue;
             if (rc < 0 && socket_would_block(err)) {
                 WaitResult wr = socket_wait(state, obj, MOBIUS_IO_WRITE, deadline);
                 if (wr != WaitResult::ready) return wait_error(state, "socket:send()", wr);
@@ -662,18 +528,14 @@ static int tcp_socket_recv(MobiusState* state, int arg_count, void* /*userdata*/
     SocketUse use(obj);
     if (!use.ok) return mobius_error(state, "socket:recv() socket is closed");
     int64_t deadline = socket_deadline(obj);
-#ifdef _WIN32
-    int rc = recv(obj->handle, (char*)buffer.data(), (int)buffer.size(), 0);
-#else
-    ssize_t rc;
-    while ((rc = recv(obj->handle, buffer.data(), buffer.size(), 0)) < 0) {
+    long long rc;
+    while ((rc = sock_recv(obj->handle, buffer.data(), buffer.size())) < 0) {
         int err = socket_last_error_code();
-        if (err == EINTR) continue;
+        if (socket_interrupted(err)) continue;
         if (!socket_would_block(err)) break;
         WaitResult wr = socket_wait(state, obj, MOBIUS_IO_READ, deadline);
         if (wr != WaitResult::ready) return wait_error(state, "socket:recv()", wr);
     }
-#endif
     if (rc == 0) {
         mobius_stack_pop(state, 2);
         mobius_stack_pushNil(state);
@@ -708,19 +570,8 @@ static int tcp_socket_shutdown(MobiusState* state, int arg_count, void* /*userda
         write = mobius_stack_asBool(state, -1);
     }
 
-    int how = 0;
-#ifdef _WIN32
-    if (read && write) how = SD_BOTH;
-    else if (read) how = SD_RECEIVE;
-    else if (write) how = SD_SEND;
-    else return mobius_error(state, "socket:shutdown() requires read or write");
-#else
-    if (read && write) how = SHUT_RDWR;
-    else if (read) how = SHUT_RD;
-    else if (write) how = SHUT_WR;
-    else return mobius_error(state, "socket:shutdown() requires read or write");
-#endif
-    if (shutdown(obj->handle, how) != 0) {
+    if (!read && !write) return mobius_error(state, "socket:shutdown() requires read or write");
+    if (shutdown(obj->handle, socket_shutdown_how(read, write)) != 0) {
         return mobius_error(state, socket_error_message("socket:shutdown()", socket_last_error_code()).c_str());
     }
     mobius_stack_copy(state, 0);
@@ -738,26 +589,22 @@ static int tcp_listener_accept(MobiusState* state, int arg_count, void* /*userda
     socklen_t len = (socklen_t)sizeof(storage);
     SocketUse use(obj);
     if (!use.ok) return mobius_error(state, "socket:accept() listener is closed");
-#ifdef _WIN32
-    SOCKET client = accept(obj->handle, (sockaddr*)&storage, &len);
-#else
     int64_t deadline = socket_deadline(obj);
-    int client;
-    while ((client = accept(obj->handle, (sockaddr*)&storage, &len)) < 0) {
+    mobius_socket_handle client;
+    while ((client = accept(obj->handle, (sockaddr*)&storage, &len)) == MOBIUS_INVALID_SOCKET_HANDLE) {
         int err = socket_last_error_code();
-        if (err == EINTR || err == ECONNABORTED) continue;
+        if (socket_interrupted(err) || socket_accept_aborted(err)) continue;
         if (!socket_would_block(err)) break;
         WaitResult wr = socket_wait(state, obj, MOBIUS_IO_READ, deadline);
         if (wr == WaitResult::closed) return mobius_error(state, "socket:accept() listener is closed");
         if (wr != WaitResult::ready) return wait_error(state, "socket:accept()", wr);
         len = (socklen_t)sizeof(storage);
     }
-    if (client >= 0) {
+    if (client != MOBIUS_INVALID_SOCKET_HANDLE) {
         socket_set_nonblocking(client);
         int yes = 1;
         setsockopt(client, IPPROTO_TCP, TCP_NODELAY, (const char*)&yes, sizeof(yes));
     }
-#endif
     if (client == MOBIUS_INVALID_SOCKET_HANDLE) {
         int err = socket_last_error_code();
         if (socket_error_is_timeout(err)) return mobius_error(state, "socket:accept() timed out");
@@ -812,19 +659,15 @@ static int udp_socket_send(MobiusState* state, int arg_count, void* /*userdata*/
     if (!value_to_bytes(state, -1, bytes)) return mobius_error(state, "socket:send() expects a buffer or string");
     SocketUse use(obj);
     if (!use.ok) return mobius_error(state, "socket:send() socket is closed");
-#ifdef _WIN32
-    int rc = send(obj->handle, (const char*)bytes.data(), (int)bytes.size(), 0);
-#else
     int64_t deadline = socket_deadline(obj);
-    ssize_t rc;
-    while ((rc = send(obj->handle, bytes.data(), bytes.size(), SEND_FLAGS)) < 0) {
+    long long rc;
+    while ((rc = sock_send(obj->handle, bytes.data(), bytes.size(), SEND_FLAGS)) < 0) {
         int err = socket_last_error_code();
-        if (err == EINTR) continue;
+        if (socket_interrupted(err)) continue;
         if (!socket_would_block(err)) break;
         WaitResult wr = socket_wait(state, obj, MOBIUS_IO_WRITE, deadline);
         if (wr != WaitResult::ready) return wait_error(state, "socket:send()", wr);
     }
-#endif
     if (rc < 0) {
         int err = socket_last_error_code();
         if (socket_error_is_timeout(err)) return mobius_error(state, "socket:send() timed out");
@@ -846,19 +689,15 @@ static int udp_socket_recv(MobiusState* state, int arg_count, void* /*userdata*/
     std::vector<uint8_t> buffer((size_t)max_bytes);
     SocketUse use(obj);
     if (!use.ok) return mobius_error(state, "socket:recv() socket is closed");
-#ifdef _WIN32
-    int rc = recv(obj->handle, (char*)buffer.data(), (int)buffer.size(), 0);
-#else
     int64_t deadline = socket_deadline(obj);
-    ssize_t rc;
-    while ((rc = recv(obj->handle, buffer.data(), buffer.size(), 0)) < 0) {
+    long long rc;
+    while ((rc = sock_recv(obj->handle, buffer.data(), buffer.size())) < 0) {
         int err = socket_last_error_code();
-        if (err == EINTR) continue;
+        if (socket_interrupted(err)) continue;
         if (!socket_would_block(err)) break;
         WaitResult wr = socket_wait(state, obj, MOBIUS_IO_READ, deadline);
         if (wr != WaitResult::ready) return wait_error(state, "socket:recv()", wr);
     }
-#endif
     if (rc < 0) {
         int err = socket_last_error_code();
         if (socket_error_is_timeout(err)) return mobius_error(state, "socket:recv() timed out");
@@ -891,7 +730,7 @@ static int udp_socket_send_to(MobiusState* state, int arg_count, void* /*userdat
         return mobius_error(state, error.c_str());
     }
     int last_error = 0;
-    ssize_t sent = -1;
+    long long sent = -1;
     SocketUse use(obj);
     if (!use.ok) {
         freeaddrinfo(results);
@@ -899,21 +738,17 @@ static int udp_socket_send_to(MobiusState* state, int arg_count, void* /*userdat
     }
     int64_t deadline = socket_deadline(obj);
     for (addrinfo* it = results; it; it = it->ai_next) {
-#ifdef _WIN32
-        int rc = sendto(obj->handle, (const char*)bytes.data(), (int)bytes.size(), 0, it->ai_addr, (int)it->ai_addrlen);
-#else
-        ssize_t rc = sendto(obj->handle, bytes.data(), bytes.size(), SEND_FLAGS, it->ai_addr, (socklen_t)it->ai_addrlen);
-        if (rc < 0 && (socket_last_error_code() == EINTR || socket_would_block(socket_last_error_code()))) {
-            if (socket_last_error_code() != EINTR) {
+        long long rc = sock_sendto(obj->handle, bytes.data(), bytes.size(), SEND_FLAGS, it->ai_addr, it->ai_addrlen);
+        if (rc < 0 && (socket_interrupted(socket_last_error_code()) || socket_would_block(socket_last_error_code()))) {
+            if (!socket_interrupted(socket_last_error_code())) {
                 WaitResult wr = socket_wait(state, obj, MOBIUS_IO_WRITE, deadline);
                 if (wr != WaitResult::ready) {
                     freeaddrinfo(results);
                     return wait_error(state, "socket:send_to()", wr);
                 }
             }
-            rc = sendto(obj->handle, bytes.data(), bytes.size(), SEND_FLAGS, it->ai_addr, (socklen_t)it->ai_addrlen);
+            rc = sock_sendto(obj->handle, bytes.data(), bytes.size(), SEND_FLAGS, it->ai_addr, it->ai_addrlen);
         }
-#endif
         if (rc >= 0) {
             sent = rc;
             break;
@@ -944,20 +779,16 @@ static int udp_socket_recv_from(MobiusState* state, int arg_count, void* /*userd
     memset(&storage, 0, sizeof(storage));
     SocketUse use(obj);
     if (!use.ok) return mobius_error(state, "socket:recv_from() socket is closed");
-#ifdef _WIN32
-    int rc = recvfrom(obj->handle, (char*)buffer.data(), (int)buffer.size(), 0, (sockaddr*)&storage, &addr_len);
-#else
     int64_t deadline = socket_deadline(obj);
-    ssize_t rc;
-    while ((rc = recvfrom(obj->handle, buffer.data(), buffer.size(), 0, (sockaddr*)&storage, &addr_len)) < 0) {
+    long long rc;
+    while ((rc = sock_recvfrom(obj->handle, buffer.data(), buffer.size(), (sockaddr*)&storage, &addr_len)) < 0) {
         int err = socket_last_error_code();
-        if (err == EINTR) continue;
+        if (socket_interrupted(err)) continue;
         if (!socket_would_block(err)) break;
         WaitResult wr = socket_wait(state, obj, MOBIUS_IO_READ, deadline);
         if (wr != WaitResult::ready) return wait_error(state, "socket:recv_from()", wr);
         addr_len = (socklen_t)sizeof(storage);
     }
-#endif
     if (rc < 0) {
         int err = socket_last_error_code();
         if (socket_error_is_timeout(err)) return mobius_error(state, "socket:recv_from() timed out");
@@ -982,7 +813,7 @@ static int udp_socket_recv_from(MobiusState* state, int arg_count, void* /*userd
     else set_string_field(state, tbl, "family", "unknown");
     if (rc >= 0 && rc > 0) {
         bool utf8 = true;
-        for (ssize_t i = 0; i < rc; i++) {
+        for (long long i = 0; i < rc; i++) {
             if (buffer[(size_t)i] == 0) {
                 utf8 = false;
                 break;

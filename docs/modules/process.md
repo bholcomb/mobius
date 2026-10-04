@@ -13,7 +13,11 @@ arguments passed exactly as given, not through a shell. You choose what happens
 to each standard stream, and can capture output, feed input, set the
 environment and working directory, and stop a program that runs too long.
 
-Linux only for now. (`os.system` and `os.exec` remain for quick shell commands.)
+(`os.system` and `os.exec` remain for quick shell commands.)
+
+On Windows there are no signals: `kill` (any signal) and `timeout_ms` end the
+program at once, with exit code 1. `shell: true` runs the command with
+`cmd.exe /c`.
 
 ```mobius
 import "process"
@@ -62,7 +66,7 @@ amounts of both never deadlock.
 | `cwd` | current | Working directory for the program. |
 | `env` | none | Variables to set, as a table of strings. They are added to the script's environment; a `nil` value removes a variable. |
 | `env_clear` | `false` | Start from an empty environment, so the program sees only `env`. |
-| `shell` | `false` | Run `args` (a single string) with `/bin/sh -c`. Only when you need shell features: quoting is then your responsibility. |
+| `shell` | `false` | Run `args` (a single string) with `/bin/sh -c` (`cmd.exe /c` on Windows). Only when you need shell features: quoting is then your responsibility. |
 
 ## Streams
 

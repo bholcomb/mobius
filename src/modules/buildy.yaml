@@ -20,7 +20,11 @@ targets:
     - name: io
       language: cpp
       output_prefix: ""
-      sources: ["io/io_plugin.cpp"]
+      sources:
+        - "io/io_plugin.cpp"
+        - linux: ["io/io_platform_posix.cpp"]
+        - macos: ["io/io_platform_posix.cpp"]
+        - windows: ["io/io_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -32,7 +36,11 @@ targets:
     - name: process
       language: cpp
       output_prefix: ""
-      sources: ["process/process_plugin.cpp"]
+      sources:
+        - "process/process_plugin.cpp"
+        - linux: ["process/process_platform_posix.cpp", "process/process_platform_linux.cpp", "io/io_platform_posix.cpp"]
+        - macos: ["process/process_platform_posix.cpp", "process/process_platform_macos.cpp", "io/io_platform_posix.cpp"]
+        - windows: ["process/process_platform_win32.cpp", "io/io_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -57,7 +65,11 @@ targets:
     - name: os
       language: cpp
       output_prefix: ""
-      sources: ["os/os_plugin.cpp"]
+      sources:
+        - "os/os_plugin.cpp"
+        - linux: ["os/os_platform_posix.cpp", "os/os_platform_linux.cpp", "internal/module_platform_posix.cpp"]
+        - macos: ["os/os_platform_posix.cpp", "os/os_platform_macos.cpp", "internal/module_platform_posix.cpp"]
+        - windows: ["os/os_platform_win32.cpp", "internal/module_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -69,7 +81,11 @@ targets:
     - name: regex
       language: cpp
       output_prefix: ""
-      sources: ["regex/regex_plugin.cpp"]
+      sources:
+        - "regex/regex_plugin.cpp"
+        - linux: ["regex/regex_platform_posix.cpp"]
+        - macos: ["regex/regex_platform_posix.cpp"]
+        - windows: ["regex/regex_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -105,7 +121,11 @@ targets:
     - name: datetime
       language: cpp
       output_prefix: ""
-      sources: ["datetime/datetime_plugin.cpp"]
+      sources:
+        - "datetime/datetime_plugin.cpp"
+        - linux: ["internal/module_platform_posix.cpp"]
+        - macos: ["internal/module_platform_posix.cpp"]
+        - windows: ["internal/module_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -129,7 +149,11 @@ targets:
     - name: crypto
       language: cpp
       output_prefix: ""
-      sources: ["crypto/crypto_plugin.cpp"]
+      sources:
+        - "crypto/crypto_plugin.cpp"
+        - linux: ["internal/module_platform_posix.cpp"]
+        - macos: ["internal/module_platform_posix.cpp"]
+        - windows: ["internal/module_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -165,7 +189,11 @@ targets:
     - name: websocket
       language: cpp
       output_prefix: ""
-      sources: ["websocket/websocket_plugin.cpp"]
+      sources:
+        - "websocket/websocket_plugin.cpp"
+        - linux: ["internal/module_platform_posix.cpp"]
+        - macos: ["internal/module_platform_posix.cpp"]
+        - windows: ["internal/module_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"
@@ -182,6 +210,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
+        - linux: ["${workspace}/src/modules/socket/posix"]
+        - macos: ["${workspace}/src/modules/socket/posix"]
+        - windows: ["${workspace}/src/modules/socket/win32"]
       libs: ["mobius-core", {linux: ["dl"]}]
       depends_on:
         targets: ["mobius-core"]

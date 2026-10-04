@@ -7,11 +7,7 @@
 #include <string>
 #include <vector>
 
-#ifdef _WIN32
-  #include <stdlib.h>
-#else
-  #include <unistd.h>
-#endif
+#include "modules/internal/module_platform.h"
 
 namespace mobius_crypto_internal {
 
@@ -136,25 +132,7 @@ inline std::string base64_encode_bytes(const uint8_t* data, size_t len) {
 }
 
 inline bool secure_random_fill(uint8_t* data, size_t len) {
-    if (len == 0) return true;
-#ifdef _WIN32
-    size_t offset = 0;
-    while (offset < len) {
-        unsigned int value = 0;
-        if (rand_s(&value) != 0) return false;
-        size_t remaining = len - offset;
-        size_t chunk = remaining < sizeof(value) ? remaining : sizeof(value);
-        memcpy(data + offset, &value, chunk);
-        offset += chunk;
-    }
-    return true;
-#else
-    FILE* fp = fopen("/dev/urandom", "rb");
-    if (!fp) return false;
-    size_t read = fread(data, 1, len, fp);
-    fclose(fp);
-    return read == len;
-#endif
+    return module_platform_random(data, len);
 }
 
 } // namespace mobius_crypto_internal
