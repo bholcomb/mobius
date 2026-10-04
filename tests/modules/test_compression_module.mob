@@ -28,8 +28,6 @@ func has_entry(entries, path, entry_type) {
 var input_path = os.tmpfile()
 var gzip_path = input_path + ".gz"
 var gzip_roundtrip = input_path + ".gzip.out"
-var zstd_path = input_path + ".zst"
-var zstd_roundtrip = input_path + ".zstd.out"
 
 assert_test("tmp path created", input_path is string)
 assert_test("write fixture", writefile(input_path, "compression module fixture\nsecond line"))
@@ -82,19 +80,6 @@ try { compression.decompress(joined_gz, joined_out + ".damaged", { format: "gzip
 assert_test("gzip damage detected", contains(damage_error, "checksum"))
 for (var f in [part_path, part_gz, joined_gz, joined_out, joined_out + ".damaged"]) { if (os.exists(f)) { os.remove(f) } }
 
-var zstd_summary = compression.compress(input_path, zstd_path, { format: "zstd", overwrite: "replace" })
-assert_test("zstd summary ok", zstd_summary.ok == true)
-assert_test("zstd summary format", zstd_summary.format == "zstd")
-
-var zstd_info = compression.inspect(zstd_path, nil)
-assert_test("zstd inspect kind", zstd_info.kind == "compressed_stream")
-assert_test("zstd inspect format", zstd_info.format == "zstd")
-assert_test("zstd inspect compression format", zstd_info.compression_format == "zstd")
-
-var zstd_decode = compression.decompress(zstd_path, zstd_roundtrip, { overwrite: "replace" })
-assert_test("zstd decompress ok", zstd_decode.ok == true)
-assert_test("zstd roundtrip contents", readfile(zstd_roundtrip) == readfile(input_path))
-
 var archive_root = os.tmpdir() + "/mobius_compression_" + str(os.getpid())
 var source_dir = archive_root + "/payload"
 var nested_dir = source_dir + "/nested"
@@ -108,7 +93,6 @@ var payload_name = os.basename(source_dir)
 var zip_path = archive_root + "/payload.zip"
 var tar_path = archive_root + "/payload.tar"
 var targz_path = archive_root + "/payload.tar.gz"
-var tarzst_path = archive_root + "/payload.tar.zst"
 
 var zip_summary = compression.create(zip_path, [source_dir], { overwrite: "replace" })
 assert_test("zip create ok", zip_summary.ok == true)
@@ -148,28 +132,12 @@ var targz_extract = compression.extract(targz_path, targz_extract_dir, { overwri
 assert_test("tar.gz extract ok", targz_extract.ok == true)
 assert_test("tar.gz extracted root file", readfile(targz_extract_dir + "/" + payload_name + "/root.txt") == "root file")
 
-var tarzst_summary = compression.create(tarzst_path, [source_dir], { overwrite: "replace" })
-assert_test("tar.zst create ok", tarzst_summary.ok == true)
-var tarzst_info = compression.inspect(tarzst_path, nil)
-assert_test("tar.zst inspect format", tarzst_info.format == "tar.zst")
-assert_test("tar.zst inspect archive format", tarzst_info.archive_format == "tar")
-assert_test("tar.zst inspect compression format", tarzst_info.compression_format == "zstd")
-var tarzst_entries = compression.list(tarzst_path, nil)
-assert_test("tar.zst has nested file", has_entry(tarzst_entries, payload_name + "/nested/child.txt", "file"))
-var tarzst_extract_dir = archive_root + "/tarzst_out"
-var tarzst_extract = compression.extract(tarzst_path, tarzst_extract_dir, { overwrite: "replace" })
-assert_test("tar.zst extract ok", tarzst_extract.ok == true)
-assert_test("tar.zst extracted nested file", readfile(tarzst_extract_dir + "/" + payload_name + "/nested/child.txt") == "child file")
-
 os.remove(input_path)
 os.remove(gzip_path)
 os.remove(gzip_roundtrip)
-os.remove(zstd_path)
-os.remove(zstd_roundtrip)
 os.remove(zip_path)
 os.remove(tar_path)
 os.remove(targz_path)
-os.remove(tarzst_path)
 os.remove(source_dir + "/root.txt")
 os.remove(nested_dir + "/child.txt")
 os.rmdir(empty_dir)
@@ -193,12 +161,6 @@ os.rmdir(targz_extract_dir + "/" + payload_name + "/empty")
 os.rmdir(targz_extract_dir + "/" + payload_name + "/nested")
 os.rmdir(targz_extract_dir + "/" + payload_name)
 os.rmdir(targz_extract_dir)
-os.remove(tarzst_extract_dir + "/" + payload_name + "/root.txt")
-os.remove(tarzst_extract_dir + "/" + payload_name + "/nested/child.txt")
-os.rmdir(tarzst_extract_dir + "/" + payload_name + "/empty")
-os.rmdir(tarzst_extract_dir + "/" + payload_name + "/nested")
-os.rmdir(tarzst_extract_dir + "/" + payload_name)
-os.rmdir(tarzst_extract_dir)
 os.rmdir(archive_root)
 
 print("")

@@ -20,13 +20,6 @@
 #include "miniz/miniz.c"
 #include "microtar/microtar.c"
 
-#if __has_include(<zstd.h>)
-#include <zstd.h>
-#define MOBIUS_COMPRESSION_HAS_ZSTD 1
-#else
-#define MOBIUS_COMPRESSION_HAS_ZSTD 0
-#endif
-
 namespace {
 
 namespace fs = std::filesystem;
@@ -216,22 +209,11 @@ static FormatInfo format_from_name(const std::string& raw) {
         info.archive_format = "tar";
         info.compression_format = "gzip";
         info.supported = true;
-    } else if (fmt == "tar.zst" || fmt == "tzst") {
-        info.format = "tar.zst";
-        info.kind = "archive";
-        info.archive_format = "tar";
-        info.compression_format = "zstd";
-        info.supported = true;
     } else if (fmt == "gzip" || fmt == "gz") {
         info.format = "gzip";
         info.kind = "compressed_stream";
         info.compression_format = "gzip";
         info.supported = true;
-    } else if (fmt == "zstd" || fmt == "zst") {
-        info.format = "zstd";
-        info.kind = "compressed_stream";
-        info.compression_format = "zstd";
-        info.supported = MOBIUS_COMPRESSION_HAS_ZSTD;
     }
     return info;
 }
@@ -239,11 +221,9 @@ static FormatInfo format_from_name(const std::string& raw) {
 static FormatInfo infer_format_from_path(const std::string& path) {
     std::string lower = lower_copy(path);
     if (ends_with(lower, ".tar.gz") || ends_with(lower, ".tgz")) return format_from_name("tar.gz");
-    if (ends_with(lower, ".tar.zst") || ends_with(lower, ".tzst")) return format_from_name("tar.zst");
     if (ends_with(lower, ".zip") || ends_with(lower, ".mz")) return format_from_name("zip");
     if (ends_with(lower, ".tar")) return format_from_name("tar");
     if (ends_with(lower, ".gz")) return format_from_name("gzip");
-    if (ends_with(lower, ".zst")) return format_from_name("zstd");
     return {};
 }
 
@@ -258,10 +238,6 @@ static FormatInfo detect_format_from_magic(const std::string& path) {
     }
     if (prefix.size() >= 2 && prefix[0] == 0x1F && prefix[1] == 0x8B) {
         return format_from_name("gzip");
-    }
-    if (prefix.size() >= 4 && prefix[0] == 0x28 && prefix[1] == 0xB5 &&
-        prefix[2] == 0x2F && prefix[3] == 0xFD) {
-        return format_from_name("zstd");
     }
     if (prefix.size() >= 262 &&
         std::memcmp(prefix.data() + 257, "ustar", 5) == 0) {
@@ -278,7 +254,6 @@ static FormatInfo resolve_format(const std::string& path, const std::string& ove
 
     if (!by_path.format.empty() && !by_magic.format.empty()) {
         if (by_path.format == "tar.gz" && by_magic.format == "gzip") return by_path;
-        if (by_path.format == "tar.zst" && by_magic.format == "zstd") return by_path;
         return by_magic;
     }
     if (!by_path.format.empty()) return by_path;
@@ -447,12 +422,6 @@ static bool gzip_compress_file(const std::string& input_path, const std::string&
 static bool gzip_decompress_file(const std::string& input_path, const std::string& output_path,
                                  std::string& error);
 
-#if MOBIUS_COMPRESSION_HAS_ZSTD
-static bool zstd_compress_file(const std::string& input_path, const std::string& output_path,
-                               int level, std::string& error);
-static bool zstd_decompress_file(const std::string& input_path, const std::string& output_path,
-                                 std::string& error);
-#endif
 
 static bool is_within_root(const fs::path& root, const fs::path& candidate) {
     fs::path root_norm = root.lexically_normal();
@@ -968,14 +937,6 @@ static bool with_temp_tar_from_compressed(const std::string& path, const FormatI
     if (info.format == "tar.gz") {
         return gzip_decompress_file(path, temp_tar.path.string(), error);
     }
-    if (info.format == "tar.zst") {
-#if MOBIUS_COMPRESSION_HAS_ZSTD
-        return zstd_decompress_file(path, temp_tar.path.string(), error);
-#else
-        error = "zstd support is unavailable in this build";
-        return false;
-#endif
-    }
     error = "unsupported compressed tar format";
     return false;
 }
@@ -985,7 +946,7 @@ static bool list_archive_entries(const std::string& path, const FormatInfo& info
                                  std::string& error) {
     if (info.format == "zip") return list_zip_archive(path, entries, total_uncompressed, error);
     if (info.format == "tar") return list_tar_archive(path, entries, total_uncompressed, error);
-    if (info.format == "tar.gz" || info.format == "tar.zst") {
+    if (info.format == "tar.gz") {
         ScopedTempFile temp_tar;
         if (!with_temp_tar_from_compressed(path, info, temp_tar, error)) return false;
         return list_tar_archive(temp_tar.path.string(), entries, total_uncompressed, error);
@@ -998,7 +959,7 @@ static bool extract_archive(const std::string& path, const std::string& destinat
                             const CommonOptions& options, uint64_t& files_written, std::string& error) {
     if (info.format == "zip") return extract_zip_archive(path, destination, options, files_written, error);
     if (info.format == "tar") return extract_tar_archive(path, destination, options, files_written, error);
-    if (info.format == "tar.gz" || info.format == "tar.zst") {
+    if (info.format == "tar.gz") {
         ScopedTempFile temp_tar;
         if (!with_temp_tar_from_compressed(path, info, temp_tar, error)) return false;
         return extract_tar_archive(temp_tar.path.string(), destination, options, files_written, error);
@@ -1012,23 +973,13 @@ static bool create_archive(const std::string& output_path, const std::vector<Loc
                            std::string& error) {
     if (info.format == "zip") return write_zip_archive(output_path, entries, options, files_written, error);
     if (info.format == "tar") return write_tar_archive(output_path, entries, files_written, error);
-    if (info.format == "tar.gz" || info.format == "tar.zst") {
+    if (info.format == "tar.gz") {
         ScopedTempFile temp_tar;
         temp_tar.path = fs::u8path(unique_temp_path(".tar"));
         uint64_t temp_files_written = 0;
         if (!write_tar_archive(temp_tar.path.string(), entries, temp_files_written, error)) return false;
         files_written = temp_files_written;
-        if (info.format == "tar.gz") {
-            return gzip_compress_file(temp_tar.path.string(), output_path, options.compression_level, error);
-        }
-        if (info.format == "tar.zst") {
-#if MOBIUS_COMPRESSION_HAS_ZSTD
-            return zstd_compress_file(temp_tar.path.string(), output_path, options.compression_level, error);
-#else
-            error = "zstd support is unavailable in this build";
-            return false;
-#endif
-        }
+        return gzip_compress_file(temp_tar.path.string(), output_path, options.compression_level, error);
     }
     error = "format does not support archive creation";
     return false;
@@ -1202,75 +1153,6 @@ static bool gzip_decompress_file(const std::string& input_path, const std::strin
     return true;
 }
 
-#if MOBIUS_COMPRESSION_HAS_ZSTD
-static bool zstd_compress_file(const std::string& input_path, const std::string& output_path,
-                               int level, std::string& error) {
-    std::vector<unsigned char> input;
-    if (!read_entire_file(input_path, input, error)) return false;
-
-    int actual_level = level >= 0 ? level : ZSTD_CLEVEL_DEFAULT;
-    size_t bound = ZSTD_compressBound(input.size());
-    std::vector<unsigned char> out(bound);
-    size_t compressed = ZSTD_compress(out.data(), bound, input.data(), input.size(), actual_level);
-    if (ZSTD_isError(compressed)) {
-        error = ZSTD_getErrorName(compressed);
-        return false;
-    }
-
-    std::ofstream file(fs::u8path(output_path), std::ios::binary | std::ios::trunc);
-    if (!file) {
-        error = "unable to open output file";
-        return false;
-    }
-    file.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(compressed));
-    if (!file) {
-        error = "failed writing zstd output";
-        return false;
-    }
-    return true;
-}
-
-static bool zstd_decompress_file(const std::string& input_path, const std::string& output_path,
-                                 std::string& error) {
-    std::vector<unsigned char> input;
-    if (!read_entire_file(input_path, input, error)) return false;
-
-    ZSTD_DCtx* dctx = ZSTD_createDCtx();
-    if (!dctx) {
-        error = "failed to create zstd decompressor";
-        return false;
-    }
-
-    std::ofstream out(fs::u8path(output_path), std::ios::binary | std::ios::trunc);
-    if (!out) {
-        ZSTD_freeDCtx(dctx);
-        error = "unable to open output file";
-        return false;
-    }
-
-    ZSTD_inBuffer in_buf = {input.data(), input.size(), 0};
-    std::vector<unsigned char> out_buf_mem(kChunkSize);
-
-    while (in_buf.pos < in_buf.size) {
-        ZSTD_outBuffer out_buf = {out_buf_mem.data(), out_buf_mem.size(), 0};
-        size_t rc = ZSTD_decompressStream(dctx, &out_buf, &in_buf);
-        if (ZSTD_isError(rc)) {
-            ZSTD_freeDCtx(dctx);
-            error = ZSTD_getErrorName(rc);
-            return false;
-        }
-        out.write(reinterpret_cast<const char*>(out_buf.dst), static_cast<std::streamsize>(out_buf.pos));
-        if (!out) {
-            ZSTD_freeDCtx(dctx);
-            error = "failed writing decompressed output";
-            return false;
-        }
-    }
-
-    ZSTD_freeDCtx(dctx);
-    return true;
-}
-#endif
 
 static int compression_inspect_native(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count < 1 || arg_count > 2) {
@@ -1410,7 +1292,6 @@ static int compression_create_native(MobiusState* state, int arg_count, void* /*
     FormatInfo info = resolve_format(output_path, options.format);
     if (info.format == "tar" && !options.tar_compression.empty()) {
         if (lower_copy(options.tar_compression) == "gzip") info = format_from_name("tar.gz");
-        else if (lower_copy(options.tar_compression) == "zstd") info = format_from_name("tar.zst");
     }
     if (info.kind != "archive") {
         return mobius_error(state, "__create_native() is only valid for archive formats");
@@ -1465,18 +1346,8 @@ static int compression_compress_native(MobiusState* state, int arg_count, void* 
         return push_summary_table(state, "gzip", output_path, file_size_or_zero(output_path), 1);
     }
 
-    if (info.format == "zstd") {
-#if MOBIUS_COMPRESSION_HAS_ZSTD
-        if (!zstd_compress_file(input_path, output_path, options.compression_level, error)) {
-            return mobius_error(state, error.c_str());
-        }
-        return push_summary_table(state, "zstd", output_path, file_size_or_zero(output_path), 1);
-#else
-        return mobius_error(state, "__compress_native() zstd support is unavailable in this build");
-#endif
-    }
 
-    return mobius_error(state, "__compress_native() supports only gzip and zstd stream formats");
+    return mobius_error(state, "__compress_native() supports only the gzip stream format");
 }
 
 static int compression_decompress_native(MobiusState* state, int arg_count, void* /*userdata*/) {
@@ -1516,18 +1387,8 @@ static int compression_decompress_native(MobiusState* state, int arg_count, void
         return push_summary_table(state, "gzip", output_path, file_size_or_zero(output_path), 1);
     }
 
-    if (info.format == "zstd") {
-#if MOBIUS_COMPRESSION_HAS_ZSTD
-        if (!zstd_decompress_file(input_path, output_path, error)) {
-            return mobius_error(state, error.c_str());
-        }
-        return push_summary_table(state, "zstd", output_path, file_size_or_zero(output_path), 1);
-#else
-        return mobius_error(state, "__decompress_native() zstd support is unavailable in this build");
-#endif
-    }
 
-    return mobius_error(state, "__decompress_native() supports only gzip and zstd stream formats");
+    return mobius_error(state, "__decompress_native() supports only the gzip stream format");
 }
 
 static int init_compression_plugin(MobiusState* /*state*/) { return 0; }

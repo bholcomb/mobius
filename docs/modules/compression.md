@@ -25,15 +25,15 @@ Public API:
 Supported formats:
 
 - Archives: `zip`, `tar`
-- Compressed streams: `gzip`, `zstd`
-- Combined archive flows: `tar.gz`, `tar.zst`
+- Compressed streams: `gzip`
+- Combined archive flows: `tar.gz`
 - `.mz` is intended to be zip-based for package creation/install flows.
 
 Useful options:
 
 | Option | Meaning |
 |---|---|
-| `format` | Override format inference, such as `"gzip"`, `"zstd"`, `"zip"`, `"tar"`, `"tar.gz"`, or `"tar.zst"`. |
+| `format` | Override format inference, such as `"gzip"`, `"zip"`, `"tar"`, or `"tar.gz"`. |
 | `overwrite` | Output behavior: `"error"` (default) or `"replace"`. |
 | `compression_level` | Compression level when supported by the selected backend. |
 | `root_in_archive` | Prefix all created archive entries with a root directory. |
