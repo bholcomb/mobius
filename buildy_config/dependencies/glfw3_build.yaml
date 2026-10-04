@@ -17,6 +17,10 @@ environment:
       symbols: true
     release:
       optimization: speed
+    portable:
+      optimization: speed
+      compile:
+        flags: ["-march=x86-64-v2"]
 
 targets:
   static_libraries:

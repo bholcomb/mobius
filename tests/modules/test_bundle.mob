@@ -1,0 +1,90 @@
+// tools/bundle.mob makes a standalone executable: it runs its entry script
+// with its arguments, imports bundled scripts and modules (native ones
+// included), reads bundled data through bundle_dir, passes on the exit
+// code, and extracts once per content hash. Uses this build (bin/) as the
+// runtime; distributions use dist/portable/bin.
+import "process"
+import "os"
+import "io"
+
+var failures = 0
+func check(name, ok) {
+    if (!ok) {
+        failures++
+        print("FAIL: " + name)
+    }
+}
+
+var mobius = os.executable()
+var bin_dir = os.dirname(mobius)
+var bundler = os.join(os.dirname(bin_dir), "tools", "bundle.mob")
+var work = os.join(os.tmpdir(), "mobius_bundle_test_" + str(os.getpid()))
+var cache = os.join(work, "cache")
+os.mkdirp(os.join(work, "app", "data"))
+
+func write(path, text) {
+    var f = io.open(os.join(work, path), "w")
+    f:write(text)
+    f:close()
+}
+write("app/main.mob", "import \"json\"\nimport \"process\"\nimport \"util\"\n" +
+      "print(json.stringify(argv))\n" +
+      "print(util.greet(\"bundle\"))\n" +
+      "print(trim(readfile(bundle_dir + \"/data/message.txt\")))\n" +
+      "print(trim(process.run([\"echo\", \"child\"]).stdout))\n" +
+      "exit(size(argv))\n")
+write("app/util.mob", "func greet(who) { return \"hello \" + who }\n")
+write("app/data/message.txt", "from data\n")
+write("app/app.yaml", "name: hello\nentry: main.mob\nfiles: [util.mob, data]\nmodules: [json, process]\n")
+
+func bundle(manifest, output) {
+    return process.run([mobius, bundler, os.join(work, manifest), "-o", output, "--runtime", bin_dir])
+}
+func run_bundle(exe, args) {
+    var cmd = [exe]
+    for (var a in args) { cmd:push(a) }
+    return process.run(cmd, {env: {MOBIUS_BUNDLE_CACHE: cache}})
+}
+
+var exe = os.join(work, "hello")
+var made = bundle("app/app.yaml", exe)
+check("bundle succeeds: " + made.stderr, made.exit_code == 0)
+
+var r = run_bundle(exe, ["one", "two words"])
+check("runs: " + r.stderr, r.stdout == "[\"one\",\"two words\"]\nhello bundle\nfrom data\nchild\n")
+check("exit code passed on", r.exit_code == 2)
+check("extracted once", size(os.listdir(cache)) == 1)
+
+// Again: the cache is reused.
+r = run_bundle(exe, [])
+check("second run", r.exit_code == 0 && contains(r.stdout, "hello bundle"))
+check("still one extraction", size(os.listdir(cache)) == 1)
+
+// The executable works when moved: it carries everything.
+var moved = os.join(work, "elsewhere")
+os.mkdirp(moved)
+os.rename(exe, os.join(moved, "tool"))
+r = run_bundle(os.join(moved, "tool"), ["x"])
+check("moved bundle runs", r.exit_code == 1 && contains(r.stdout, "from data"))
+
+// Changed content gets its own extraction.
+write("app/data/message.txt", "changed\n")
+made = bundle("app/app.yaml", exe)
+r = run_bundle(exe, [])
+check("changed bundle", contains(r.stdout, "changed"))
+check("new extraction for new content", size(os.listdir(cache)) == 2)
+
+// Errors at bundle time.
+write("app/bad.yaml", "entry: main.mob\nmodules: [no_such_module]\n")
+made = bundle("app/bad.yaml", os.join(work, "bad"))
+check("unknown module refused", made.exit_code != 0 && contains(made.stderr, "no_such_module"))
+write("app/noentry.yaml", "entry: missing.mob\n")
+made = bundle("app/noentry.yaml", os.join(work, "bad"))
+check("missing entry refused", made.exit_code != 0 && contains(made.stderr, "missing.mob"))
+
+// The launcher alone is not a bundle.
+r = process.run([os.join(bin_dir, "mobius-launcher")])
+check("bare launcher explains itself", r.exit_code == 1 && contains(r.stderr, "no bundle attached"))
+
+process.run(["rm", "-rf", work])
+if (failures == 0) { print("bundle: PASS") } else { exit(1) }

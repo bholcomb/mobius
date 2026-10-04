@@ -102,6 +102,53 @@ root. See [Modules and Packages](../guide/modules-and-packages.md#packages).
 
 ---
 
+## Standalone executables
+
+`tools/bundle.mob` turns an application into one executable file that runs
+on another machine without Mobius installed. Describe the application in an
+`app.yaml` (paths relative to it):
+
+```yaml
+name: mytool            # output file name (default: the entry script's name)
+entry: main.mob         # the script to run
+files: [lib, data]      # more scripts and data files: files or directories
+modules: [json, process]  # installed modules it imports; dependencies are added
+```
+
+Build the distribution runtime once, then bundle:
+
+```sh
+tools/build_portable.sh                       # dist/portable/bin, for any x86-64-v2 CPU
+bin/mobius tools/bundle.mob app.yaml -o mytool
+./mytool arg1 arg2
+```
+
+The bundle is a small launcher with an archive appended: the core library,
+the listed modules (as installed, native libraries included), the entry
+script and the files. On first run it extracts the archive to
+`~/.cache/mobius/bundles/<hash>/` (`$XDG_CACHE_HOME` and
+`MOBIUS_BUNDLE_CACHE` are honored) and runs the entry script there; later
+runs reuse that directory, and a bundle with different content gets its own.
+Native libraries must be files to be loaded, so extracting is how a bundle
+carries them.
+
+Inside a bundle:
+
+- `argv` holds the command-line arguments, as for `mobius main.mob args...`;
+- `exit(code)` ends the program with that code; an uncaught error exits
+  with 1;
+- `import` finds bundled scripts next to the entry script and the bundled
+  modules;
+- `bundle_dir` is the directory holding the bundle's files, so data files
+  are read as `readfile(bundle_dir + "/data/config.toml")`. Keep files a
+  program writes elsewhere (the extraction directory is a cache).
+
+The target machine needs the C and C++ runtime libraries (`libc`,
+`libstdc++`) and a CPU at least at x86-64-v2 (any x86-64 CPU from about 2009
+on). The regular build in `bin/` is tuned for the build machine's CPU
+(`-march=native`), which is why bundles use `dist/portable`. Bundles are
+Linux-only for now, and stored uncompressed.
+
 ## Notes
 
 The runtime loader, archive builder, and installer are all in place. The

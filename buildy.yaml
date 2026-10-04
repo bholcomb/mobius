@@ -21,6 +21,16 @@ environment:
         flags: ["-O3", "-march=native", "-funroll-loops", "-flto"]
       link:
         flags: ["-flto", "-Wl,-O1"]
+    # Release build for distribution (standalone bundles): a CPU baseline
+    # any x86-64 machine from ~2009 on supports, instead of this machine's.
+    portable:
+      optimization: speed
+      defines: ["NDEBUG"]
+      compile:
+        remove_flags: ["-O2"]
+        flags: ["-O3", "-march=x86-64-v2", "-funroll-loops", "-flto"]
+      link:
+        flags: ["-flto", "-Wl,-O1"]
 
 workspace:
   modules:
@@ -43,6 +53,7 @@ staging:
     - folder: "bin"
       files:
         - "${out_dir}/bin/mobius"
+        - "${out_dir}/bin/mobius-launcher"
         - "${out_dir}/bin/libmobius-core.so"
     - folder: "bin/modules/compression"
       files:

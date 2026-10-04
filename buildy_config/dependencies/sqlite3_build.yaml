@@ -19,6 +19,11 @@ environment:
     release:
       optimization: speed
       defines: ["NDEBUG"]
+    portable:
+      optimization: speed
+      defines: ["NDEBUG"]
+      compile:
+        flags: ["-march=x86-64-v2"]
 
 targets:
   shared_libraries:
