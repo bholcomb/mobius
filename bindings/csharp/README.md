@@ -1,8 +1,38 @@
 # Mobius for C#
 
-A thin .NET 8 binding over the Mobius C API (`include/mobius/*.h`). It loads
-`libmobius-core.so` (`mobius-core.dll` on Windows, once supported), which must be
-on the loader's search path.
+A .NET 8 binding over the Mobius C API (`include/mobius/*.h`), in two layers:
+
+- `Native`: the whole C API, one to one, under the C names (`Native.mobius_stack_pushInt64`,
+  ...), with its structs (`MobiusConfig`, `MobiusError`, `MobiusFileSystem`, ...),
+  `MobiusValueType` and every constant. Use it as you would from C; callbacks are
+  `static [UnmanagedCallersOnly]` methods passed as function pointers.
+- `MobiusState`: an optional convenience layer (below) built on `Native`.
+  `state.Handle` is the `MobiusState*` for mixing the two.
+
+It loads `libmobius-core.so` (`mobius-core.dll` on Windows, once supported), which
+must be on the loader's search path.
+
+Using the C API directly:
+
+```csharp
+[UnmanagedCallersOnly]
+static int SpawnEnemy(IntPtr state, int argc, IntPtr userdata)
+{
+    var world = (World)GCHandle.FromIntPtr(userdata).Target!;
+    long kind = Native.mobius_stack_getInt64(state, 0);
+    Native.mobius_stack_pop(state, argc);
+    Native.mobius_stack_pushInt64(state, world.Spawn(kind));
+    return 1;
+}
+
+IntPtr s = Native.mobius_new_state(null);
+Native.mobius_init_stdlib(s);
+Native.mobius_register_function(s, "spawn_enemy", &SpawnEnemy, GCHandle.ToIntPtr(worldHandle));
+Native.mobius_exec_string(s, "spawn_enemy(3)");
+Native.mobius_free_state(s);
+```
+
+The convenience layer:
 
 ```csharp
 using Mobius;
