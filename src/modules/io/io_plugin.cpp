@@ -695,19 +695,21 @@ static MobiusPluginFunction io_functions[] = {
 };
 
 static MobiusPlugin io_plugin = {
-    .metadata = {
-        .name = "io",
-        .version = "1.0.0",
-        .description = "File and standard-stream objects",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "io" /* name */,
+        "1.0.0" /* version */,
+        "File and standard-stream objects" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = io_functions,
-    .function_count = sizeof(io_functions) / sizeof(io_functions[0]),
-    .init_plugin = nullptr,
-    .cleanup_plugin = nullptr,
-    .post_init = io_post_init,
+    io_functions /* functions */,
+    sizeof(io_functions) / sizeof(io_functions[0]) /* function_count */,
+    nullptr /* init_plugin */,
+    nullptr /* cleanup_plugin */,
+    io_post_init /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

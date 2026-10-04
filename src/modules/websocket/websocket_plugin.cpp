@@ -811,21 +811,21 @@ static const char* websocket_depends_on[] = {
 };
 
 static MobiusPlugin websocket_plugin = {
-    .metadata = {
-        .name = "websocket",
-        .version = "1.0.0",
-        .description = "Dependency-free websocket handshake, frame, and client transport helpers",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT",
-        .depends_on = websocket_depends_on,
-        .depends_on_count = sizeof(websocket_depends_on) / sizeof(websocket_depends_on[0]),
+    {
+        "websocket" /* name */,
+        "1.0.0" /* version */,
+        "Dependency-free websocket handshake, frame, and client transport helpers" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        websocket_depends_on /* depends_on */,
+        sizeof(websocket_depends_on) / sizeof(websocket_depends_on[0]) /* depends_on_count */
     },
-    .functions = websocket_functions,
-    .function_count = sizeof(websocket_functions) / sizeof(websocket_functions[0]),
-    .init_plugin = init_websocket_plugin,
-    .cleanup_plugin = cleanup_websocket_plugin,
-    .post_init = nullptr,
+    websocket_functions /* functions */,
+    sizeof(websocket_functions) / sizeof(websocket_functions[0]) /* function_count */,
+    init_websocket_plugin /* init_plugin */,
+    cleanup_websocket_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

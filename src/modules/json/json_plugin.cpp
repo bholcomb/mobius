@@ -740,19 +740,21 @@ static MobiusPluginFunction json_functions[] = {
 };
 
 static MobiusPlugin json_plugin = {
-    .metadata = {
-        .name = "json",
-        .version = "1.0.0",
-        .description = "JSON Parser and Serializer",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "json" /* name */,
+        "1.0.0" /* version */,
+        "JSON Parser and Serializer" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = json_functions,
-    .function_count = sizeof(json_functions) / sizeof(json_functions[0]),
-    .init_plugin = init_json_plugin,
-    .cleanup_plugin = cleanup_json_plugin,
-    .post_init = nullptr,
+    json_functions /* functions */,
+    sizeof(json_functions) / sizeof(json_functions[0]) /* function_count */,
+    init_json_plugin /* init_plugin */,
+    cleanup_json_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

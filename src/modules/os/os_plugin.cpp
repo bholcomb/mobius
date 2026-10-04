@@ -1537,19 +1537,21 @@ static MobiusPluginFunction os_functions[] = {
 };
 
 static MobiusPlugin os_plugin = {
-    .metadata = {
-        .name = "os",
-        .version = "1.0.0",
-        .description = "Operating System Interface",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "os" /* name */,
+        "1.0.0" /* version */,
+        "Operating System Interface" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = os_functions,
-    .function_count = sizeof(os_functions) / sizeof(os_functions[0]),
-    .init_plugin = init_os_plugin,
-    .cleanup_plugin = cleanup_os_plugin,
-    .post_init = os_post_init,
+    os_functions /* functions */,
+    sizeof(os_functions) / sizeof(os_functions[0]) /* function_count */,
+    init_os_plugin /* init_plugin */,
+    cleanup_os_plugin /* cleanup_plugin */,
+    os_post_init /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

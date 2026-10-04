@@ -5,6 +5,12 @@ entry:
 platforms:
   linux-x86_64:
     module_library: native/linux-x86_64/compression.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/compression.dll
+  macos-arm64:
+    module_library: native/macos-arm64/compression.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/compression.dylib
 dependencies:
   mobius_modules: []
 metadata:

@@ -596,19 +596,21 @@ static MobiusPluginFunction crypto_functions[] = {
 };
 
 static MobiusPlugin crypto_plugin = {
-    .metadata = {
-        .name = "crypto",
-        .version = "1.0.0",
-        .description = "Dependency-free hashing and encoding helpers",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "crypto" /* name */,
+        "1.0.0" /* version */,
+        "Dependency-free hashing and encoding helpers" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = crypto_functions,
-    .function_count = sizeof(crypto_functions) / sizeof(crypto_functions[0]),
-    .init_plugin = init_crypto_plugin,
-    .cleanup_plugin = cleanup_crypto_plugin,
-    .post_init = nullptr,
+    crypto_functions /* functions */,
+    sizeof(crypto_functions) / sizeof(crypto_functions[0]) /* function_count */,
+    init_crypto_plugin /* init_plugin */,
+    cleanup_crypto_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

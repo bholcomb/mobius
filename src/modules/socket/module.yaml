@@ -3,6 +3,12 @@ version: 0.1.0
 platforms:
   linux-x86_64:
     module_library: native/linux-x86_64/socket.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/socket.dll
+  macos-arm64:
+    module_library: native/macos-arm64/socket.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/socket.dylib
 dependencies:
   mobius_modules: []
 metadata:

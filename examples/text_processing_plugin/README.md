@@ -85,18 +85,21 @@ static MobiusPluginFunction functions[] = {
 };
 
 static MobiusPlugin plugin = {
-    .metadata = {
-        .name        = "text_processing",
-        .version     = "1.0.0",
-        .description = "Advanced Text Processing Functions",
-        .author      = "Mobius Examples",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license     = "MIT",
+    {
+        "text_processing" /* name */,
+        "1.0.0" /* version */,
+        "Advanced Text Processing Functions" /* description */,
+        "Mobius Examples" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions      = functions,
-    .function_count = sizeof(functions) / sizeof(functions[0]),
-    .init_plugin    = NULL,
-    .cleanup_plugin = NULL,
+    functions /* functions */,
+    sizeof(functions) / sizeof(functions[0]) /* function_count */,
+    NULL /* init_plugin */,
+    NULL /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

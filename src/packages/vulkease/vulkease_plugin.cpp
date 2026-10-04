@@ -543,19 +543,21 @@ static MobiusPluginFunction vulkease_functions[] = {
 };
 
 static MobiusPlugin vulkease_plugin = {
-    .metadata = {
-        .name = "vulkease",
-        .version = "0.1.0",
-        .description = "VulkEase graphics bootstrap bindings for Mobius",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "vulkease" /* name */,
+        "0.1.0" /* version */,
+        "VulkEase graphics bootstrap bindings for Mobius" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = vulkease_functions,
-    .function_count = sizeof(vulkease_functions) / sizeof(vulkease_functions[0]),
-    .init_plugin = nullptr,
-    .cleanup_plugin = cleanup_vulkease_plugin,
-    .post_init = vulkease_post_init,
+    vulkease_functions /* functions */,
+    sizeof(vulkease_functions) / sizeof(vulkease_functions[0]) /* function_count */,
+    nullptr /* init_plugin */,
+    cleanup_vulkease_plugin /* cleanup_plugin */,
+    vulkease_post_init /* post_init */
 };
 
 } // namespace

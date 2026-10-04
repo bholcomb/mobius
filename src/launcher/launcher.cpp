@@ -16,6 +16,16 @@
 // Offsets are from the start of the file. The hash names the cache
 // directory, so a changed bundle never reuses an old extraction.
 
+#if !defined(__linux__)
+// Standalone bundles are Linux-only for now: elsewhere this program only
+// says so (it is still built, as a target of every platform).
+#include <cstdio>
+int main() {
+    fprintf(stderr, "mobius bundle: standalone bundles are supported on Linux only for now\n");
+    return 1;
+}
+#else
+
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
@@ -271,3 +281,5 @@ int main(int argc, char* argv[]) {
     api.free_state(state);
     return rc == 0 ? 0 : 1;
 }
+
+#endif // __linux__

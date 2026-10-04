@@ -629,19 +629,21 @@ static MobiusPluginFunction math_functions[] = {
 };
 
 static MobiusPlugin math_plugin = {
-    .metadata = {
-        .name = "math",
-        .version = "1.0.0",
-        .description = "Extended Mathematical Functions",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "math" /* name */,
+        "1.0.0" /* version */,
+        "Extended Mathematical Functions" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = math_functions,
-    .function_count = sizeof(math_functions) / sizeof(math_functions[0]),
-    .init_plugin = init_math_plugin,
-    .cleanup_plugin = cleanup_math_plugin,
-    .post_init = math_post_init,
+    math_functions /* functions */,
+    sizeof(math_functions) / sizeof(math_functions[0]) /* function_count */,
+    init_math_plugin /* init_plugin */,
+    cleanup_math_plugin /* cleanup_plugin */,
+    math_post_init /* post_init */
 };
 
 extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {

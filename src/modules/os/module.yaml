@@ -3,6 +3,12 @@ version: 0.1.0
 platforms:
   linux-x86_64:
     module_library: native/linux-x86_64/os.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/os.dll
+  macos-arm64:
+    module_library: native/macos-arm64/os.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/os.dylib
 dependencies:
   mobius_modules: []
 metadata:

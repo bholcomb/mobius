@@ -1733,19 +1733,21 @@ static MobiusPluginFunction glfw_functions[] = {
 };
 
 static MobiusPlugin glfw_plugin = {
-    .metadata = {
-        .name = "glfw",
-        .version = "0.4.0",
-        .description = "GLFW windowing and input bindings for Mobius",
-        .author = "Mobius Team",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "glfw" /* name */,
+        "0.4.0" /* version */,
+        "GLFW windowing and input bindings for Mobius" /* description */,
+        "Mobius Team" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = glfw_functions,
-    .function_count = sizeof(glfw_functions) / sizeof(glfw_functions[0]),
-    .init_plugin = nullptr,
-    .cleanup_plugin = cleanup_glfw_plugin,
-    .post_init = glfw_post_init,
+    glfw_functions /* functions */,
+    sizeof(glfw_functions) / sizeof(glfw_functions[0]) /* function_count */,
+    nullptr /* init_plugin */,
+    cleanup_glfw_plugin /* cleanup_plugin */,
+    glfw_post_init /* post_init */
 };
 
 } // namespace

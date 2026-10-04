@@ -22,20 +22,23 @@ targets:
         - "${workspace}/src"
         - "${workspace}/src/mobius"
       flags:
-        - "-fvisibility=hidden"
         - "-DMOBIUS_BUILDING"
+        - linux: ["-fvisibility=hidden"]
+        - macos: ["-fvisibility=hidden"]
       # The SONAME lets plugins (which name libmobius-core.so as a needed
       # library) bind to a copy already loaded from any path, e.g. by a
       # standalone bundle's launcher.
       link:
-        flags: ["-Wl,-soname,libmobius-core.so"]
-      libs: ["pthread"]
+        flags:
+          - linux: ["-Wl,-soname,libmobius-core.so"]
+          - macos: ["-Wl,-install_name,@rpath/libmobius-core.dylib"]
+      libs: [{linux: ["pthread", "dl"]}, {windows: ["ws2_32"]}]
 
   executables:
     - name: mobius-launcher
       language: cpp
       sources: ["launcher/launcher.cpp"]
-      libs: ["dl"]
+      libs: [{linux: ["dl"]}]
 
     - name: mobius
       language: cpp
@@ -44,6 +47,6 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
-      libs: ["mobius-core", "m", "dl", "pthread"]
+      libs: ["mobius-core", {linux: ["m", "dl", "pthread"]}]
       depends_on:
         targets: ["mobius-core"]

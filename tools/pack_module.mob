@@ -66,7 +66,12 @@ func validate_manifest(package_dir, manifest) {
             saw_platform = true
             var platform_spec = expect_table(spec, "platforms." + str(platform))
             if (platform_spec.module_library != nil) {
-                ensure_file(package_dir, expect_string(platform_spec.module_library, "platforms." + str(platform) + ".module_library"), "platform module_library")
+                // A manifest names every platform the package supports; a
+                // package built on one machine carries only that machine's
+                // libraries. Platforms whose library isn't here are skipped,
+                // but one that is here must be complete.
+                var library = expect_string(platform_spec.module_library, "platforms." + str(platform) + ".module_library")
+                if (!os.is_file(os.join(package_dir, library))) { continue }
                 has_entry = true
             }
             if (platform_spec.runtime_libraries != nil) {

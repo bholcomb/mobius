@@ -7,6 +7,18 @@ platforms:
     module_library: native/linux-x86_64/monstro.so
     runtime_libraries:
       - native/linux-x86_64/libmonstro.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/monstro.dll
+    runtime_libraries:
+      - native/windows-x86_64/monstro.dll
+  macos-arm64:
+    module_library: native/macos-arm64/monstro.dylib
+    runtime_libraries:
+      - native/macos-arm64/libmonstro.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/monstro.dylib
+    runtime_libraries:
+      - native/macos-x86_64/libmonstro.dylib
 dependencies:
   mobius_modules: []
 metadata:

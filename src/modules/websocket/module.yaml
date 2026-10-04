@@ -5,6 +5,12 @@ entry:
 platforms:
   linux-x86_64:
     module_library: native/linux-x86_64/websocket.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/websocket.dll
+  macos-arm64:
+    module_library: native/macos-arm64/websocket.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/websocket.dylib
 dependencies:
   mobius_modules: [crypto, http, socket]
 metadata:

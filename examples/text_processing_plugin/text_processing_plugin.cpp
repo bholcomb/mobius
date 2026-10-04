@@ -483,18 +483,21 @@ static MobiusPluginFunction text_processing_functions[] = {
 // ============================================================================
 
 static MobiusPlugin text_processing_plugin = {
-    .metadata = {
-        .name = "text_processing",
-        .version = "1.0.0",
-        .description = "Advanced Text Processing Functions",
-        .author = "Mobius Examples",
-        .api_version = MOBIUS_PLUGIN_API_VERSION,
-        .license = "MIT"
+    {
+        "text_processing" /* name */,
+        "1.0.0" /* version */,
+        "Advanced Text Processing Functions" /* description */,
+        "Mobius Examples" /* author */,
+        MOBIUS_PLUGIN_API_VERSION /* api_version */,
+        "MIT" /* license */,
+        nullptr /* depends_on */,
+        0 /* depends_on_count */
     },
-    .functions = text_processing_functions,
-    .function_count = sizeof(text_processing_functions) / sizeof(text_processing_functions[0]),
-    .init_plugin = init_text_processing_plugin,
-    .cleanup_plugin = cleanup_text_processing_plugin,
+    text_processing_functions /* functions */,
+    sizeof(text_processing_functions) / sizeof(text_processing_functions[0]) /* function_count */,
+    init_text_processing_plugin /* init_plugin */,
+    cleanup_text_processing_plugin /* cleanup_plugin */,
+    nullptr /* post_init */
 };
 
 // ============================================================================

@@ -7,6 +7,18 @@ platforms:
     module_library: native/linux-x86_64/sqlite.so
     runtime_libraries:
       - native/linux-x86_64/libsqlite3.so
+  windows-x86_64:
+    module_library: native/windows-x86_64/sqlite.dll
+    runtime_libraries:
+      - native/windows-x86_64/sqlite3.dll
+  macos-arm64:
+    module_library: native/macos-arm64/sqlite.dylib
+    runtime_libraries:
+      - native/macos-arm64/libsqlite3.dylib
+  macos-x86_64:
+    module_library: native/macos-x86_64/sqlite.dylib
+    runtime_libraries:
+      - native/macos-x86_64/libsqlite3.dylib
 dependencies:
   mobius_modules: []
 metadata:
