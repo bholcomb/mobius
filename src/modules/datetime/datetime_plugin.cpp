@@ -6,32 +6,18 @@
 #include <string>
 #include <cctype>
 
-#ifdef _WIN32
-  #include <time.h>
-#endif
+#include "modules/internal/module_platform.h"
 
 static bool localtime_safe(time_t value, struct tm* out) {
-#ifdef _WIN32
-    return localtime_s(out, &value) == 0;
-#else
-    return localtime_r(&value, out) != nullptr;
-#endif
+    return module_platform_localtime((int64_t)value, out);
 }
 
 static bool gmtime_safe(time_t value, struct tm* out) {
-#ifdef _WIN32
-    return gmtime_s(out, &value) == 0;
-#else
-    return gmtime_r(&value, out) != nullptr;
-#endif
+    return module_platform_gmtime((int64_t)value, out);
 }
 
 static time_t timegm_safe(struct tm* tm_value) {
-#ifdef _WIN32
-    return _mkgmtime(tm_value);
-#else
-    return timegm(tm_value);
-#endif
+    return (time_t)module_platform_timegm(tm_value);
 }
 
 static void push_datetime_table(MobiusState* state, const struct tm& tm_value,

@@ -64,13 +64,13 @@ Notes:
 
 - This module is plain TCP only. HTTPS and secure WebSocket support will layer on
   later with TLS.
-- Calls look blocking but don't hold a thread (Linux): a fiber waiting to
+- Calls look blocking but don't hold a thread: a fiber waiting to
   connect, accept, send or receive is set aside until the socket is ready, and
   the worker threads run other fibers meanwhile, so a server can have a fiber
   per connection. `fiber.cancel` interrupts a waiting call with a
   `CancellationError`, and closing a socket wakes any fiber waiting on it (its
   call fails with "socket is closed"). Host name lookup still blocks its
-  thread. On Windows, calls currently block their worker thread.
+  thread.
 - `recv()` is buffer-first by design so higher-level protocols can decide how to
   decode the payload.
 - UDP `recv_from()` is also buffer-first and includes a `text` helper for valid
