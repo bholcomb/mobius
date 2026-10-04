@@ -1,0 +1,38 @@
+// Calling a top-level function by name with the wrong number of arguments
+// reports the count. In top-level code such calls compile to direct calls,
+// which skip loading the function; with a wrong count they fell back to an
+// ordinary call on an empty register and reported "Attempt to call a
+// non-function value (type: nil)". (The calls must stay at the top level.)
+
+var failures = 0
+func check(name, msg, needle) {
+    if (!contains(msg, needle)) {
+        failures++
+        print("FAIL: " + name + ": expected '" + needle + "', got '" + msg + "'")
+    }
+}
+
+func one(a) { return a }
+func two(a, b) { return a + b }
+func with_default(a, b = 10) { return a + b }
+
+var m = ""
+try { one() } catch e { m = str(e) }
+check("too few", m, "expects 1 arguments but got 0")
+m = ""
+try { two(1, 2, 3) } catch e { m = str(e) }
+check("too many", m, "expects 2 arguments but got 3")
+m = ""
+try { with_default() } catch e { m = str(e) }
+check("too few with defaults", m, "expects 1 to 2 arguments but got 0")
+m = ""
+try { with_default(1, 2, 3) } catch e { m = str(e) }
+check("too many with defaults", m, "expects 1 to 2 arguments but got 3")
+
+// Correct counts still work, including omitted defaults.
+if (one(4) != 4 || two(2, 3) != 5 || with_default(1) != 11 || with_default(1, 2) != 3) {
+    failures++
+    print("FAIL: correct calls")
+}
+
+if (failures == 0) { print("direct call arg count: PASS") } else { exit(1) }
