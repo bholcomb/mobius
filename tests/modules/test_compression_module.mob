@@ -173,6 +173,38 @@ os.rmdir(targz_extract_dir + "/" + payload_name)
 os.rmdir(targz_extract_dir)
 os.rmdir(archive_root)
 
+// Non-ASCII paths (UTF-8) in every format; zip keeps modification times.
+var uni_root = os.tmpdir() + "/mobius_compression_ünï_" + str(os.getpid())
+var uni_src = uni_root + "/naïve 日本"
+assert_test("unicode mkdirp", os.mkdirp(uni_src))
+assert_test("unicode write", writefile(uni_src + "/café.txt", "crème brûlée"))
+var uni_mtime = os.stat(uni_src + "/café.txt").mtime
+for (var fmt in ["zip", "tar", "tar.gz"]) {
+    var archive = uni_root + "/archive é." + fmt
+    var created = compression.create(archive, [uni_src], { format: fmt })
+    assert_test("unicode " + fmt + " create", created.ok == true)
+    var listed = compression.list(archive, nil)
+    assert_test("unicode " + fmt + " list", has_entry(listed, "naïve 日本/café.txt", "file"))
+    var out_dir = uni_root + "/out ü " + fmt
+    compression.extract(archive, out_dir, nil)
+    assert_test("unicode " + fmt + " extract", readfile(out_dir + "/naïve 日本/café.txt") == "crème brûlée")
+    if (fmt == "zip") {
+        var got = os.stat(out_dir + "/naïve 日本/café.txt").mtime
+        assert_test("zip keeps mtime", got - uni_mtime <= 2 && uni_mtime - got <= 2)
+    }
+}
+compression.compress(uni_src + "/café.txt", uni_root + "/café.txt.gz", nil)
+compression.decompress(uni_root + "/café.txt.gz", uni_root + "/café out.txt", nil)
+assert_test("unicode gzip roundtrip", readfile(uni_root + "/café out.txt") == "crème brûlée")
+var uni_files = os.walkdir(uni_root)
+for (var i = size(uni_files) - 1; i >= 0; i--) {
+    if (os.is_file(uni_files[i])) { os.remove(uni_files[i]) }
+}
+for (var i = size(uni_files) - 1; i >= 0; i--) {
+    if (os.is_dir(uni_files[i])) { os.rmdir(uni_files[i]) }
+}
+os.rmdir(uni_root)
+
 print("")
 print("Compression Module Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
 if (fail_count == 0) {

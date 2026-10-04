@@ -7,7 +7,11 @@ targets:
     - name: compression
       language: cpp
       output_prefix: ""
-      sources: ["compression/compression_plugin.cpp"]
+      sources:
+        - "compression/compression_plugin.cpp"
+        - linux: ["internal/module_platform_posix.cpp"]
+        - macos: ["internal/module_platform_posix.cpp"]
+        - windows: ["internal/module_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src"

@@ -24,6 +24,18 @@ int64_t module_platform_timegm(struct tm* value) {
     return (int64_t)_mkgmtime64(value);
 }
 
+static std::wstring widen(const std::string& s) {
+    if (s.empty()) return std::wstring();
+    int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), nullptr, 0);
+    std::wstring w((size_t)n, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), &w[0], n);
+    return w;
+}
+
+FILE* module_platform_fopen(const std::string& path, const char* mode) {
+    return _wfopen(widen(path).c_str(), widen(mode).c_str());
+}
+
 bool module_platform_random(uint8_t* data, size_t len) {
     while (len > 0) {
         ULONG chunk = len > 0x7FFFFFFF ? 0x7FFFFFFF : (ULONG)len;
