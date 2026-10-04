@@ -3,58 +3,8 @@
 #include <cstdlib>
 #include <cstdio>
 
-#ifdef _WIN32
-#  include <windows.h>
-#else
-#  include <sys/mman.h>
-#  include <unistd.h>
-#endif
-
-static size_t get_page_size() {
-#ifdef _WIN32
-    SYSTEM_INFO si;
-    GetSystemInfo(&si);
-    return si.dwPageSize;
-#else
-    return (size_t)sysconf(_SC_PAGESIZE);
-#endif
-}
-
-static size_t align_up(size_t value, size_t alignment) {
-    return (value + alignment - 1) & ~(alignment - 1);
-}
-
-// Allocate stack memory with a guard page at the bottom to catch overflow.
-// Layout: [guard page | usable stack]
-// Stack grows downward, so the guard page is at the low address.
-static void* alloc_stack(size_t usable_size, size_t page_size) {
-    size_t total = page_size + usable_size;
-#ifdef _WIN32
-    void* mem = VirtualAlloc(nullptr, total, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (!mem) return nullptr;
-    DWORD old;
-    VirtualProtect(mem, page_size, PAGE_NOACCESS, &old);
-#else
-    void* mem = mmap(nullptr, total, PROT_READ | PROT_WRITE,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (mem == MAP_FAILED) return nullptr;
-    mprotect(mem, page_size, PROT_NONE);
-#endif
-    return mem;
-}
-
-static void free_stack(void* mem, size_t usable_size, size_t page_size) {
-    size_t total = page_size + usable_size;
-#ifdef _WIN32
-    VirtualFree(mem, 0, MEM_RELEASE);
-    (void)total;
-#else
-    munmap(mem, total);
-#endif
-}
-
 FiberPool::FiberPool(size_t fiber_stack_size, size_t initial_count, size_t max_count)
-    : fiber_stack_size_(align_up(fiber_stack_size, get_page_size())),
+    : fiber_stack_size_(fiber_stack_size),
       max_count_(max_count), next_id_(1) {
     all_fibers_.reserve(initial_count);
     free_list_.reserve(initial_count);
@@ -71,17 +21,12 @@ FiberPool::~FiberPool() {
 }
 
 MobiusFiber* FiberPool::allocateFiber() {
-    size_t page_size = get_page_size();
-    // Windows fibers get OS-allocated stacks (see fiber_context.h).
-    void* mem = nullptr;
-    if (kFiberStacksFromPool) {
-        mem = alloc_stack(fiber_stack_size_, page_size);
-        if (!mem) return nullptr;
-    }
+    PlatformFiber* context = platform_fiber_create(fiber_stack_size_);
+    if (!context) return nullptr;
 
     MobiusFiber* fiber = new MobiusFiber();
     fiber->id = next_id_++;
-    fiber->stack_memory = mem;
+    fiber->context = context;
     fiber->stack_size = fiber_stack_size_;
     fiber->state = FiberState::Idle;
     fiber->vm = nullptr;
@@ -93,10 +38,7 @@ MobiusFiber* FiberPool::allocateFiber() {
 }
 
 void FiberPool::deallocateFiber(MobiusFiber* fiber) {
-    fiber_context_destroy(&fiber->context);
-    if (fiber->stack_memory) {
-        free_stack(fiber->stack_memory, fiber->stack_size, get_page_size());
-    }
+    platform_fiber_destroy(fiber->context);
     delete fiber;
 }
 
@@ -129,21 +71,16 @@ void FiberPool::release(MobiusFiber* fiber) {
 }
 
 MobiusFiber* FiberPool::createDetachedFiber(size_t stack_size) {
-    size_t page_size = get_page_size();
-    size_t usable = align_up(stack_size, page_size);
-    void* mem = nullptr;
-    if (kFiberStacksFromPool) {
-        mem = alloc_stack(usable, page_size);
-        if (!mem) return nullptr;
-    }
+    PlatformFiber* context = platform_fiber_create(stack_size);
+    if (!context) return nullptr;
 
     MobiusFiber* fiber = new MobiusFiber();
     {
         std::lock_guard<std::mutex> lock(mutex_);
         fiber->id = next_id_++;
     }
-    fiber->stack_memory = mem;
-    fiber->stack_size = usable;
+    fiber->context = context;
+    fiber->stack_size = stack_size;
     fiber->state = FiberState::Idle;
     fiber->vm = nullptr;
     fiber->cancel_requested.store(false, std::memory_order_relaxed);

@@ -6,37 +6,11 @@
 #include <mobius/mobius.h>
 #include <mobius/mobius_plugin.h>
 
-#if defined(_WIN32)
-#  include <windows.h>
-#elif defined(__APPLE__)
-#  include <mach-o/dyld.h>
-#  include <limits.h>
-#else
-#  include <unistd.h>
-#  include <limits.h>
-#endif
+#include "platform/mobius_platform.h"
 
 // Directory containing the running executable, or empty on failure.
 static std::string executable_dir() {
-    std::string path;
-#if defined(_WIN32)
-    char buf[MAX_PATH];
-    DWORD len = GetModuleFileNameA(nullptr, buf, (DWORD)sizeof(buf));
-    if (len == 0 || len >= sizeof(buf)) return std::string();
-    path.assign(buf, len);
-#elif defined(__APPLE__)
-    uint32_t size = 0;
-    _NSGetExecutablePath(nullptr, &size);
-    std::string tmp(size + 1, '\0');
-    if (_NSGetExecutablePath(&tmp[0], &size) != 0) return std::string();
-    path.assign(tmp.c_str());
-#else
-    char buf[PATH_MAX];
-    ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
-    if (len < 0) return std::string();
-    buf[len] = '\0';
-    path.assign(buf);
-#endif
+    std::string path = platform_executable_path();
     size_t slash = path.find_last_of("/\\");
     if (slash == std::string::npos) return std::string();
     return path.substr(0, slash);
@@ -54,11 +28,7 @@ static void register_module_directories(MobiusState* state) {
 
     const char* env_path = getenv("MOBIUS_MODULE_PATH");
     if (env_path && *env_path) {
-#if defined(_WIN32)
-        const char list_sep = ';';
-#else
-        const char list_sep = ':';
-#endif
+        const char list_sep = platform_path_list_separator();
         std::string s(env_path);
         size_t start = 0;
         while (start <= s.size()) {

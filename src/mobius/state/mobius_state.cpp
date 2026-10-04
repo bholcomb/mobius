@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 199309L 
 
-#include "util/platform.h"
+#include "platform/mobius_platform.h"
 #include "frontend/diagnostics.h"
 #include <chrono>
 #include <mobius/mobius_plugin.h>

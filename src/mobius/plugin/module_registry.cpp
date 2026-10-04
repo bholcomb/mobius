@@ -1,5 +1,5 @@
 
-#include "util/platform.h"
+#include "platform/mobius_platform.h"
 #include <mobius/mobius.h>
 #include "plugin/module_registry.h"
 #include "state/mobius_state.h"
@@ -155,38 +155,6 @@ static bool is_regular_file_path(const std::string& path) {
     return platform_is_regular_file(path);
 }
 
-static const char* native_module_extension() {
-#if defined(_WIN32)
-    return ".dll";
-#elif defined(__APPLE__)
-    return ".dylib";
-#else
-    return ".so";
-#endif
-}
-
-static std::string current_platform_key() {
-#if defined(_WIN32)
-  #if defined(_M_ARM64) || defined(__aarch64__)
-    return "windows-aarch64";
-  #else
-    return "windows-x86_64";
-  #endif
-#elif defined(__APPLE__)
-  #if defined(__aarch64__) || defined(__arm64__)
-    return "macos-aarch64";
-  #else
-    return "macos-x86_64";
-  #endif
-#else
-  #if defined(__aarch64__)
-    return "linux-aarch64";
-  #else
-    return "linux-x86_64";
-  #endif
-#endif
-}
-
 static bool parse_package_manifest(const std::string& manifest_path, PackageManifest& out, std::string& error) {
     out = PackageManifest{};
     std::ifstream in(manifest_path);
@@ -205,7 +173,7 @@ static bool parse_package_manifest(const std::string& manifest_path, PackageMani
     };
 
     Section section = Section::root;
-    const std::string wanted_platform = current_platform_key();
+    const std::string wanted_platform = std::string(platform_name());
     bool in_wanted_platform = false;
     bool saw_platforms = false;
     bool saw_any_platform_module_library = false;
@@ -361,7 +329,7 @@ static ModulePaths resolve_flat_module_paths(const std::string& dir, const char*
     ModulePaths out;
 
     if (want_native) {
-        std::string so_path = dir + "/" + name + native_module_extension();
+        std::string so_path = dir + "/" + name + platform_library_extension();
         if (is_regular_file_path(so_path)) {
             out.has_so = true;
             out.so_path = std::move(so_path);

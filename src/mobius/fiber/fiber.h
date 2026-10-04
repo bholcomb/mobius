@@ -1,7 +1,7 @@
 #ifndef MOBIUS_FIBER_H
 #define MOBIUS_FIBER_H
 
-#include "fiber/fiber_context.h"
+#include "platform/mobius_platform.h"
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -18,12 +18,11 @@ enum class FiberState : uint8_t {
 };
 
 struct MobiusFiber {
-    FiberContext context;
+    PlatformFiber* context;        // execution context and stack
     uint32_t     id;
     FiberState   state;
 
-    void*        stack_memory;     // mmap'd region (includes guard page)
-    size_t       stack_size;       // usable stack bytes (excludes guard page)
+    size_t       stack_size;       // usable stack bytes
 
     MobiusVM*    vm;               // back-pointer to the VM running on this fiber
 
@@ -44,8 +43,8 @@ struct MobiusFiber {
     int          host_call_depth = 0;
 
     MobiusFiber()
-        : id(0), state(FiberState::Idle),
-          stack_memory(nullptr), stack_size(0),
+        : context(nullptr), id(0), state(FiberState::Idle),
+          stack_size(0),
           vm(nullptr), cancel_requested(false),
           peak_stack_bytes(0) {}
 };
