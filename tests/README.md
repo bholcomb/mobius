@@ -1,25 +1,29 @@
 # Mobius Test Suite
 
-Behavioral tests for the Mobius interpreter, written as `.mob` scripts and run by
-the [`test_simple.sh`](../test_simple.sh) runner at the project root.
+Behavioral tests for the Mobius interpreter, written as `.mob` scripts, plus
+C API tests in `tests/embed/`, run by [`tools/run_tests.mob`](../tools/run_tests.mob).
 
 ## Running
 
 ```bash
-./test_simple.sh
+./test_simple.sh                    # Linux and macOS
+bin/mobius tools/run_tests.mob      # any platform
 ```
 
 The runner:
 
-1. Finds every `*.mob` file under `tests/` (sorted).
-2. Runs each with `bin/mobius`, with a 10-second timeout.
+1. Finds every `test_*.mob` file under `tests/` (sorted); helper scripts and
+   fixtures are skipped.
+2. Runs each with `bin/mobius` from the project root, with a 10-second timeout.
 3. Treats **exit code 0 as pass** — unless the test is listed in
    [`expected_failures.txt`](expected_failures.txt), in which case a non-zero
-   exit is the pass (these verify that errors are reported correctly).
-4. Prints a per-test ✅/❌ line and a final summary with the success rate.
-
-> Note: for files directly under `tests/` and under `tests/modules/`, only those
-> named `test_*.mob` are executed; helper scripts and fixtures are skipped.
+   exit is the pass (these verify that errors are reported correctly). Exit
+   code 77 means the test skipped itself because something it needs isn't
+   built here (the `monstro` and `vulkease` packages).
+4. Compiles each `tests/embed/test_*.c` against `bin/`'s core library with the
+   system C compiler (`cc`) and runs it the same way. These use POSIX threads,
+   so they are skipped on Windows.
+5. Prints a line per test and a summary, and exits 1 if any test failed.
 
 A test "passes" simply by running to completion with the expected exit status,
 so tests assert their own invariants and call `exit(1)` (or `throw`) on failure.

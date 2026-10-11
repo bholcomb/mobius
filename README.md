@@ -178,7 +178,8 @@ Full documentation lives in [`docs/`](docs/index.md).
 
 The [`examples/`](examples/) directory has embedding examples (C and C++),
 plugin and userdata examples, networking servers, and pure-Mobius demo
-scripts. Run the test suite with `./test_simple.sh`.
+scripts. Run the test suite with `./test_simple.sh` (`bin/mobius tools/run_tests.mob`
+on any platform).
 
 ## Status
 

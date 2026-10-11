@@ -9,8 +9,8 @@ A .NET 8 binding over the Mobius C API (`include/mobius/*.h`), in two layers:
 - `MobiusState`: an optional convenience layer (below) built on `Native`.
   `state.Handle` is the `MobiusState*` for mixing the two.
 
-It loads `libmobius-core.so` (`mobius-core.dll` on Windows, once supported), which
-must be on the loader's search path.
+It loads `libmobius-core.so` (`mobius-core.dll` on Windows, `libmobius-core.dylib`
+on macOS), which must be on the loader's search path.
 
 Using the C API directly:
 
@@ -92,4 +92,5 @@ any thread, which is the host's responsibility. (With
 `Execute`/`Resume`.) A registered function that calls back into a script may
 not wait for another fiber there (`await` and friends raise an error).
 
-Tests: `./test.sh` builds and runs `Mobius.Tests` against `../../bin`.
+Tests: `bin/mobius bindings/csharp/test.mob` (from the project root) builds and
+runs `Mobius.Tests` against the core library in `bin/`.

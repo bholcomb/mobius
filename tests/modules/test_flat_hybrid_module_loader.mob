@@ -14,14 +14,26 @@ func assert_test(name, cond) {
 }
 
 var repo_root = os.getcwd()
+
+// This platform's names: the native folder the build stages libraries in
+// (arm64, not aarch64, on Apple Silicon) and shared library file names.
+var native_folder = replace(os.platform, "-aarch64", "-arm64")
+var lib_prefix = "lib"
+var lib_ext = ".so"
+if (startswith(os.platform, "windows")) {
+    lib_prefix = ""
+    lib_ext = ".dll"
+} else if (startswith(os.platform, "macos")) {
+    lib_ext = ".dylib"
+}
 var mobius_bin = os.join(repo_root, "bin", "mobius")
-var math_so_src = os.join(repo_root, "bin", "modules", "math", "native", "linux-x86_64", "math.so")
-var core_so_src = os.join(repo_root, "bin", "libmobius-core.so")
+var math_so_src = os.join(repo_root, "bin", "modules", "math", "native", native_folder, "math" + lib_ext)
+var core_so_src = os.join(repo_root, "bin", lib_prefix + "mobius-core" + lib_ext)
 
 var workspace = os.join(os.tmpdir(), "mobius_flat_hybrid_" + str(os.getpid()))
 var wrapper_path = os.join(workspace, "math.mob")
-var native_path = os.join(workspace, "math.so")
-var core_path = os.join(workspace, "libmobius-core.so")
+var native_path = os.join(workspace, "math" + lib_ext)
+var core_path = os.join(workspace, lib_prefix + "mobius-core" + lib_ext)
 var run_script = os.join(workspace, "run.mob")
 
 assert_test("math native exists", os.is_file(math_so_src))

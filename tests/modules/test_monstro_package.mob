@@ -19,6 +19,14 @@ var pack_tool = os.join(repo_root, "tools", "pack_module.mob")
 var install_tool = os.join(repo_root, "tools", "install_module.mob")
 var package_source = os.join(repo_root, "packages", "monstro")
 
+// The monstro package's native libraries are built outside this repository
+// (its targets are off in buildy.yaml); without them there is nothing to
+// test, so skip (exit code 77).
+if (!os.is_dir(os.join(package_source, "native"))) {
+    print("SKIP: the monstro package's native libraries are not built")
+    exit(77)
+}
+
 var workspace = os.join(os.tmpdir(), "mobius_monstro_pkg_" + str(os.getpid()))
 var modules_root = os.join(workspace, "modules")
 var archive_path = os.join(workspace, "monstro.mz")

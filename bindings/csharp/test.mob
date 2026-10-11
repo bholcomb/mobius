@@ -1,0 +1,45 @@
+// test: build the C# binding's tests and run them against the core library
+// in bin/, on any platform.
+//
+//   bin/mobius bindings/csharp/test.mob
+//
+// The binding loads the core library by name (mobius-core), so bin/ goes on
+// the loader's search path: LD_LIBRARY_PATH on Linux, DYLD_LIBRARY_PATH on
+// macOS, PATH on Windows. Needs the .NET 8 SDK (dotnet on the PATH).
+
+import "io"
+import "os"
+import "process"
+
+func fail(message) {
+    io.stderr:write("csharp test: " + message + "\n")
+    exit(1)
+}
+
+// The repository: this runs as <repo>/bin/mobius.
+var repo = os.dirname(os.dirname(os.executable()))
+var here = os.join(repo, "bindings", "csharp")
+var bin = os.join(repo, "bin")
+
+var loader_var = "LD_LIBRARY_PATH"
+var list_separator = ":"
+if (startswith(os.platform, "windows")) {
+    loader_var = "PATH"
+    list_separator = ";"
+} else if (startswith(os.platform, "macos")) {
+    loader_var = "DYLD_LIBRARY_PATH"
+}
+
+var inherit = {cwd: repo, stdin: "null", stdout: "inherit", stderr: "inherit"}
+var build = process.run(["dotnet", "build", os.join(here, "Mobius.Tests"), "-c", "Release", "-v", "q", "-nologo"], inherit)
+if (build.exit_code != 0) { fail("dotnet build failed") }
+
+var search_path = bin
+var previous = os.getenv(loader_var)
+if (previous != nil && previous != "") { search_path = bin + list_separator + previous }
+var env = {}
+env[loader_var] = search_path
+
+var tests = os.join(here, "Mobius.Tests", "bin", "Release", "net8.0", "Mobius.Tests.dll")
+var run = process.run(["dotnet", tests], {cwd: repo, stdin: "null", stdout: "inherit", stderr: "inherit", env: env})
+exit(run.exit_code)

@@ -14,6 +14,18 @@ func assert_test(name, cond) {
 }
 
 var repo_root = os.getcwd()
+
+// This platform's names: the native folder the build stages libraries in
+// (arm64, not aarch64, on Apple Silicon) and shared library file names.
+var native_folder = replace(os.platform, "-aarch64", "-arm64")
+var lib_prefix = "lib"
+var lib_ext = ".so"
+if (startswith(os.platform, "windows")) {
+    lib_prefix = ""
+    lib_ext = ".dll"
+} else if (startswith(os.platform, "macos")) {
+    lib_ext = ".dylib"
+}
 var mobius_bin = os.join(repo_root, "bin", "mobius")
 var pack_tool = os.join(repo_root, "tools", "pack_module.mob")
 var install_tool = os.join(repo_root, "tools", "install_module.mob")
@@ -159,7 +171,7 @@ var install_rc = os.system(mobius_bin + " " + install_tool + " " + archive_path 
 assert_test("install glfw package", install_rc == 0)
 assert_test("installed glfw manifest exists", os.is_file(os.join(modules_root, "glfw", "module.yaml")))
 assert_test("installed glfw script exists", os.is_file(os.join(modules_root, "glfw", "glfw.mob")))
-assert_test("installed glfw native library exists", os.is_file(os.join(modules_root, "glfw", "native", "linux-x86_64", "glfw.so")))
+assert_test("installed glfw native library exists", os.is_file(os.join(modules_root, "glfw", "native", native_folder, "glfw" + lib_ext)))
 
 var old_cwd = os.getcwd()
 assert_test("chdir into workspace", os.chdir(workspace))
@@ -167,8 +179,8 @@ var import_rc = os.system(mobius_bin + " " + run_script)
 assert_test("import installed glfw package", import_rc == 0)
 assert_test("chdir back to repo root", os.chdir(old_cwd))
 
-os.remove(os.join(modules_root, "glfw", "native", "linux-x86_64", "glfw.so"))
-os.rmdir(os.join(modules_root, "glfw", "native", "linux-x86_64"))
+os.remove(os.join(modules_root, "glfw", "native", native_folder, "glfw" + lib_ext))
+os.rmdir(os.join(modules_root, "glfw", "native", native_folder))
 os.rmdir(os.join(modules_root, "glfw", "native"))
 os.remove(os.join(modules_root, "glfw", "glfw.mob"))
 os.remove(os.join(modules_root, "glfw", "module.yaml"))

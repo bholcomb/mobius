@@ -1,0 +1,168 @@
+// run_tests: run the test suite against the build in bin/, on any platform.
+//
+//   bin/mobius tools/run_tests.mob
+//
+// Script tests: every tests/**/test_*.mob, run from the repository root with
+// bin/mobius and a 10-second timeout. Exit code 0 passes, unless the test is
+// listed in tests/expected_failures.txt, where a nonzero exit passes. Exit
+// code 77 means the test skipped itself (it needs something this build
+// doesn't have).
+//
+// C API tests: every tests/embed/test_*.c, compiled against the core
+// library in bin/ with the system C compiler (cc) and run like a script test.
+// They use POSIX threads, so they are skipped on Windows.
+//
+// Exits 1 if any test fails.
+
+import "io"
+import "os"
+import "process"
+
+const TIMEOUT_MS = 10000
+const SKIP_CODE = 77
+
+// The repository: this runs as <repo>/bin/mobius.
+var repo = os.dirname(os.dirname(os.executable()))
+var windows = startswith(os.platform, "windows")
+var mobius = os.join(repo, "bin", windows ? "mobius.exe" : "mobius")
+if (!os.is_file(mobius)) {
+    io.stderr:write("run_tests: no mobius at " + mobius + "\n")
+    exit(1)
+}
+
+var passed = 0
+var skipped = 0
+var failed = []
+
+// A path relative to the repository, '/'-separated on every platform.
+func relative(path) {
+    var rel = substr(path, size(repo) + 1, size(path) - size(repo) - 1)
+    return replace(rel, "\\", "/")
+}
+
+func report(name, outcome) {
+    var line = name
+    while (size(line) < 50) { line = line + " " }
+    print(line + " " + outcome)
+}
+
+func pass(name, outcome) {
+    passed = passed + 1
+    report(name, outcome)
+}
+
+func fail(name, outcome) {
+    failed:push(name)
+    report(name, outcome)
+}
+
+func skip(name, reason) {
+    skipped = skipped + 1
+    report(name, "SKIP (" + reason + ")")
+}
+
+// Runs a program the way a test runs; returns its result.
+func run_test(cmd) {
+    return process.run(cmd, {
+        cwd: repo,
+        stdin: "null",
+        stdout: "null",
+        stderr: "null",
+        timeout_ms: TIMEOUT_MS
+    })
+}
+
+var expected_failures = {}
+for (var line in readlines(os.join(repo, "tests", "expected_failures.txt"))) {
+    var name = trim(line)
+    if (name == "" || startswith(name, "#")) { continue }
+    expected_failures[name] = true
+}
+
+func find_tests(dir, extension) {
+    var found = []
+    for (var path in os.walkdir(os.join(repo, dir))) {
+        var base = os.basename(path)
+        if (os.is_file(path) && startswith(base, "test_") && endswith(base, extension)) {
+            found:push(relative(path))
+        }
+    }
+    found:sort()
+    return found
+}
+
+// ---- Script tests ----------------------------------------------------------
+
+for (var test in find_tests("tests", ".mob")) {
+    var cmd = [mobius, test]
+    if (test == "tests/basic/test_cli_argv.mob") {
+        cmd:push("alpha")
+        cmd:push("two words")
+        cmd:push("--flag")
+        cmd:push("42")
+    }
+    var r = run_test(cmd)
+    var expected_to_fail = expected_failures[test] == true
+    if (r.timed_out) {
+        fail(test, "FAIL (timed out)")
+    } else if (r.exit_code == SKIP_CODE) {
+        skip(test, "not built here")
+    } else if (r.exit_code == 0 && !expected_to_fail) {
+        pass(test, "PASS")
+    } else if (r.exit_code == 0) {
+        fail(test, "FAIL (expected to fail but passed)")
+    } else if (expected_to_fail) {
+        pass(test, "PASS (failed as expected)")
+    } else {
+        fail(test, "FAIL (exit code " + str(r.exit_code) + ")")
+    }
+}
+
+// ---- C API tests -----------------------------------------------------------
+
+var bin = os.join(repo, "bin")
+var build_dir = os.join(os.tmpdir(), "mobius_embed_tests_" + str(os.getpid()))
+if (!windows) { os.mkdirp(build_dir) }
+
+for (var test in find_tests(os.join("tests", "embed"), ".c")) {
+    if (windows) {
+        skip(test, "POSIX only")
+        continue
+    }
+    var exe = os.join(build_dir, substr(os.basename(test), 0, size(os.basename(test)) - 2))
+    var compile = process.run([
+        "cc", "-std=c11", "-Wall", "-I" + os.join(repo, "include"), os.join(repo, test),
+        "-o", exe, "-L" + bin, "-lmobius-core", "-Wl,-rpath," + bin, "-lpthread"
+    ], {cwd: repo, stdin: "null"})
+    if (compile.exit_code != 0) {
+        fail(test, "FAIL (does not compile)")
+        io.stderr:write(compile.stderr)
+        continue
+    }
+    var r = run_test([exe])
+    os.remove(exe)
+    if (r.timed_out) {
+        fail(test, "FAIL (timed out)")
+    } else if (r.exit_code == 0) {
+        pass(test, "PASS")
+    } else {
+        fail(test, "FAIL (exit code " + str(r.exit_code) + ")")
+    }
+}
+
+if (!windows) { os.rmdir(build_dir) }
+
+// ---- Summary ---------------------------------------------------------------
+
+print("")
+print("=== Test Summary ===")
+print("Total Tests:  " + str(passed + size(failed) + skipped))
+print("Passed:       " + str(passed))
+print("Skipped:      " + str(skipped))
+print("Failed:       " + str(size(failed)))
+if (size(failed) > 0) {
+    print("")
+    print("Failed tests:")
+    for (var name in failed) { print("  - " + name) }
+    exit(1)
+}
