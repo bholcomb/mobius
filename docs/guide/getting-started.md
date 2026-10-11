@@ -16,6 +16,11 @@ configuration:
 ./buildy -r
 ```
 
+The build tool is bundled for each platform: `buildy` on Linux, `buildy.exe`
+on Windows (run where MSVC's `cl.exe` and `link.exe` are on the `PATH`, such as
+a Developer Command Prompt) and `buildy-macos` on macOS (Apple Silicon). Use
+your platform's in place of `./buildy`.
+
 (Use `./buildy` on its own for a debug build.) This produces, under
 `build/<platform>-release/bin/` and staged into `bin/`:
 

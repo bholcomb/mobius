@@ -24,7 +24,15 @@ func fail(message) {
 
 // The repository: this runs as <repo>/bin/mobius.
 var repo = os.dirname(os.dirname(os.executable()))
-var buildy = os.join(repo, startswith(os.platform, "windows") ? "buildy.exe" : "buildy")
+// The build tool for this platform: buildy (Linux), buildy.exe (Windows),
+// buildy-macos (macOS).
+var buildy_name = "buildy"
+if (startswith(os.platform, "windows")) {
+    buildy_name = "buildy.exe"
+} else if (startswith(os.platform, "macos")) {
+    buildy_name = "buildy-macos"
+}
+var buildy = os.join(repo, buildy_name)
 if (!os.is_file(buildy)) { fail("no build tool at " + buildy) }
 var jobs = os.getenv("JOBS")
 if (jobs == nil) { jobs = str(os.cpu_count()) }

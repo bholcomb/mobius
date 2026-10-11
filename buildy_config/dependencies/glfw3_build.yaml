@@ -19,8 +19,11 @@ environment:
       optimization: speed
     portable:
       optimization: speed
+      # Linux only: x86-64 GCC; elsewhere the release build already targets
+      # the platform's baseline.
       compile:
-        flags: ["-march=x86-64-v2"]
+        flags:
+          - linux: ["-march=x86-64-v2"]
 
 targets:
   static_libraries:

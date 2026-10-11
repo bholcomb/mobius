@@ -65,8 +65,8 @@ staging:
     - folder: "bin"
       files:
         - linux: ["${out_dir}/bin/mobius", "${out_dir}/bin/mobius-launcher", "${out_dir}/bin/libmobius-core.so"]
-        - macos: ["${out_dir}/bin/mobius", "${out_dir}/bin/libmobius-core.dylib"]
-        - windows: ["${out_dir}/bin/mobius.exe", "${out_dir}/bin/mobius-core.dll"]
+        - macos: ["${out_dir}/bin/mobius", "${out_dir}/bin/mobius-launcher", "${out_dir}/bin/libmobius-core.dylib"]
+        - windows: ["${out_dir}/bin/mobius.exe", "${out_dir}/bin/mobius-launcher.exe", "${out_dir}/bin/mobius-core.dll"]
     - folder: "bin/modules/compression"
       files:
         - "src/modules/compression/module.yaml"
