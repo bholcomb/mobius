@@ -1,0 +1,152 @@
+# Build and test Mobius on Linux, Windows and macOS. A v* tag also
+# publishes a GitHub release of each platform's runtime.
+#
+# Each platform builds with its committed buildy binary (see matrix.buildy):
+# the release build in bin/ is tested, then the portable build in
+# dist/portable/ (tools/build_portable.mob) is what gets packaged.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Every platform reports, even when another fails.
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            os: ubuntu-24.04
+            buildy: buildy
+            archive: tar.gz
+          - rid: win-x64
+            os: windows-2025
+            buildy: buildy.exe
+            archive: zip
+          - rid: osx-arm64
+            os: macos-15
+            buildy: buildy-macos
+            archive: tar.gz
+    defaults:
+      run:
+        shell: bash
+    env:
+      JOBS: "4"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check for this platform's buildy
+        run: |
+          if [ ! -f "${{ matrix.buildy }}" ]; then
+            echo "::error::No ${{ matrix.buildy }} in the repository: commit the ${{ matrix.rid }} build of buildy as ${{ matrix.buildy }}."
+            exit 1
+          fi
+
+      # The glfw package builds GLFW from source on Linux (X11 headers) and
+      # uses Homebrew's on macOS.
+      - name: Install X11 headers (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+
+      - name: Install GLFW (macOS)
+        if: runner.os == 'macOS'
+        run: brew install glfw
+
+      # buildy calls cl.exe and link.exe: export the environment of
+      # vcvars64.bat (the x64 MSVC tools) to the later steps.
+      - name: Set up MSVC (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          if (-not $vs) { throw "No Visual Studio with the x64 C++ tools" }
+          $vcvars = Join-Path $vs "VC\Auxiliary\Build\vcvars64.bat"
+          $vars = cmd /c "call `"$vcvars`" >nul && set"
+          if ($LASTEXITCODE -ne 0) { throw "vcvars64.bat failed" }
+          foreach ($line in $vars) {
+            if ($line -match '^(PATH|INCLUDE|LIB|LIBPATH)=(.*)$') {
+              "$($Matches[1])=$($Matches[2])" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+            }
+          }
+
+      # Git's bash puts its own link.exe (coreutils) ahead of MSVC's.
+      - name: Use MSVC's link.exe (Windows)
+        if: runner.os == 'Windows'
+        run: rm -f /usr/bin/link.exe
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build
+        run: ./${{ matrix.buildy }} -c release -j "$JOBS"
+
+      - name: Test
+        run: bin/mobius tools/run_tests.mob
+
+      - name: Test the C# binding
+        run: bin/mobius bindings/csharp/test.mob
+
+      - name: Build the portable runtime
+        run: bin/mobius tools/build_portable.mob
+
+      # mobius-<rid>/: the portable runtime (bin/ and packages/), the C API
+      # headers, the C# binding and the licence.
+      - name: Package
+        run: |
+          name="mobius-${{ matrix.rid }}"
+          stage="dist/release/$name"
+          mkdir -p "$stage/dotnet"
+          cp -R dist/portable/bin dist/portable/packages include LICENSE README.md "$stage/"
+          dotnet build bindings/csharp/Mobius -c Release -v q -nologo
+          cp bindings/csharp/Mobius/bin/Release/net8.0/Mobius.dll "$stage/dotnet/"
+          cd dist/release
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            7z a -tzip "$name.zip" "$name"
+          else
+            tar -czf "$name.tar.gz" "$name"
+          fi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mobius-${{ matrix.rid }}
+          path: dist/release/mobius-${{ matrix.rid }}.${{ matrix.archive }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: mobius-*
+          path: release
+          merge-multiple: true
+
+      - name: Write SHA256SUMS
+        working-directory: release
+        run: |
+          sha256sum mobius-* > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publish the release
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --title "Mobius $GITHUB_REF_NAME" --generate-notes --verify-tag mobius-* SHA256SUMS
