@@ -186,21 +186,23 @@ by Gatekeeper until its quarantine flag is cleared
 
 Continuous integration ([`.github/workflows/ci.yml`](../../.github/workflows/ci.yml))
 builds and tests Mobius on Linux x64, Windows x64 and macOS on Apple Silicon
-for every push and pull request. Pushing a `v*` tag also publishes a GitHub
-release with each platform's archive and their checksums:
+for every push and pull request, and packages each platform's runtime.
+Pushing a `v*` tag also publishes a GitHub release. For now it holds Linux
+only; the Windows and macOS jobs report their status but don't block it, and
+they join the release once they pass:
 
 | Asset | Platform |
 |-------|----------|
 | `mobius-linux-x64.tar.gz` | Linux x86-64, glibc 2.39 (Ubuntu 24.04) or newer |
-| `mobius-win-x64.zip` | Windows x64 |
-| `mobius-osx-arm64.tar.gz` | macOS on Apple Silicon |
 | `SHA256SUMS` | The SHA-256 of each archive |
 
 Each archive holds one folder, `mobius-<platform>/`: the portable runtime
 (`bin/` and `packages/`, also the `--runtime` for that platform's
 executables), the C API headers (`include/`), the C# binding
-(`dotnet/Mobius.dll`), `LICENSE` and `README.md`. On macOS the `glfw` package
-uses Homebrew's GLFW (`brew install glfw`).
+(`dotnet/Mobius.dll`), `LICENSE` and `README.md`. The Windows and macOS
+archives (`mobius-win-x64.zip`, `mobius-osx-arm64.tar.gz`) are the CI run's
+artifacts until then. On macOS the `glfw` package uses Homebrew's GLFW
+(`brew install glfw`).
 
 ### The buildy pin
 
