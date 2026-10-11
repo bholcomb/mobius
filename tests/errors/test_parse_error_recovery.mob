@@ -2,6 +2,7 @@
 // no hang, and no running of a program that failed to parse. Each snippet
 // is written to a temp file and run in a separate interpreter.
 import "os"
+import "process"
 
 var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
 var workspace = os.join(os.tmpdir(), "mobius_parse_recovery_" + str(os.getpid()))
@@ -9,11 +10,19 @@ os.mkdirp(workspace)
 var failures = 0
 var counter = 0
 
+// Runs a script in its own interpreter, output discarded, for at most 10
+// seconds; returns its exit code.
+func run_quietly(path) {
+    var r = process.run([mobius_bin, path], {stdin: "null", stdout: "null", stderr: "null", timeout_ms: 10000})
+    if (r.timed_out) { return -1 }
+    return r.exit_code
+}
+
 func expect_parse_error(name, source) {
     counter = counter + 1
     var path = os.join(workspace, "case" + str(counter) + ".mob")
     writefile(path, source)
-    var code = os.system("timeout 10 \"" + mobius_bin + "\" \"" + path + "\" > /dev/null 2>&1")
+    var code = run_quietly(path)
     if (code != 1) {
         failures = failures + 1
         print("FAIL: " + name + ": exit code " + str(code) + " (expected 1)")
@@ -63,7 +72,7 @@ expect_parse_error("5000 nested function literals", "var f = " + repeat("func() 
 var deep_path = os.join(workspace, "deep_ok.mob")
 writefile(deep_path, "print(" + repeat("(", 60) + "1" + repeat(")", 60) + ")\n" +
     repeat("if (true) {\n", 40) + "print(2)\n" + repeat("}\n", 40))
-if (os.system("timeout 10 \"" + mobius_bin + "\" \"" + deep_path + "\" > /dev/null 2>&1") != 0) {
+if (run_quietly(deep_path) != 0) {
     failures = failures + 1
     print("FAIL: 60 nested parentheses and 40 nested blocks should run")
 }
