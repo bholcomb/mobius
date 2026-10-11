@@ -7,7 +7,7 @@ alwaysApply: true
 
 # Build System Standards
 - **Tool**: Use `buildy` for all build operations.  It is an 
-- **Primary Command**: `./buildy -r -n 3`
+- **Primary Command**: `buildy -r -n 3`
 - **Permissions**: You do not need to ask to run the build commands
 - **Debuggable builds**: Remove the '-r' flag from the build command to create a debuggable build.d
 - **Workflow**: Always run a build after modifying core logic to check for compilation errors.

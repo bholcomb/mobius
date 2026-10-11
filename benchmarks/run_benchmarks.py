@@ -132,7 +132,7 @@ def main():
     if mobius:
         impls.append(("mobius", [mobius, os.path.join(HERE, "benchmark_comprehensive.mob")]))
     else:
-        print("warning: mobius binary not found; build it with ./buildy -r", file=sys.stderr)
+        print("warning: mobius binary not found; build it with buildy -r", file=sys.stderr)
     if lua:
         impls.append(("lua", [lua, os.path.join(HERE, "benchmark_comprehensive.lua")]))
     else:

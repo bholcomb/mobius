@@ -60,7 +60,7 @@ int custom_add(MobiusState* state, int arg_count, void* userdata) {
 
 ```bash
 # From the project root
-./buildy -r -n 3
+buildy -r -n 3
 
 # Run
 ./bin/embedding_example

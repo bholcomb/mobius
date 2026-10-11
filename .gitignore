@@ -1,6 +1,8 @@
 # Compiled binaries
 bin/
 *.exe
+# buildy goes on the PATH (docs/guide/getting-started.md), not in the repository
+/buildy
 
 # Object files
 *.o

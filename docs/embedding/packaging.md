@@ -202,6 +202,16 @@ executables), the C API headers (`include/`), the C# binding
 (`dotnet/Mobius.dll`), `LICENSE` and `README.md`. On macOS the `glfw` package
 uses Homebrew's GLFW (`brew install glfw`).
 
+### The buildy pin
+
+CI builds with the [buildy](https://github.com/bholcomb/buildy) release
+pinned in `ci/buildy.json`: its version (without the `v`) and each platform
+archive's SHA-256, from that release's `SHA256SUMS`. Each job first runs
+`ci/fetch_buildy.py build/buildy`, which downloads its platform's archive,
+fails on a SHA-256 that doesn't match the pin or while the pin is unset, and
+unpacks `buildy` into `build/buildy/`; the job then puts that directory on
+the `PATH`.
+
 ## Notes
 
 The runtime loader, archive builder, and installer are all in place. The

@@ -8,20 +8,32 @@ This page gets you from a clean checkout to running your own Mobius scripts.
 
 ## Building
 
-Mobius builds with `buildy`, a small build tool bundled in the repository —
-no system build tools to install. From the project root, build the release
-configuration:
+Mobius builds with [buildy](https://github.com/bholcomb/buildy), a small
+build tool, and the platform's C/C++ compiler: GCC on Linux, Apple Clang on
+macOS, MSVC on Windows (run where `cl.exe` and `link.exe` are on the `PATH`,
+such as a Developer Command Prompt).
+
+### buildy
+
+Put `buildy` (`buildy.exe` on Windows) on your `PATH`: a
+[release](https://github.com/bholcomb/buildy/releases) for Linux x64, Windows
+x64 or macOS on Apple Silicon, or your own build of it. CI builds with the
+release pinned in `ci/buildy.json`; `ci/fetch_buildy.py` installs that one
+for your platform, its SHA-256 checked:
 
 ```bash
-./buildy -r
+python3 ci/fetch_buildy.py ~/.local/bin
 ```
 
-The build tool is bundled for each platform: `buildy` on Linux, `buildy.exe`
-on Windows (run where MSVC's `cl.exe` and `link.exe` are on the `PATH`, such as
-a Developer Command Prompt) and `buildy-macos` on macOS (Apple Silicon). Use
-your platform's in place of `./buildy`.
+### Building Mobius
 
-(Use `./buildy` on its own for a debug build.) This produces, under
+From the project root, build the release configuration:
+
+```bash
+buildy -r
+```
+
+(Use `buildy` on its own for a debug build.) This produces, under
 `build/<platform>-release/bin/` and staged into `bin/`:
 
 - `bin/mobius` — the command-line interpreter and REPL
@@ -30,7 +42,7 @@ your platform's in place of `./buildy`.
   loadable plugins
 
 The C/C++ examples under `examples/` and the bundled module plugins are part of
-the same Buildy workspace (see `buildy.yaml`), so a single `./buildy -r`
+the same Buildy workspace (see `buildy.yaml`), so a single `buildy -r`
 compiles everything.
 
 ---

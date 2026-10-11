@@ -91,7 +91,7 @@ func on_damage(amount) {
 ## Building and Running
 
 ```bash
-./buildy -r -n 3
+buildy -r -n 3
 ./bin/game_engine
 ```
 

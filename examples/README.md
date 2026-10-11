@@ -13,7 +13,7 @@ Everything here is part of the Buildy workspace, so a single build compiles the
 interpreter, the library, the bundled modules, and these examples:
 
 ```bash
-./buildy -r
+buildy -r
 ```
 
 Compiled C/C++ examples are produced under `build/<platform>-release/bin/` and

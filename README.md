@@ -85,10 +85,12 @@ be readable from the start.
 
 ## Quick start
 
-Build with the bundled `buildy` tool, then run a script or open the REPL:
+Build with [buildy](https://github.com/bholcomb/buildy) on your `PATH` (see
+[Getting Started](docs/guide/getting-started.md#building)), then run a script
+or open the REPL:
 
 ```bash
-./buildy -r                 # build (release)
+buildy -r                   # build (release)
 bin/mobius script.mob       # run a file
 bin/mobius                  # interactive REPL
 ```

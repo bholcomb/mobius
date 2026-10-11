@@ -104,6 +104,6 @@ each live userdata value.
 ## Building and Running
 
 ```bash
-./buildy -r -n 3
+buildy -r -n 3
 ./bin/cpp_class_example
 ```

@@ -1,9 +1,10 @@
 # Build and test Mobius on Linux, Windows and macOS. A v* tag also
 # publishes a GitHub release of each platform's runtime.
 #
-# Each platform builds with its committed buildy binary (see matrix.buildy):
-# the release build in bin/ is tested, then the portable build in
-# dist/portable/ (tools/build_portable.mob) is what gets packaged.
+# Each platform builds with the buildy release pinned in ci/buildy.json
+# (ci/fetch_buildy.py): the release build in bin/ is tested, then the
+# portable build in dist/portable/ (tools/build_portable.mob) is what gets
+# packaged.
 
 name: CI
 
@@ -27,15 +28,15 @@ jobs:
         include:
           - rid: linux-x64
             os: ubuntu-24.04
-            buildy: buildy
+            python: python3
             archive: tar.gz
           - rid: win-x64
             os: windows-2025
-            buildy: buildy.exe
+            python: python
             archive: zip
           - rid: osx-arm64
             os: macos-15
-            buildy: buildy-macos
+            python: python3
             archive: tar.gz
     defaults:
       run:
@@ -45,12 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Check for this platform's buildy
+      # Downloads the pinned release's archive for this platform and checks
+      # its SHA-256; fails while the pin is a placeholder. The later steps
+      # run the buildy on the PATH.
+      - name: Get buildy
         run: |
-          if [ ! -f "${{ matrix.buildy }}" ]; then
-            echo "::error::No ${{ matrix.buildy }} in the repository: commit the ${{ matrix.rid }} build of buildy as ${{ matrix.buildy }}."
-            exit 1
-          fi
+          ${{ matrix.python }} ci/fetch_buildy.py build/buildy
+          echo "$GITHUB_WORKSPACE/build/buildy" >> "$GITHUB_PATH"
 
       # The glfw package builds GLFW from source on Linux (X11 headers) and
       # uses Homebrew's on macOS.
@@ -92,7 +94,7 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Build
-        run: ./${{ matrix.buildy }} -c release -j "$JOBS"
+        run: buildy -c release -j "$JOBS"
 
       - name: Test
         run: bin/mobius tools/run_tests.mob

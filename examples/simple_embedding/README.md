@@ -36,7 +36,7 @@ mobius_free_state(state);
 ## Building and Running
 
 ```bash
-./buildy -r -n 3
+buildy -r -n 3
 ./bin/simple_embedding
 ```
 
