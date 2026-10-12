@@ -387,7 +387,8 @@ func edit(name, text) {
     var path = os.join(reload_root, name)
     writefile(path, text)
     fake_mtime = fake_mtime + 1
-    os.system("touch -d @" + str(fake_mtime) + " \"" + path + "\"")
+    // touch -t (local time) is POSIX: macOS's touch has no -d @seconds
+    os.system("touch -t " + os.strftime("%Y%m%d%H%M.%S", fake_mtime) + " \"" + path + "\"")
 }
 
 edit("page.html", "{% extends \"base.html\" %}{% import \"ui.html\" %}{% block b %}{% use tag %}{% enduse %}{% include \"part.html\" %}{% endblock %}")

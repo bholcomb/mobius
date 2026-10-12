@@ -1,4 +1,5 @@
 // Test C-style string escape sequences
+import "os"
 
 // \n is a newline byte
 var nl = "\n"
@@ -51,8 +52,9 @@ var quoted = "say \"hello\""
 if (size(quoted) != 11) { exit(1) }
 
 // Write and read back with real newlines
-writefile("/tmp/mobius_escape_test.txt", "line1\nline2\nline3")
-var lines = readlines("/tmp/mobius_escape_test.txt")
+var escape_path = os.join(os.tmpdir(), "mobius_escape_test.txt")
+writefile(escape_path, "line1\nline2\nline3")
+var lines = readlines(escape_path)
 if (size(lines) != 3) { exit(1) }
 if (lines[0] != "line1") { exit(1) }
 if (lines[1] != "line2") { exit(1) }

@@ -4,6 +4,8 @@
 // still reported.
 import "os"
 
+var null_device = startswith(os.platform, "windows") ? "NUL" : "/dev/null"
+
 var dir = os.join(os.tmpdir(), "mobius_caught_errors_" + str(os.getpid()))
 os.mkdirp(dir)
 var script = os.join(dir, "child.mob")
@@ -12,7 +14,7 @@ var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
 
 func run_child(source) {
     writefile(script, source)
-    var code = os.system("\"" + mobius_bin + "\" \"" + script + "\" > /dev/null 2> \"" + err_file + "\"")
+    var code = os.system("\"" + mobius_bin + "\" \"" + script + "\" > " + null_device + " 2> \"" + err_file + "\"")
     return [code, readfile(err_file)]
 }
 

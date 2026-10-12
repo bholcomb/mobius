@@ -2,6 +2,8 @@
 // their text, so keywords, symbols and literals all showed as 'unknown'.
 import "os"
 
+var null_device = startswith(os.platform, "windows") ? "NUL" : "/dev/null"
+
 var dir = os.join(os.tmpdir(), "mobius_parse_text_" + str(os.getpid()))
 os.mkdirp(dir)
 var script = os.join(dir, "bad.mob")
@@ -10,7 +12,7 @@ var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
 
 func error_for(source) {
     writefile(script, source)
-    os.system("\"" + mobius_bin + "\" \"" + script + "\" > /dev/null 2> \"" + err_file + "\"")
+    os.system("\"" + mobius_bin + "\" \"" + script + "\" > " + null_device + " 2> \"" + err_file + "\"")
     return readfile(err_file)
 }
 func expect(source, needle) {

@@ -4,6 +4,8 @@
 // The fiber used to report it as well, so caught errors still printed.
 import "os"
 
+var null_device = startswith(os.platform, "windows") ? "NUL" : "/dev/null"
+
 var dir = os.join(os.tmpdir(), "mobius_fiber_errors_" + str(os.getpid()))
 os.mkdirp(dir)
 var script = os.join(dir, "child.mob")
@@ -12,7 +14,7 @@ var mobius_bin = os.join(os.getcwd(), "bin", "mobius")
 
 func stderr_of(source) {
     writefile(script, source)
-    os.system("\"" + mobius_bin + "\" \"" + script + "\" > /dev/null 2> \"" + err_file + "\"")
+    os.system("\"" + mobius_bin + "\" \"" + script + "\" > " + null_device + " 2> \"" + err_file + "\"")
     return readfile(err_file)
 }
 func count(text, needle) { return size(split(text, needle)) - 1 }
