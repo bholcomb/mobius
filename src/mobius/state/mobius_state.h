@@ -414,7 +414,11 @@ private:
 
     MobiusErrorHandler error_handler_;
     void* error_handler_userdata_;
-    static constexpr size_t kHostChunkBits = 10, kHostChunkSize = 1u << kHostChunkBits, kHostChunks = 1024;
+    // One declaration each: MSVC rejects the later declarators of a shared one in a dllexport
+    // class (C2487)
+    static constexpr size_t kHostChunkBits = 10;
+    static constexpr size_t kHostChunkSize = 1u << kHostChunkBits;
+    static constexpr size_t kHostChunks = 1024;
     std::atomic<HostFunction*> host_function_chunks_[kHostChunks] = {};
     std::mutex host_functions_mutex_;
     int32_t next_host_function_ = 1;
