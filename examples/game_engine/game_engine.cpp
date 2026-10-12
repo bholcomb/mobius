@@ -12,13 +12,12 @@
  * - Real-time script execution
  */
 
-#define _POSIX_C_SOURCE 200809L  // For usleep
-#define _DEFAULT_SOURCE  // Additional feature for usleep
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
+#include <chrono>
+#include <thread>
 
 #include <mobius/mobius.h>
 #include <mobius/mobius_plugin.h>
@@ -502,7 +501,7 @@ int main(void) {
         print_game_status(&game);
         
         // Small delay for demonstration
-        usleep(500000); // 0.5 seconds
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
     
     printf("\n🎯 Game simulation complete!\n");
