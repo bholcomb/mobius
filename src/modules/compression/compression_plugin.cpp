@@ -25,8 +25,11 @@ namespace {
 
 namespace fs = std::filesystem;
 
-// A path as UTF-8 (path.string() is in the ANSI code page on Windows).
+// A path as UTF-8 (path.string() is in the ANSI code page on Windows, and
+// throws for a character the code page lacks). A std::string path is made
+// a path with fs::u8path for the same reason.
 static std::string path_string(const fs::path& path) { return path.u8string(); }
+static std::string generic_path_string(const fs::path& path) { return path.generic_u8string(); }
 
 constexpr size_t kChunkSize = 64 * 1024;
 
@@ -103,10 +106,6 @@ static std::string lower_copy(std::string s) {
 static bool ends_with(const std::string& value, const std::string& suffix) {
     return value.size() >= suffix.size() &&
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
-
-static std::string to_generic_string(const fs::path& path) {
-    return path.generic_string();
 }
 
 static std::string ensure_trailing_slash(std::string s) {
@@ -446,10 +445,10 @@ static bool normalize_archive_member_path(const std::string& raw, int strip_comp
         normalized.erase(0, 2);
     }
 
-    fs::path path = fs::path(normalized).lexically_normal();
+    fs::path path = fs::u8path(normalized).lexically_normal();
     std::vector<std::string> components;
     for (const auto& part : path) {
-        std::string piece = part.generic_string();
+        std::string piece = generic_path_string(part);
         if (piece.empty() || piece == ".") continue;
         if (piece == "..") {
             error = "archive entry uses parent directory traversal";
@@ -490,7 +489,7 @@ static bool archive_member_destination(const fs::path& destination_root, const s
         out.clear();
         return true;
     }
-    out = (destination_root / fs::path(normalized)).lexically_normal();
+    out = (destination_root / fs::u8path(normalized)).lexically_normal();
     if (!is_within_root(destination_root, out)) {
         error = "archive entry escapes destination directory";
         return false;
@@ -520,7 +519,7 @@ static bool collect_input_entries(const std::vector<std::string>& inputs, const 
         }
 
         fs::path normalized = input.lexically_normal();
-        std::string base = normalized.filename().generic_string();
+        std::string base = generic_path_string(normalized.filename());
         if (base.empty()) {
             error = "could not derive archive name for input path: " + raw_input;
             return false;
@@ -539,7 +538,7 @@ static bool collect_input_entries(const std::vector<std::string>& inputs, const 
                     error = "failed computing relative path while archiving";
                     return false;
                 }
-                std::string archive_path = join_archive_path(archive_root, rel.generic_string());
+                std::string archive_path = join_archive_path(archive_root, generic_path_string(rel));
                 bool is_dir = it->is_directory(ec);
                 if (ec) {
                     error = "failed reading input entry type";
