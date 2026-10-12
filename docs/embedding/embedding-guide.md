@@ -797,6 +797,14 @@ Threading model:
 - Different `MobiusState` instances share no mutable state and run independently.
 - Native functions may be invoked from any worker thread — make them
   thread-safe if they touch shared C/C++ state.
+- `mobius_set_thread_start_handler(state, handler, userdata)` runs
+  `handler` on each worker thread as it starts, before it runs any fiber.
+  Set it before running code when native functions call into a runtime that
+  keeps per-thread state. .NET needs it: on Windows fibers are the OS's, and
+  .NET takes the first fiber a thread runs managed code on as the thread's
+  home, ending the thread's .NET state when that fiber is deleted; a call
+  into managed code from the handler makes the thread's own fiber its home
+  (the C# binding does this).
 
 ### Waiting for I/O in a native function
 

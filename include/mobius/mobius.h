@@ -264,6 +264,23 @@ MOBIUS_API void mobius_set_exit_handler(MobiusState* state,
                                         MobiusExitHandler handler,
                                         void* userdata);
 
+/**
+ * Called on each worker thread the state starts, on that thread, before
+ * the thread runs any fiber. Workers run host functions and callbacks, so a
+ * host whose runtime keeps per-thread state introduces the thread to it here.
+ * .NET must be: on Windows, fibers are the OS's, and .NET makes the fiber a
+ * thread first runs managed code on the thread's "home"; deleting that fiber
+ * (as Mobius does with its fibers) ends the thread's .NET state, and the next
+ * managed code there fails fast. A first call into managed code from this
+ * handler makes the thread's own fiber its home. Set it before running code:
+ * workers start then (and again later, after idling).
+ */
+typedef void (*MobiusThreadStartHandler)(MobiusState* state, void* userdata);
+
+MOBIUS_API void mobius_set_thread_start_handler(MobiusState* state,
+                                                MobiusThreadStartHandler handler,
+                                                void* userdata);
+
 /* ====================================================================== */
 /*  Files                                                                  */
 /* ====================================================================== */

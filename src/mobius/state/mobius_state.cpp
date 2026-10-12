@@ -1410,6 +1410,10 @@ void mobius_set_exit_handler(MobiusState* state, MobiusExitHandler handler, void
     if (state) state->setExitHandler(handler, userdata);
 }
 
+void mobius_set_thread_start_handler(MobiusState* state, MobiusThreadStartHandler handler, void* userdata) {
+    if (state) state->setThreadStartHandler(handler, userdata);
+}
+
 void mobius_set_file_system(MobiusState* state, const MobiusFileSystem* fs, void* userdata) {
     if (state) state->setFileSystem(fs, userdata);
 }

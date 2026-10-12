@@ -363,6 +363,7 @@ bool JobSystem::mainFiberDone() {
 }
 
 void JobSystem::workerThreadEntry() {
+    owner_->threadStarted();   // before any fiber runs here
     scheduler_ctx() = platform_thread_fiber();
 
     auto idle_start = std::chrono::steady_clock::now();
