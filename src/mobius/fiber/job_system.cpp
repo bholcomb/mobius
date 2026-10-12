@@ -226,6 +226,13 @@ MobiusFiber* JobSystem::currentFiber() const {
     return current_fiber();
 }
 
+void JobSystem::callHost(void (*fn)(void*), void* arg) {
+    MobiusFiber* fiber = current_fiber();
+    if (fiber) fiber->host_call_depth++;
+    platform_call_on_thread_stack(fn, arg);
+    if (fiber) fiber->host_call_depth--;   // still on this thread: it never switched out
+}
+
 bool JobSystem::inHostFunction() {
     MobiusFiber* fiber = current_fiber();
     return fiber && fiber->host_call_depth > 0;
@@ -363,7 +370,6 @@ bool JobSystem::mainFiberDone() {
 }
 
 void JobSystem::workerThreadEntry() {
-    owner_->threadStarted();   // before any fiber runs here
     scheduler_ctx() = platform_thread_fiber();
 
     auto idle_start = std::chrono::steady_clock::now();

@@ -1,8 +1,10 @@
 # Mobius for C#
 
-A .NET 10 binding over the Mobius C API (`include/mobius/*.h`). It needs .NET 9 or later:
-host functions and file-system callbacks run on Mobius fiber stacks, and .NET 8 crashes when
-a managed exception is thrown there, even one the callback catches. It comes in two layers:
+A .NET 10 binding over the Mobius C API (`include/mobius/*.h`). It needs .NET 9 or later: on
+Linux and macOS, host functions and callbacks run on Mobius fiber stacks, and .NET 8 crashes
+when a managed exception is thrown there, even one the callback catches. (On Windows, Mobius
+runs them on the thread's own stack: .NET doesn't support managed code on Win32 fibers.) It
+comes in two layers:
 
 - `Native`: the whole C API, one to one, under the C names (`Native.mobius_stack_pushInt64`,
   ...), with its structs (`MobiusConfig`, `MobiusError`, `MobiusFileSystem`, ...),
@@ -27,25 +29,12 @@ static int SpawnEnemy(IntPtr state, int argc, IntPtr userdata)
     return 1;
 }
 
-// Does nothing: being called on each worker thread as it starts is enough.
-[UnmanagedCallersOnly]
-static void ThreadStart(IntPtr state, IntPtr userdata) { }
-
 IntPtr s = Native.mobius_new_state(null);
-Native.mobius_set_thread_start_handler(s, &ThreadStart, IntPtr.Zero);
 Native.mobius_init_stdlib(s);
 Native.mobius_register_function(s, "spawn_enemy", &SpawnEnemy, GCHandle.ToIntPtr(worldHandle));
 Native.mobius_exec_string(s, "spawn_enemy(3)");
 Native.mobius_free_state(s);
 ```
-
-Set a thread start handler, as above, before running code. Mobius runs scripts on fibers,
-and on Windows they are the OS's: .NET takes the first fiber a thread runs managed code on as
-the thread's "home", and when that fiber is deleted (Mobius deletes its fibers) it ends the
-thread's .NET state, after which the next managed code there fails fast ("Attempt to execute
-managed code after the .NET runtime thread state has been destroyed"). Called on each worker
-as it starts, before any fiber, the handler makes the thread's own fiber its home.
-`MobiusState` does this itself.
 
 The convenience layer:
 

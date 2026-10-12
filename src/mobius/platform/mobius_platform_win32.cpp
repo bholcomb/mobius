@@ -183,8 +183,17 @@ namespace {
 
 thread_local PlatformFiber* t_thread_fiber = nullptr;
 thread_local int t_thread_fiber_refs = 0;
-// The context running on this thread, for platform_stack_bounds.
+// The context running on this thread: a fiber, or the thread's own.
 thread_local PlatformFiber* t_running = nullptr;
+
+// A host call a fiber hands to this thread's own context to run
+// (platform_call_on_thread_stack); it lives on that fiber's stack.
+struct HostCall {
+    void (*fn)(void*);
+    void* arg;
+    PlatformFiber* back;   // the fiber to resume afterwards
+};
+thread_local HostCall* t_host_call = nullptr;
 
 void WINAPI fiber_proc(LPVOID param) {
     PlatformFiber* f = static_cast<PlatformFiber*>(param);
@@ -225,6 +234,30 @@ void platform_fiber_switch(PlatformFiber* from, PlatformFiber* to) {
     (void)from;   // the OS knows the running fiber
     t_running = to;
     SwitchToFiber(to->handle);
+    // Resumed. A thread's own context is resumed here also by a fiber that
+    // wants a host call run on this stack (platform_call_on_thread_stack):
+    // run it and switch back to that fiber, until something resumes this
+    // context for its own sake.
+    while (HostCall* call = t_host_call) {
+        t_host_call = nullptr;
+        call->fn(call->arg);
+        t_running = call->back;
+        SwitchToFiber(call->back->handle);
+    }
+}
+
+void platform_call_on_thread_stack(void (*fn)(void*), void* arg) {
+    PlatformFiber* self = t_running;
+    PlatformFiber* home = t_thread_fiber;
+    if (!self || !home || self == home) {   // on the thread's own stack already
+        fn(arg);
+        return;
+    }
+    HostCall call{fn, arg, self};
+    t_host_call = &call;
+    t_running = home;
+    SwitchToFiber(home->handle);
+    // The thread's context ran it and switched back here, on this thread.
 }
 
 PlatformFiber* platform_thread_fiber() {
@@ -256,9 +289,8 @@ void platform_thread_fiber_release() {
 }
 
 bool platform_stack_bounds(char** low, char** high) {
-    PlatformFiber* f = t_running;
-    if (!f || f == t_thread_fiber) return false;   // a thread's own stack: not tracked
-    // The thread information block describes the running fiber's stack.
+    // The thread information block describes the running fiber's stack, or
+    // the thread's own (where host calls run, and scripts they call).
     ULONG_PTR lo = 0, hi = 0;
     GetCurrentThreadStackLimits(&lo, &hi);
     if (lo == 0) return false;

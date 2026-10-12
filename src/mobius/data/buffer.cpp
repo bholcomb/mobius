@@ -1,4 +1,5 @@
 #include "data/buffer.h"
+#include "fiber/job_system.h"
 
 #include <cstring>
 #include <limits>
@@ -23,7 +24,7 @@ BufferValue::BufferValue(void* external_data, size_t size, ReleaseFn release_fn,
 BufferValue::~BufferValue() {
     if (external_) {
         if (release_fn_ && data_) {
-            release_fn_(data_, size_, release_userdata_);
+            JobSystem::callHost([this] { release_fn_(data_, size_, release_userdata_); });   // host code
         }
         data_ = nullptr;
         return;

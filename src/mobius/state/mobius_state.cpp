@@ -1232,7 +1232,7 @@ void MobiusState::reportError(InternalError* err) {
     pub_err.line = err->line;
     pub_err.column = err->column;
     pub_err.function_name = err->function_name;
-    error_handler_(this, &pub_err, error_handler_userdata_);
+    JobSystem::callHost([&] { error_handler_(this, &pub_err, error_handler_userdata_); });
 }
 
 void MobiusState::reportFiberError(MobiusState* state, InternalError* err) {
@@ -1288,7 +1288,7 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
 
 void MobiusState::writeOutput(int stream, const char* data, size_t length) {
     if (output_handler_) {
-        output_handler_(this, stream, data, length, output_handler_userdata_);
+        JobSystem::callHost([&] { output_handler_(this, stream, data, length, output_handler_userdata_); });
         return;
     }
     if (!allowsDefault(MOBIUS_CAP_OUTPUT)) return;   // sandboxed: discarded
@@ -1339,7 +1339,9 @@ bool MobiusState::readFile(const char* path, std::string& out, std::string& erro
     if (has_file_system_) {
         if (!file_system_.read) { error = kFilesUnavailable; return false; }
         MobiusFileRequest request{&out, &error};
-        if (file_system_.read(this, path, &request, file_system_userdata_) != MOBIUS_OK) {
+        int rc = 0;
+        JobSystem::callHost([&] { rc = file_system_.read(this, path, &request, file_system_userdata_); });
+        if (rc != MOBIUS_OK) {
             if (error.empty()) error = "could not read file";
             return false;
         }
@@ -1362,8 +1364,11 @@ bool MobiusState::writeFile(const char* path, const char* data, size_t length, b
     if (has_file_system_) {
         if (!file_system_.write) { error = kFilesUnavailable; return false; }
         MobiusFileRequest request{nullptr, &error};
-        if (file_system_.write(this, path, data, length, append ? 1 : 0, &request,
-                               file_system_userdata_) != MOBIUS_OK) {
+        int rc = 0;
+        JobSystem::callHost([&] {
+            rc = file_system_.write(this, path, data, length, append ? 1 : 0, &request, file_system_userdata_);
+        });
+        if (rc != MOBIUS_OK) {
             if (error.empty()) error = "could not write file";
             return false;
         }
@@ -1384,7 +1389,9 @@ bool MobiusState::writeFile(const char* path, const char* data, size_t length, b
 int MobiusState::fileExists(const char* path, std::string& error) {
     if (has_file_system_) {
         if (!file_system_.exists) { error = kFilesUnavailable; return -1; }
-        return file_system_.exists(this, path, file_system_userdata_) ? 1 : 0;
+        int exists = 0;
+        JobSystem::callHost([&] { exists = file_system_.exists(this, path, file_system_userdata_); });
+        return exists ? 1 : 0;
     }
     if (!allowsDefault(MOBIUS_CAP_FILES)) { error = kFilesUnavailable; return -1; }
     return file_exists(path) ? 1 : 0;
@@ -1392,7 +1399,7 @@ int MobiusState::fileExists(const char* path, std::string& error) {
 
 void MobiusState::requestExit(int code) {
     if (exit_handler_) {
-        exit_handler_(this, code, exit_handler_userdata_);
+        JobSystem::callHost([&] { exit_handler_(this, code, exit_handler_userdata_); });
         return;
     }
     char msg[96];
@@ -1408,10 +1415,6 @@ void mobius_set_output_handler(MobiusState* state, MobiusOutputHandler handler, 
 
 void mobius_set_exit_handler(MobiusState* state, MobiusExitHandler handler, void* userdata) {
     if (state) state->setExitHandler(handler, userdata);
-}
-
-void mobius_set_thread_start_handler(MobiusState* state, MobiusThreadStartHandler handler, void* userdata) {
-    if (state) state->setThreadStartHandler(handler, userdata);
 }
 
 void mobius_set_file_system(MobiusState* state, const MobiusFileSystem* fs, void* userdata) {

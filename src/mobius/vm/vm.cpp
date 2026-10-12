@@ -512,11 +512,8 @@ MOBIUS_NOINLINE int MobiusVM::invokeHostFunction(const Value& func, int nargs) {
         runtimeError("Attempt to call an unknown host function");
         return -1;
     }
-    JobSystem* js = state_->jobSystem();
-    MobiusFiber* fiber = js ? js->currentFiber() : nullptr;
-    if (fiber) fiber->host_call_depth++;
-    int rc = hf->function(state_, nargs, hf->userdata);
-    if (fiber) fiber->host_call_depth--;
+    int rc = 0;
+    JobSystem::callHost([&] { rc = hf->function(state_, nargs, hf->userdata); });
     return rc;
 }
 

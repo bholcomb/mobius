@@ -8,6 +8,7 @@
 #include "data/array_slice.h"
 #include "data/shared_cell.h"
 #include "data/table.h"
+#include "fiber/job_system.h"
 #include "data/array.h"
 #include "data/function.h"
 #include "frontend/ast.h"
@@ -102,8 +103,10 @@ void Value::releaseRefSlow() {
         case VAL_USERDATA:
             if (as.userdata) {
                 if (as.userdata->ref_count.fetch_sub(1, std::memory_order_acq_rel) <= 1) {
-                    if (as.userdata->destructor && as.userdata->ptr)
-                        as.userdata->destructor(as.userdata->ptr);
+                    if (as.userdata->destructor && as.userdata->ptr) {
+                        UserdataObject* ud = as.userdata;
+                        JobSystem::callHost([ud] { ud->destructor(ud->ptr); });   // host code
+                    }
                     delete as.userdata;
                 }
             }

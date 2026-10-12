@@ -125,6 +125,20 @@ void platform_thread_fiber_release();
 // address and the top), for overflow checks. False if unknown.
 bool platform_stack_bounds(char** low, char** high);
 
+// Runs fn(arg) for host code (the embedding program's functions and
+// callbacks), and returns. On Windows it runs on the calling thread's own
+// stack: from a fiber, it switches to the thread's own context (which
+// platform_fiber_switch left suspended), runs fn there and switches back, so
+// the fiber stays on this thread throughout. .NET does not support managed
+// code on Win32 fiber stacks (its stack bounds, stack walks and exception
+// dispatch fail now and then), and a host's runtime takes the fiber its
+// thread first runs on as the thread's own. The caller must not switch
+// fibers from inside fn. Elsewhere fn runs on the current stack: .NET runs
+// managed code on these fibers' stacks on Linux and macOS (the C# binding's
+// tests, which run C# on fibers, with exceptions and collections, under
+// load), and a call costs nothing extra.
+void platform_call_on_thread_stack(void (*fn)(void*), void* arg);
+
 // ---------------------------------------------------------------------------
 // I/O readiness
 // ---------------------------------------------------------------------------

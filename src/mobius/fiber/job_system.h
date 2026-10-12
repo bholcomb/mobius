@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <chrono>
 #include <string>
+#include <type_traits>
 
 struct JobDecl {
     std::function<void()> entry;
@@ -62,6 +63,17 @@ public:
     // True on a fiber that is running a host function (see
     // MobiusFiber::host_call_depth): it must not wait for other fibers.
     static bool inHostFunction();
+
+    // Runs host code: a host function or a host's callback (output, errors,
+    // files, exit, a userdata destructor, an external buffer's release). It
+    // runs on the thread's own stack where the platform needs that
+    // (platform_call_on_thread_stack), with the running fiber marked as in a
+    // host call (MobiusFiber::host_call_depth), so nothing it calls back
+    // into switches the fiber out meanwhile.
+    static void callHost(void (*fn)(void*), void* arg);
+    template <class F> static void callHost(F&& f) {
+        callHost([](void* p) { (*static_cast<std::remove_reference_t<F>*>(p))(); }, &f);
+    }
     static constexpr const char* kWaitInHostFunctionMessage =
         "cannot wait for another fiber inside a host function";
 

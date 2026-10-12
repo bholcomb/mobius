@@ -239,14 +239,6 @@ public:
         exit_handler_ = handler;
         exit_handler_userdata_ = userdata;
     }
-    void setThreadStartHandler(MobiusThreadStartHandler handler, void* userdata) {
-        thread_start_handler_ = handler;
-        thread_start_handler_userdata_ = userdata;
-    }
-    // On a worker thread as it starts: the host's handler, if any.
-    void threadStarted() {
-        if (thread_start_handler_) thread_start_handler_(this, thread_start_handler_userdata_);
-    }
     // exit(code) from a script: the host's handler, or a warning.
     void requestExit(int code);
 
@@ -440,8 +432,6 @@ private:
     void* output_handler_userdata_ = nullptr;
     MobiusExitHandler exit_handler_ = nullptr;
     void* exit_handler_userdata_ = nullptr;
-    MobiusThreadStartHandler thread_start_handler_ = nullptr;
-    void* thread_start_handler_userdata_ = nullptr;
 
     MobiusConfig config_;
     MobiusOverrideBehavior compile_override_behavior_ = MOBIUS_OVERRIDE_ERROR;

@@ -178,6 +178,10 @@ void platform_thread_fiber_release() {
     }
 }
 
+void platform_call_on_thread_stack(void (*fn)(void*), void* arg) {
+    fn(arg);   // see mobius_platform.h
+}
+
 bool platform_stack_bounds(char** low, char** high) {
     PlatformFiber* f = running();
     if (!f || !f->mem) return false;   // a thread's own stack: not tracked
