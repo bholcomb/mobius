@@ -27,6 +27,12 @@ MOBIUS_TLS_ACCESSOR PlatformFiber*& scheduler_ctx() {
     return t_scheduler_ctx;
 }
 
+// The running script waits: its instruction count starts again
+// (mobius_set_count_hook).
+void restart_count() {
+    if (MobiusVM* vm = MobiusVM::current()) vm->restartCount();
+}
+
 } // namespace
 
 struct FiberStartData {
@@ -140,6 +146,7 @@ void JobSystem::waitForCounter(AtomicCounter* counter, int32_t target_value) {
     if (!counter) return;
     if (counter->load() <= target_value) return;
 
+    restart_count();
     MobiusFiber* self = current_fiber();
     if (!self) return;
 
@@ -152,6 +159,7 @@ void JobSystem::waitForCounter(AtomicCounter* counter, int32_t target_value) {
 }
 
 void JobSystem::yieldFiber() {
+    restart_count();
     MobiusFiber* self = current_fiber();
     if (!self) return;
     if (self->host_call_depth > 0) {   // a host function is on this stack: stay put
@@ -174,6 +182,7 @@ void JobSystem::cancelPark() {
 }
 
 void JobSystem::park() {
+    restart_count();
     MobiusFiber* self = current_fiber();
     if (!self) return;
     self->state = FiberState::Parked;

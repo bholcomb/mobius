@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <limits>
 #include <new>
+#include <string>
 
 class MobiusState;
 class ExecutionContext;
@@ -309,6 +310,41 @@ public:
     // the process ran out of memory.
     size_t max_call_depth_ = 0;
     bool callDepthExceeded() const { return call_depth_ >= max_call_depth_; }
+
+    // The count hook (mobius_set_count_hook), this VM's own copy: each
+    // fiber has its own VM, so each counts for itself and no counter is
+    // shared between threads. While count_hook_ is set, each safepoint (a
+    // loop's back-edge, a call) takes one off count_left_, and the hook
+    // runs when it reaches zero.
+    MobiusCountHook count_hook_ = nullptr;
+    void* count_hook_userdata_ = nullptr;
+    uint32_t count_hook_count_ = 0;
+    uint32_t count_left_ = 0;
+    // Set when the hook stopped the script: no try block catches errors
+    // until the host gets the error back (and arms the VM again).
+    bool count_aborted_ = false;
+    std::string count_abort_message_;   // the hook's, to stop it with again
+    void armCountHook(MobiusCountHook hook, uint32_t count, void* userdata) {
+        count_hook_ = count ? hook : nullptr;
+        count_hook_count_ = count_hook_ ? count : 0;
+        count_hook_userdata_ = count_hook_ ? userdata : nullptr;
+        count_left_ = count_hook_count_;
+        count_aborted_ = false;
+    }
+    // The host starts a script on this VM: take the state's setting.
+    void armCountHookFromState() {
+        armCountHook(state_->countHook(), state_->countHookCount(), state_->countHookUserdata());
+    }
+    // The fiber waits: its count starts again.
+    void restartCount() { count_left_ = count_hook_count_; }
+    // A safepoint while counting: when the count reaches zero, call the
+    // hook (or, once it stopped the script, stop it again). Returns -1 if
+    // the script must stop, with the error set at `ip` (the position the
+    // script reached in the running frame).
+    int countSafepoint(uint32_t* ip);
+    // Drop the try blocks registered within the run at `base_depth`
+    // (an error none of them may catch is leaving it).
+    void discardTryBlocks(size_t base_depth);
 
     // True when the C stack of the running fiber is nearly used up. Native
     // code that calls back into script (metamethods, map/sort callbacks,

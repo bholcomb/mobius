@@ -162,6 +162,11 @@ public static unsafe class Native
 
     [DllImport(Lib)] public static extern void mobius_sandbox(IntPtr state, uint allow);
 
+    // ---- Count hook ---------------------------------------------------------
+
+    /// <summary>hook: (state, userdata) -> null to go on, or a UTF-8 message to stop the script with.</summary>
+    [DllImport(Lib)] public static extern void mobius_set_count_hook(IntPtr state, delegate* unmanaged<IntPtr, IntPtr, byte*> hook, uint count, IntPtr userdata);
+
     // ---- Lifecycle and execution -----------------------------------------
 
     [DllImport(Lib)] public static extern IntPtr mobius_new_state(MobiusConfig* config);

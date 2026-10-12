@@ -156,7 +156,10 @@ LD_LIBRARY_PATH=bin ./app
 ```
 
 From there you can register C functions, expose your own userdata types with
-methods, and call Mobius functions back from C — see the
+methods, and call Mobius functions back from C. For untrusted scripts (mods),
+`mobius_sandbox` limits what they can reach, and a count hook
+(`mobius_set_count_hook`) stops runaway loops and gives each call an
+instruction budget — see the
 [Embedding Guide](docs/embedding/embedding-guide.md).
 
 ## Performance

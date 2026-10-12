@@ -254,6 +254,19 @@ public:
         return entries ? &entries[index] : nullptr;
     }
 
+    // The count hook (mobius_set_count_hook) for scripts the host starts.
+    // A VM takes a copy when the host enters it (MobiusVM::armCountHook);
+    // spawned fibers copy their parent's.
+    void setCountHook(MobiusCountHook hook, uint32_t count, void* userdata) {
+        bool on = hook && count;
+        count_hook_ = on ? hook : nullptr;
+        count_hook_count_ = on ? count : 0;
+        count_hook_userdata_ = on ? userdata : nullptr;
+    }
+    MobiusCountHook countHook() const { return count_hook_; }
+    uint32_t countHookCount() const { return count_hook_count_; }
+    void* countHookUserdata() const { return count_hook_userdata_; }
+
     // Sandbox (mobius_sandbox) and the host's file system.
     void setSandbox(unsigned int allow) { sandboxed_ = true; sandbox_allow_ = allow; }
     bool sandboxed() const { return sandboxed_; }
@@ -432,6 +445,9 @@ private:
     void* output_handler_userdata_ = nullptr;
     MobiusExitHandler exit_handler_ = nullptr;
     void* exit_handler_userdata_ = nullptr;
+    MobiusCountHook count_hook_ = nullptr;
+    uint32_t count_hook_count_ = 0;
+    void* count_hook_userdata_ = nullptr;
 
     MobiusConfig config_;
     MobiusOverrideBehavior compile_override_behavior_ = MOBIUS_OVERRIDE_ERROR;

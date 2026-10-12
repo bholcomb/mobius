@@ -237,6 +237,12 @@ static inline int vm_userdata_lookup(MobiusVM* vm, const Value& value, const Val
     return 0;
 }
 
+// A safepoint of the count hook (mobius_set_count_hook): a loop's back-edge
+// or a call. True if the hook stopped the script (the error is set). One
+// load and branch without a hook.
+#define COUNT_SAFEPOINT(vm, ip) \
+    (MOBIUS_UNLIKELY((vm)->count_hook_ != nullptr) && (vm)->countSafepoint(ip) < 0)
+
 // ============================================================================
 // Constructor / Destructor
 // ============================================================================
@@ -452,6 +458,11 @@ int MobiusVM::currentLine() const {
 int MobiusVM::execute(Prototype* proto) {
     JobSystem* js = state_->jobSystem();
 
+    // The host starts a script (not a script's import or load): it counts
+    // from zero, with the state's count hook.
+    MobiusVM* running = current();
+    if (!running || running->state_ != state_) armCountHookFromState();
+
     // Only use executeAsMainFiber for the top-level call (not from within
     // a fiber, e.g. during import/require which re-enters execute).
     if (js && !js->currentFiber()) {
@@ -654,6 +665,7 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
     }
 
+    if (COUNT_SAFEPOINT(this, caller.ip)) return -1;
     if (MOBIUS_UNLIKELY(callDepthExceeded())) {
         runtimeError("Stack overflow: more than %zu nested calls", max_call_depth_);
         return -1;
@@ -766,6 +778,7 @@ int MobiusVM::callScriptMetamethod(const Value& fn, MobiusString* mm_name,
                      mm_name->data, nargs, mf->param_count);
         return -1;
     }
+    if (COUNT_SAFEPOINT(this, callStackTop().ip)) return -1;
     if (MOBIUS_UNLIKELY(callDepthExceeded())) {
         runtimeError("Stack overflow: more than %zu nested calls", max_call_depth_);
         return -1;
@@ -2733,8 +2746,9 @@ MOBIUS_FORCEINLINE static int vm_op_modi(MobiusVM* vm, VMFrame& f, uint32_t inst
 // ---- Jumps ----
 
 MOBIUS_FORCEINLINE static int vm_op_jmp(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm;
-    f.ip += DECODE_sBx_wide(inst);
+    int offset = DECODE_sBx_wide(inst);
+    if (MOBIUS_UNLIKELY(offset < 0) && COUNT_SAFEPOINT(vm, f.ip)) return -1;   // a loop's back-edge
+    f.ip += offset;
     return 0;
 }
 
@@ -3091,12 +3105,12 @@ MOBIUS_FORCEINLINE static int vm_op_iforprep(MobiusVM* vm, VMFrame& f, uint32_t 
 }
 
 MOBIUS_FORCEINLINE static int vm_op_iforloop(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    (void)vm;
     int a = DECODE_A(inst);
     int64_t sv = f.regs[a + 2].as.i64;
     int64_t iv = (int64_t)((uint64_t)f.regs[a].as.i64 + (uint64_t)sv);   // wraps
     f.regs[a].as.i64 = iv;
     if ((sv > 0) ? (iv <= f.regs[a + 1].as.i64) : (iv >= f.regs[a + 1].as.i64)) {
+        if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
         f.ip += DECODE_sBx(inst);
         f.regs[a + 3].as.i64 = iv;
         f.regs[a + 3].type = VAL_INT64;
@@ -3211,6 +3225,7 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
     }
 
     f.ci->ip = f.ip;
+    if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
     if (MOBIUS_UNLIKELY(vm->callDepthExceeded())) {
         vm->runtimeError("Stack overflow: more than %zu nested calls", vm->max_call_depth_);
         return -1;
@@ -3266,6 +3281,7 @@ MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t
             memset(&vm->type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
         }
 
+        if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
         if (MOBIUS_UNLIKELY(vm->callDepthExceeded())) {
             VM_ERROR(vm, f, "Stack overflow: more than %zu nested calls", vm->max_call_depth_);
             return -1;
@@ -3408,6 +3424,7 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
         vm->registers_[f.ci->base + i] = Value();
     }
 
+    if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
     f.ci->proto = child;
     f.ci->ip = child->code.data();
     f.ci->clearUpvalues();
@@ -4079,14 +4096,20 @@ MOBIUS_FORCEINLINE static int vm_op_spawn(MobiusVM* vm, VMFrame& f, uint32_t ins
 
         Prototype* proto = mf->proto;
         MobiusState* state = vm->state_;
+        // The new fiber counts with its parent's count hook, from zero.
+        MobiusCountHook count_hook = vm->count_hook_;
+        uint32_t count_hook_count = vm->count_hook_count_;
+        void* count_hook_userdata = vm->count_hook_userdata_;
 
         ((RefCounted*)future)->retain();
 
         JobDecl job;
         job.entry = [state, proto, args_copy = std::move(args),
-                     upvals = std::move(upvalue_snapshot), future]() mutable {
+                     upvals = std::move(upvalue_snapshot), future,
+                     count_hook, count_hook_count, count_hook_userdata]() mutable {
             MobiusVM fiber_vm(state);
             fiber_vm.future_ = future;
+            fiber_vm.armCountHook(count_hook, count_hook_count, count_hook_userdata);
             int nargs = (int)args_copy.size();
             int needed = proto->num_registers + nargs + 256 + 1;
             fiber_vm.ensureRegisters(needed);
@@ -4375,7 +4398,38 @@ MOBIUS_FORCEINLINE static int vm_op_nop(MobiusVM* vm, VMFrame& f, uint32_t inst)
 // Main dispatch loop
 // ============================================================================
 
+void MobiusVM::discardTryBlocks(size_t base_depth) {
+    while (!try_stack_.empty() && try_stack_.back().call_stack_depth > base_depth) {
+        release_atomic_locks(this, try_stack_.back().atomic_depth);
+        try_stack_.pop_back();
+    }
+}
+
+MOBIUS_NOINLINE int MobiusVM::countSafepoint(uint32_t* ip) {
+    if (--count_left_ != 0) return 0;
+    callStackTop().ip = ip;   // the error reports the instruction reached
+    if (!count_aborted_) {
+        count_left_ = count_hook_count_;
+        MobiusCountHook hook = count_hook_;
+        void* userdata = count_hook_userdata_;
+        const char* stop = nullptr;
+        JobSystem::callHost([&] { stop = hook(state_, userdata); });
+        if (!stop) return 0;
+        count_aborted_ = true;
+        count_abort_message_ = stop;
+    }
+    // (Running again although stopped: native code that called back into
+    // the script dropped the error. It stops again, at once.)
+    runtimeError("instruction limit: %s", count_abort_message_.c_str());
+    count_left_ = 1;   // and at every safepoint it reaches from now on
+    return -1;
+}
+
 MOBIUS_NOINLINE int MobiusVM::handleHandlerError(size_t base_depth) {
+    if (MOBIUS_UNLIKELY(count_aborted_)) {   // stopped by the count hook
+        discardTryBlocks(base_depth);
+        return -1;
+    }
     if (!try_stack_.empty() &&
         try_stack_.back().call_stack_depth > base_depth) {
         TryBlock& tb = try_stack_.back();
@@ -4622,6 +4676,10 @@ int MobiusVM::run(size_t base_depth) {
             // Same handler-selection rules as VM_HANDLER: only a try block
             // registered within this run() may catch, and its atomic locks
             // must be released on the way to the catch.
+            if (MOBIUS_UNLIKELY(count_aborted_)) {
+                discardTryBlocks(base_depth);
+                return -1;
+            }
             if (!try_stack_.empty() &&
                 try_stack_.back().call_stack_depth > base_depth) {
                 TryBlock& _tb = try_stack_.back();

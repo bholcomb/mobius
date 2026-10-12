@@ -51,6 +51,8 @@ mobius.ExitRequested = code => UnloadMod(code);
 mobius.Sandbox();
 mobius.FileSystem = new ModFiles(modDirectory);   // implements IMobiusFileSystem
 mobius.AddScriptDirectory("scripts");             // import "util" -> scripts/util.mob
+// And a budget: each call from C# may run 10000 loop iterations and calls.
+mobius.SetCountHook(10000, () => "over budget");
 
 // The game's API.
 mobius.Register("spawn_enemy", args => world.Spawn((string)args[0]!));
@@ -85,6 +87,14 @@ Values convert both ways:
 Errors (syntax, runtime, or a C# exception thrown by a registered function)
 come back as `MobiusException` with `File` and `Line`. A C# exception thrown in
 a registered function becomes a script error the script can catch.
+
+`SetCountHook(count, hook)` is `mobius_set_count_hook` (see the
+[Embedding Guide](../../docs/embedding/embedding-guide.md#instruction-budgets)):
+the hook runs after every `count` loop iterations and calls a script makes
+without waiting, counted per fiber from each call from C#, and returns null to
+let the script go on or a message to stop it with an `instruction limit:`
+error the script can't catch. A hook that throws stops the script with the
+exception's message.
 
 Threading: a registered function runs on whichever thread is running the
 script fiber that called it. That can be any of the interpreter's worker

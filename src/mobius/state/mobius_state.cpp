@@ -598,7 +598,12 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
     }
 
     MobiusVM* vm = activeVM();
-    if (!vm) vm = main_vm_;
+    if (!vm) {
+        // The host calls into a script outside any running script: on the
+        // main VM, counting from zero with the state's count hook.
+        vm = main_vm_;
+        if (vm) vm->armCountHookFromState();
+    }
     if (!vm) {
         { setError(MOBIUS_ERROR_RUNTIME,
                         "callValue() requires a bound VM",
@@ -1219,7 +1224,9 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     // An error escaping a spawned fiber goes to its future; await reports
     // it if the awaiter doesn't catch it, and an unobserved future reports
     // it when freed (MobiusState::reportFiberError).
-    bool will_be_caught = vm && (!vm->try_stack_.empty() || vm->future_ != nullptr);
+    // (Nothing catches an error once the count hook stopped the script.)
+    bool will_be_caught = vm && ((!vm->try_stack_.empty() && !vm->count_aborted_) ||
+                                 vm->future_ != nullptr);
     if (!will_be_caught) reportError(err_slot);
 
     return code;
@@ -1436,6 +1443,11 @@ void mobius_file_set_error(MobiusFileRequest* request, const char* message) {
 
 void mobius_sandbox(MobiusState* state, unsigned int allow) {
     if (state) state->setSandbox(allow);
+}
+
+void mobius_set_count_hook(MobiusState* state, MobiusCountHook hook, uint32_t count,
+                           void* userdata) {
+    if (state) state->setCountHook(hook, count, userdata);
 }
 
 }

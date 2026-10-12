@@ -654,8 +654,63 @@ mobius_stack_pushNewTable(state, 8);
 mobius_register_module(state, "game");
 ```
 
-Limits on what a script may consume (CPU time, memory) are separate from
-the sandbox.
+### Instruction budgets
+
+The sandbox limits what a script can reach, not how long it runs. To stop
+runaway scripts (`while (true) {}`) and give scripts a budget, set a count
+hook:
+
+```c
+static const char* over_budget(MobiusState* state, void* userdata) {
+    return "over budget";               // NULL would let the script go on
+}
+
+mobius_set_count_hook(state, over_budget, 10000, NULL);
+```
+
+The hook runs after every `count` **safepoints** a script passes without
+waiting. The safepoints are where a script can run long: each jump back to
+the start of a loop (one per iteration) and each call of a script function
+by script code, including tail calls and metamethods written in Mobius.
+Straight-line code between them isn't counted, nor are native and host
+functions. A budget of N lets a script run at most N loop iterations and
+calls.
+
+When the hook returns a message, the script fails with the runtime error
+`instruction limit: <message>` where it is. The error unwinds the whole
+script to the host, past any `try`/`catch` in the script, and reaches the
+error handler and the return code as usual. Returning `NULL` lets the
+script go on until the next `count`; a hook can, for example, check a clock
+and stop only scripts that ran too long.
+
+Each fiber counts for itself, and its count starts again at zero when the
+host starts a script (`mobius_exec_string` and friends, or `mobius_call_ref`
+outside any running script), when a spawned fiber starts, and each time a
+fiber waits (`yield`, `await`, `fiber.sleep`, channels, I/O). So with a
+hook that always stops, `count` is a budget for each call from the host:
+
+```c
+mobius_set_count_hook(state, over_budget, 10000, NULL);
+for (each tick) {
+    if (mobius_call_ref(state, on_tick, NULL, 0, 0) < 0) {
+        // the script failed, or ran more than 10000 loop iterations and calls
+    }
+}
+```
+
+and, for a script that runs as a fiber, a budget between two waits. A
+script called back from a host function counts on the fiber that called the
+host function, without starting again.
+
+The setting applies to scripts the host starts afterwards. A fiber spawned
+by a script keeps its parent's hook, count and userdata, so a script can't
+escape its budget by spawning. `mobius_set_count_hook(state, NULL, 0, NULL)`
+removes the hook for scripts started afterwards. Like other host callbacks,
+the hook may run on any worker thread, concurrently for different fibers;
+it must not run scripts.
+
+Without a hook nothing is counted: each safepoint costs a test of a flag.
+Memory limits are separate.
 
 ---
 

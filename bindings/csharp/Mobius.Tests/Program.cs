@@ -140,6 +140,37 @@ using (var m = new MobiusState(workerThreads: 0))
     Check("single-threaded", other == 0);
 }
 
+// The count hook: endless loops stop, a budget per call, fibers on several
+// workers each counted, a throwing hook stops the script cleanly.
+using (var m = new MobiusState(workerThreads: 3))
+{
+    m.SetCountHook(1000, () => "too long");
+    Throws("endless loop", () => m.Execute("while (true) {}"), "instruction limit: too long");
+    Throws("endless loop inside try", () => m.Execute("try { while (true) {} } catch e {}"), "instruction limit: too long");
+
+    m.Execute("func spin(n) { for (var i = 0; i < n; i++) {} return n }");
+    m.SetCountHook(100, () => "over budget");
+    bool under = true;
+    for (int i = 0; i < 200; i++) under &= m.Call("spin", 99L) is long n && n == 99;
+    Check("under the budget", under);
+    Throws("over the budget", () => m.Call("spin", 100L), "instruction limit: over budget");
+
+    m.Execute("func forever() { while (true) {} }");
+    m.SetCountHook(100000, () => "fiber too long");
+    m.Execute("var fs = []\nfor (var i = 0; i < 8; i++) { fs:push(spawn forever()) }\nvar stopped = 0\n" +
+              "for (var f in fs) { try { await f } catch e { if (contains(e, \"fiber too long\")) { stopped = stopped + 1 } } }");
+    Check("fibers stopped", (long)m.GetGlobal("stopped")! == 8);
+
+    long hooked = 0;
+    m.SetCountHook(1000, () => { Interlocked.Increment(ref hooked); throw new InvalidOperationException("hook broke"); });
+    Throws("throwing hook", () => m.Execute("while (true) {}"), "instruction limit: hook broke");
+    Check("throwing hook ran", Interlocked.Read(ref hooked) == 1);
+
+    m.SetCountHook(0, null);
+    m.Execute("var n = 0\nfor (var i = 0; i < 1000000; i++) { n = n + 1 }");
+    Check("hook removed", (long)m.GetGlobal("n")! == 1000000);
+}
+
 // The C API directly, through Native.
 RawApi.Run(Check);
 

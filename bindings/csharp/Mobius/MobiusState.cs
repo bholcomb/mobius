@@ -61,7 +61,7 @@ public sealed unsafe class MobiusState : IDisposable
 {
     private IntPtr _state;
     private GCHandle _self;
-    private readonly List<GCHandle> _functions = new();
+    private readonly List<GCHandle> _handles = new();   // host functions and count hooks, freed on Dispose
     private readonly object _errorLock = new();
     private MobiusException? _lastError;
 
@@ -87,10 +87,10 @@ public sealed unsafe class MobiusState : IDisposable
         if (_state == IntPtr.Zero) return;
         Native.mobius_free_state(_state);
         _state = IntPtr.Zero;
-        lock (_functions)
+        lock (_handles)
         {
-            foreach (var h in _functions) h.Free();
-            _functions.Clear();
+            foreach (var h in _handles) h.Free();
+            _handles.Clear();
         }
         _self.Free();
     }
@@ -181,6 +181,41 @@ public sealed unsafe class MobiusState : IDisposable
     {
         uint allow = (allowConsoleOutput ? Native.MOBIUS_CAP_OUTPUT : 0) | (allowRealFiles ? Native.MOBIUS_CAP_FILES : 0);
         Native.mobius_sandbox(S, allow);
+    }
+
+    /// <summary>
+    /// Stop runaway scripts and enforce instruction budgets (mobius_set_count_hook):
+    /// <paramref name="hook"/> runs after every <paramref name="count"/> safepoints (a loop's
+    /// back-edge, a call of a script function) a script runs without waiting. Each fiber counts
+    /// for itself, from zero at each call from C# (Execute, Call), when it is spawned and after
+    /// each wait (yield, await, sleep, channels). The hook returns null to let the script go
+    /// on, or a message to stop it with the error "instruction limit: message", which the
+    /// script's try/catch can't catch; an exception from the hook stops it with its message.
+    /// A budget per call: <c>SetCountHook(10000, () => "over budget")</c>. A count of 0 or a
+    /// null hook removes it. Applies to scripts started afterwards; a spawned fiber keeps its
+    /// parent's hook. Called on interpreter threads, possibly concurrently.
+    /// </summary>
+    public void SetCountHook(uint count, Func<string?>? hook)
+    {
+        if (hook == null || count == 0) { Native.mobius_set_count_hook(S, null, 0, IntPtr.Zero); return; }
+        // A handle per hook, kept until Dispose: fibers spawned under this one keep calling it.
+        Native.mobius_set_count_hook(S, &OnCount, count, KeepObject(hook));
+    }
+
+    // The message the count hook last stopped a script with on this thread:
+    // Mobius copies it as soon as the hook returns, so it's freed on the next stop.
+    [ThreadStatic] private static IntPtr t_stopMessage;
+
+    [UnmanagedCallersOnly]
+    private static byte* OnCount(IntPtr state, IntPtr userdata)
+    {
+        string? stop;
+        try { stop = ((Func<string?>)GCHandle.FromIntPtr(userdata).Target!)(); }
+        catch (Exception e) { stop = e.Message; }   // a throwing hook stops the script, not the process
+        if (stop == null) return null;
+        Marshal.FreeCoTaskMem(t_stopMessage);
+        t_stopMessage = Marshal.StringToCoTaskMemUTF8(stop);
+        return (byte*)t_stopMessage;
     }
 
     /// <summary>Where `import "name"` looks for name.mob (through the file system).</summary>
@@ -326,10 +361,12 @@ public sealed unsafe class MobiusState : IDisposable
         reference = 0;
     }
 
-    private IntPtr Keep(Func<object?[], object?> function)
+    private IntPtr Keep(Func<object?[], object?> function) => KeepObject(new HostFunction(this, function));
+
+    private IntPtr KeepObject(object target)
     {
-        var h = GCHandle.Alloc(new HostFunction(this, function));
-        lock (_functions) _functions.Add(h);   // host functions may push functions on worker threads
+        var h = GCHandle.Alloc(target);
+        lock (_handles) _handles.Add(h);   // host functions may push functions on worker threads
         return GCHandle.ToIntPtr(h);
     }
 
