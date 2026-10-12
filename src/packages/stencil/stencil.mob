@@ -2640,9 +2640,11 @@ func __env_check(self) {
     var errors = []
     var files = os.walkdir(self.root)
     files:sort()
+    // walkdir joins with the platform's separator ('\' on Windows); template
+    // names are '/'-separated.
     var prefix = self.root
-    if (!endswith(prefix, "/")) {
-        prefix = prefix + "/"
+    if (!endswith(prefix, "/") and !endswith(prefix, os.separator)) {
+        prefix = prefix + os.separator
     }
     for (var i = 0; i < size(files); i++) {
         var path = files[i]
@@ -2652,6 +2654,9 @@ func __env_check(self) {
         var name = path
         if (startswith(path, prefix)) {
             name = substr(path, size(prefix), size(path) - size(prefix))
+        }
+        if (os.separator != "/") {
+            name = replace(name, os.separator, "/")
         }
         __check_template(self, name, errors)
     }
