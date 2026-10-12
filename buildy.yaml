@@ -7,7 +7,11 @@ environment:
   compile:
     cpp_standard: "c++17"
     warnings: extra
-    flags: []
+    # Fibers move between threads: /GT stops MSVC keeping a thread-local's
+    # address across a call, which may switch fibers. GCC and Clang have no
+    # such switch (see src/mobius/platform/fiber_tls.h).
+    flags:
+      - windows: ["/GT"]
   # Every symbol a library uses must resolve when it links, as on Windows and
   # macOS: a plugin that uses a symbol the core doesn't export (anything but
   # the C API) fails to link here too, instead of only at load time.
