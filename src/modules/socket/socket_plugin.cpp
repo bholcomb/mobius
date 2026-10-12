@@ -571,8 +571,13 @@ static int tcp_socket_shutdown(MobiusState* state, int arg_count, void* /*userda
     }
 
     if (!read && !write) return mobius_error(state, "socket:shutdown() requires read or write");
+    // A TCP socket here was connected when made (connect, accept), so "not
+    // connected" means the peer has closed it: both directions are shut.
     if (shutdown(obj->handle, socket_shutdown_how(read, write)) != 0) {
-        return mobius_error(state, socket_error_message("socket:shutdown()", socket_last_error_code()).c_str());
+        int err = socket_last_error_code();
+        if (!socket_not_connected(err)) {
+            return mobius_error(state, socket_error_message("socket:shutdown()", err).c_str());
+        }
     }
     mobius_stack_copy(state, 0);
     mobius_stack_pop(state, arg_count);

@@ -71,6 +71,10 @@ static inline bool socket_interrupted(int code) { return code == EINTR; }
 // accept() of a connection the peer already dropped: take the next one.
 static inline bool socket_accept_aborted(int code) { return code == ECONNABORTED; }
 
+// shutdown() of a connection the peer has already closed (macOS reports
+// it; Linux shuts it down without complaint).
+static inline bool socket_not_connected(int code) { return code == ENOTCONN; }
+
 // shutdown()'s `how` for the directions to close (read and/or write).
 static inline int socket_shutdown_how(bool read, bool write) {
     return read && write ? SHUT_RDWR : read ? SHUT_RD : SHUT_WR;
