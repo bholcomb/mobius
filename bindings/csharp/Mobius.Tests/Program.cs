@@ -108,6 +108,29 @@ using (var m = new MobiusState())
     Check("no native plugins", (bool)m.GetGlobal("bad")!);
 }
 
+// Many C# calls from many fibers on every worker, with exceptions thrown and
+// caught and garbage collections (which walk every thread's stack) in them,
+// so trouble with where host code runs shows up here rather than now and then.
+using (var m = new MobiusState())
+{
+    long hits = 0;
+    m.Register("hit", args =>
+    {
+        if (Interlocked.Increment(ref hits) % 500 == 0) GC.Collect();
+        return (long)args[0]! + 1;
+    });
+    m.Register("boom", args => throw new InvalidOperationException("boom"));
+    m.Execute("func work(n) {\n    var t = 0\n    for (var i = 0; i < n; i++) {\n        t = t + hit(i)\n        try { boom() } catch e { t = t + 1 }\n    }\n    return t\n}");
+    const int rounds = 40, fibers = 64, calls = 20;
+    bool totals = true;
+    for (int round = 0; round < rounds; round++)
+    {
+        m.Execute($"var fs = []\nfor (var i = 0; i < {fibers}; i++) {{ fs:push(spawn work({calls})) }}\nvar total = 0\nfor (var f in fs) {{ total = total + await f }}");
+        totals &= (long)m.GetGlobal("total")! == fibers * (calls * (calls + 1) / 2 + calls);
+    }
+    Check("host calls from many fibers", totals && hits == rounds * fibers * calls);
+}
+
 // No worker threads: everything on the calling thread.
 using (var m = new MobiusState(workerThreads: 0))
 {
