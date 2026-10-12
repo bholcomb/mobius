@@ -61,9 +61,7 @@ public:
 
     // True on a fiber that is running a host function (see
     // MobiusFiber::host_call_depth): it must not wait for other fibers.
-    static bool inHostFunction() {
-        return t_current_fiber_ && t_current_fiber_->host_call_depth > 0;
-    }
+    static bool inHostFunction();
     static constexpr const char* kWaitInHostFunctionMessage =
         "cannot wait for another fiber inside a host function";
 
@@ -146,9 +144,6 @@ private:
     // Dedicated, larger-stacked fiber for the top-level script (see
     // executeAsMainFiber). Created lazily, reused across calls, freed in dtor.
     MobiusFiber* dedicated_main_fiber_ = nullptr;
-
-    static thread_local MobiusFiber* t_current_fiber_;
-    static thread_local PlatformFiber* t_scheduler_ctx_;   // this thread's own context
 };
 
 // Scope guard for a fiber's wait loop. Registers the fiber as blocked for

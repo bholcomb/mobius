@@ -7,6 +7,7 @@
 
 #include "platform/mobius_platform.h"
 #include "platform/fiber_context.h"
+#include "platform/fiber_tls.h"
 
 #include <cerrno>
 #include <climits>
@@ -87,10 +88,18 @@ struct PlatformFiber {
 
 namespace {
 
+// The thread's own context: used only on it, never on a fiber.
 thread_local PlatformFiber* t_thread_fiber = nullptr;
 thread_local int t_thread_fiber_refs = 0;
-// The context running on this thread, for platform_stack_bounds.
+
+// The context running on this thread, for platform_stack_bounds. Fibers
+// use it, so only through running() (see fiber_tls.h).
 thread_local PlatformFiber* t_running = nullptr;
+
+MOBIUS_TLS_ACCESSOR PlatformFiber*& running() {
+    MOBIUS_TLS_FENCE();
+    return t_running;
+}
 
 size_t page_size() {
     static const size_t size = (size_t)sysconf(_SC_PAGESIZE);
@@ -132,7 +141,7 @@ void platform_fiber_start(PlatformFiber* fiber, void (*entry)(void*), void* arg)
 }
 
 void platform_fiber_switch(PlatformFiber* from, PlatformFiber* to) {
-    t_running = to;
+    running() = to;
     mobius_fiber_switch(&from->sp, to->sp);
 }
 
@@ -141,7 +150,7 @@ void platform_fiber_switch(PlatformFiber* from, PlatformFiber* to) {
 PlatformFiber* platform_thread_fiber() {
     if (t_thread_fiber_refs++ == 0) {
         t_thread_fiber = new PlatformFiber();
-        t_running = t_thread_fiber;
+        running() = t_thread_fiber;
     }
     return t_thread_fiber;
 }
@@ -150,12 +159,12 @@ void platform_thread_fiber_release() {
     if (t_thread_fiber_refs > 0 && --t_thread_fiber_refs == 0) {
         delete t_thread_fiber;
         t_thread_fiber = nullptr;
-        t_running = nullptr;
+        running() = nullptr;
     }
 }
 
 bool platform_stack_bounds(char** low, char** high) {
-    PlatformFiber* f = t_running;
+    PlatformFiber* f = running();
     if (!f || !f->mem) return false;   // a thread's own stack: not tracked
     *low = (char*)f->mem + page_size();
     *high = (char*)f->mem + f->mem_size;

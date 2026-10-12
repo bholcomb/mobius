@@ -309,7 +309,7 @@ void free_internal_error(InternalError* error) {
 static void default_error_handler(MobiusState* state, const MobiusError* error, void* userdata);
 
 static MOBIUS_FORCEINLINE MobiusVM* executing_vm_for_state(const MobiusState* state) {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = MobiusVM::current();
     return (vm && vm->state_ == state) ? vm : nullptr;
 }
 
@@ -317,12 +317,12 @@ namespace {
 struct ScopedCurrentVMOverride {
     MobiusVM* previous;
 
-    explicit ScopedCurrentVMOverride(MobiusVM* vm) : previous(MobiusVM::t_current_vm) {
-        MobiusVM::t_current_vm = vm;
+    explicit ScopedCurrentVMOverride(MobiusVM* vm) : previous(MobiusVM::current()) {
+        MobiusVM::setCurrent(vm);
     }
 
     ~ScopedCurrentVMOverride() {
-        MobiusVM::t_current_vm = previous;
+        MobiusVM::setCurrent(previous);
     }
 };
 }
@@ -1064,52 +1064,56 @@ int MobiusState::execStringInEnvironment(const char* code, GlobalEnvironment* en
 
     // Parse and compile errors are collected, then reported through the
     // error handler with their real text (they used to go straight to
-    // stderr, and the handler got only "Parse error").
-    DiagnosticScope diagnostics;
-    auto report_diagnostics = [&](int code, const char* fallback) {
-        const char* src = getSourceContext();
-        std::string message = fallback;
-        int line = 0;
-        if (!diagnostics.diagnostics.empty()) {
-            const Diagnostic& first = diagnostics.diagnostics[0];
-            message = first.message;
-            line = first.line;
-            // Further errors follow on their own lines.
-            for (size_t i = 1; i < diagnostics.diagnostics.size(); i++) {
-                const Diagnostic& d = diagnostics.diagnostics[i];
-                message += "\n";
-                if (d.line > 0) message += "line " + std::to_string(d.line) + ": ";
-                message += d.message;
+    // stderr, and the handler got only "Parse error"). The scope is the
+    // thread's, so it ends before the chunk runs: running can switch
+    // fibers, and the fiber may resume on another thread.
+    Prototype* proto = nullptr;
+    {
+        DiagnosticScope diagnostics;
+        auto report_diagnostics = [&](int code, const char* fallback) {
+            const char* src = getSourceContext();
+            std::string message = fallback;
+            int line = 0;
+            if (!diagnostics.diagnostics.empty()) {
+                const Diagnostic& first = diagnostics.diagnostics[0];
+                message = first.message;
+                line = first.line;
+                // Further errors follow on their own lines.
+                for (size_t i = 1; i < diagnostics.diagnostics.size(); i++) {
+                    const Diagnostic& d = diagnostics.diagnostics[i];
+                    message += "\n";
+                    if (d.line > 0) message += "line " + std::to_string(d.line) + ": ";
+                    message += d.message;
+                }
             }
+            setError(code, message.c_str(), nullptr, line, 0, nullptr, src ? src : "<string>");
+            return code;
+        };
+
+        TokenArray tokens = scan_source(code, string_pool_);
+        if (tokens.count == 0) {
+            free_token_array(&tokens);
+            setError(MOBIUS_ERROR_SYNTAX, "No tokens found", NULL, 0, 0, NULL);
+            return MOBIUS_ERROR_SYNTAX;
         }
-        setError(code, message.c_str(), nullptr, line, 0, nullptr, src ? src : "<string>");
-        return code;
-    };
 
-    TokenArray tokens = scan_source(code, string_pool_);
-    if (tokens.count == 0) {
+        ParseResult parse_result = parse(this, tokens);
         free_token_array(&tokens);
-        setError(MOBIUS_ERROR_SYNTAX, "No tokens found", NULL, 0, 0, NULL);
-        return MOBIUS_ERROR_SYNTAX;
-    }
 
-    ParseResult parse_result = parse(this, tokens);
-    free_token_array(&tokens);
+        if (parse_result.had_error) {
+            free_parse_result(&parse_result);
+            return report_diagnostics(MOBIUS_ERROR_SYNTAX, "Syntax error");
+        }
 
-    if (parse_result.had_error) {
+        const char* src = getSourceContext();
+        Compiler compiler(string_pool_, this, env_or_root(this, env));
+        proto = compiler.compile(parse_result.statements, parse_result.count,
+                                 src ? src : "<string>");
         free_parse_result(&parse_result);
-        return report_diagnostics(MOBIUS_ERROR_SYNTAX, "Syntax error");
-    }
 
-    const char* src = getSourceContext();
-    Compiler compiler(string_pool_, this, env_or_root(this, env));
-    Prototype* proto = compiler.compile(parse_result.statements,
-                                        parse_result.count,
-                                        src ? src : "<string>");
-    free_parse_result(&parse_result);
-
-    if (!proto) {
-        return report_diagnostics(MOBIUS_ERROR_SYNTAX, "Compile error");
+        if (!proto) {
+            return report_diagnostics(MOBIUS_ERROR_SYNTAX, "Compile error");
+        }
     }
 
     if (config_.debug_mode) {

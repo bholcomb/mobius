@@ -13,6 +13,7 @@
 #include "plugin/module_registry.h"
 #include "fiber/job_system.h"
 #include "frontend/ast.h"
+#include "platform/fiber_tls.h"
 #include <chrono>
 
 #include <cstdio>
@@ -59,6 +60,8 @@ static int g_gc_no_pool = []() {
     return e ? atoi(e) : 0;
 }();
 
+struct GcSegment;
+
 namespace {
 
 constexpr int    GC_TYPE_COUNT = 4;
@@ -75,8 +78,10 @@ struct GcPool {
     char* end = nullptr;
 };
 
-// Per OS thread: chunk pools (shared by every heap: a chunk is just memory)
-// and the in-flight cross-thread frees.
+struct SegmentRef { uint64_t heap_id; GcSegment* seg; };
+
+// Per OS thread: chunk pools (shared by every heap: a chunk is just memory),
+// the in-flight cross-thread frees and the thread's segments.
 struct GcThread {
     GcPool pools[GC_TYPE_COUNT];
     // In-flight cross-thread frees on THIS thread (LIFO: an inner delete
@@ -85,6 +90,15 @@ struct GcThread {
     // records the corpse here; gc_object_free hands it to the owner.
     struct DeferredFree { void* obj; GcHeader* h; };
     std::vector<DeferredFree> defer_stack;
+    // This thread's segment of a heap: the last one used is cached; the
+    // rest are in a small list.
+    uint64_t seg_heap_id = 0;
+    GcSegment* seg = nullptr;
+    std::vector<SegmentRef> segments;
+    // A sweep runs every destructor on its own thread, and other states
+    // keep running (and freeing) on theirs.
+    bool in_sweep = false;
+    uint32_t shadow_verify_countdown = 0;
 };
 
 } // namespace
@@ -128,7 +142,10 @@ std::atomic<int> g_pending_heaps{0};
 
 thread_local GcThread* tl_gc = nullptr;
 
-GcThread* gc_thread() {
+// This thread's GcThread. Only through here (see platform/fiber_tls.h):
+// scripts allocate and free on fibers, which may move between threads.
+MOBIUS_TLS_ACCESSOR GcThread* gc_thread() {
+    MOBIUS_TLS_FENCE();
     GcThread* t = tl_gc;
     if (MOBIUS_LIKELY(t != nullptr)) return t;
     t = new GcThread();   // leaked deliberately: its pools hold live chunks
@@ -136,47 +153,40 @@ GcThread* gc_thread() {
     return t;
 }
 
-// This thread's segment of a heap: the last one used is cached; the rest
-// are in a small per-thread list.
-struct SegmentRef { uint64_t heap_id; GcSegment* seg; };
-thread_local uint64_t tl_seg_heap_id = 0;
-thread_local GcSegment* tl_seg = nullptr;
-thread_local std::vector<SegmentRef>* tl_segments = nullptr;
-
 size_t gc_threshold_base_fwd();
 
-GcSegment* gc_segment_slow(GcHeap* heap) {
-    if (!tl_segments) tl_segments = new std::vector<SegmentRef>();   // leaked with the thread
+GcSegment* gc_segment_slow(GcThread* t, GcHeap* heap) {
     GcSegment* seg = nullptr;
-    for (const SegmentRef& r : *tl_segments)
+    for (const SegmentRef& r : t->segments)
         if (r.heap_id == heap->id) { seg = r.seg; break; }
     if (!seg) {
         {
             // Forget segments of destroyed heaps (their memory is gone).
             std::lock_guard<std::mutex> lock(g_heaps_mutex);
-            auto& v = *tl_segments;
+            auto& v = t->segments;
             for (size_t i = 0; i < v.size();) {
                 if (!g_live_heap_ids.count(v[i].heap_id)) { v[i] = v.back(); v.pop_back(); }
                 else i++;
             }
         }
         seg = new GcSegment();
-        seg->thread = gc_thread();
+        seg->thread = t;
         seg->heap = heap;
         std::lock_guard<std::mutex> lock(heap->mutex);
         seg->budget = heap->budget;
         seg->next_segment = heap->head;
         heap->head = seg;
-        tl_segments->push_back({heap->id, seg});
+        t->segments.push_back({heap->id, seg});
     }
-    tl_seg_heap_id = heap->id;
-    tl_seg = seg;
+    t->seg_heap_id = heap->id;
+    t->seg = seg;
     return seg;
 }
 
 inline GcSegment* gc_segment(GcHeap* heap) {
-    if (MOBIUS_LIKELY(tl_seg_heap_id == heap->id)) return tl_seg;
-    return gc_segment_slow(heap);
+    GcThread* t = gc_thread();
+    if (MOBIUS_LIKELY(t->seg_heap_id == heap->id)) return t->seg;
+    return gc_segment_slow(t, heap);
 }
 
 inline void segment_unlink(GcHeader* h) {
@@ -283,7 +293,8 @@ void gc_heap_destroy(GcHeap* heap) {
     }
     gc_clear_heap_pending(heap);
     // This thread's cache; other threads drop theirs on their next miss.
-    if (tl_seg_heap_id == heap->id) { tl_seg_heap_id = 0; tl_seg = nullptr; }
+    GcThread* t = gc_thread();
+    if (t->seg_heap_id == heap->id) { t->seg_heap_id = 0; t->seg = nullptr; }
     GcSegment* s = heap->head;
     while (s) {
         GcSegment* next = s->next_segment;
@@ -356,7 +367,8 @@ void gc_track(GcHeap* heap, GcHeader* h, GcObjectType type, void* obj) {
 void gc_untrack(GcHeader* h) {
     if (!h->prev) return;   // already unlinked by the sweep
     GcSegment* s = static_cast<GcSegment*>(h->owner);
-    if (MOBIUS_LIKELY(s->thread == tl_gc)) {
+    GcThread* t = gc_thread();
+    if (MOBIUS_LIKELY(s->thread == t)) {
         segment_unlink(h);
         s->count--;
         return;
@@ -370,7 +382,7 @@ void gc_untrack(GcHeader* h) {
     // handoff. Until then the header stays linked in the owner's segment,
     // which is safe: segment walks happen only at quiescence, and this
     // thread destructing means we are not quiescent.
-    gc_thread()->defer_stack.push_back({h->obj, h});
+    t->defer_stack.push_back({h->obj, h});
 }
 
 size_t gc_tracked_count(GcHeap* heap) {
@@ -667,24 +679,21 @@ static void gc_destruct(GcHeader* h) {
     }
 }
 
-// Per thread: a sweep runs every destructor on its own thread, and other
-// states keep running (and freeing) on theirs.
-static thread_local bool g_gc_in_sweep = false;
-
-bool gc_is_sweeping() { return g_gc_in_sweep; }
+bool gc_is_sweeping() { return gc_thread()->in_sweep; }
 
 // Out-of-line cold path of RefCounted::release() (see ref_counted.h): the
 // count hit zero. Defined here so the sweep flag never appears in inline
 // code compiled into plugins.
 void RefCounted::releaseAtZero() {
-    if (gc_managed_ && g_gc_in_sweep) return;   // the sweep owns freeing it
+    if (gc_managed_ && gc_thread()->in_sweep) return;   // the sweep owns freeing it
     delete this;
 }
 
 static void gc_free_dead(std::vector<GcHeader*>& dead) {
-    g_gc_in_sweep = true;
+    GcThread* t = gc_thread();
+    t->in_sweep = true;
     for (GcHeader* h : dead) gc_destruct(h);
-    g_gc_in_sweep = false;
+    t->in_sweep = false;
     for (GcHeader* h : dead) gc_object_free(h->type(), h->obj);
 }
 
@@ -792,7 +801,6 @@ void gc_safepoint(MobiusVM* vm) {
         gc_collect(vm);
 
     if (g_gc_shadow_mode) {
-        static thread_local uint32_t countdown = 0;
-        if (countdown++ % 64 == 0) gc_shadow_verify_now(vm);
+        if (gc_thread()->shadow_verify_countdown++ % 64 == 0) gc_shadow_verify_now(vm);
     }
 }

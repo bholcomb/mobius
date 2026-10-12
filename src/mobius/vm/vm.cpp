@@ -1,4 +1,5 @@
 #include "platform/mobius_platform.h"
+#include "platform/fiber_tls.h"
 #include "vm/vm.h"
 #include "state/mobius_state.h"
 #include "data/table.h"
@@ -240,18 +241,30 @@ static inline int vm_userdata_lookup(MobiusVM* vm, const Value& value, const Val
 // Constructor / Destructor
 // ============================================================================
 
-thread_local MobiusVM* MobiusVM::t_current_vm = nullptr;
+namespace {
+thread_local MobiusVM* t_current_vm = nullptr;
+} // namespace
+
+MOBIUS_TLS_ACCESSOR MobiusVM* MobiusVM::current() {
+    MOBIUS_TLS_FENCE();
+    return t_current_vm;
+}
+
+MOBIUS_TLS_ACCESSOR void MobiusVM::setCurrent(MobiusVM* vm) {
+    MOBIUS_TLS_FENCE();
+    t_current_vm = vm;
+}
 
 namespace {
 struct ScopedCurrentVM {
     MobiusVM* prev;
 
-    explicit ScopedCurrentVM(MobiusVM* vm) : prev(MobiusVM::t_current_vm) {
-        MobiusVM::t_current_vm = vm;
+    explicit ScopedCurrentVM(MobiusVM* vm) : prev(MobiusVM::current()) {
+        MobiusVM::setCurrent(vm);
     }
 
     ~ScopedCurrentVM() {
-        MobiusVM::t_current_vm = prev;
+        MobiusVM::setCurrent(prev);
     }
 };
 } // namespace

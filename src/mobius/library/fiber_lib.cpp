@@ -58,7 +58,7 @@ int lib_fiber_cancel(MobiusState* state, int arg_count, void* /*userdata*/) {
 // Every wait loop checks it: a fiber blocked in await, fiber.all/any or a
 // channel operation ignored cancellation, so cancelling it never ended it.
 static bool current_fiber_cancelled() {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = MobiusVM::current();
     return vm && vm->future_ && vm->future_->isCancelled();
 }
 
@@ -131,7 +131,7 @@ int lib_fiber_all(MobiusState* state, int arg_count, void* /*userdata*/) {
             // Propagate the first failure as itself (documented behavior),
             // not a generic "one or more fibers failed".
             results->release();
-            MobiusVM* vm = MobiusVM::t_current_vm;
+            MobiusVM* vm = MobiusVM::current();
             if (vm) {
                 vm->rethrowFutureError(future);
                 return -1;

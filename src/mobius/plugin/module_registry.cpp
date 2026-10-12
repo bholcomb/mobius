@@ -464,7 +464,7 @@ static void run_plugin_post_init(Plugin* plugin, Table* mod_table, MobiusState* 
     Value scratch[32];
     mod_table->retain();
     scratch[0] = make_table_value(mod_table);
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = MobiusVM::current();
     if (vm) {
         int saved_base = vm->native_ctx_.base;
         int saved_top  = vm->native_ctx_.top;

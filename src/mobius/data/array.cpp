@@ -2,6 +2,7 @@
 #include "data/shared_cell.h"
 #include "data/table.h"
 #include "data/value.h"
+#include "platform/fiber_tls.h"
 
 
 // ----------------------------------------------------------------------------
@@ -31,11 +32,13 @@ void ArrayValue::operator delete(void* p) noexcept {
 void ArrayValue::operator delete(void* p, const std::nothrow_t&) noexcept {
     if (p) gc_object_free(GC_ARRAY, p);
 }
-static Value& invalid_array_value() {
+MOBIUS_TLS_ACCESSOR static Value& invalid_array_value() {
     // Handed out for out-of-bounds access through the non-const operator[],
     // so a caller CAN write through it. thread_local + reset-to-nil on every
     // call keeps a stray OOB write from (a) racing across fibers and (b)
-    // becoming the permanent result of every later OOB read.
+    // becoming the permanent result of every later OOB read. An accessor
+    // (see platform/fiber_tls.h), as fibers move between threads.
+    MOBIUS_TLS_FENCE();
     static thread_local Value nil_value;
     nil_value = make_nil_value();
     return nil_value;

@@ -1,5 +1,6 @@
 #include "fiber/io_reactor.h"
 #include "fiber/job_system.h"
+#include "platform/fiber_tls.h"
 #include "state/mobius_state.h"
 #include "vm/vm.h"
 
@@ -8,9 +9,25 @@
 #include <algorithm>
 #include <thread>
 
+namespace {
 
-thread_local MobiusFiber* JobSystem::t_current_fiber_ = nullptr;
-thread_local PlatformFiber* JobSystem::t_scheduler_ctx_ = nullptr;
+// The fiber running on this thread, and the thread's own context, which
+// fibers switch back to. Only through these (see fiber_tls.h): a fiber
+// that switches out may resume on another thread.
+thread_local MobiusFiber* t_current_fiber = nullptr;
+thread_local PlatformFiber* t_scheduler_ctx = nullptr;
+
+MOBIUS_TLS_ACCESSOR MobiusFiber*& current_fiber() {
+    MOBIUS_TLS_FENCE();
+    return t_current_fiber;
+}
+
+MOBIUS_TLS_ACCESSOR PlatformFiber*& scheduler_ctx() {
+    MOBIUS_TLS_FENCE();
+    return t_scheduler_ctx;
+}
+
+} // namespace
 
 struct FiberStartData {
     JobSystem* system;
@@ -37,9 +54,9 @@ void JobSystem::fiberEntryTrampoline(void* arg) {
     if (system && counts)
         system->outstanding_jobs_.fetch_sub(1, std::memory_order_acq_rel);
 
-    MobiusFiber* self = t_current_fiber_;
+    MobiusFiber* self = current_fiber();
     self->state = FiberState::Dead;
-    platform_fiber_switch(self->context, t_scheduler_ctx_);
+    platform_fiber_switch(self->context, scheduler_ctx());
 
     fprintf(stderr, "FATAL: returned to completed fiber\n");
     abort();
@@ -123,7 +140,7 @@ void JobSystem::waitForCounter(AtomicCounter* counter, int32_t target_value) {
     if (!counter) return;
     if (counter->load() <= target_value) return;
 
-    MobiusFiber* self = t_current_fiber_;
+    MobiusFiber* self = current_fiber();
     if (!self) return;
 
     {
@@ -131,11 +148,11 @@ void JobSystem::waitForCounter(AtomicCounter* counter, int32_t target_value) {
         wait_list_.push_back({self, counter, target_value});
     }
     self->state = FiberState::Suspended;
-    platform_fiber_switch(self->context, t_scheduler_ctx_);
+    platform_fiber_switch(self->context, scheduler_ctx());
 }
 
 void JobSystem::yieldFiber() {
-    MobiusFiber* self = t_current_fiber_;
+    MobiusFiber* self = current_fiber();
     if (!self) return;
     if (self->host_call_depth > 0) {   // a host function is on this stack: stay put
         std::this_thread::yield();
@@ -143,24 +160,24 @@ void JobSystem::yieldFiber() {
     }
 
     self->state = FiberState::Suspended;
-    platform_fiber_switch(self->context, t_scheduler_ctx_);
+    platform_fiber_switch(self->context, scheduler_ctx());
 }
 
 void JobSystem::beginPark() {
-    MobiusFiber* self = t_current_fiber_;
+    MobiusFiber* self = current_fiber();
     if (self) self->park_state.store(MobiusFiber::PARK_PARKING, std::memory_order_release);
 }
 
 void JobSystem::cancelPark() {
-    MobiusFiber* self = t_current_fiber_;
+    MobiusFiber* self = current_fiber();
     if (self) self->park_state.store(MobiusFiber::PARK_IDLE, std::memory_order_release);
 }
 
 void JobSystem::park() {
-    MobiusFiber* self = t_current_fiber_;
+    MobiusFiber* self = current_fiber();
     if (!self) return;
     self->state = FiberState::Parked;
-    platform_fiber_switch(self->context, t_scheduler_ctx_);
+    platform_fiber_switch(self->context, scheduler_ctx());
     // Resumed by wakeFiber (or the worker, if the wake came early).
     self->park_state.store(MobiusFiber::PARK_IDLE, std::memory_order_release);
 }
@@ -206,7 +223,12 @@ std::string JobSystem::fiberLimitDeadlockMessage() {
 }
 
 MobiusFiber* JobSystem::currentFiber() const {
-    return t_current_fiber_;
+    return current_fiber();
+}
+
+bool JobSystem::inHostFunction() {
+    MobiusFiber* fiber = current_fiber();
+    return fiber && fiber->host_call_depth > 0;
 }
 
 MobiusFiber* JobSystem::dequeueReadyFiber() {
@@ -294,15 +316,15 @@ void JobSystem::spawnWorkerIfNeeded() {
 }
 
 // Run `fiber` on this thread until it yields, parks or finishes, then file
-// it accordingly. The thread must have a scheduler context (t_scheduler_ctx_).
+// it accordingly. The thread must have a scheduler context (scheduler_ctx()).
 void JobSystem::runFiber(MobiusFiber* fiber) {
-    MobiusVM* outer_vm = MobiusVM::t_current_vm;
-    t_current_fiber_ = fiber;
+    MobiusVM* outer_vm = MobiusVM::current();
+    current_fiber() = fiber;
     fiber->state = FiberState::Running;
-    if (fiber->vm) MobiusVM::t_current_vm = fiber->vm;
-    platform_fiber_switch(t_scheduler_ctx_, fiber->context);
-    t_current_fiber_ = nullptr;
-    MobiusVM::t_current_vm = outer_vm;
+    if (fiber->vm) MobiusVM::setCurrent(fiber->vm);
+    platform_fiber_switch(scheduler_ctx(), fiber->context);
+    current_fiber() = nullptr;
+    MobiusVM::setCurrent(outer_vm);
 
     if (fiber->state == FiberState::Dead) {
         metrics_->total_jobs_executed++;
@@ -341,7 +363,7 @@ bool JobSystem::mainFiberDone() {
 }
 
 void JobSystem::workerThreadEntry() {
-    t_scheduler_ctx_ = platform_thread_fiber();
+    scheduler_ctx() = platform_thread_fiber();
 
     auto idle_start = std::chrono::steady_clock::now();
     const auto idle_timeout = std::chrono::milliseconds(1000);
@@ -429,7 +451,7 @@ int JobSystem::executeAsMainFiber(std::function<int()> fn) {
     // workers it runs everything. Spawned fibers still unfinished when the
     // main fiber ends continue on the workers, or with no workers, during
     // the next call into the state.
-    t_scheduler_ctx_ = platform_thread_fiber();
+    scheduler_ctx() = platform_thread_fiber();
     while (!mainFiberDone()) {
         MobiusFiber* next = dequeueReadyFiber();
         if (next) {

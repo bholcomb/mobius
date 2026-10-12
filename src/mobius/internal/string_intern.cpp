@@ -1,4 +1,5 @@
 #include "internal/string_intern.h"
+#include "platform/fiber_tls.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -158,12 +159,20 @@ struct StringPoolClass {
     void* free_head = nullptr;
     char* cursor = nullptr;
     char* end = nullptr;
+    bool owner = false;   // this thread has carved a slab of this class
 };
 thread_local StringPoolClass tl_string_pools[STRING_CLASS_COUNT];
 
+// This thread's pool of a class. Only through here (see
+// platform/fiber_tls.h): strings are made and freed on fibers, which may
+// move between threads.
+MOBIUS_TLS_ACCESSOR StringPoolClass& string_pool(int cls) {
+    MOBIUS_TLS_FENCE();
+    return tl_string_pools[cls];
+}
+
 // Foreign frees land here; allocators drain opportunistically.
 std::atomic<void*> g_string_overflow[STRING_CLASS_COUNT] = {};
-thread_local bool tl_string_pool_owner[STRING_CLASS_COUNT] = {};
 
 inline int string_class_for_block(size_t block) {
     if (block <= 64) return 0;
@@ -173,7 +182,7 @@ inline int string_class_for_block(size_t block) {
 }
 
 void* string_pool_alloc(int cls) {
-    StringPoolClass& p = tl_string_pools[cls];
+    StringPoolClass& p = string_pool(cls);
     if (void* c = p.free_head) {
         p.free_head = *(void**)c;
         return c;
@@ -192,7 +201,7 @@ void* string_pool_alloc(int cls) {
         if (!slab) return nullptr;
         p.cursor = slab;
         p.end = slab + STRING_SLAB_SIZE;
-        tl_string_pool_owner[cls] = true;
+        p.owner = true;
     }
     void* c = p.cursor;
     p.cursor += bs;
@@ -202,8 +211,8 @@ void* string_pool_alloc(int cls) {
 void string_pool_free(int cls, void* block) {
     // Same-thread if this thread has ever allocated this class (the usual
     // case); otherwise push onto the class's global overflow stack.
-    if (tl_string_pool_owner[cls]) {
-        StringPoolClass& p = tl_string_pools[cls];
+    StringPoolClass& p = string_pool(cls);
+    if (p.owner) {
         *(void**)block = p.free_head;
         p.free_head = block;
         return;

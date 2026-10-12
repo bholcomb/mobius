@@ -216,7 +216,10 @@ public:
     int callScriptMetamethod(const Value& fn, MobiusString* mm_name,
                              const Value* args, int nargs, Value* out);
 
-    static thread_local MobiusVM* t_current_vm;
+    // The VM running on this thread (the running fiber's), or null: a
+    // thread_local, reached only through these (see platform/fiber_tls.h).
+    static MobiusVM* current();
+    static void setCurrent(MobiusVM* vm);
 
     MobiusState* state_;
     MobiusMetrics* metrics_;

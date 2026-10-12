@@ -8,7 +8,7 @@
 // Identity of the current lock owner: the running fiber's VM, or this
 // thread when no VM is active (e.g. an embedder's own thread).
 static const void* current_owner() {
-    if (MobiusVM::t_current_vm) return MobiusVM::t_current_vm;
+    if (MobiusVM* vm = MobiusVM::current()) return vm;
     static thread_local char thread_identity;
     return &thread_identity;
 }
@@ -16,7 +16,7 @@ static const void* current_owner() {
 // Let the lock holder run: yield this fiber if we are on one, otherwise
 // yield the thread.
 static void wait_for_holder() {
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = MobiusVM::current();
     JobSystem* js = vm ? vm->state_->jobSystem() : nullptr;
     if (js && js->currentFiber()) {
         js->yieldFiber();

@@ -252,7 +252,7 @@ MOBIUS_API int mobius_io_wait(MobiusState* state, const MobiusIoWait* waits, int
         return platform_poll(waits, count, timeout_ms);
     }
 
-    MobiusVM* vm = MobiusVM::t_current_vm;
+    MobiusVM* vm = MobiusVM::current();
     FutureValue* future = vm ? vm->future_ : nullptr;
     if (future && future->isCancelled()) return MOBIUS_IO_CANCELLED;
 
