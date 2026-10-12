@@ -13,10 +13,8 @@ targets:
       language: cpp
       output_prefix: ""
       sources: ["sqlite_plugin.cpp"]
-      include_dirs:
-        - "${workspace}/include"
-        - "${workspace}/src"
-        - "${workspace}/src/mobius"
+      # Only the public headers: a package uses only the C API.
+      include_dirs: ["${workspace}/include"]
       libs: ["mobius-core"]
       deps: ["sqlite3"]
       depends_on:

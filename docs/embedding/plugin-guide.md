@@ -8,6 +8,12 @@ modules.
 **Header:** `<mobius/mobius_plugin.h>` — plugin structs, the stack API, and the
 export macro. It includes `<mobius/mobius.h>` for you.
 
+A plugin uses only this C API. The interpreter's own C++ headers are not a
+plugin interface, and the core library doesn't export most of what they
+declare, so a plugin using them fails to link on Windows and macOS. Mobius's
+own build links with `-Wl,--no-undefined` on Linux, so the mistake fails there
+too.
+
 The stack API and value-handling rules are identical to those in the
 [Embedding Guide](embedding-guide.md); this page focuses on packaging native
 code as an importable module.

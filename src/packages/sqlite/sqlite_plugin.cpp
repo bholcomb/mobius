@@ -1,5 +1,4 @@
 #include <mobius/mobius_plugin.h>
-#include "state/mobius_state.h"
 
 #include <sqlite3.h>
 

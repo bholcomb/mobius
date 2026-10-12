@@ -1,8 +1,6 @@
+// The GLFW package. Like any plugin it uses only the public C API
+// (mobius_plugin.h), not the interpreter's internals.
 #include <mobius/mobius_plugin.h>
-
-#include "data/enum.h"
-#include "data/value.h"
-#include "state/mobius_state.h"
 
 #include <GLFW/glfw3.h>
 
@@ -12,6 +10,7 @@
 #include <mutex>
 #include <new>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -20,10 +19,13 @@ namespace {
 static const char* GLFW_WINDOW_TYPE = "glfw_window";
 static const char* GLFW_MONITOR_TYPE = "glfw_monitor";
 
+// A window's userdata stays alive while the GLFW window is open: self_ref
+// roots it, so callbacks and current_context() hand scripts the same window
+// value. Closing the window (window:close(), glfw.terminate()) releases it.
 struct WindowObject {
     MobiusState* state = nullptr;
     GLFWwindow* handle = nullptr;
-    UserdataObject* userdata_handle = nullptr;
+    MobiusValueRef self_ref = 0;
     bool destroyed = false;
 
     MobiusValueRef on_key_ref = 0;
@@ -45,10 +47,33 @@ struct MonitorObject {
     GLFWmonitor* handle = nullptr;
 };
 
+// A callback argument after the window: plain data, made a Mobius value when
+// the event is dispatched (on the window's state, inside poll_events()).
+struct EventArg {
+    enum Kind { INT, UINT, FLOAT, BOOL, ENUM } kind = INT;
+    int64_t integer = 0;
+    double number = 0.0;
+    const char* enum_name = nullptr;   // ENUM: an enum the companion script installed
+};
+
+static EventArg int_arg(int64_t value) { EventArg a; a.kind = EventArg::INT; a.integer = value; return a; }
+static EventArg uint_arg(uint64_t value) { EventArg a; a.kind = EventArg::UINT; a.integer = (int64_t)value; return a; }
+static EventArg float_arg(double value) { EventArg a; a.kind = EventArg::FLOAT; a.number = value; return a; }
+static EventArg bool_arg(bool value) { EventArg a; a.kind = EventArg::BOOL; a.integer = value ? 1 : 0; return a; }
+static EventArg enum_arg(const char* enum_name, int64_t value) {
+    EventArg a;
+    a.kind = EventArg::ENUM;
+    a.integer = value;
+    a.enum_name = enum_name;
+    return a;
+}
+
+// A GLFW callback, queued while GLFW processes events and called when
+// poll_events() (or a wait) returns. The window's callback is looked up then.
 struct PendingCallbackEvent {
-    MobiusState* state = nullptr;
-    MobiusValueRef function_ref = 0;
-    std::array<MobiusValueRef, 5> args = {};
+    WindowObject* window = nullptr;
+    MobiusValueRef WindowObject::* callback = nullptr;
+    std::array<EventArg, 4> args = {};
     size_t arg_count = 0;
 };
 
@@ -56,7 +81,8 @@ static std::mutex g_glfw_mutex;
 static std::unordered_set<MobiusState*> g_initialized_states;
 static std::unordered_set<WindowObject*> g_live_windows;
 static std::vector<PendingCallbackEvent> g_pending_events;
-using InstalledEnumMap = std::unordered_map<std::string, EnumDefinition*>;
+// Each state's enum definitions, installed by the companion script.
+using InstalledEnumMap = std::unordered_map<std::string, MobiusValueRef>;
 static std::unordered_map<MobiusState*, InstalledEnumMap> g_installed_enums;
 
 static bool state_is_initialized(MobiusState* state) {
@@ -80,62 +106,57 @@ static void push_bool_field(MobiusState* state, int table_idx, const char* key, 
     mobius_stack_setTableField(state, table_idx, key);
 }
 
-static void push_value_field(MobiusState* state, int table_idx, const char* key, const Value& value) {
-    state->npush(value);
-    mobius_stack_setTableField(state, table_idx, key);
-}
-
 static void push_float_field(MobiusState* state, int table_idx, const char* key, double value) {
     mobius_stack_pushFloat64(state, value);
     mobius_stack_setTableField(state, table_idx, key);
 }
 
-static void release_installed_enum_map(InstalledEnumMap& enums) {
-    for (auto& entry : enums) {
-        if (entry.second) entry.second->release();
-    }
-    enums.clear();
-}
-
-static EnumDefinition* retain_installed_enum(MobiusState* state, const char* enum_name) {
-    if (!state || !enum_name || enum_name[0] == '\0') return nullptr;
-
+static MobiusValueRef installed_enum(MobiusState* state, const char* enum_name) {
     std::lock_guard<std::mutex> lock(g_glfw_mutex);
     auto state_it = g_installed_enums.find(state);
-    if (state_it == g_installed_enums.end()) return nullptr;
-
+    if (state_it == g_installed_enums.end()) return 0;
     auto enum_it = state_it->second.find(enum_name);
-    if (enum_it == state_it->second.end() || !enum_it->second) return nullptr;
-    static_cast<RefCounted*>(enum_it->second)->retain();
-    return enum_it->second;
+    return enum_it == state_it->second.end() ? 0 : enum_it->second;
 }
 
-static Value make_retained_enum_value(EnumDefinition* definition, int64_t value) {
-    if (!definition) return make_int64_value(value);
-
-    Value enum_value;
-    enum_value.type = VAL_ENUM;
-    enum_value.flags = 0;
-    enum_value.aux = (int32_t)value;
-    enum_value.as.enum_def = definition;
-    static_cast<RefCounted*>(definition)->retain();
-    return enum_value;
+// Pushes `value` as a value of the enum installed as `enum_name`, or as an
+// integer if the companion script hasn't installed it. Returns false (an
+// error is set) if the value can't be made.
+static bool push_enum_value(MobiusState* state, const char* enum_name, int64_t value) {
+    MobiusValueRef definition = installed_enum(state, enum_name);
+    if (!definition) {
+        mobius_stack_pushInt64(state, value);
+        return true;
+    }
+    // [definition, value] -> [value]: the stack API removes only from the
+    // top, so the value waits in a ref while the definition is popped.
+    if (!mobius_push_ref(state, definition)) {
+        mobius_error(state, "glfw: an installed enum definition is gone");
+        return false;
+    }
+    if (!mobius_stack_getEnumValue(state, -1, value)) {
+        mobius_stack_pop(state, 1);
+        mobius_error(state, "glfw: enum value out of range");
+        return false;
+    }
+    MobiusValueRef result = mobius_ref_value(state, -1);
+    mobius_stack_pop(state, 2);
+    if (!result || !mobius_push_ref(state, result)) {
+        mobius_unref_value(state, result);
+        mobius_error(state, "glfw: failed to root an enum value");
+        return false;
+    }
+    mobius_unref_value(state, result);
+    return true;
 }
 
-static Value make_installed_enum_value(MobiusState* state, const char* enum_name, int64_t value) {
-    EnumDefinition* definition = retain_installed_enum(state, enum_name);
-    if (!definition) return make_int64_value(value);
-
-    Value enum_value = make_retained_enum_value(definition, value);
-    definition->release();
-    return enum_value;
-}
-
-static void push_error_table(MobiusState* state, int code, const char* description) {
+static bool push_error_table(MobiusState* state, int code, const char* description) {
     mobius_stack_pushNewTable(state, 2);
     int tbl = mobius_stack_size(state) - 1;
-    push_value_field(state, tbl, "code", make_installed_enum_value(state, "Error", code));
+    if (!push_enum_value(state, "Error", code)) return false;
+    mobius_stack_setTableField(state, tbl, "code");
     push_string_field(state, tbl, "description", description);
+    return true;
 }
 
 static void push_size_table(MobiusState* state, int width, int height) {
@@ -262,97 +283,98 @@ static void clear_window_callbacks(WindowObject* window) {
     release_value_ref(window->state, window->on_maximize_ref);
 }
 
-static void free_event_refs(PendingCallbackEvent& event) {
-    if (!event.state) return;
-    if (event.function_ref) {
-        mobius_unref_value(event.state, event.function_ref);
-        event.function_ref = 0;
+// Drops a window's callback refs without releasing them: for a window whose
+// state is being freed, which releases every ref itself.
+static void forget_window_callbacks(WindowObject* window) {
+    window->on_key_ref = 0;
+    window->on_char_ref = 0;
+    window->on_cursor_pos_ref = 0;
+    window->on_mouse_button_ref = 0;
+    window->on_scroll_ref = 0;
+    window->on_resize_ref = 0;
+    window->on_framebuffer_resize_ref = 0;
+    window->on_close_ref = 0;
+    window->on_focus_ref = 0;
+    window->on_cursor_enter_ref = 0;
+    window->on_iconify_ref = 0;
+    window->on_maximize_ref = 0;
+}
+
+static void clear_pending_events_locked(MobiusState* state, WindowObject* window) {
+    std::vector<PendingCallbackEvent> kept;
+    kept.reserve(g_pending_events.size());
+    for (PendingCallbackEvent& event : g_pending_events) {
+        bool drop = window ? event.window == window : event.window->state == state;
+        if (!drop) kept.push_back(event);
     }
-    for (size_t i = 0; i < event.arg_count; i++) {
-        if (event.args[i]) mobius_unref_value(event.state, event.args[i]);
-        event.args[i] = 0;
-    }
-    event.arg_count = 0;
+    g_pending_events.swap(kept);
 }
 
 static void clear_pending_events_for_state(MobiusState* state) {
     std::lock_guard<std::mutex> lock(g_glfw_mutex);
-    std::vector<PendingCallbackEvent> kept;
-    kept.reserve(g_pending_events.size());
-    for (PendingCallbackEvent& event : g_pending_events) {
-        if (event.state == state) {
-            free_event_refs(event);
-        } else {
-            kept.push_back(std::move(event));
-        }
-    }
-    g_pending_events.swap(kept);
+    clear_pending_events_locked(state, nullptr);
 }
 
-static void clear_pending_events_for_state_locked(MobiusState* state) {
-    std::vector<PendingCallbackEvent> kept;
-    kept.reserve(g_pending_events.size());
-    for (PendingCallbackEvent& event : g_pending_events) {
-        if (event.state == state) {
-            free_event_refs(event);
-        } else {
-            kept.push_back(std::move(event));
-        }
-    }
-    g_pending_events.swap(kept);
-}
-
-static void clear_all_pending_events() {
+// Takes `window` out of the live set and drops its queued events.
+static void forget_live_window(WindowObject* window) {
     std::lock_guard<std::mutex> lock(g_glfw_mutex);
-    for (PendingCallbackEvent& event : g_pending_events) {
-        free_event_refs(event);
-    }
-    g_pending_events.clear();
+    g_live_windows.erase(window);
+    clear_pending_events_locked(nullptr, window);
 }
 
-static void invalidate_window_for_terminate(WindowObject* window) {
-    if (!window) return;
-    window->handle = nullptr;
-    window->destroyed = true;
+static void destroy_glfw_window(GLFWwindow* handle) {
+    if (!handle) return;
+    glfwSetWindowUserPointer(handle, nullptr);
+    glfwSetKeyCallback(handle, nullptr);
+    glfwSetCharCallback(handle, nullptr);
+    glfwSetCursorPosCallback(handle, nullptr);
+    glfwSetMouseButtonCallback(handle, nullptr);
+    glfwSetScrollCallback(handle, nullptr);
+    glfwSetWindowSizeCallback(handle, nullptr);
+    glfwSetFramebufferSizeCallback(handle, nullptr);
+    glfwSetWindowCloseCallback(handle, nullptr);
+    glfwSetWindowFocusCallback(handle, nullptr);
+    glfwSetCursorEnterCallback(handle, nullptr);
+    glfwSetWindowIconifyCallback(handle, nullptr);
+    glfwSetWindowMaximizeCallback(handle, nullptr);
+    glfwDestroyWindow(handle);
+}
+
+// Releases a closed window's refs. The self ref goes last: releasing it can
+// free the userdata, and with it `window`.
+static void release_window_refs(WindowObject* window) {
     clear_window_callbacks(window);
+    MobiusState* state = window->state;
+    MobiusValueRef self_ref = window->self_ref;
+    window->self_ref = 0;
+    if (self_ref) mobius_unref_value(state, self_ref);
 }
 
-static void destroy_window(WindowObject* window) {
-    if (!window) return;
-
+// window:close(). `window` may be freed when this returns.
+static void close_window(WindowObject* window) {
+    if (window->destroyed) return;
+    forget_live_window(window);
     GLFWwindow* handle = window->handle;
     window->handle = nullptr;
     window->destroyed = true;
-
-    {
-        std::lock_guard<std::mutex> lock(g_glfw_mutex);
-        g_live_windows.erase(window);
-    }
-
-    clear_window_callbacks(window);
-
-    if (handle) {
-        glfwSetWindowUserPointer(handle, nullptr);
-        glfwSetKeyCallback(handle, nullptr);
-        glfwSetCharCallback(handle, nullptr);
-        glfwSetCursorPosCallback(handle, nullptr);
-        glfwSetMouseButtonCallback(handle, nullptr);
-        glfwSetScrollCallback(handle, nullptr);
-        glfwSetWindowSizeCallback(handle, nullptr);
-        glfwSetFramebufferSizeCallback(handle, nullptr);
-        glfwSetWindowCloseCallback(handle, nullptr);
-        glfwSetWindowFocusCallback(handle, nullptr);
-        glfwSetCursorEnterCallback(handle, nullptr);
-        glfwSetWindowIconifyCallback(handle, nullptr);
-        glfwSetWindowMaximizeCallback(handle, nullptr);
-        glfwDestroyWindow(handle);
-    }
+    destroy_glfw_window(handle);
+    release_window_refs(window);
 }
 
 static void window_object_destructor(void* ptr) {
     WindowObject* window = static_cast<WindowObject*>(ptr);
     if (!window) return;
-    destroy_window(window);
+    if (!window->destroyed) {
+        // An open window's self ref keeps its userdata alive, so this one's
+        // state is being freed, and is releasing every ref (this one's
+        // too): drop them without releasing them.
+        forget_live_window(window);
+        destroy_glfw_window(window->handle);
+        window->handle = nullptr;
+        window->destroyed = true;
+        forget_window_callbacks(window);
+        window->self_ref = 0;
+    }
     delete window;
 }
 
@@ -361,185 +383,160 @@ static void monitor_object_destructor(void* ptr) {
     delete monitor;
 }
 
-static Value make_window_value(WindowObject* window) {
-    Value value;
-    value.type = VAL_USERDATA;
-    value.flags = 0;
-    value.aux = 0;
-    value.as.userdata = window ? window->userdata_handle : nullptr;
-    return value;
-}
-
 static int push_window_for_handle(MobiusState* state, GLFWwindow* handle) {
-    if (!handle) {
+    WindowObject* window = handle ? static_cast<WindowObject*>(glfwGetWindowUserPointer(handle)) : nullptr;
+    if (!window || window->destroyed) {
         mobius_stack_pushNil(state);
         return 1;
     }
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window || !window->userdata_handle) {
-        mobius_stack_pushNil(state);
-        return 1;
-    }
-    state->npush(make_window_value(window));
+    if (window->state != state) return mobius_error(state, "the GLFW window belongs to another Mobius state");
+    if (!mobius_push_ref(state, window->self_ref)) return mobius_error(state, "glfw: a window's ref is gone");
     return 1;
 }
 
-static MobiusValueRef duplicate_ref(MobiusState* state, MobiusValueRef ref) {
-    Value value;
-    if (!state || ref == 0 || !state->copyValueRef(ref, &value)) return 0;
-    return state->createValueRef(value);
-}
-
-static const Value* get_native_arg_value(MobiusState* state, int idx, int arg_count) {
-    NativeCallContext* ctx = state ? state->nativeContext() : nullptr;
-    if (!ctx || idx < 0 || idx >= arg_count) return nullptr;
-    int abs = ctx->base + idx;
-    if (abs < ctx->base || abs >= ctx->top) return nullptr;
-    return &ctx->registers[abs];
-}
-
-static EnumDefinition* get_native_enum_definition_arg(MobiusState* state, int idx, int arg_count) {
-    const Value* value = get_native_arg_value(state, idx, arg_count);
-    if (!value || value->type != VAL_ENUM || !value->as.enum_def || value->aux != -1) return nullptr;
-    return value->as.enum_def;
-}
-
-static void queue_callback_event(WindowObject* window, MobiusValueRef callback_ref,
-                                 std::initializer_list<Value> args) {
-    if (!window || !window->state || !window->handle || callback_ref == 0) return;
+static void queue_callback_event(WindowObject* window, MobiusValueRef WindowObject::* callback,
+                                 std::initializer_list<EventArg> args) {
+    if (!window || window->destroyed || window->*callback == 0) return;
 
     PendingCallbackEvent event;
-    event.state = window->state;
-    event.function_ref = duplicate_ref(window->state, callback_ref);
-    if (!event.function_ref) return;
-
-    for (const Value& arg : args) {
-        if (event.arg_count >= event.args.size()) break;
-        MobiusValueRef arg_ref = window->state->createValueRef(arg);
-        if (!arg_ref) {
-            free_event_refs(event);
-            return;
-        }
-        event.args[event.arg_count++] = arg_ref;
-    }
+    event.window = window;
+    event.callback = callback;
+    for (const EventArg& arg : args) event.args[event.arg_count++] = arg;
 
     std::lock_guard<std::mutex> lock(g_glfw_mutex);
-    g_pending_events.push_back(std::move(event));
+    g_pending_events.push_back(event);
 }
 
-static int dispatch_pending_events(MobiusState* state) {
-    std::vector<PendingCallbackEvent> local_events;
-    {
-        std::lock_guard<std::mutex> lock(g_glfw_mutex);
-        std::vector<PendingCallbackEvent> kept;
-        kept.reserve(g_pending_events.size());
-        for (PendingCallbackEvent& event : g_pending_events) {
-            if (event.state == state) local_events.push_back(std::move(event));
-            else kept.push_back(std::move(event));
+// Takes the oldest queued event for one of `state`'s windows. A callback can
+// close a window (dropping its events) or poll again, so events are taken one
+// at a time.
+static bool take_pending_event(MobiusState* state, PendingCallbackEvent* out) {
+    std::lock_guard<std::mutex> lock(g_glfw_mutex);
+    for (auto it = g_pending_events.begin(); it != g_pending_events.end(); ++it) {
+        if (it->window->state == state) {
+            *out = *it;
+            g_pending_events.erase(it);
+            return true;
         }
-        g_pending_events.swap(kept);
     }
+    return false;
+}
 
-    int rc = 0;
-    for (PendingCallbackEvent& event : local_events) {
-        if (rc == 0) {
-            int call_rc = mobius_call_ref(state, event.function_ref, event.args.data(), event.arg_count, 1);
-            if (call_rc < 0) rc = -1;
-            else if (call_rc > 0) mobius_stack_pop(state, call_rc);
-        }
-        free_event_refs(event);
+static bool push_event_arg(MobiusState* state, const EventArg& arg) {
+    switch (arg.kind) {
+        case EventArg::INT: mobius_stack_pushInt64(state, arg.integer); return true;
+        case EventArg::UINT: mobius_stack_pushUInt64(state, (uint64_t)arg.integer); return true;
+        case EventArg::FLOAT: mobius_stack_pushFloat64(state, arg.number); return true;
+        case EventArg::BOOL: mobius_stack_pushBool(state, arg.integer != 0); return true;
+        case EventArg::ENUM: return push_enum_value(state, arg.enum_name, arg.integer);
     }
+    return false;
+}
+
+// Calls a queued event's callback: (window, args...).
+static int dispatch_event(MobiusState* state, const PendingCallbackEvent& event) {
+    WindowObject* window = event.window;
+    MobiusValueRef function = window->*event.callback;
+    if (!function) return 0;   // removed since the event came
+
+    // mobius_call_ref copies the function and arguments before calling, so
+    // the callback may replace itself or close the window.
+    std::array<MobiusValueRef, 5> refs = {};
+    refs[0] = window->self_ref;
+    size_t count = 1;
+    int rc = 0;
+    for (size_t i = 0; i < event.arg_count; i++) {
+        if (!push_event_arg(state, event.args[i])) {
+            rc = -1;
+            break;
+        }
+        refs[count] = mobius_ref_value(state, -1);
+        mobius_stack_pop(state, 1);
+        if (!refs[count]) {
+            rc = mobius_error(state, "glfw: failed to root a callback argument");
+            break;
+        }
+        count++;
+    }
+    if (rc == 0) {
+        int results = mobius_call_ref(state, function, refs.data(), count, 1);
+        if (results < 0) rc = -1;
+        else if (results > 0) mobius_stack_pop(state, results);
+    }
+    for (size_t i = 1; i < count; i++) mobius_unref_value(state, refs[i]);
     return rc;
 }
 
+static int dispatch_pending_events(MobiusState* state) {
+    PendingCallbackEvent event;
+    while (take_pending_event(state, &event)) {
+        if (dispatch_event(state, event) < 0) {
+            clear_pending_events_for_state(state);
+            return -1;
+        }
+    }
+    return 0;
+}
+
+static WindowObject* callback_window(GLFWwindow* handle) {
+    return static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
+}
+
 static void glfw_key_callback(GLFWwindow* handle, int key, int scancode, int action, int mods) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_key_ref,
-                         {make_window_value(window),
-                          make_installed_enum_value(window->state, "Key", key),
-                          make_int64_value(scancode),
-                          make_installed_enum_value(window->state, "Action", action),
-                          make_installed_enum_value(window->state, "Modifier", mods)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_key_ref,
+                         {enum_arg("Key", key), int_arg(scancode), enum_arg("Action", action),
+                          enum_arg("Modifier", mods)});
 }
 
 static void glfw_char_callback(GLFWwindow* handle, unsigned int codepoint) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_char_ref,
-                         {make_window_value(window), make_uint64_value(codepoint)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_char_ref, {uint_arg(codepoint)});
 }
 
 static void glfw_cursor_pos_callback(GLFWwindow* handle, double x, double y) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_cursor_pos_ref,
-                         {make_window_value(window), make_float_value(x), make_float_value(y)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_cursor_pos_ref, {float_arg(x), float_arg(y)});
 }
 
 static void glfw_mouse_button_callback(GLFWwindow* handle, int button, int action, int mods) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_mouse_button_ref,
-                         {make_window_value(window),
-                          make_installed_enum_value(window->state, "MouseButton", button),
-                          make_installed_enum_value(window->state, "Action", action),
-                          make_installed_enum_value(window->state, "Modifier", mods)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_mouse_button_ref,
+                         {enum_arg("MouseButton", button), enum_arg("Action", action),
+                          enum_arg("Modifier", mods)});
 }
 
 static void glfw_scroll_callback(GLFWwindow* handle, double xoffset, double yoffset) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_scroll_ref,
-                         {make_window_value(window), make_float_value(xoffset), make_float_value(yoffset)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_scroll_ref,
+                         {float_arg(xoffset), float_arg(yoffset)});
 }
 
 static void glfw_window_size_callback(GLFWwindow* handle, int width, int height) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_resize_ref,
-                         {make_window_value(window), make_int64_value(width), make_int64_value(height)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_resize_ref, {int_arg(width), int_arg(height)});
 }
 
 static void glfw_framebuffer_size_callback(GLFWwindow* handle, int width, int height) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_framebuffer_resize_ref,
-                         {make_window_value(window), make_int64_value(width), make_int64_value(height)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_framebuffer_resize_ref,
+                         {int_arg(width), int_arg(height)});
 }
 
 static void glfw_window_close_callback(GLFWwindow* handle) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_close_ref, {make_window_value(window)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_close_ref, {});
 }
 
 static void glfw_window_focus_callback(GLFWwindow* handle, int focused) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_focus_ref,
-                         {make_window_value(window), make_bool_value(focused == GLFW_TRUE)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_focus_ref, {bool_arg(focused == GLFW_TRUE)});
 }
 
 static void glfw_cursor_enter_callback(GLFWwindow* handle, int entered) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_cursor_enter_ref,
-                         {make_window_value(window), make_bool_value(entered == GLFW_TRUE)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_cursor_enter_ref,
+                         {bool_arg(entered == GLFW_TRUE)});
 }
 
 static void glfw_window_iconify_callback(GLFWwindow* handle, int iconified) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_iconify_ref,
-                         {make_window_value(window), make_bool_value(iconified == GLFW_TRUE)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_iconify_ref,
+                         {bool_arg(iconified == GLFW_TRUE)});
 }
 
 static void glfw_window_maximize_callback(GLFWwindow* handle, int maximized) {
-    WindowObject* window = static_cast<WindowObject*>(glfwGetWindowUserPointer(handle));
-    if (!window) return;
-    queue_callback_event(window, window->on_maximize_ref,
-                         {make_window_value(window), make_bool_value(maximized == GLFW_TRUE)});
+    queue_callback_event(callback_window(handle), &WindowObject::on_maximize_ref,
+                         {bool_arg(maximized == GLFW_TRUE)});
 }
 
 static int set_callback_ref(MobiusState* state, MobiusValueRef& slot, int idx, const char* context) {
@@ -611,6 +608,7 @@ static int glfw_terminate(MobiusState* state, int arg_count, void* /*userdata*/)
     if (arg_count != 0) return mobius_error(state, "terminate() expects no arguments");
 
     bool should_terminate = false;
+    std::vector<WindowObject*> windows;
     {
         std::lock_guard<std::mutex> lock(g_glfw_mutex);
         auto it = g_initialized_states.find(state);
@@ -619,17 +617,24 @@ static int glfw_terminate(MobiusState* state, int arg_count, void* /*userdata*/)
             return 1;
         }
         g_initialized_states.erase(it);
-        clear_pending_events_for_state_locked(state);
+        clear_pending_events_locked(state, nullptr);
         should_terminate = g_initialized_states.empty();
         if (should_terminate) {
-            for (WindowObject* window : g_live_windows) invalidate_window_for_terminate(window);
+            windows.assign(g_live_windows.begin(), g_live_windows.end());
             g_live_windows.clear();
+            g_pending_events.clear();
         }
     }
 
     if (should_terminate) {
-        clear_all_pending_events();
+        // glfwTerminate destroys the windows still open; then their refs go
+        // (which can free them).
+        for (WindowObject* window : windows) {
+            window->handle = nullptr;
+            window->destroyed = true;
+        }
         glfwTerminate();
+        for (WindowObject* window : windows) release_window_refs(window);
     }
 
     mobius_stack_pushBool(state, true);
@@ -646,7 +651,7 @@ static int glfw_last_error(MobiusState* state, int arg_count, void* /*userdata*/
     if (arg_count != 0) return mobius_error(state, "last_error() expects no arguments");
     const char* description = nullptr;
     int code = glfwGetError(&description);
-    push_error_table(state, code, description);
+    if (!push_error_table(state, code, description)) return -1;
     return 1;
 }
 
@@ -781,17 +786,21 @@ static int glfw_install_enum(MobiusState* state, int arg_count, void* /*userdata
     if (arg_count != 2) return mobius_error(state, "__install_enum() expects 2 arguments (name, enum_def)");
     if (!mobius_stack_isString(state, 0)) return mobius_error(state, "__install_enum() name must be a string");
 
-    const char* enum_name = mobius_stack_asString(state, 0);
-    EnumDefinition* definition = get_native_enum_definition_arg(state, 1, arg_count);
-    if (!definition) return mobius_error(state, "__install_enum() enum_def must be an enum definition");
+    if (mobius_stack_type(state, 1) != MOBIUS_VAL_ENUM) {
+        return mobius_error(state, "__install_enum() enum_def must be an enum definition");
+    }
+    std::string enum_name = mobius_stack_asString(state, 0);
+    MobiusValueRef definition = mobius_ref_value(state, 1);
+    if (!definition) return mobius_error(state, "__install_enum() failed to root the enum definition");
 
-    static_cast<RefCounted*>(definition)->retain();
+    MobiusValueRef previous = 0;
     {
         std::lock_guard<std::mutex> lock(g_glfw_mutex);
-        EnumDefinition*& slot = g_installed_enums[state][enum_name];
-        if (slot) slot->release();
+        MobiusValueRef& slot = g_installed_enums[state][enum_name];
+        previous = slot;
         slot = definition;
     }
+    if (previous) mobius_unref_value(state, previous);
 
     mobius_stack_pop(state, 2);
     mobius_stack_pushBool(state, true);
@@ -925,11 +934,11 @@ static int glfw_create_window(MobiusState* state, int arg_count, void* /*userdat
     window->handle = handle;
     window->destroyed = false;
 
+    // The userdata owns `window` from here: if rooting it fails, freeing the
+    // userdata destroys the GLFW window.
     mobius_stack_pushUserdata(state, window, window_object_destructor, GLFW_WINDOW_TYPE, sizeof(WindowObject));
-    Value self_value = state->npeek(0);
-    if (self_value.type == VAL_USERDATA) {
-        window->userdata_handle = self_value.as.userdata;
-    }
+    window->self_ref = mobius_ref_value(state, -1);
+    if (!window->self_ref) return mobius_error(state, "failed to root the GLFW window");
     glfwSetWindowUserPointer(handle, window);
 
     {
@@ -1055,7 +1064,7 @@ static int window_close(MobiusState* state, int arg_count, void* /*userdata*/) {
     WindowObject* window = get_window_object(state, 0, "window:close() self is not a window");
     if (!window) return -1;
     mobius_stack_pop(state, 1);
-    destroy_window(window);
+    close_window(window);
     mobius_stack_pushBool(state, true);
     return 1;
 }
@@ -1195,7 +1204,7 @@ static int window_get_key(MobiusState* state, int arg_count, void* /*userdata*/)
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     int key = (int)mobius_stack_asInt64(state, 1);
     mobius_stack_pop(state, 2);
-    state->npush(make_installed_enum_value(state, "Action", glfwGetKey(window->handle, key)));
+    if (!push_enum_value(state, "Action", glfwGetKey(window->handle, key))) return -1;
     return 1;
 }
 
@@ -1206,7 +1215,7 @@ static int window_get_mouse_button(MobiusState* state, int arg_count, void* /*us
     if (ensure_window_alive(state, window, "window has been destroyed") < 0) return -1;
     int button = (int)mobius_stack_asInt64(state, 1);
     mobius_stack_pop(state, 2);
-    state->npush(make_installed_enum_value(state, "Action", glfwGetMouseButton(window->handle, button)));
+    if (!push_enum_value(state, "Action", glfwGetMouseButton(window->handle, button))) return -1;
     return 1;
 }
 
@@ -1380,8 +1389,8 @@ static int window_get_input_mode(MobiusState* state, int arg_count, void* /*user
     int mode = (int)mobius_stack_asInt64(state, 1);
     mobius_stack_pop(state, 2);
     int value = glfwGetInputMode(window->handle, mode);
-    if (mode == GLFW_CURSOR) state->npush(make_installed_enum_value(state, "CursorMode", value));
-    else mobius_stack_pushInt64(state, value);
+    if (mode != GLFW_CURSOR) mobius_stack_pushInt64(state, value);
+    else if (!push_enum_value(state, "CursorMode", value)) return -1;
     return 1;
 }
 
@@ -1632,16 +1641,20 @@ static int glfw_post_init(MobiusState* state) {
     return 0;
 }
 
+// At exit. The states may be freed already (with every ref they held), so
+// this releases no refs.
 static void cleanup_glfw_plugin(void) {
     {
         std::lock_guard<std::mutex> lock(g_glfw_mutex);
-        for (WindowObject* window : g_live_windows) invalidate_window_for_terminate(window);
+        for (WindowObject* window : g_live_windows) {
+            window->handle = nullptr;
+            window->destroyed = true;
+        }
         g_live_windows.clear();
         g_initialized_states.clear();
-        for (auto& entry : g_installed_enums) release_installed_enum_map(entry.second);
         g_installed_enums.clear();
+        g_pending_events.clear();
     }
-    clear_all_pending_events();
     glfwTerminate();
 }
 
