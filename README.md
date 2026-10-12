@@ -52,7 +52,7 @@ print("processed", total, "bytes")
 
 * **Built to embed.** Mobius has a small, straightforward C API for creating a VM,
   registering native functions, exchanging values, and exposing application-defined types.
-  A [.NET 8 binding](bindings/csharp/README.md) brings the same API to C# hosts.
+  A [.NET 10 binding](bindings/csharp/README.md) brings the same API to C# hosts.
   The core runtime ships as a single shared library—about 1.5 MB on disk, a few MB resident,
   and typically starts in under 10 ms—with no unusual dependencies. Optional
   modules stay separate, so you only ship what you use.
@@ -195,7 +195,7 @@ Full documentation lives in [`docs/`](docs/index.md).
 | [Module Reference](docs/modules/index.md)               | Built-in modules (`json`, `os`, `http`, `web`, …) and packages (`sqlite`, …) |
 | [Embedding Guide](docs/embedding/embedding-guide.md)    | Embed Mobius in a C/C++ application |
 | [Plugin Guide](docs/embedding/plugin-guide.md)          | Write native `.so`/`.dll` modules |
-| [C# binding](bindings/csharp/README.md)                 | Embed Mobius in a .NET 8 application |
+| [C# binding](bindings/csharp/README.md)                 | Embed Mobius in a .NET 10 application |
 | [Grammar (BNF)](docs/reference/grammar.md)              | The canonical formal grammar |
 
 The [`examples/`](examples/) directory has embedding examples (C and C++),
