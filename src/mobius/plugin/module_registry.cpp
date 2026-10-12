@@ -33,7 +33,7 @@
 static std::mutex g_libraries_mutex;
 static std::vector<std::unique_ptr<LoadedModule>>* g_libraries = nullptr;
 
-static void unload_libraries() {
+void unload_plugin_libraries() {
     std::lock_guard<std::mutex> lock(g_libraries_mutex);
     if (!g_libraries) return;
     for (auto& mod : *g_libraries) {
@@ -47,10 +47,7 @@ static void unload_libraries() {
 
 // Caller holds g_libraries_mutex.
 static std::vector<std::unique_ptr<LoadedModule>>& libraries() {
-    if (!g_libraries) {
-        g_libraries = new std::vector<std::unique_ptr<LoadedModule>>();
-        atexit(unload_libraries);
-    }
+    if (!g_libraries) g_libraries = new std::vector<std::unique_ptr<LoadedModule>>();
     return *g_libraries;
 }
 
@@ -687,6 +684,10 @@ LoadedModule* ModuleRegistry::loadLibrary(const char* path,
     mod->status = PLUGIN_STATUS_LOADED;
     LoadedModule* raw = mod.get();
     libraries().push_back(std::move(mod));
+    // A process that exits with states still alive (a script's exit()) unloads
+    // the libraries at exit, before this one's static objects are destroyed:
+    // registered after it loaded, the hook runs before its destructors.
+    platform_at_exit(unload_plugin_libraries);
     return raw;
 }
 

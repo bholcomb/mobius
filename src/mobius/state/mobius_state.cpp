@@ -1546,6 +1546,12 @@ MobiusState* mobius_new_state(MobiusConfig* config) {
 
 void mobius_free_state(MobiusState* state) {
     delete state;
+    // The last state is done with the plugin libraries: clean them up and
+    // unload them now, in order, rather than at exit, when a library's static
+    // objects (which its cleanup uses) may already be destroyed. Holding the
+    // lock keeps a new state from loading a library meanwhile.
+    std::lock_guard<std::mutex> lock(g_live_states_mutex);
+    if (g_live_states.empty()) unload_plugin_libraries();
 }
 
 void mobius_get_metrics(MobiusState* state, MobiusMetrics* out) {

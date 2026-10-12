@@ -57,6 +57,14 @@ std::string platform_user_cache_dir();
 // is the same whether or not a script imports io (which does the same).
 void platform_binary_stdio();
 
+// Has fn run when the process ends through exit(), before the static
+// objects of the shared libraries loaded so far are destroyed (call it after
+// loading them; it may be registered more than once). POSIX: atexit, whose
+// hooks run in reverse order with those destructors. Windows: never; there
+// a DLL's exit work runs as it detaches, after the DLLs loaded later have
+// detached, and nothing in a DLL runs before them.
+void platform_at_exit(void (*fn)());
+
 // ---------------------------------------------------------------------------
 // Files
 // ---------------------------------------------------------------------------

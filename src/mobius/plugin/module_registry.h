@@ -84,4 +84,9 @@ private:
 };
 
 
+// Runs every loaded plugin library's cleanup_plugin, then unloads them. Called
+// once no state is alive (mobius_free_state of the last one): every state is
+// then done with the libraries, and their own static objects still exist.
+void unload_plugin_libraries();
+
 #endif // MOBIUS_MODULE_REGISTRY_H

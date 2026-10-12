@@ -105,6 +105,10 @@ void platform_binary_stdio() {
     _setmode(_fileno(stderr), _O_BINARY);
 }
 
+void platform_at_exit(void (*fn)()) {
+    (void)fn;   // see mobius_platform.h: the process's exit undoes what's left
+}
+
 std::string platform_user_cache_dir() {
     const wchar_t* local = _wgetenv(L"LOCALAPPDATA");
     if (local && *local) return narrow(local);

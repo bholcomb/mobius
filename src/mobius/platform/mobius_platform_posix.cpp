@@ -38,6 +38,13 @@ uint64_t platform_process_id() { return (uint64_t)getpid(); }
 
 void platform_binary_stdio() {}   // POSIX streams are bytes already
 
+void platform_at_exit(void (*fn)()) {
+    if (atexit(fn) != 0) {
+        fprintf(stderr, "FATAL: atexit failed\n");
+        abort();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Files
 // ---------------------------------------------------------------------------
