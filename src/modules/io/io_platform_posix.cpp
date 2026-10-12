@@ -2,6 +2,7 @@
 // waited on in the fiber-aware I/O reactor.
 
 #include "io_stream.h"
+#include "platform/fiber_tls.h"
 
 #include <cerrno>
 #include <fcntl.h>
@@ -50,7 +51,11 @@ void io_platform_attach_pipe(IoStream* s, intptr_t handle) {
     s->nonblocking = true;
 }
 
-long long io_platform_read(intptr_t handle, void* buf, size_t len, int* err) {
+// Reads and writes check errno, which is per thread, and their callers wait
+// in between, which may resume the fiber on another thread: they are
+// accessors (see platform/fiber_tls.h), never inlined into the callers.
+MOBIUS_TLS_ACCESSOR long long io_platform_read(intptr_t handle, void* buf, size_t len, int* err) {
+    MOBIUS_TLS_FENCE();
     while (true) {
         ssize_t n = read((int)handle, buf, len);
         if (n >= 0) return n;
@@ -61,7 +66,8 @@ long long io_platform_read(intptr_t handle, void* buf, size_t len, int* err) {
     }
 }
 
-long long io_platform_write(intptr_t handle, const void* buf, size_t len, int* err) {
+MOBIUS_TLS_ACCESSOR long long io_platform_write(intptr_t handle, const void* buf, size_t len, int* err) {
+    MOBIUS_TLS_FENCE();
     while (true) {
         ssize_t n = write((int)handle, buf, len);
         if (n >= 0) return n;

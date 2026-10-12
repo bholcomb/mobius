@@ -3,6 +3,7 @@
 
 #include "process_platform.h"
 #include "process_platform_posix.h"
+#include "platform/fiber_tls.h"
 
 #include <cerrno>
 #include <csignal>
@@ -164,7 +165,10 @@ void proc_environment(std::map<std::string, std::string>* env) {
 
 int64_t proc_pid(const ProcChild* child) { return (int64_t)child->pid; }
 
-bool proc_try_reap(ProcChild* c) {
+// Checks errno, which is per thread, between waits that may resume the
+// fiber on another thread: an accessor (see platform/fiber_tls.h).
+MOBIUS_TLS_ACCESSOR bool proc_try_reap(ProcChild* c) {
+    MOBIUS_TLS_FENCE();
     if (c->reaped) return true;
     int st = 0;
     pid_t r = waitpid(c->pid, &st, WNOHANG);

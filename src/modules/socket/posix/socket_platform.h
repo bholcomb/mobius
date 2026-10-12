@@ -5,6 +5,8 @@
 // differ on Windows (socket/win32/socket_platform.h). The build puts the
 // platform's directory on the include path.
 
+#include "platform/fiber_tls.h"
+
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
@@ -29,7 +31,13 @@ static const int SEND_FLAGS = 0;              // macOS: SO_NOSIGPIPE, set per so
 static inline bool socket_platform_init() { return true; }
 static inline void socket_platform_cleanup() {}
 
-static inline int socket_last_error_code() { return errno; }
+// errno is per thread, and a connect reads it again after a wait, which
+// may resume on another thread: read it through an accessor (see
+// platform/fiber_tls.h).
+MOBIUS_TLS_ACCESSOR static int socket_last_error_code() {
+    MOBIUS_TLS_FENCE();
+    return errno;
+}
 
 static inline bool socket_error_is_timeout(int code) {
     return code == EAGAIN || code == EWOULDBLOCK || code == ETIMEDOUT;
