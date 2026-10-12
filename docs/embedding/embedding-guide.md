@@ -670,11 +670,22 @@ mobius_set_count_hook(state, over_budget, 10000, NULL);
 
 The hook runs after every `count` **instructions** a script executes
 without waiting: every bytecode instruction the interpreter runs
-(`mobius --debug script.mob` lists a script's). A call of a native or host
-function is the one call instruction that invoked it, however long the
+(`mobius --debug script.mob` lists a script's), by the code words it takes.
+Most take one; a fused instruction (the compiler fuses some common pairs,
+such as a global's lookup and its call) takes one per instruction it fuses,
+and arithmetic with a 64-bit constant takes three. A call of a native or
+host function is the one call instruction that invoked it, however long the
 function runs; a script function it calls back counts its own instructions.
-A fused instruction (the compiler fuses some common pairs, such as a
-global's lookup and its call) counts once.
+
+The interpreter doesn't count instruction by instruction. It counts where
+control flow changes: at each jump taken (a loop's jump back, a test that
+skips an instruction, the integer `for` loop), each call of a script
+function, each return and each caught error, it adds the instructions run
+since the last such point -- exact for the straight-line code between
+them -- and calls the hook if the count is exceeded. So the hook may come a
+few instructions late, by at most one straight-line run of instructions;
+every loop and every call goes through such a point, so no script runs on
+unchecked.
 
 When the hook returns a message, the script fails with the runtime error
 `instruction limit: <message>` at the instruction it reached. The error
@@ -688,7 +699,7 @@ host starts a script (`mobius_exec_string` and friends, or `mobius_call_ref`
 outside any running script), when a spawned fiber starts, and each time a
 fiber waits (`yield`, `await`, `fiber.sleep`, channels, I/O; not waiting
 for an atomic block's lock). So with a hook that always stops, `count` is
-a budget for each call from the host:
+a budget for each call from the host (give or take a straight-line run):
 
 ```c
 mobius_set_count_hook(state, over_budget, 10000, NULL);
@@ -710,8 +721,9 @@ removes the hook for scripts started afterwards. Like other host callbacks,
 the hook may run on any worker thread, concurrently for different fibers;
 it must not run scripts.
 
-Counting costs a few percent whether or not a hook is set (the interpreter
-keeps the count in a register). Memory limits are separate.
+Counting costs about 2–3% on `benchmarks/benchmark_comprehensive.mob`
+whether or not a hook is set, more in code that is mostly calls of tiny
+functions (recursive Fibonacci: about 10%). Memory limits are separate.
 
 ---
 

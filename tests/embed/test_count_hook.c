@@ -1,14 +1,17 @@
 /* mobius_set_count_hook: the host stops runaway scripts and enforces
- * instruction budgets. It counts the VM instructions a script executes;
- * each fiber counts for itself, from zero when the host starts a script,
- * when the fiber is spawned and after each wait.
+ * instruction budgets. It counts the VM instructions a script executes,
+ * where control flow changes (jumps, calls, returns), so a stop may come up
+ * to one straight-line run of instructions late; each fiber counts for
+ * itself, from zero when the host starts a script, when the fiber is
+ * spawned and after each wait.
  *
  * Checked here: every kind of endless loop stops with the hook's message and
- * the script's try/catch can't catch it; a budget per call from the host,
- * exact to the instruction (counted from the functions' bytecode), over many
- * calls, and the state still works after many stopped calls; spawned fibers
- * inherit the hook, each counted separately, on several workers; waits start
- * the count again; removing the hook restores normal running. */
+ * the script's try/catch can't catch it; a budget per call from the host
+ * (counted from the functions' bytecode) is never cut short and is overrun
+ * by no more than the longest straight-line run, over many calls, and the
+ * state still works after many stopped calls; spawned fibers inherit the
+ * hook, each counted separately, on several workers; waits start the count
+ * again; removing the hook restores normal running. */
 #include <mobius/mobius.h>
 #include <mobius/mobius_plugin.h>
 #include <pthread.h>
@@ -148,7 +151,7 @@ static void endless_loops(void) {
     mobius_stack_pop(s, 1);
 
     /* A host function that drops the error doesn't free the script: it
-     * stops again at its next instruction, with the same message. */
+     * stops again where it next counts, with the same message. */
     mobius_register_function(s, "swallow", swallow, NULL);
     mobius_exec_string(s, "func forever() { while (true) {} }");
     atomic_store(&hook_calls, 0);
@@ -173,13 +176,18 @@ static void endless_loops(void) {
     mobius_free_state(s);
 }
 
-/* How many instructions the call name(n) from the host runs, measured with
- * a count of 1: the hook then runs before every instruction but the first. */
-static long instructions(MobiusState* s, const char* name, int64_t n) {
-    mobius_set_count_hook(s, keep_going, 1, NULL);
-    atomic_store(&hook_calls, 0);
-    if (call_with(s, name, n) < 0) fail("counting a call");
-    return atomic_load(&hook_calls) + 1;
+/* The smallest budget (hook count) the call name(n) from the host runs
+ * within, trying budgets from `from` down until one stops it. */
+static long smallest_budget(MobiusState* s, const char* name, int64_t n, long from) {
+    long budget = from;
+    for (;;) {
+        if (budget <= 1) fail("no budget stopped the call");
+        mobius_set_count_hook(s, stop, (uint32_t)(budget - 1), "over budget");
+        if (call_with(s, name, n) < 0) break;
+        budget--;
+    }
+    expect_error("instruction limit: over budget", "the budget's message");
+    return budget;
 }
 
 static void budget_per_call(void) {
@@ -188,26 +196,38 @@ static void budget_per_call(void) {
         "func spin(n) { for (var i = 0; i < n; i++) {} return n }\n"
         "func step() { return 1 }\n"
         "func calls(n) { var k = 0\n while (k < n) { k = k + step() } return k }");
-    /* From their bytecode (bin/mobius --debug): spin(n) runs LOADINT, then
-     * per round SHARED_LOAD LT MOVE INC JMP, and to leave SHARED_LOAD LT
-     * JMP RETURN: 5n + 5 instructions. calls(n) runs LOADINT GETGLOBAL,
-     * per round LT CALL_DIRECT_PLAIN, step's LOADINT RETURN, ADD_II JMP,
-     * and to leave LT JMP RETURN: 6n + 5. */
-    if (instructions(s, "spin", 99) != 500) fail("spin(99) is not 500 instructions");
-    if (instructions(s, "calls", 49) != 299) fail("calls(49) is not 299 instructions");
+    /* From their bytecode (bin/mobius --debug), in code words (a fused
+     * instruction takes two): spin(n) runs LOADINT, then per round
+     * SHARED_LOAD LT MOVE INC JMP, and to leave SHARED_LOAD LT JMP RETURN:
+     * 5n + 5. calls(n) runs LOADINT GETGLOBAL, per round LT
+     * CALL_DIRECT_PLAIN (two words), step's LOADINT RETURN, ADD_II JMP,
+     * and to leave LT JMP RETURN: 7n + 5. In both, the longest run of
+     * instructions between two jumps, calls or returns is 3, so a call
+     * overruns its budget by at most 3. */
+    long spin_words = 5 * 99 + 5, calls_words = 7 * 49 + 5;
 
-    /* A budget of N lets a call run N instructions, every time. */
-    mobius_set_count_hook(s, stop, 500, "over budget");
+    /* A budget of the call's instructions always lets it finish. */
+    mobius_set_count_hook(s, stop, (uint32_t)spin_words, "over budget");
     for (int i = 0; i < 1000; i++)
-        if (call_with(s, "spin", 99) < 0) fail("spin(99) on a budget of 500 failed");
-    mobius_set_count_hook(s, stop, 499, "over budget");
-    if (call_with(s, "spin", 99) >= 0) fail("spin(99) on a budget of 499 passed");
+        if (call_with(s, "spin", 99) < 0) fail("spin(99) on a budget of its instructions failed");
+    mobius_set_count_hook(s, stop, (uint32_t)calls_words, "over budget");
+    for (int i = 0; i < 1000; i++)
+        if (call_with(s, "calls", 49) < 0) fail("calls(49) on a budget of its instructions failed");
+
+    /* A smaller one stops it, at most a straight-line run late. */
+    long spin_least = smallest_budget(s, "spin", 99, spin_words);
+    if (spin_least > spin_words || spin_words - spin_least > 3) {
+        printf("  spin(99): %ld instructions, smallest budget %ld\n", spin_words, spin_least);
+        fail("spin(99) overran its budget by more than a straight-line run");
+    }
+    long calls_least = smallest_budget(s, "calls", 49, calls_words);
+    if (calls_least > calls_words || calls_words - calls_least > 3) {
+        printf("  calls(49): %ld instructions, smallest budget %ld\n", calls_words, calls_least);
+        fail("calls(49) overran its budget by more than a straight-line run");
+    }
+    mobius_set_count_hook(s, stop, 450, "over budget");
+    if (call_with(s, "spin", 99) >= 0) fail("spin(99) on a budget of 450 passed");
     expect_error("instruction limit: over budget", "the budget's message");
-    mobius_set_count_hook(s, stop, 299, "over budget");
-    if (call_with(s, "calls", 49) < 0) fail("calls(49) on a budget of 299 failed");
-    mobius_set_count_hook(s, stop, 298, "over budget");
-    if (call_with(s, "calls", 49) >= 0) fail("calls(49) on a budget of 298 passed");
-    expect_error("instruction limit: over budget", "the budget's message for calls");
 
     /* Many stopped calls leave nothing behind (frames, try blocks). */
     mobius_exec_string(s, "func guarded(n) { try { while (true) {} } catch e {} return n }");

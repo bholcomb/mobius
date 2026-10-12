@@ -186,7 +186,9 @@ public sealed unsafe class MobiusState : IDisposable
     /// <summary>
     /// Stop runaway scripts and enforce instruction budgets (mobius_set_count_hook):
     /// <paramref name="hook"/> runs after every <paramref name="count"/> VM instructions a script
-    /// executes without waiting (a call of a C# function is one instruction). Each fiber counts
+    /// executes without waiting (a call of a C# function is one instruction). Instructions are
+    /// counted where control flow changes (jumps, calls, returns), so the hook may run a few
+    /// instructions late: at most one straight-line run of instructions. Each fiber counts
     /// for itself, from zero at each call from C# (Execute, Call), when it is spawned and after
     /// each wait (yield, await, sleep, channels). The hook returns null to let the script go
     /// on, or a message to stop it with the error "instruction limit: message", which the

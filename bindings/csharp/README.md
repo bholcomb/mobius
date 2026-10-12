@@ -93,8 +93,9 @@ a registered function becomes a script error the script can catch.
 the hook runs after every `count` instructions a script executes without
 waiting, counted per fiber from each call from C#, and returns null to
 let the script go on or a message to stop it with an `instruction limit:`
-error the script can't catch. A hook that throws stops the script with the
-exception's message.
+error the script can't catch. Instructions are counted where control flow
+changes (jumps, calls, returns), so the hook may run a few instructions
+late. A hook that throws stops the script with the exception's message.
 
 Threading: a registered function runs on whichever thread is running the
 script fiber that called it. That can be any of the interpreter's worker

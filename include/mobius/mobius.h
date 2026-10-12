@@ -337,12 +337,12 @@ MOBIUS_API void mobius_sandbox(MobiusState* state, unsigned int allow);
 /* ====================================================================== */
 
 /**
- * Called when a script has executed `count` instructions without waiting,
- * before it executes the next. Return NULL to let it go on (it is called
- * again after another `count`), or a message to stop it: the script then
- * fails with the runtime error "instruction limit: <message>" at the
- * instruction it reached. The message is copied as soon as the hook
- * returns.
+ * Called when a script has executed more than `count` instructions
+ * without waiting, at the next jump, call or return (see
+ * mobius_set_count_hook). Return NULL to let it go on (it is called again
+ * after another `count`), or a message to stop it: the script then fails
+ * with the runtime error "instruction limit: <message>" at the instruction
+ * it reached. The message is copied as soon as the hook returns.
  *
  * The error unwinds the whole script to the host: try/catch in the script
  * can't catch it. (A spawned fiber stopped this way fails its future,
@@ -359,11 +359,22 @@ typedef const char* (*MobiusCountHook)(MobiusState* state, void* userdata);
  * NULL or `count` 0 removes it.
  *
  * What is counted: every bytecode instruction the interpreter executes
- * (`mobius --debug` lists a script's). A call of a native or host
- * function is the one call instruction that invoked it, however long the
- * function runs; a script function it calls back counts its own
- * instructions. A fused instruction (the compiler fuses some common pairs,
- * such as a global's lookup and its call) counts once.
+ * (`mobius --debug` lists a script's), by the code words it takes: most
+ * take one; a fused instruction (the compiler fuses some common pairs,
+ * such as a global's lookup and its call) takes one per instruction it
+ * fuses, and arithmetic with a 64-bit constant takes three. A call of a
+ * native or host function is the one call instruction that invoked it,
+ * however long the function runs; a script function it calls back counts
+ * its own instructions.
+ *
+ * When it is counted: not instruction by instruction, but where control
+ * flow changes -- at each jump taken (including a test that skips an
+ * instruction and the integer for loop), call of a script function,
+ * return and caught error -- which adds the instructions run since the
+ * last such point and calls the hook if the count is exceeded. So the
+ * hook may come a few instructions late: by at most one straight-line run
+ * of instructions (no loop runs without a jump), and an instruction that
+ * finishes a call from the host is not checked at all.
  *
  * Each fiber counts for itself, and its count starts again at zero:
  *   - when the host starts a script: mobius_exec_string and friends, and
@@ -374,8 +385,8 @@ typedef const char* (*MobiusCountHook)(MobiusState* state, void* userdata);
  * A script called back from a host function (mobius_call_ref or
  * mobius_pcall inside it) counts on the calling fiber, without starting
  * again. So with a hook that always stops the script, a call from the
- * host runs at most `count` instructions, and a fiber at most `count`
- * between two waits.
+ * host runs at most `count` instructions and a straight-line run more,
+ * and a fiber as much between two waits.
  *
  * The setting applies to scripts the host starts afterwards. A spawned
  * fiber takes its parent's setting (hook, count, userdata) when it is

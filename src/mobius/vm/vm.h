@@ -313,14 +313,24 @@ public:
 
     // The count hook (mobius_set_count_hook), this VM's own copy: each
     // fiber has its own VM, so each counts for itself and no counter is
-    // shared between threads. count_left_ is how many instructions may be
-    // dispatched until the hook is due, counting the one that finds it
-    // due; run() counts in a local and hands it over here (see `budget`).
+    // shared between threads. count_limit_ is where the count runs out, as
+    // a code address in the running frame's code (in bytes: the hook is due
+    // once ip passes it); run() moves it with ip wherever ip jumps, calls
+    // or returns, so running straight on counts itself. While no run() is
+    // going on it is the count left, in bytes (an address in no code).
+    // count_run_ is the innermost run() going on, if any, and where the
+    // run enclosing it had got to (`outer`, in the enclosing run's code, or
+    // 0 for the host), which the limit moves back to when it ends.
+    static constexpr uintptr_t kCountUnlimited = (uintptr_t)1 << 62;   // no hook
     MobiusCountHook count_hook_ = nullptr;
     void* count_hook_userdata_ = nullptr;
     uint32_t count_hook_count_ = 0;
-    uint32_t count_left_ = 0;
-    bool count_changed_ = false;   // count_left_ changed outside run()'s loop
+    uintptr_t count_limit_ = kCountUnlimited;
+    struct CountRun {
+        uintptr_t outer;
+        CountRun* enclosing;
+    };
+    CountRun* count_run_ = nullptr;
     // Set when the hook stopped the script: no try block catches errors
     // until the host gets the error back (and arms the VM again).
     bool count_aborted_ = false;
@@ -336,17 +346,21 @@ public:
     void armCountHookFromState() {
         armCountHook(state_->countHook(), state_->countHookCount(), state_->countHookUserdata());
     }
-    // The count starts again (the host starts a script, the fiber waits):
-    // `count` instructions run, and the hook is due at the next one.
-    void restartCount() {
-        count_left_ = count_hook_count_ < UINT32_MAX ? count_hook_count_ + 1 : UINT32_MAX;
-        count_changed_ = true;
+    // `count` instructions, in bytes of code, or kCountUnlimited without a hook.
+    uintptr_t countBytes() const {
+        return count_hook_ ? (uintptr_t)count_hook_count_ * sizeof(uint32_t) : kCountUnlimited;
     }
-    // run()'s count ran out: call the hook if one is set (or, once it
-    // stopped the script, stop it again). Returns the new count, or 0 if
-    // the script must stop, with the error set at `ip` (the dispatch
-    // position in the running frame).
-    uint32_t countRanOut(uint32_t* ip);
+    // The count starts again (the host starts a script, the fiber waits):
+    // the hook is due once more than `count` instructions have run. In a
+    // run, from the running frame's ip, which the instruction that waits
+    // saved.
+    void restartCount() {
+        count_limit_ = (count_run_ ? (uintptr_t)callStackTop().ip : 0) + countBytes();
+    }
+    // run()'s count ran out at `ip`: call the hook, or, once it stopped the
+    // script, stop it again. Returns false if the script must stop, with
+    // the error set at the running frame's ip.
+    bool countRanOut(const uint32_t* ip);
     // Drop the try blocks registered within the run at `base_depth`
     // (an error none of them may catch is leaving it).
     void discardTryBlocks(size_t base_depth);
