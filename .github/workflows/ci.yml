@@ -59,13 +59,14 @@ jobs:
           ${{ matrix.python }} ci/fetch_buildy.py build/buildy
           echo "$GITHUB_WORKSPACE/build/buildy" >> "$GITHUB_PATH"
 
-      # The glfw package builds GLFW from source on Linux (X11 headers) and
-      # uses Homebrew's on macOS.
-      - name: Install X11 headers (Linux)
+      # The glfw package builds GLFW from source on Linux (X11 headers, and
+      # OpenGL's GL/gl.h, which GLFW's header includes) and uses Homebrew's
+      # on macOS.
+      - name: Install X11 and OpenGL headers (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+          sudo apt-get install -y --no-install-recommends libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libgl-dev
 
       - name: Install GLFW (macOS)
         if: runner.os == 'macOS'
