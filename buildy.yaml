@@ -8,6 +8,12 @@ environment:
     cpp_standard: "c++17"
     warnings: extra
     flags: []
+  # Every symbol a library uses must resolve when it links, as on Windows and
+  # macOS: a plugin that uses a symbol the core doesn't export (anything but
+  # the C API) fails to link here too, instead of only at load time.
+  link:
+    flags:
+      - linux: ["-Wl,--no-undefined"]
 
   configurations:
     debug:
