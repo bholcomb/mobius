@@ -138,8 +138,18 @@ FILE* platform_fopen(const std::string& path, const char* mode) {
 void* platform_library_open(const std::string& path, bool global, std::string* error) {
     (void)global;   // each DLL resolves its own imports
     // The DLL's own directory satisfies its dependencies (a package's
-    // runtime libraries sit beside its module).
-    HMODULE h = LoadLibraryExW(widen(path).c_str(), nullptr,
+    // runtime libraries sit beside its module). That search needs the full
+    // path, with backslashes: a relative one (./modules/x/x.dll) fails with
+    // ERROR_INVALID_PARAMETER.
+    std::wstring wpath = widen(path);
+    DWORD n = GetFullPathNameW(wpath.c_str(), 0, nullptr, nullptr);
+    std::wstring full(n, L'\0');
+    if (n == 0 || (n = GetFullPathNameW(wpath.c_str(), n, &full[0], nullptr)) == 0 || n >= full.size()) {
+        if (error) *error = last_error_text();
+        return nullptr;
+    }
+    full.resize(n);
+    HMODULE h = LoadLibraryExW(full.c_str(), nullptr,
                                LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
     if (!h && error) *error = last_error_text();
     return (void*)h;
