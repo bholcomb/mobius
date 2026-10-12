@@ -56,20 +56,36 @@ func fail(name, outcome) {
     report(name, outcome)
 }
 
+func fail_with_output(name, outcome, r) {
+    fail(name, outcome)
+    show_output(r)
+}
+
 func skip(name, reason) {
     skipped = skipped + 1
     report(name, "SKIP (" + reason + ")")
 }
 
-// Runs a program the way a test runs; returns its result.
+// Runs a program the way a test runs; returns its result, with stdout and
+// stderr merged into r.stdout.
 func run_test(cmd) {
     return process.run(cmd, {
         cwd: repo,
         stdin: "null",
-        stdout: "null",
-        stderr: "null",
+        stdout: "pipe",
+        stderr: "stdout",
         timeout_ms: TIMEOUT_MS
     })
+}
+
+// Shows a failed test's output (its last 40 lines), indented under it, so
+// a CI log says why it failed.
+func show_output(r) {
+    var lines = split(replace(r.stdout, "\r", ""), "\n")
+    if (size(lines) > 0 && trim(lines[size(lines) - 1]) == "") { lines:pop() }
+    var first = size(lines) > 40 ? size(lines) - 40 : 0
+    if (first > 0) { print("    ... (" + str(first) + " lines before)") }
+    for (var i = first; i < size(lines); i++) { print("    | " + lines[i]) }
 }
 
 var expected_failures = {}
@@ -104,17 +120,17 @@ for (var test in find_tests("tests", ".mob")) {
     var r = run_test(cmd)
     var expected_to_fail = expected_failures[test] == true
     if (r.timed_out) {
-        fail(test, "FAIL (timed out)")
+        fail_with_output(test, "FAIL (timed out)", r)
     } else if (r.exit_code == SKIP_CODE) {
         skip(test, "not built here")
     } else if (r.exit_code == 0 && !expected_to_fail) {
         pass(test, "PASS")
     } else if (r.exit_code == 0) {
-        fail(test, "FAIL (expected to fail but passed)")
+        fail_with_output(test, "FAIL (expected to fail but passed)", r)
     } else if (expected_to_fail) {
         pass(test, "PASS (failed as expected)")
     } else {
-        fail(test, "FAIL (exit code " + str(r.exit_code) + ")")
+        fail_with_output(test, "FAIL (exit code " + str(r.exit_code) + ")", r)
     }
 }
 
@@ -142,11 +158,11 @@ for (var test in find_tests(os.join("tests", "embed"), ".c")) {
     var r = run_test([exe])
     os.remove(exe)
     if (r.timed_out) {
-        fail(test, "FAIL (timed out)")
+        fail_with_output(test, "FAIL (timed out)", r)
     } else if (r.exit_code == 0) {
         pass(test, "PASS")
     } else {
-        fail(test, "FAIL (exit code " + str(r.exit_code) + ")")
+        fail_with_output(test, "FAIL (exit code " + str(r.exit_code) + ")", r)
     }
 }
 
