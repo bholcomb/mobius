@@ -20,4 +20,14 @@ var html = """<!doctype html>
 if (!startswith(html, "<!doctype html>\n<html>\n")) { exit(1) }
 if (!contains(html, "<h1>\"quoted\"</h1>")) { exit(1) }
 
+// Source with CRLF line endings (a Windows checkout) means the same: a line
+// break inside a string is "\n".
+import "os"
+var crlf_path = os.join(os.tmpdir(), "mobius_crlf_" + str(os.getpid()) + ".mob")
+writefile(crlf_path, "crlf_multiline = \"\"\"one\r\ntwo\"\"\"\r\ncrlf_interpolated = `one\r\n${1 + 1}`\r\n")
+load(crlf_path)
+os.remove(crlf_path)
+if (crlf_multiline != "one\ntwo") { exit(1) }
+if (crlf_interpolated != "one\n2") { exit(1) }
+
 exit(0)

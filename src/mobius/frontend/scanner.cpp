@@ -174,10 +174,14 @@ Token make_simple_token(Scanner* scanner, TokenType type) {
 }
 
 // Process escape sequences in a raw source range, writing the decoded bytes
-// into `out`. Returns the number of bytes written.
+// into `out`. Returns the number of bytes written. A line break in the
+// source is "\n" whether the file ends its lines with LF or CRLF.
 static size_t process_escapes(const char* src, size_t src_len, char* out) {
     size_t w = 0;
     for (size_t i = 0; i < src_len; i++) {
+        if (src[i] == '\r' && i + 1 < src_len && src[i + 1] == '\n') {
+            continue;
+        }
         if (src[i] == '\\' && i + 1 < src_len) {
             i++;
             switch (src[i]) {
