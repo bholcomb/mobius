@@ -86,7 +86,7 @@ be readable from the start.
 
 ## Status
 
-Mobius is version **0.1.0**. The language, VM, standard library, fiber
+Mobius is version **0.2.0**. The language, VM, standard library, fiber
 runtime, embedding API, and bundled modules are usable today. Packages install
 from local `.mz` files with `tools/install_module.mob` (there is no package
 download yet), and the `http`, `socket`, and `websocket` modules have no TLS
