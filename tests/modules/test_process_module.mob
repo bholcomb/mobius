@@ -28,30 +28,67 @@ os.mkdirp(dir)
 fiber.sleep(1)   // starts the I/O reactor, whose descriptors live for the whole run
 var fds_before = open_fds()
 
+// The children are small Mobius programs, so the same test runs on every
+// platform. They import io: its standard streams are byte-exact (no CRLF
+// on Windows).
+var windows = startswith(os.platform, "windows-")
+var mobius_bin = os.executable()
+func child(name, source) {
+    writefile(os.join(dir, name + ".mob"), "import \"io\"\nimport \"os\"\n" + source)
+}
+// The command running child `name` with `args`.
+func mob(name, args) {
+    var cmd = [mobius_bin, os.join(dir, name + ".mob")]
+    for (var a in args) { cmd:push(a) }
+    return cmd
+}
+// Each argument in brackets.
+child("args", "for (var a in argv) { io.stdout:write(\"[\" + a + \"]\") }\n")
+// Prints its arguments, like echo.
+child("echo", "print(join(argv, \" \"))\n")
+// Prints argv[1], then exits with argv[0].
+child("exit_with", "if (size(argv) > 1) { print(argv[1]) }\nexit(int(argv[0]))\n")
+// Copies stdin to stdout as it arrives, like cat.
+child("cat", "while (true) {\n    var chunk = io.stdin:read(65536)\n    if (chunk == nil) { break }\n    io.stdout:write(chunk)\n}\n")
+// Prints argv[1] at once, then sleeps argv[0] seconds and prints "never".
+child("slow", "print(argv[1])\nio.stdout:flush()\nos.sleep(float(argv[0]))\nprint(\"never\")\n")
+// The variables named in argv, as [value] (nil when unset).
+child("env", "for (var name in argv) { io.stdout:write(\"[\" + str(os.getenv(name)) + \"]\") }\n")
+// How many variables it has, and ONLY's value.
+child("env_count", "print(str(size(os.env())) + \" \" + str(os.getenv(\"ONLY\")))\n")
+// Its working directory.
+child("pwd", "print(os.getcwd())\n")
+// Writes argv[0] to stdout, then argv[1] to stderr.
+child("out_err", "io.stdout:write(argv[0] + \"\\n\")\nio.stdout:flush()\nio.stderr:write(argv[1] + \"\\n\")\n")
+
+// A child ended by kill() or a timeout: -15 (SIGTERM) on POSIX; Windows
+// has no signals, and a terminated child exits with 1.
+var terminated_code = windows ? 1 : -15
+
 // Arguments pass through exactly: spaces, quotes, empty strings, no shell.
-var args = process.run(["printf", "[%s]", "a b", "it's \"quoted\"", "", "$HOME", "*"])
-check("arguments verbatim", args.stdout, "[a b][it's \"quoted\"][][$HOME][*]")
+var args = process.run(mob("args", ["a b", "it's \"quoted\"", "", "$HOME", "*", "back\\slash \\", "%PATH%"]))
+check("arguments verbatim", args.stdout, "[a b][it's \"quoted\"][][$HOME][*][back\\slash \\][%PATH%]")
 check("exit code 0", args.exit_code, 0)
 check("stderr captured empty", args.stderr, "")
 
 // Nonzero exits are results, not errors; check: true makes them errors.
-var fail = process.run(["sh", "-c", "echo partial; exit 7"])
+var fail = process.run(mob("exit_with", ["7", "partial"]))
 check("nonzero exit code", fail.exit_code, 7)
 check("output before nonzero exit", fail.stdout, "partial\n")
-expect_error("check", func() { return process.run(["sh", "-c", "exit 2"], {check: true}) }, "exited with status 2")
+expect_error("check", func() { return process.run(mob("exit_with", ["2"]), {check: true}) }, "exited with status 2")
 
 // Launch errors.
 expect_error("missing program", func() { return process.run(["no-such-program-xyz"]) }, "not found in PATH")
 expect_error("missing path", func() { return process.run(["/no/such/program"]) }, "cannot run")
 expect_error("empty args", func() { return process.run([]) }, "must not be empty")
 expect_error("non-string arg", func() { return process.run(["echo", 5]) }, "args[1] must be a string")
-expect_error("bad stdio word", func() { return process.run(["true"], {stdout: "nowhere"}) }, "unknown setting")
+expect_error("bad stdio word", func() { return process.run(mob("exit_with", ["0"]), {stdout: "nowhere"}) }, "unknown setting")
 
 // Binary input and output, with NUL bytes.
-var bin = process.run(["cat"], {input: "a\0b\0c", binary: true})
+var bin = process.run(mob("cat", []), {input: "a\0b\0c", binary: true})
 check("binary output is a buffer", typeof(bin.stdout), "buffer")
 check("binary round trip", bin.stdout:to_string(), "a\0b\0c")
-var text = process.run(["cat"], {input: buffer_from_string("buffer input")})
+var text = process.run(mob("cat", []), {input: buffer_from_string("buffer input")})
 check("buffer input", text.stdout, "buffer input")
 
 // Large stdout and stderr at the same time, plus large input: a child that
@@ -59,64 +96,77 @@ check("buffer input", text.stdout, "buffer input")
 // them together.
 var big_input = "0123456789"
 for (var i = 0; i < 18; i++) { big_input = big_input + big_input }   // 2,621,440 bytes
-var big = process.run(["sh", "-c", "cat; head -c 2000000 /dev/zero | tr '\\0' e 1>&2"], {input: big_input})
+child("big", "while (true) {\n    var chunk = io.stdin:read(65536)\n    if (chunk == nil) { break }\n    io.stdout:write(chunk)\n}\n" +
+      "io.stderr:write(repeat(\"e\", 2000000))\n")
+var big = process.run(mob("big", []), {input: big_input})
 check("large stdout", size(big.stdout), 2621440)
 check("large stderr", size(big.stderr), 2000000)
 
 // Environment: added to the parent's by default, nil removes, env_clear
 // starts empty.
-var env1 = process.run(["sh", "-c", "echo \"$MOBIUS_T1:$HOME_SET\""], {env: {MOBIUS_T1: "one", HOME_SET: "x"}})
-check("env added", env1.stdout, "one:x\n")
-check("parent env kept", process.run(["sh", "-c", "echo $PATH"]).stdout != "\n", true)
-var env2 = process.run(["/usr/bin/env"], {env_clear: true, env: {ONLY: "this"}})
-check("env_clear", env2.stdout, "ONLY=this\n")
+var env1 = process.run(mob("env", ["MOBIUS_T1", "HOME_SET"]), {env: {MOBIUS_T1: "one", HOME_SET: "x"}})
+check("env added", env1.stdout, "[one][x]")
+check("parent env kept", process.run(mob("env", ["PATH"])).stdout != "[nil]", true)
+var env2 = process.run(mob("env_count", []), {env_clear: true, env: {ONLY: "this"}})
+check("env_clear", env2.stdout, "1 this\n")
 os.setenv("MOBIUS_T2", "inherited")
-var env3 = process.run(["sh", "-c", "echo [$MOBIUS_T2]"], {env: {MOBIUS_T2: nil}})
-check("nil removes a variable", env3.stdout, "[]\n")
+var env3 = process.run(mob("env", ["MOBIUS_T2"]), {env: {MOBIUS_T2: nil}})
+check("nil removes a variable", env3.stdout, "[nil]")
 
-// Working directory.
-check("cwd", process.run(["pwd"], {cwd: dir}).stdout, os.realpath(dir) + "\n")
-expect_error("missing cwd", func() { return process.run(["pwd"], {cwd: os.join(dir, "nope")}) }, "cannot run")
+// Working directory (compared resolved: macOS's temporary directory is
+// behind a link, Windows' may be a short 8.3 name).
+var child_cwd = trim(process.run(mob("pwd", []), {cwd: dir}).stdout)
+check("cwd", os.realpath(child_cwd), os.realpath(dir))
+expect_error("missing cwd", func() { return process.run(mob("pwd", []), {cwd: os.join(dir, "nope")}) }, "cannot run")
 
 // Redirection: files, null, merging, io streams, inheriting.
 var out_path = os.join(dir, "out.txt")
-process.run(["echo", "first"], {stdout: {file: out_path}})
-process.run(["echo", "second"], {stdout: {file: out_path, append: true}})
+process.run(mob("echo", ["first"]), {stdout: {file: out_path}})
+process.run(mob("echo", ["second"]), {stdout: {file: out_path, append: true}})
 check("file and append", readfile(out_path), "first\nsecond\n")
 writefile(os.join(dir, "in.txt"), "from file\n")
-check("stdin from file", process.run(["cat"], {stdin: {file: os.join(dir, "in.txt")}}).stdout, "from file\n")
-var merged = process.run(["sh", "-c", "echo out; echo err 1>&2"], {stderr: "stdout"})
+check("stdin from file", process.run(mob("cat", []), {stdin: {file: os.join(dir, "in.txt")}}).stdout, "from file\n")
+var merged = process.run(mob("out_err", ["out", "err"]), {stderr: "stdout"})
 check("merged stderr", merged.stdout, "out\nerr\n")
 check("merged stderr field", merged.stderr, nil)
-var quiet = process.run(["sh", "-c", "echo hidden"], {stdout: "null"})
+var quiet = process.run(mob("echo", ["hidden"]), {stdout: "null"})
 check("null output", quiet.stdout, nil)
 var log = io.open(os.join(dir, "stream.txt"), "w")
 log:write("before\n")
-process.run(["echo", "from child"], {stdout: log})
+process.run(mob("echo", ["from child"]), {stdout: log})
 log:write("after\n")
 log:close()
 check("io stream target keeps order", readfile(os.join(dir, "stream.txt")), "before\nfrom child\nafter\n")
 expect_error("input without a stdin pipe", func() {
-    return process.run(["cat"], {input: "x", stdin: "null"})
+    return process.run(mob("cat", []), {input: "x", stdin: "null"})
 }, "stdin is not a pipe")
 
-// Shell, only when asked.
-check("shell", process.run("echo $((6*7)) | tr 4 X", {shell: true}).stdout, "X2\n")
+// Shell, only when asked: the platform's (sh, or cmd.exe, whose echo ends
+// lines with CRLF).
+if (windows) {
+    check("shell", process.run("echo one& echo two", {shell: true}).stdout, "one\r\ntwo\r\n")
+} else {
+    check("shell", process.run("echo $((6*7)) | tr 4 X", {shell: true}).stdout, "X2\n")
+}
 expect_error("shell needs a string", func() { return process.run(["echo"], {shell: true}) }, "must be a string")
 
 // Timeouts stop the child and keep the output so far.
-var slow = process.run(["sh", "-c", "echo started; sleep 5; echo never"], {timeout_ms: 300})
+var slow = process.run(mob("slow", ["5", "started"]), {timeout_ms: 300})
 check("timed out", slow.timed_out, true)
 check("partial output", slow.stdout, "started\n")
-check("terminated by signal", slow.exit_code, -15)
-var stubborn = process.run(["sh", "-c", "trap '' TERM; echo going; sleep 5"], {timeout_ms: 200})
-check("SIGKILL after grace", stubborn.exit_code, -9)
+check("terminated", slow.exit_code, terminated_code)
+if (!windows) {
+    // A child that ignores SIGTERM gets SIGKILL after a grace period
+    // (Windows terminates at once: there is no signal to ignore).
+    var stubborn = process.run(["sh", "-c", "trap '' TERM; echo going; sleep 5"], {timeout_ms: 200})
+    check("SIGKILL after grace", stubborn.exit_code, -9)
+}
 expect_error("check reports timeout", func() {
-    return process.run(["sleep", "5"], {timeout_ms: 100, check: true})
+    return process.run(mob("slow", ["5", "x"]), {timeout_ms: 100, check: true})
 }, "timed out")
 
 // start(): pipes are io streams.
-var cat = process.start(["cat"], {stdin: "pipe", stdout: "pipe"})
+var cat = process.start(mob("cat", []), {stdin: "pipe", stdout: "pipe"})
 check("pid", cat.pid > 0, true)
 cat.stdin:write("one\ntwo\n")
 cat.stdin:close()
@@ -126,24 +176,25 @@ check("lines through pipes", size(got), 2)
 cat.stdout:close()
 check("wait", cat:wait(), 0)
 check("poll after exit", cat:poll(), 0)
-check("unpiped stream is nil", process.start(["true"]).stdout, nil)
+check("unpiped stream is nil", process.start(mob("exit_with", ["0"])).stdout, nil)
 
-var both = process.start(["sh", "-c", "cat; echo e 1>&2; exit 4"], {stdin: "pipe", stdout: "pipe", stderr: "pipe"})
+child("cat_err_exit", "io.stdout:write(io.stdin:read_text())\nio.stderr:write(\"e\\n\")\nexit(4)\n")
+var both = process.start(mob("cat_err_exit", []), {stdin: "pipe", stdout: "pipe", stderr: "pipe"})
 var res = both:communicate("data")
 check("communicate stdout", res.stdout, "data")
 check("communicate stderr", res.stderr, "e\n")
 check("communicate exit", res.exit_code, 4)
 check("streams consumed", both.stdout:is_closed(), true)
 
-var sleeper = process.start(["sleep", "10"])
+var sleeper = process.start(mob("slow", ["10", "z"]), {stdout: "null"})
 check("poll while running", sleeper:poll(), nil)
 check("wait with timeout", sleeper:wait(50), nil)
 check("kill", sleeper:kill(), true)
-check("killed exit code", sleeper:wait(), -15)
+check("killed exit code", sleeper:wait(), terminated_code)
 check("kill after exit", sleeper:kill(), false)
 expect_error("bad signal", func() { return sleeper:kill("stop") }, "unknown signal")
 
-var slow_child = process.start(["sh", "-c", "echo hi; sleep 5"], {stdout: "pipe"})
+var slow_child = process.start(mob("slow", ["5", "hi"]), {stdout: "pipe"})
 var partial = slow_child:communicate(nil, 200)
 check("communicate timeout", partial.timed_out, true)
 check("communicate partial", partial.stdout, "hi\n")
@@ -151,7 +202,8 @@ check("communicate partial", partial.stdout, "hi\n")
 // No descriptors leak.
 if (fds_before >= 0) { check("no leaked descriptors", open_fds(), fds_before) }
 
-os.system("rm -rf \"" + dir + "\"")
+for (var path in os.listdir(dir)) { os.remove(os.join(dir, path)) }
+os.rmdir(dir)
 if (failures > 0) {
     print("process module: " + str(failures) + " failures")
     exit(1)

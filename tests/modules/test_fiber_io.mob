@@ -21,6 +21,27 @@ func expect_error(name, f, needle) {
 }
 func elapsed_ms(start) { return int((clock() - start) / 1000000) }
 
+// The children are small Mobius programs, so the same test runs on every
+// platform.
+var windows = startswith(os.platform, "windows-")
+shared var mobius_bin = os.executable()
+shared var dir = os.join(os.tmpdir(), "mobius_fiber_io_" + str(os.getpid()))
+os.mkdirp(dir)
+func child(name, source) {
+    writefile(os.join(dir, name + ".mob"), "import \"io\"\nimport \"os\"\n" + source)
+}
+func mob(name, args) {
+    var cmd = [mobius_bin, os.join(dir, name + ".mob")]
+    for (var a in args) { cmd:push(a) }
+    return cmd
+}
+// Sleeps argv[0] seconds.
+child("sleep", "os.sleep(float(argv[0]))\n")
+// Prints one, two and three, 0.2 seconds apart.
+child("talker", "print(\"one\")\nio.stdout:flush()\nos.sleep(0.2)\nprint(\"two\")\nio.stdout:flush()\nos.sleep(0.2)\nprint(\"three\")\n")
+// Upper-cases stdin, like tr a-z A-Z.
+child("upper", "io.stdout:write(upper(io.stdin:read_text()))\n")
+
 // Far more waiting fibers than worker threads: they all wait at once.
 func nap(ms) {
     fiber.sleep(ms)
@@ -35,7 +56,7 @@ check("sleepers all finished", total, 200)
 check("sleepers wait together", elapsed_ms(start) < 1000, true)
 
 func run_sleeper() {
-    return process.run(["sleep", "0.4"]).exit_code
+    return process.run(mob("sleep", ["0.4"])).exit_code
 }
 start = clock()
 var runs = []
@@ -46,8 +67,8 @@ check("children all exited", codes, 0)
 check("children waited together", elapsed_ms(start) < 1600, true)
 
 func start_and_wait() {
-    var child = process.start(["sleep", "0.4"])
-    return child:wait()
+    var sleeper = process.start(mob("sleep", ["0.4"]))
+    return sleeper:wait()
 }
 start = clock()
 var waits = []
@@ -63,7 +84,7 @@ func read_lines(stream) {
     for (var line in stream:lines()) { lines:push(line) }
     return lines
 }
-var talker = process.start(["sh", "-c", "echo one; sleep 0.2; echo two; sleep 0.2; echo three"], {stdout: "pipe"})
+var talker = process.start(mob("talker", []), {stdout: "pipe"})
 var reader = spawn read_lines(talker.stdout)
 func ticker() {
     var ticks = 0
@@ -83,7 +104,7 @@ talker.stdout:close()
 
 // Several fibers each driving their own child through communicate.
 func shout(word) {
-    return process.run(["tr", "a-z", "A-Z"], {input: word}).stdout
+    return process.run(mob("upper", []), {input: word}).stdout
 }
 var shouts = []
 for (var w in ["alpha", "beta", "gamma", "delta"]) { shouts:push(spawn shout(w)) }
@@ -91,7 +112,7 @@ var results = fiber.all(shouts)
 check("communicate in fibers", results[0] + results[1] + results[2] + results[3], "ALPHABETAGAMMADELTA")
 
 // fiber.cancel wakes a fiber parked on a read.
-var silent = process.start(["sleep", "10"], {stdout: "pipe"})
+var silent = process.start(mob("sleep", ["10"]), {stdout: "pipe"})
 func read_one(stream) { return stream:read_line() }
 var blocked = spawn read_one(silent.stdout)
 fiber.sleep(50)
@@ -106,11 +127,13 @@ fiber.sleep(50)
 silent.stdout:close()
 expect_error("close wakes a parked reader", func() { return await blocked2 }, "stream is closed")
 check("close then kill", silent:kill("kill"), true)
-check("killed child", silent:wait(), -9)
+// SIGKILL on POSIX; Windows has no signals, and a terminated child exits
+// with 1.
+check("killed child", silent:wait(), windows ? 1 : -9)
 
 // fiber.cancel wakes a fiber waiting for a child, and process.run kills its
 // child when cancelled.
-func long_run() { return process.run(["sleep", "10"]) }
+func long_run() { return process.run(mob("sleep", ["10"])) }
 var runner = spawn long_run()
 fiber.sleep(100)
 start = clock()
@@ -118,35 +141,30 @@ fiber.cancel(runner)
 expect_error("cancel interrupts process.run", func() { return await runner }, "CancellationError")
 check("cancelled run is prompt", elapsed_ms(start) < 500, true)
 
-// A FIFO opened with io.open is waitable too.
-var dir = os.join(os.tmpdir(), "mobius_fiber_io_" + str(os.getpid()))
-os.mkdirp(dir)
-var fifo = os.join(dir, "pipe")
-process.run(["mkfifo", fifo], {check: true})
-var fifo_reader = io.open(fifo, "r+")   // r+ does not wait for a writer
-var fifo_lines = spawn read_one(fifo_reader)
-fiber.sleep(50)
-var fifo_writer = io.open(fifo, "w")
-fifo_writer:write("through the fifo\n")
-fifo_writer:close()
-check("fifo line", await fifo_lines, "through the fifo")
-expect_error("fifo cannot seek", func() { return fifo_reader:seek(0) }, "seek")
-fifo_reader:close()
-os.remove(fifo)
-os.rmdir(dir)
+// A FIFO opened with io.open is waitable too (POSIX: Windows has no FIFOs
+// in the file system).
+if (!windows) {
+    var fifo = os.join(dir, "pipe")
+    process.run(["mkfifo", fifo], {check: true})
+    var fifo_reader = io.open(fifo, "r+")   // r+ does not wait for a writer
+    var fifo_lines = spawn read_one(fifo_reader)
+    fiber.sleep(50)
+    var fifo_writer = io.open(fifo, "w")
+    fifo_writer:write("through the fifo\n")
+    fifo_writer:close()
+    check("fifo line", await fifo_lines, "through the fifo")
+    expect_error("fifo cannot seek", func() { return fifo_reader:seek(0) }, "seek")
+    fifo_reader:close()
+    os.remove(fifo)
+}
 
 // Standard input of a child Mobius process from a pipe.
-var mobius_bin = os.executable()
-if (os.exists(mobius_bin)) {
-    var script = "import \"io\"\nvar n = 0\nfor (var line in io.stdin:lines()) { n = n + int(line) }\nprint(n)\n"
-    var script_path = os.join(os.tmpdir(), "mobius_fiber_io_stdin_" + str(os.getpid()) + ".mob")
-    var sf = io.open(script_path, "w")
-    sf:write(script)
-    sf:close()
-    var summed = process.run([mobius_bin, script_path], {input: "1\n2\n3\n4\n"})
-    check("stdin from a pipe", summed.stdout, "10\n")
-    os.remove(script_path)
-}
+child("sum", "var n = 0\nfor (var line in io.stdin:lines()) { n = n + int(line) }\nprint(n)\n")
+var summed = process.run(mob("sum", []), {input: "1\n2\n3\n4\n"})
+check("stdin from a pipe", summed.stdout, "10\n")
+
+for (var name in os.listdir(dir)) { os.remove(os.join(dir, name)) }
+os.rmdir(dir)
 
 if (failures == 0) { print("fiber io: PASS") } else { print("fiber io: " + str(failures) + " failures") }
 if (failures != 0) { exit(1) }
