@@ -1,4 +1,5 @@
 import "os"
+import "process"
 
 var pass_count = 0
 var fail_count = 0
@@ -40,92 +41,92 @@ assert_test("glfw package staged", os.is_dir(package_source))
 assert_test("create workspace", os.mkdirp(workspace))
 assert_test("write run script", writefile(run_script,
     "import \"glfw\"\n" +
-    "if (typeof(glfw.Action) != \"enum\") { exit(1) }\n" +
-    "if (typeof(glfw.Key) != \"enum\") { exit(1) }\n" +
-    "if (typeof(glfw.MouseButton) != \"enum\") { exit(1) }\n" +
-    "if (typeof(glfw.Hint) != \"enum\") { exit(1) }\n" +
+    "if (typeof(glfw.Action) != \"enum\") { exit(10) }\n" +
+    "if (typeof(glfw.Key) != \"enum\") { exit(11) }\n" +
+    "if (typeof(glfw.MouseButton) != \"enum\") { exit(12) }\n" +
+    "if (typeof(glfw.Hint) != \"enum\") { exit(13) }\n" +
     "var version = glfw.version()\n" +
-    "if (version.major != 3) { exit(1) }\n" +
-    "if (version.minor < 4) { exit(1) }\n" +
-    "if (size(glfw.version_string()) == 0) { exit(1) }\n" +
+    "if (version.major != 3) { exit(14) }\n" +
+    "if (version.minor < 4) { exit(15) }\n" +
+    "if (size(glfw.version_string()) == 0) { exit(16) }\n" +
     "var vk = glfw.vulkan_supported()\n" +
-    "if (!(vk == true || vk == false)) { exit(1) }\n" +
-    "if (glfw.initialized()) { exit(1) }\n" +
+    "if (!(vk == true || vk == false)) { exit(17) }\n" +
+    "if (glfw.initialized()) { exit(18) }\n" +
     // GLFW's null platform: windows and monitors that exist only in
     // memory, so the test never opens a window or touches a display.
     "glfw.init_hint(glfw.InitHint.PLATFORM, glfw.Platform.NULL)\n" +
     "if (!glfw.init()) {\n" +
     "    print(\"glfw init failed: \" + str(glfw.last_error().description))\n" +
-    "    exit(1)\n" +
+    "    exit(19)\n" +
     "}\n" +
-    "if (!glfw.initialized()) { exit(1) }\n" +
-    "if (glfw.platform() != glfw.Platform.NULL) { exit(1) }\n" +
-    "if (glfw.get_time() < 0.0) { exit(1) }\n" +
+    "if (!glfw.initialized()) { exit(20) }\n" +
+    "if (glfw.platform() != glfw.Platform.NULL) { exit(21) }\n" +
+    "if (glfw.get_time() < 0.0) { exit(22) }\n" +
     "glfw.set_time(1.25)\n" +
-    "if (glfw.get_time() < 1.0) { exit(1) }\n" +
-    "if (glfw.timer_value() == 0) { exit(1) }\n" +
-    "if (glfw.timer_frequency() == 0) { exit(1) }\n" +
-    "if (glfw.get_key_scancode(glfw.Key.A) < 0) { exit(1) }\n" +
-    "if (!(glfw.raw_mouse_motion_supported() == true || glfw.raw_mouse_motion_supported() == false)) { exit(1) }\n" +
-    "if (glfw.current_context() != nil) { exit(1) }\n" +
+    "if (glfw.get_time() < 1.0) { exit(23) }\n" +
+    "if (glfw.timer_value() == 0) { exit(24) }\n" +
+    "if (glfw.timer_frequency() == 0) { exit(25) }\n" +
+    "if (glfw.get_key_scancode(glfw.Key.A) < 0) { exit(26) }\n" +
+    "if (!(glfw.raw_mouse_motion_supported() == true || glfw.raw_mouse_motion_supported() == false)) { exit(27) }\n" +
+    "if (glfw.current_context() != nil) { exit(28) }\n" +
     "glfw.default_window_hints()\n" +
     "glfw.window_hint(glfw.Hint.VISIBLE, false)\n" +
     "glfw.window_hint(glfw.Hint.CLIENT_API, glfw.ClientApi.NO_API)\n" +
     "var required_ext = glfw.required_instance_extensions()\n" +
-    "if (!(required_ext == nil || size(required_ext) >= 0)) { exit(1) }\n" +
+    "if (!(required_ext == nil || size(required_ext) >= 0)) { exit(29) }\n" +
     "var monitors = glfw.monitors()\n" +
     "if (size(monitors) > 0) {\n" +
     "    var primary = glfw.primary_monitor()\n" +
-    "    if (primary == nil) { exit(1) }\n" +
+    "    if (primary == nil) { exit(30) }\n" +
     "    var name = primary:name()\n" +
-    "    if (name != nil && size(name) == 0) { exit(1) }\n" +
+    "    if (name != nil && size(name) == 0) { exit(31) }\n" +
     "    var mode = primary:video_mode()\n" +
-    "    if (mode == nil) { exit(1) }\n" +
-    "    if (mode.width <= 0 || mode.height <= 0) { exit(1) }\n" +
+    "    if (mode == nil) { exit(32) }\n" +
+    "    if (mode.width <= 0 || mode.height <= 0) { exit(33) }\n" +
     "    var modes = primary:video_modes()\n" +
-    "    if (size(modes) == 0) { exit(1) }\n" +
+    "    if (size(modes) == 0) { exit(34) }\n" +
     "    var mon_pos = primary:get_pos()\n" +
     "    var work = primary:get_workarea()\n" +
     "    var physical = primary:get_physical_size()\n" +
     "    var mon_scale = primary:get_content_scale()\n" +
-    "    if (!(mon_pos.x == mon_pos.x && mon_pos.y == mon_pos.y)) { exit(1) }\n" +
-    "    if (work.width <= 0 || work.height <= 0) { exit(1) }\n" +
-    "    if (physical.width_mm < 0 || physical.height_mm < 0) { exit(1) }\n" +
-    "    if (mon_scale.x <= 0 || mon_scale.y <= 0) { exit(1) }\n" +
+    "    if (!(mon_pos.x == mon_pos.x && mon_pos.y == mon_pos.y)) { exit(35) }\n" +
+    "    if (work.width <= 0 || work.height <= 0) { exit(36) }\n" +
+    "    if (physical.width_mm < 0 || physical.height_mm < 0) { exit(37) }\n" +
+    "    if (mon_scale.x <= 0 || mon_scale.y <= 0) { exit(38) }\n" +
     "}\n" +
     "var window = glfw.create_window(64, 64, \"glfw package test\")\n" +
     "if (window == nil) {\n" +
     "    print(\"glfw window failed: \" + str(glfw.last_error().description))\n" +
-    "    exit(1)\n" +
+    "    exit(39)\n" +
     "}\n" +
     "var win_size = window:get_size()\n" +
-    "if (win_size.width != 64 || win_size.height != 64) { exit(1) }\n" +
+    "if (win_size.width != 64 || win_size.height != 64) { exit(40) }\n" +
     "window:set_title(\"glfw package test 2\")\n" +
     "window:set_size_limits(glfw.DONT_CARE, glfw.DONT_CARE, glfw.DONT_CARE, glfw.DONT_CARE)\n" +
     "window:set_aspect_ratio(glfw.DONT_CARE, glfw.DONT_CARE)\n" +
     "var fb = window:get_framebuffer_size()\n" +
-    "if (fb.width <= 0 || fb.height <= 0) { exit(1) }\n" +
+    "if (fb.width <= 0 || fb.height <= 0) { exit(41) }\n" +
     "var frame = window:get_frame_size()\n" +
-    "if (!(frame.left == frame.left && frame.top == frame.top && frame.right == frame.right && frame.bottom == frame.bottom)) { exit(1) }\n" +
+    "if (!(frame.left == frame.left && frame.top == frame.top && frame.right == frame.right && frame.bottom == frame.bottom)) { exit(42) }\n" +
     "var pos = window:get_pos()\n" +
-    "if (!(pos.x == pos.x && pos.y == pos.y)) { exit(1) }\n" +
+    "if (!(pos.x == pos.x && pos.y == pos.y)) { exit(43) }\n" +
     "var cursor = window:get_cursor_pos()\n" +
-    "if (!(cursor.x == cursor.x && cursor.y == cursor.y)) { exit(1) }\n" +
+    "if (!(cursor.x == cursor.x && cursor.y == cursor.y)) { exit(44) }\n" +
     "window:set_cursor_pos(cursor.x, cursor.y)\n" +
     "var scale = window:get_content_scale()\n" +
-    "if (scale.x <= 0 || scale.y <= 0) { exit(1) }\n" +
+    "if (scale.x <= 0 || scale.y <= 0) { exit(45) }\n" +
     "var opacity = window:get_opacity()\n" +
-    "if (opacity <= 0 || opacity > 1.0) { exit(1) }\n" +
+    "if (opacity <= 0 || opacity > 1.0) { exit(46) }\n" +
     "window:set_opacity(1.0)\n" +
-    "if (window:get_monitor() != nil) { exit(1) }\n" +
+    "if (window:get_monitor() != nil) { exit(47) }\n" +
     "var visible_attr = window:get_attrib(glfw.Hint.VISIBLE)\n" +
-    "if (!(visible_attr == 0 || visible_attr == 1)) { exit(1) }\n" +
+    "if (!(visible_attr == 0 || visible_attr == 1)) { exit(48) }\n" +
     "window:set_input_mode(glfw.InputMode.CURSOR, glfw.CursorMode.NORMAL)\n" +
-    "if (window:get_input_mode(glfw.InputMode.CURSOR) != glfw.CursorMode.NORMAL) { exit(1) }\n" +
+    "if (window:get_input_mode(glfw.InputMode.CURSOR) != glfw.CursorMode.NORMAL) { exit(49) }\n" +
     "var key_state = window:get_key(glfw.Key.A)\n" +
-    "if (!(key_state == glfw.Action.RELEASE || key_state == glfw.Action.PRESS || key_state == glfw.Action.REPEAT)) { exit(1) }\n" +
+    "if (!(key_state == glfw.Action.RELEASE || key_state == glfw.Action.PRESS || key_state == glfw.Action.REPEAT)) { exit(50) }\n" +
     "var mouse_state = window:get_mouse_button(glfw.MouseButton.LEFT)\n" +
-    "if (!(mouse_state == glfw.Action.RELEASE || mouse_state == glfw.Action.PRESS || mouse_state == glfw.Action.REPEAT)) { exit(1) }\n" +
+    "if (!(mouse_state == glfw.Action.RELEASE || mouse_state == glfw.Action.PRESS || mouse_state == glfw.Action.REPEAT)) { exit(51) }\n" +
     "window:on_key(func (self, key, scancode, action, mods) {})\n" +
     "window:on_char(func (self, codepoint) {})\n" +
     "window:on_cursor_pos(func (self, x, y) {})\n" +
@@ -152,14 +153,14 @@ assert_test("write run script", writefile(run_script,
     "window:on_maximize(nil)\n" +
     "glfw.poll_events()\n" +
     "glfw.wait_events_timeout(0.0)\n" +
-    "if (window:should_close()) { exit(1) }\n" +
+    "if (window:should_close()) { exit(52) }\n" +
     "window:set_should_close(true)\n" +
-    "if (!window:should_close()) { exit(1) }\n" +
-    "if (window:is_closed()) { exit(1) }\n" +
+    "if (!window:should_close()) { exit(53) }\n" +
+    "if (window:is_closed()) { exit(54) }\n" +
     "window:close()\n" +
-    "if (!window:is_closed()) { exit(1) }\n" +
-    "if (!glfw.terminate()) { exit(1) }\n" +
-    "if (glfw.initialized()) { exit(1) }\n" +
+    "if (!window:is_closed()) { exit(55) }\n" +
+    "if (!glfw.terminate()) { exit(56) }\n" +
+    "if (glfw.initialized()) { exit(57) }\n" +
     "print(\"glfw package import ok\")\n"))
 
 var pack_rc = os.system(mobius_bin + " " + pack_tool + " " + package_source + " " + archive_path)
@@ -174,8 +175,16 @@ assert_test("installed glfw native library exists", os.is_file(os.join(modules_r
 
 var old_cwd = os.getcwd()
 assert_test("chdir into workspace", os.chdir(workspace))
-var import_rc = os.system(mobius_bin + " " + run_script)
-assert_test("import installed glfw package", import_rc == 0)
+var imported = process.run([mobius_bin, run_script], {stderr: "stdout"})
+if (imported.exit_code != 0) {
+    // Each of its checks exits with its own code: show the one that failed.
+    print("  the run script exited with " + str(imported.exit_code) + ", output:")
+    print(imported.stdout)
+    for (var line in split(readfile(run_script), "\n")) {
+        if (contains(line, "exit(" + str(imported.exit_code) + ")")) { print("  failed: " + trim(line)) }
+    }
+}
+assert_test("import installed glfw package", imported.exit_code == 0 && contains(imported.stdout, "glfw package import ok"))
 assert_test("chdir back to repo root", os.chdir(old_cwd))
 
 os.remove(os.join(modules_root, "glfw", "native", native_folder, "glfw" + lib_ext))
