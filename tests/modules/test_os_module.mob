@@ -199,11 +199,13 @@ assert_test("extname foo.tar.gz", os.extname("foo.tar.gz") == ".gz")
 assert_test("extname no ext", os.extname("Makefile") == "")
 assert_test("extname /path/to/file.c", os.extname("/path/to/file.c") == ".c")
 
-assert_test("join a b", os.join("/foo", "bar") == "/foo/bar")
+// join puts this platform's separator between parts that have none.
+var sep = os.separator
+assert_test("join a b", os.join("/foo", "bar") == "/foo" + sep + "bar")
 assert_test("join trailing sep", os.join("/foo/", "bar") == "/foo/bar")
 assert_test("join empty a", os.join("", "bar") == "bar")
 assert_test("join empty b", os.join("/foo", "") == "/foo")
-assert_test("join three segments", os.join("/foo", "bar", "baz.txt") == "/foo/bar/baz.txt")
+assert_test("join three segments", os.join("/foo", "bar", "baz.txt") == "/foo" + sep + "bar" + sep + "baz.txt")
 assert_test("join ignores repeated separators", os.join("/foo/", "/bar/", "baz") == "/foo/bar/baz")
 assert_test("join all empty", os.join("", "", "") == "")
 
@@ -221,13 +223,16 @@ os.rmdir(os.dirname(os.dirname(os.dirname(deep))))
 // ============================================================================
 // exec and system
 // ============================================================================
+// Through the platform's shell (sh, or cmd.exe, whose echo ends lines
+// with CRLF), output exactly as the command wrote it.
 var out = os.exec("echo hello_from_os")
-assert_test("exec output", out == "hello_from_os\n")
+var newline = startswith(os.platform, "windows-") ? "\r\n" : "\n"
+assert_test("exec output", out == "hello_from_os" + newline)
 
-var rc = os.system("true")
+var rc = os.system("exit 0")
 assert_test("system exit 0", rc == 0)
 
-var rc2 = os.system("false")
+var rc2 = os.system("exit 1")
 assert_test("system exit 1", rc2 == 1)
 
 // ============================================================================
