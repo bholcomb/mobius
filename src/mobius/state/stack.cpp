@@ -1339,7 +1339,10 @@ int mobius_pcall(MobiusState* state, int nargs, int nresults) {
     nctx->base = saved_base;
     nctx->top  = saved_top;
 
-    if (rc < 0) return -1;
+    if (rc < 0) {
+        vm->popFramesTo(depth - 1);   // the failed run's frames (see callValue)
+        return -1;
+    }
 
     int actual_results = (nresults > 0) ? nresults : 1;
     for (int i = 0; i < actual_results; i++) {

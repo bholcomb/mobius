@@ -273,6 +273,15 @@ public:
         call_depth_--;
     }
 
+    // Pop the frames above call depth `depth`, closing their upvalues: what
+    // a call from native code into a script that failed leaves behind.
+    void popFramesTo(size_t depth) {
+        while (call_depth_ > depth) {
+            if (MOBIUS_UNLIKELY(callStackTop().upvalue_count > 0)) closeUpvalues(callStackTop(), 0);
+            callStackPop();
+        }
+    }
+
     int callFunction(CallInfo& caller, int func_reg, int nargs, int nresults);
     void closeUpvalues(CallInfo& ci, int from_reg);
 

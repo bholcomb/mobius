@@ -712,7 +712,12 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
     nctx->base = saved_base;
     nctx->top = saved_top;
 
-    if (rc < 0) return rc;
+    if (rc < 0) {
+        // A failed run leaves its frames: drop them, or each failed call
+        // from the host kept a frame until calls hit max_call_depth.
+        vm->popFramesTo(depth - 1);
+        return rc;
+    }
 
     int result_count = (nresults > 0) ? nresults : 1;
     for (int i = 0; i < result_count; i++) {
