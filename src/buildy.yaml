@@ -19,6 +19,11 @@ targets:
       flags:
         - linux: ["-fPIC", "-fvisibility=hidden"]
         - macos: ["-fPIC", "-fvisibility=hidden"]
+      # The workspace's C runtime link flags are for the linker, not the
+      # archiver (lib.exe).
+      link:
+        remove_flags:
+          - windows: ["/NODEFAULTLIB:libucrt.lib", "/DEFAULTLIB:ucrt.lib"]
 
   shared_libraries:
     - name: mobius-core

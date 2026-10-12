@@ -22,10 +22,18 @@ environment:
   # Every symbol a library uses must resolve when it links, as on Windows and
   # macOS: a plugin that uses a symbol the core doesn't export (anything but
   # the C API) fails to link here too, instead of only at load time.
+  # On Windows every executable and DLL shares one C runtime, the system's
+  # UCRT (ucrtbase.dll): print, the io module and the process module pass
+  # FILE*s and descriptors to each other, and a C runtime linked statically
+  # into each would give each its own stdio and descriptor table (a stream
+  # from one is an invalid argument to another, which ends the process).
+  # The compiler runtime stays static (MSVC's default), so nothing beyond
+  # Windows itself is needed to run them: Microsoft's "hybrid CRT".
   link:
     flags:
       - linux: ["-Wl,--no-undefined"]
       - linux: {x86_64: ["-fcf-protection=branch"]}
+      - windows: ["/NODEFAULTLIB:libucrt.lib", "/DEFAULTLIB:ucrt.lib"]
 
   configurations:
     debug:
