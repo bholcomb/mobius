@@ -125,12 +125,19 @@ void os_platform_sleep(double seconds) {
     Sleep((DWORD)(seconds * 1000.0));
 }
 
+// _wsystem and _wpopen run cmd.exe /c <command>, and cmd.exe drops the first
+// and last quote of a command that starts with one: "C:\a b\x" "y" would run
+// C:\a b\x" "y. Quoting the whole command keeps it as written.
+static std::wstring cmd_line(const std::string& command) {
+    return L"\"" + widen(command) + L"\"";
+}
+
 int64_t os_platform_system(const std::string& command) {
-    return (int64_t)_wsystem(widen(command).c_str());
+    return (int64_t)_wsystem(cmd_line(command).c_str());
 }
 
 bool os_platform_exec(const std::string& command, std::string* output) {
-    FILE* fp = _wpopen(widen(command).c_str(), L"rb");
+    FILE* fp = _wpopen(cmd_line(command).c_str(), L"rb");
     if (!fp) return false;
     char buf[4096];
     size_t n;
