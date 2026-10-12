@@ -1,14 +1,14 @@
 /* mobius_set_count_hook: the host stops runaway scripts and enforces
- * instruction budgets. The count counts safepoints, a loop's back-edges and
- * calls of script functions; each fiber counts for itself, from zero when
- * the host starts a script, when the fiber is spawned and after each wait.
+ * instruction budgets. It counts the VM instructions a script executes;
+ * each fiber counts for itself, from zero when the host starts a script,
+ * when the fiber is spawned and after each wait.
  *
  * Checked here: every kind of endless loop stops with the hook's message and
- * the script's try/catch can't catch it; a budget per call from the host
- * (exactly at the edge, many calls, and the state still works after many
- * stopped calls); spawned fibers inherit the hook, each counted separately,
- * on several workers; waits start the count again; removing the hook
- * restores normal running. */
+ * the script's try/catch can't catch it; a budget per call from the host,
+ * exact to the instruction (counted from the functions' bytecode), over many
+ * calls, and the state still works after many stopped calls; spawned fibers
+ * inherit the hook, each counted separately, on several workers; waits start
+ * the count again; removing the hook restores normal running. */
 #include <mobius/mobius.h>
 #include <mobius/mobius_plugin.h>
 #include <pthread.h>
@@ -148,7 +148,7 @@ static void endless_loops(void) {
     mobius_stack_pop(s, 1);
 
     /* A host function that drops the error doesn't free the script: it
-     * stops again at its next safepoint, with the same message. */
+     * stops again at its next instruction, with the same message. */
     mobius_register_function(s, "swallow", swallow, NULL);
     mobius_exec_string(s, "func forever() { while (true) {} }");
     atomic_store(&hook_calls, 0);
@@ -173,22 +173,40 @@ static void endless_loops(void) {
     mobius_free_state(s);
 }
 
+/* How many instructions the call name(n) from the host runs, measured with
+ * a count of 1: the hook then runs before every instruction but the first. */
+static long instructions(MobiusState* s, const char* name, int64_t n) {
+    mobius_set_count_hook(s, keep_going, 1, NULL);
+    atomic_store(&hook_calls, 0);
+    if (call_with(s, name, n) < 0) fail("counting a call");
+    return atomic_load(&hook_calls) + 1;
+}
+
 static void budget_per_call(void) {
     MobiusState* s = new_state(1);
     mobius_exec_string(s,
         "func spin(n) { for (var i = 0; i < n; i++) {} return n }\n"
         "func step() { return 1 }\n"
         "func calls(n) { var k = 0\n while (k < n) { k = k + step() } return k }");
-    /* A budget of 100: the hook runs at the 100th safepoint. spin(n) takes
-     * n back-edges, so 99 passes and 100 is stopped. calls(n) takes two per
-     * round: the call of step and the back-edge. */
-    mobius_set_count_hook(s, stop, 100, "over budget");
+    /* From their bytecode (bin/mobius --debug): spin(n) runs LOADINT, then
+     * per round SHARED_LOAD LT MOVE INC JMP, and to leave SHARED_LOAD LT
+     * JMP RETURN: 5n + 5 instructions. calls(n) runs LOADINT GETGLOBAL,
+     * per round LT CALL_DIRECT_PLAIN, step's LOADINT RETURN, ADD_II JMP,
+     * and to leave LT JMP RETURN: 6n + 5. */
+    if (instructions(s, "spin", 99) != 500) fail("spin(99) is not 500 instructions");
+    if (instructions(s, "calls", 49) != 299) fail("calls(49) is not 299 instructions");
+
+    /* A budget of N lets a call run N instructions, every time. */
+    mobius_set_count_hook(s, stop, 500, "over budget");
     for (int i = 0; i < 1000; i++)
-        if (call_with(s, "spin", 99) < 0) fail("spin(99) under the budget failed");
-    if (call_with(s, "spin", 100) >= 0) fail("spin(100) over the budget passed");
+        if (call_with(s, "spin", 99) < 0) fail("spin(99) on a budget of 500 failed");
+    mobius_set_count_hook(s, stop, 499, "over budget");
+    if (call_with(s, "spin", 99) >= 0) fail("spin(99) on a budget of 499 passed");
     expect_error("instruction limit: over budget", "the budget's message");
-    if (call_with(s, "calls", 49) < 0) fail("calls(49) under the budget failed");
-    if (call_with(s, "calls", 50) >= 0) fail("calls(50) over the budget passed");
+    mobius_set_count_hook(s, stop, 299, "over budget");
+    if (call_with(s, "calls", 49) < 0) fail("calls(49) on a budget of 299 failed");
+    mobius_set_count_hook(s, stop, 298, "over budget");
+    if (call_with(s, "calls", 49) >= 0) fail("calls(49) on a budget of 298 passed");
     expect_error("instruction limit: over budget", "the budget's message for calls");
 
     /* Many stopped calls leave nothing behind (frames, try blocks). */
@@ -198,13 +216,12 @@ static void budget_per_call(void) {
     if (call_with(s, "calls", 10) < 0) fail("calls(10) after many stopped calls");
     if (mobius_exec_string(s, "var r = spin(50)") != MOBIUS_OK) fail("exec after many stopped calls");
 
-    /* A script called back from a host function counts on its caller. */
+    /* A script called back from a host function counts on its caller:
+     * spin(60) is 305 instructions, once called and once as a callback. */
     mobius_set_count_hook(s, NULL, 0, NULL);
-    mobius_exec_string(s, "func run_spin(n) { return spin(n) }");
-    mobius_set_count_hook(s, stop, 100, "over budget");
-    if (mobius_exec_string(s, "for (var i = 0; i < 60; i++) {}\nvar x = [60]:any(spin)") !=
-        MOBIUS_ERROR_RUNTIME)
-        fail("a callback did not count on its caller");
+    mobius_exec_string(s, "func both(n) { var a = spin(n)\n return [n]:any(spin) }");
+    mobius_set_count_hook(s, stop, 500, "over budget");
+    if (call_with(s, "both", 60) >= 0) fail("a callback did not count on its caller");
     expect_error("instruction limit", "the callback's message");
     mobius_free_state(s);
 }
@@ -212,14 +229,14 @@ static void budget_per_call(void) {
 static void spawned_fibers(void) {
     MobiusState* s = new_state(3);
 
-    /* Each fiber counts for itself: 8 fibers of 900 safepoints never reach
-     * 1000, which a shared counter would pass. */
+    /* Each fiber counts for itself: 8 fibers of 905 instructions (spin(180))
+     * never reach 1000, which a shared counter would pass. */
     mobius_set_count_hook(s, keep_going, 1000, NULL);
     atomic_store(&hook_calls, 0);
     if (mobius_exec_string(s,
             "func spin(n) { for (var i = 0; i < n; i++) {} return n }\n"
             "var fs = []\n"
-            "for (var i = 0; i < 8; i++) { fs:push(spawn spin(899)) }\n"
+            "for (var i = 0; i < 8; i++) { fs:push(spawn spin(180)) }\n"
             "for (var f in fs) { await f }") != MOBIUS_OK)
         fail("fibers under the count");
     if (atomic_load(&hook_calls) != 0) fail("fibers shared a count");
@@ -260,8 +277,10 @@ static void spawned_fibers(void) {
 
 static void waits_restart_the_count(void) {
     MobiusState* s = new_state(2);
-    mobius_set_count_hook(s, stop, 50, "no wait");
-    /* Many rounds, but never 50 safepoints between two waits. */
+    mobius_set_count_hook(s, stop, 300, "no wait");
+    /* Many rounds, each well under 300 instructions between two waits (an
+     * integer for loop with an empty body is one IFORLOOP per round, so the
+     * inner loop is under 50); 400 rounds between waits are too many. */
     if (mobius_exec_string(s,
             "import \"fiber\"\n"
             "func waiter() {\n"
@@ -271,11 +290,14 @@ static void waits_restart_the_count(void) {
             "    }\n"
             "    return 1\n"
             "}\n"
-            "for (var i = 0; i < 300; i++) { for (var j = 0; j < 40; j++) {}\n yield }\n"
-            "var r = await spawn waiter()") != MOBIUS_OK)
+            "func main() {\n"
+            "    for (var i = 0; i < 300; i++) { for (var j = 0; j < 40; j++) {}\n yield }\n"
+            "    return await spawn waiter()\n"
+            "}\n"
+            "var r = main()") != MOBIUS_OK)
         fail("a script that waits was stopped");
     if (mobius_exec_string(s,
-            "func greedy() { for (var i = 0; i < 1000; i++) { for (var j = 0; j < 60; j++) {}\n yield } }\n"
+            "func greedy() { for (var i = 0; i < 1000; i++) { for (var j = 0; j < 400; j++) {}\n yield } }\n"
             "greedy()") != MOBIUS_ERROR_RUNTIME)
         fail("too much between waits was not stopped");
     expect_error("instruction limit: no wait", "the message between waits");

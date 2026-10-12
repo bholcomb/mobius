@@ -668,32 +668,33 @@ static const char* over_budget(MobiusState* state, void* userdata) {
 mobius_set_count_hook(state, over_budget, 10000, NULL);
 ```
 
-The hook runs after every `count` **safepoints** a script passes without
-waiting. The safepoints are where a script can run long: each jump back to
-the start of a loop (one per iteration) and each call of a script function
-by script code, including tail calls and metamethods written in Mobius.
-Straight-line code between them isn't counted, nor are native and host
-functions. A budget of N lets a script run at most N loop iterations and
-calls.
+The hook runs after every `count` **instructions** a script executes
+without waiting: every bytecode instruction the interpreter runs
+(`mobius --debug script.mob` lists a script's). A call of a native or host
+function is the one call instruction that invoked it, however long the
+function runs; a script function it calls back counts its own instructions.
+A fused instruction (the compiler fuses some common pairs, such as a
+global's lookup and its call) counts once.
 
 When the hook returns a message, the script fails with the runtime error
-`instruction limit: <message>` where it is. The error unwinds the whole
-script to the host, past any `try`/`catch` in the script, and reaches the
-error handler and the return code as usual. Returning `NULL` lets the
-script go on until the next `count`; a hook can, for example, check a clock
-and stop only scripts that ran too long.
+`instruction limit: <message>` at the instruction it reached. The error
+unwinds the whole script to the host, past any `try`/`catch` in the script,
+and reaches the error handler and the return code as usual. Returning
+`NULL` lets the script go on for another `count`; a hook can, for example,
+check a clock and stop only scripts that ran too long.
 
 Each fiber counts for itself, and its count starts again at zero when the
 host starts a script (`mobius_exec_string` and friends, or `mobius_call_ref`
 outside any running script), when a spawned fiber starts, and each time a
-fiber waits (`yield`, `await`, `fiber.sleep`, channels, I/O). So with a
-hook that always stops, `count` is a budget for each call from the host:
+fiber waits (`yield`, `await`, `fiber.sleep`, channels, I/O; not waiting
+for an atomic block's lock). So with a hook that always stops, `count` is
+a budget for each call from the host:
 
 ```c
 mobius_set_count_hook(state, over_budget, 10000, NULL);
 for (each tick) {
     if (mobius_call_ref(state, on_tick, NULL, 0, 0) < 0) {
-        // the script failed, or ran more than 10000 loop iterations and calls
+        // the script failed, or ran more than 10000 instructions
     }
 }
 ```
@@ -709,8 +710,8 @@ removes the hook for scripts started afterwards. Like other host callbacks,
 the hook may run on any worker thread, concurrently for different fibers;
 it must not run scripts.
 
-Without a hook nothing is counted: each safepoint costs a test of a flag.
-Memory limits are separate.
+Counting costs a few percent whether or not a hook is set (the interpreter
+keeps the count in a register). Memory limits are separate.
 
 ---
 

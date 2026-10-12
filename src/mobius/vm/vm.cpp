@@ -237,12 +237,6 @@ static inline int vm_userdata_lookup(MobiusVM* vm, const Value& value, const Val
     return 0;
 }
 
-// A safepoint of the count hook (mobius_set_count_hook): a loop's back-edge
-// or a call. True if the hook stopped the script (the error is set). One
-// load and branch without a hook.
-#define COUNT_SAFEPOINT(vm, ip) \
-    (MOBIUS_UNLIKELY((vm)->count_hook_ != nullptr) && (vm)->countSafepoint(ip) < 0)
-
 // ============================================================================
 // Constructor / Destructor
 // ============================================================================
@@ -665,7 +659,6 @@ int MobiusVM::callFunction(CallInfo& caller, int func_reg, int nargs, int nresul
         memset(&type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
     }
 
-    if (COUNT_SAFEPOINT(this, caller.ip)) return -1;
     if (MOBIUS_UNLIKELY(callDepthExceeded())) {
         runtimeError("Stack overflow: more than %zu nested calls", max_call_depth_);
         return -1;
@@ -778,7 +771,6 @@ int MobiusVM::callScriptMetamethod(const Value& fn, MobiusString* mm_name,
                      mm_name->data, nargs, mf->param_count);
         return -1;
     }
-    if (COUNT_SAFEPOINT(this, callStackTop().ip)) return -1;
     if (MOBIUS_UNLIKELY(callDepthExceeded())) {
         runtimeError("Stack overflow: more than %zu nested calls", max_call_depth_);
         return -1;
@@ -2746,9 +2738,8 @@ MOBIUS_FORCEINLINE static int vm_op_modi(MobiusVM* vm, VMFrame& f, uint32_t inst
 // ---- Jumps ----
 
 MOBIUS_FORCEINLINE static int vm_op_jmp(MobiusVM* vm, VMFrame& f, uint32_t inst) {
-    int offset = DECODE_sBx_wide(inst);
-    if (MOBIUS_UNLIKELY(offset < 0) && COUNT_SAFEPOINT(vm, f.ip)) return -1;   // a loop's back-edge
-    f.ip += offset;
+    (void)vm;
+    f.ip += DECODE_sBx_wide(inst);
     return 0;
 }
 
@@ -3105,12 +3096,12 @@ MOBIUS_FORCEINLINE static int vm_op_iforprep(MobiusVM* vm, VMFrame& f, uint32_t 
 }
 
 MOBIUS_FORCEINLINE static int vm_op_iforloop(MobiusVM* vm, VMFrame& f, uint32_t inst) {
+    (void)vm;
     int a = DECODE_A(inst);
     int64_t sv = f.regs[a + 2].as.i64;
     int64_t iv = (int64_t)((uint64_t)f.regs[a].as.i64 + (uint64_t)sv);   // wraps
     f.regs[a].as.i64 = iv;
     if ((sv > 0) ? (iv <= f.regs[a + 1].as.i64) : (iv >= f.regs[a + 1].as.i64)) {
-        if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
         f.ip += DECODE_sBx(inst);
         f.regs[a + 3].as.i64 = iv;
         f.regs[a + 3].type = VAL_INT64;
@@ -3225,7 +3216,6 @@ MOBIUS_FORCEINLINE static int vm_call_direct_impl(MobiusVM* vm, VMFrame& f, uint
     }
 
     f.ci->ip = f.ip;
-    if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
     if (MOBIUS_UNLIKELY(vm->callDepthExceeded())) {
         vm->runtimeError("Stack overflow: more than %zu nested calls", vm->max_call_depth_);
         return -1;
@@ -3281,7 +3271,6 @@ MOBIUS_FORCEINLINE static int vm_op_call_impl(MobiusVM* vm, VMFrame& f, uint32_t
             memset(&vm->type_tags_[child_base], (uint8_t)VAL_UNKNOWN, child->num_registers);
         }
 
-        if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
         if (MOBIUS_UNLIKELY(vm->callDepthExceeded())) {
             VM_ERROR(vm, f, "Stack overflow: more than %zu nested calls", vm->max_call_depth_);
             return -1;
@@ -3424,7 +3413,6 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
         vm->registers_[f.ci->base + i] = Value();
     }
 
-    if (COUNT_SAFEPOINT(vm, f.ip)) return -1;
     f.ci->proto = child;
     f.ci->ip = child->code.data();
     f.ci->clearUpvalues();
@@ -4405,24 +4393,28 @@ void MobiusVM::discardTryBlocks(size_t base_depth) {
     }
 }
 
-MOBIUS_NOINLINE int MobiusVM::countSafepoint(uint32_t* ip) {
-    if (--count_left_ != 0) return 0;
+MOBIUS_NOINLINE uint32_t MobiusVM::countRanOut(uint32_t* ip) {
+    if (!count_hook_) return UINT32_MAX;   // nothing to count: just go on
     callStackTop().ip = ip;   // the error reports the instruction reached
     if (!count_aborted_) {
-        count_left_ = count_hook_count_;
         MobiusCountHook hook = count_hook_;
         void* userdata = count_hook_userdata_;
         const char* stop = nullptr;
         JobSystem::callHost([&] { stop = hook(state_, userdata); });
-        if (!stop) return 0;
+        if (!stop) {
+            // This instruction is the first of the next `count`.
+            count_left_ = count_hook_count_;
+            return count_left_;
+        }
         count_aborted_ = true;
         count_abort_message_ = stop;
     }
     // (Running again although stopped: native code that called back into
     // the script dropped the error. It stops again, at once.)
     runtimeError("instruction limit: %s", count_abort_message_.c_str());
-    count_left_ = 1;   // and at every safepoint it reaches from now on
-    return -1;
+    count_left_ = 1;   // and at every instruction it reaches from now on
+    count_changed_ = true;
+    return 0;
 }
 
 MOBIUS_NOINLINE int MobiusVM::handleHandlerError(size_t base_depth) {
@@ -4480,6 +4472,27 @@ int MobiusVM::run(size_t base_depth) {
 
     uint32_t inst;
 
+    // The count hook (mobius_set_count_hook) counts in `budget`, a local
+    // so it stays in a register: every instruction takes one off it, and
+    // when it reaches zero the hook is due (countRanOut). Whenever control
+    // leaves this loop, where other code may run scripts on this VM (which
+    // count on) or wait (which starts the count again), the count is
+    // handed over in count_left_: before handlers not marked pure
+    // (VM_HANDLER), taken back after them if count_changed_ says it
+    // changed, and handed back when run() returns (VM_LEAVE). Without a
+    // hook it starts at its maximum, and running out just starts it again.
+    uint32_t budget = count_hook_ ? count_left_ : UINT32_MAX;
+    #define VM_LEAVE(rc) do { count_left_ = budget; count_changed_ = true; return (rc); } while (0)
+    // Take the count back only if it changed (a nested run or a wait): a
+    // load of it every time put the store-to-load latency into the chain
+    // of decrements (20% slower arithmetic), a test of the flag doesn't.
+    #define VM_COUNT_RELOAD() do {                                      \
+        if (MOBIUS_UNLIKELY(count_changed_)) {                          \
+            count_changed_ = false;                                     \
+            budget = count_left_;                                       \
+        }                                                               \
+    } while (0)
+
 #if defined(__GNUC__) || defined(__clang__)
     static const void* dispatch_table[] = {
         &&L_OP_MOVE, &&L_OP_LOADK, &&L_OP_LOADNIL, &&L_OP_LOADBOOL, &&L_OP_LOADINT,
@@ -4531,7 +4544,11 @@ int MobiusVM::run(size_t base_depth) {
     static_assert(sizeof(dispatch_table) / sizeof(dispatch_table[0]) == OP_MAX_OPCODE,
                   "dispatch_table must match OpCode enum");
 
-    #define VM_DISPATCH() do { inst = *f.ip++; goto *dispatch_table[DECODE_OP(inst)]; } while(0)
+    #define VM_DISPATCH() do {                                          \
+        inst = *f.ip++;                                                 \
+        if (MOBIUS_UNLIKELY(--budget == 0)) goto L_VM_COUNT;            \
+        goto *dispatch_table[DECODE_OP(inst)];                          \
+    } while(0)
     #define VM_CASE(op) L_##op:
     #define VM_NEXT() VM_DISPATCH()
     #define VM_DEFAULT() L_VM_DEFAULT:
@@ -4539,7 +4556,16 @@ int MobiusVM::run(size_t base_depth) {
     VM_DISPATCH();
 
 #else
-    #define VM_DISPATCH() for(;;) { inst = *f.ip++; switch(DECODE_OP(inst)) {
+    #define VM_DISPATCH() for(;;) {                                     \
+        inst = *f.ip++;                                                 \
+        if (MOBIUS_UNLIKELY(--budget == 0)) {                           \
+            budget = countRanOut(f.ip);                                 \
+            if (budget == 0) {   /* stopped */                          \
+                handleHandlerError(base_depth);   /* drops try blocks */\
+                return -1;                                              \
+            }                                                           \
+        }                                                               \
+        switch(DECODE_OP(inst)) {
     #define VM_CASE(op) case op:
     #define VM_NEXT() break
     #define VM_DEFAULT() default:
@@ -4560,24 +4586,38 @@ int MobiusVM::run(size_t base_depth) {
     // allocation comfort zone (adding any two labels regressed unrelated
     // benchmarks ~20%). The frame mirror is refreshed HERE, inline, so its
     // address never escapes into the call.
+    // VM_HANDLER hands the count over (see `budget`) around the handler,
+    // which may run scripts or wait. VM_HANDLER_PURE is for handlers that
+    // can't (no metamethods, natives or waits), on the hot paths.
     #define VM_HANDLER(op, fn) VM_CASE(op) {                            \
+        count_left_ = budget;                                           \
+        int _rc = fn(this, f, inst);                                    \
+        VM_COUNT_RELOAD();                                              \
+        if (MOBIUS_UNLIKELY(_rc < 0)) {                                 \
+            if (handleHandlerError(base_depth) < 0) VM_LEAVE(-1);       \
+            refreshFrame(f);                                            \
+            VM_NEXT();                                                  \
+        }                                                               \
+        VM_NEXT();                                                      \
+    }
+    #define VM_HANDLER_PURE(op, fn) VM_CASE(op) {                       \
         int _rc = fn(this, f, inst);                                    \
         if (MOBIUS_UNLIKELY(_rc < 0)) {                                 \
-            if (handleHandlerError(base_depth) < 0) return -1;          \
+            if (handleHandlerError(base_depth) < 0) VM_LEAVE(-1);       \
             refreshFrame(f);                                            \
             VM_NEXT();                                                  \
         }                                                               \
         VM_NEXT();                                                      \
     }
 
-    VM_HANDLER(OP_MOVE, vm_op_move)
-    VM_HANDLER(OP_LOADK, vm_op_loadk)
-    VM_HANDLER(OP_LOADNIL, vm_op_loadnil)
-    VM_HANDLER(OP_LOADBOOL, vm_op_loadbool)
-    VM_HANDLER(OP_LOADINT, vm_op_loadint)
-    VM_HANDLER(OP_GETUPVAL, vm_op_getupval)
-    VM_HANDLER(OP_SETUPVAL, vm_op_setupval)
-    VM_HANDLER(OP_GETGLOBAL, vm_op_getglobal)
+    VM_HANDLER_PURE(OP_MOVE, vm_op_move)
+    VM_HANDLER_PURE(OP_LOADK, vm_op_loadk)
+    VM_HANDLER_PURE(OP_LOADNIL, vm_op_loadnil)
+    VM_HANDLER_PURE(OP_LOADBOOL, vm_op_loadbool)
+    VM_HANDLER_PURE(OP_LOADINT, vm_op_loadint)
+    VM_HANDLER_PURE(OP_GETUPVAL, vm_op_getupval)
+    VM_HANDLER_PURE(OP_SETUPVAL, vm_op_setupval)
+    VM_HANDLER_PURE(OP_GETGLOBAL, vm_op_getglobal)
     VM_HANDLER(OP_SETGLOBAL, vm_op_setglobal)
     VM_HANDLER(OP_SETGLOBAL_FORCE, vm_op_setglobal_force)
     VM_HANDLER(OP_GLOBAL_READONLY, vm_op_global_readonly)
@@ -4591,7 +4631,7 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_DIV, vm_op_div)
     VM_HANDLER(OP_MOD, vm_op_mod)
     VM_HANDLER(OP_UNM, vm_op_unm)
-    VM_HANDLER(OP_NOT, vm_op_not)
+    VM_HANDLER_PURE(OP_NOT, vm_op_not)
 
     // Through VM_HANDLER like every other instruction, so an error unwinds
     // to an enclosing try. These cases returned straight out of run(),
@@ -4606,34 +4646,34 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_EQ, vm_op_eq)
     VM_HANDLER(OP_LT, vm_op_lt)
     VM_HANDLER(OP_LE, vm_op_le)
-    VM_HANDLER(OP_TEST, vm_op_test)
-    VM_HANDLER(OP_TESTSET, vm_op_testset)
-    VM_HANDLER(OP_TESTJMP, vm_op_testjmp)
-    VM_HANDLER(OP_JMP, vm_op_jmp)
+    VM_HANDLER_PURE(OP_TEST, vm_op_test)
+    VM_HANDLER_PURE(OP_TESTSET, vm_op_testset)
+    VM_HANDLER_PURE(OP_TESTJMP, vm_op_testjmp)
+    VM_HANDLER_PURE(OP_JMP, vm_op_jmp)
 
-    VM_HANDLER(OP_LTI, vm_op_lti)
-    VM_HANDLER(OP_LEI, vm_op_lei)
-    VM_HANDLER(OP_EQI, vm_op_eqi)
-    VM_HANDLER(OP_NEI, vm_op_nei)
-    VM_HANDLER(OP_GTI, vm_op_gti)
-    VM_HANDLER(OP_GEI, vm_op_gei)
+    VM_HANDLER_PURE(OP_LTI, vm_op_lti)
+    VM_HANDLER_PURE(OP_LEI, vm_op_lei)
+    VM_HANDLER_PURE(OP_EQI, vm_op_eqi)
+    VM_HANDLER_PURE(OP_NEI, vm_op_nei)
+    VM_HANDLER_PURE(OP_GTI, vm_op_gti)
+    VM_HANDLER_PURE(OP_GEI, vm_op_gei)
 
-    VM_HANDLER(OP_ADDI, vm_op_addi)
-    VM_HANDLER(OP_SUBI, vm_op_subi)
-    VM_HANDLER(OP_MULI, vm_op_muli)
-    VM_HANDLER(OP_DIVI, vm_op_divi)
-    VM_HANDLER(OP_MODI, vm_op_modi)
+    VM_HANDLER_PURE(OP_ADDI, vm_op_addi)
+    VM_HANDLER_PURE(OP_SUBI, vm_op_subi)
+    VM_HANDLER_PURE(OP_MULI, vm_op_muli)
+    VM_HANDLER_PURE(OP_DIVI, vm_op_divi)
+    VM_HANDLER_PURE(OP_MODI, vm_op_modi)
 
-    VM_HANDLER(OP_ADD_II, vm_op_add_ii)
-    VM_HANDLER(OP_ADD_FF, vm_op_add_ff)
-    VM_HANDLER(OP_SUB_II, vm_op_sub_ii)
-    VM_HANDLER(OP_SUB_FF, vm_op_sub_ff)
-    VM_HANDLER(OP_MUL_II, vm_op_mul_ii)
-    VM_HANDLER(OP_MUL_FF, vm_op_mul_ff)
-    VM_HANDLER(OP_MOD_II, vm_op_mod_ii)
-    VM_HANDLER(OP_DIV_II, vm_op_div_ii)
-    VM_HANDLER(OP_DIV_FF, vm_op_div_ff)
-    VM_HANDLER(OP_MOD_FF, vm_op_mod_ff)
+    VM_HANDLER_PURE(OP_ADD_II, vm_op_add_ii)
+    VM_HANDLER_PURE(OP_ADD_FF, vm_op_add_ff)
+    VM_HANDLER_PURE(OP_SUB_II, vm_op_sub_ii)
+    VM_HANDLER_PURE(OP_SUB_FF, vm_op_sub_ff)
+    VM_HANDLER_PURE(OP_MUL_II, vm_op_mul_ii)
+    VM_HANDLER_PURE(OP_MUL_FF, vm_op_mul_ff)
+    VM_HANDLER_PURE(OP_MOD_II, vm_op_mod_ii)
+    VM_HANDLER_PURE(OP_DIV_II, vm_op_div_ii)
+    VM_HANDLER_PURE(OP_DIV_FF, vm_op_div_ff)
+    VM_HANDLER_PURE(OP_MOD_FF, vm_op_mod_ff)
 
     VM_HANDLER(OP_ADDK, vm_op_addk)
     VM_HANDLER(OP_SUBK, vm_op_subk)
@@ -4641,24 +4681,24 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_DIVK, vm_op_divk)
     VM_HANDLER(OP_MODK, vm_op_modk)
 
-    VM_HANDLER(OP_INC, vm_op_inc)
-    VM_HANDLER(OP_DEC, vm_op_dec)
+    VM_HANDLER_PURE(OP_INC, vm_op_inc)
+    VM_HANDLER_PURE(OP_DEC, vm_op_dec)
     VM_HANDLER(OP_TYPECHECK, vm_op_typecheck)
-    VM_HANDLER(OP_ISNUM, vm_op_isnum)
+    VM_HANDLER_PURE(OP_ISNUM, vm_op_isnum)
     VM_HANDLER(OP_TYPECOMPAT, vm_op_typecompat)
     VM_HANDLER(OP_TYPEIS, vm_op_typeis)
     VM_HANDLER(OP_LEN, vm_op_len)
 
-    VM_HANDLER(OP_IFORPREP, vm_op_iforprep)
-    VM_HANDLER(OP_IFORLOOP, vm_op_iforloop)
+    VM_HANDLER_PURE(OP_IFORPREP, vm_op_iforprep)
+    VM_HANDLER_PURE(OP_IFORLOOP, vm_op_iforloop)
 
-    VM_HANDLER(OP_MOVE_ADDI, vm_op_move_addi)
-    VM_HANDLER(OP_MOVE_MULI, vm_op_move_muli)
+    VM_HANDLER_PURE(OP_MOVE_ADDI, vm_op_move_addi)
+    VM_HANDLER_PURE(OP_MOVE_MULI, vm_op_move_muli)
     VM_HANDLER(OP_GETGLOBAL_INDEX_GET, vm_op_getglobal_index_get)
     VM_HANDLER(OP_GETGLOBAL_CALL, vm_op_getglobal_call)
     VM_HANDLER(OP_GETGLOBAL_CALL_PLAIN, vm_op_getglobal_call_plain)
-    VM_HANDLER(OP_CALL_DIRECT, vm_op_call_direct)
-    VM_HANDLER(OP_CALL_DIRECT_PLAIN, vm_op_call_direct_plain)
+    VM_HANDLER_PURE(OP_CALL_DIRECT, vm_op_call_direct)
+    VM_HANDLER_PURE(OP_CALL_DIRECT_PLAIN, vm_op_call_direct_plain)
 
     VM_HANDLER(OP_ARRAY_PUSH, vm_op_array_push)
     VM_HANDLER(OP_GETFIELD, vm_op_getfield)
@@ -4671,14 +4711,16 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_CALL_PLAIN, vm_op_call_plain)
 
     VM_CASE(OP_TAILCALL) {
+        count_left_ = budget;   // a native it calls may run scripts or wait
         int rc = vm_op_tailcall(this, f, inst, base_depth);
+        VM_COUNT_RELOAD();
         if (MOBIUS_UNLIKELY(rc < 0)) {
             // Same handler-selection rules as VM_HANDLER: only a try block
             // registered within this run() may catch, and its atomic locks
             // must be released on the way to the catch.
             if (MOBIUS_UNLIKELY(count_aborted_)) {
                 discardTryBlocks(base_depth);
-                return -1;
+                VM_LEAVE(-1);
             }
             if (!try_stack_.empty() &&
                 try_stack_.back().call_stack_depth > base_depth) {
@@ -4697,16 +4739,16 @@ int MobiusVM::run(size_t base_depth) {
                 refreshFrame(f);
                 VM_NEXT();
             }
-            return -1;
+            VM_LEAVE(-1);
         }
-        if (rc == 1) return 0;
+        if (rc == 1) VM_LEAVE(0);
         VM_NEXT();
     }
 
     VM_CASE(OP_RETURN) {
         int rc = vm_op_return(this, f, inst, base_depth);
-        if (rc < 0) return -1;
-        if (rc == 1) return 0;
+        if (rc < 0) VM_LEAVE(-1);
+        if (rc == 1) VM_LEAVE(0);
         VM_NEXT();
     }
 
@@ -4718,8 +4760,8 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_GETENUM, vm_op_getenum)
     VM_HANDLER(OP_IMPORT, vm_op_import)
     VM_HANDLER(OP_PRAGMA, vm_op_pragma)
-    VM_HANDLER(OP_TRY_BEGIN, vm_op_try_begin)
-    VM_HANDLER(OP_TRY_END, vm_op_try_end)
+    VM_HANDLER_PURE(OP_TRY_BEGIN, vm_op_try_begin)
+    VM_HANDLER_PURE(OP_TRY_END, vm_op_try_end)
     VM_HANDLER(OP_SPAWN, vm_op_spawn)
     VM_HANDLER(OP_AWAIT, vm_op_await)
     VM_HANDLER(OP_YIELD, vm_op_yield)
@@ -4737,19 +4779,19 @@ int MobiusVM::run(size_t base_depth) {
         // the guard inside vm_op_throw already established there is no
         // handler above base_depth, so no catch dispatch is needed here.
         int rc = vm_op_throw(this, f, inst, base_depth);
-        if (MOBIUS_UNLIKELY(rc < 0)) return -1;
+        if (MOBIUS_UNLIKELY(rc < 0)) VM_LEAVE(-1);
         VM_NEXT();
     }
     VM_HANDLER(OP_SELF, vm_op_self)
-    VM_HANDLER(OP_LT_II, vm_op_lt_ii)
-    VM_HANDLER(OP_LE_II, vm_op_le_ii)
-    VM_HANDLER(OP_EQ_II, vm_op_eq_ii)
-    VM_HANDLER(OP_LT_FF, vm_op_lt_ff)
-    VM_HANDLER(OP_LE_FF, vm_op_le_ff)
-    VM_HANDLER(OP_EQ_FF, vm_op_eq_ff)
-    VM_HANDLER(OP_TYPELOCK, vm_op_typelock)
-    VM_HANDLER(OP_TYPECHECK_LOCKED, vm_op_typecheck_locked)
-    VM_HANDLER(OP_NOP, vm_op_nop)
+    VM_HANDLER_PURE(OP_LT_II, vm_op_lt_ii)
+    VM_HANDLER_PURE(OP_LE_II, vm_op_le_ii)
+    VM_HANDLER_PURE(OP_EQ_II, vm_op_eq_ii)
+    VM_HANDLER_PURE(OP_LT_FF, vm_op_lt_ff)
+    VM_HANDLER_PURE(OP_LE_FF, vm_op_le_ff)
+    VM_HANDLER_PURE(OP_EQ_FF, vm_op_eq_ff)
+    VM_HANDLER_PURE(OP_TYPELOCK, vm_op_typelock)
+    VM_HANDLER_PURE(OP_TYPECHECK_LOCKED, vm_op_typecheck_locked)
+    VM_HANDLER_PURE(OP_NOP, vm_op_nop)
     VM_HANDLER(OP_AGET, vm_op_aget)
     VM_HANDLER(OP_AGET_INDEX_GET, vm_op_aget_index_get)
     VM_HANDLER(OP_ADD_CHECK, vm_op_add_check)
@@ -4757,16 +4799,29 @@ int MobiusVM::run(size_t base_depth) {
     VM_HANDLER(OP_ASET, vm_op_aset)
     VM_HANDLER(OP_FREEZE, vm_op_freeze)
 
+#if defined(__GNUC__) || defined(__clang__)
+    L_VM_COUNT:
+        budget = countRanOut(f.ip);
+        if (MOBIUS_UNLIKELY(budget == 0)) {   // stopped (count_left_ is set)
+            handleHandlerError(base_depth);   // drops this run's try blocks
+            return -1;
+        }
+        goto *dispatch_table[DECODE_OP(inst)];
+#endif
+
     VM_DEFAULT()
         f.ci->ip = f.ip;
         runtimeError("Unknown opcode %d", DECODE_OP(inst));
-        return -1;
+        VM_LEAVE(-1);
 
 #if !defined(__GNUC__) && !defined(__clang__)
     VM_END_DISPATCH()
 #endif
 
     #undef VM_HANDLER
+    #undef VM_HANDLER_PURE
+    #undef VM_LEAVE
+    #undef VM_COUNT_RELOAD
     #undef VM_DISPATCH
     #undef VM_CASE
     #undef VM_NEXT

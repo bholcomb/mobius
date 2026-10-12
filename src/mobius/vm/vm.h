@@ -313,13 +313,14 @@ public:
 
     // The count hook (mobius_set_count_hook), this VM's own copy: each
     // fiber has its own VM, so each counts for itself and no counter is
-    // shared between threads. While count_hook_ is set, each safepoint (a
-    // loop's back-edge, a call) takes one off count_left_, and the hook
-    // runs when it reaches zero.
+    // shared between threads. count_left_ is how many instructions may be
+    // dispatched until the hook is due, counting the one that finds it
+    // due; run() counts in a local and hands it over here (see `budget`).
     MobiusCountHook count_hook_ = nullptr;
     void* count_hook_userdata_ = nullptr;
     uint32_t count_hook_count_ = 0;
     uint32_t count_left_ = 0;
+    bool count_changed_ = false;   // count_left_ changed outside run()'s loop
     // Set when the hook stopped the script: no try block catches errors
     // until the host gets the error back (and arms the VM again).
     bool count_aborted_ = false;
@@ -328,20 +329,24 @@ public:
         count_hook_ = count ? hook : nullptr;
         count_hook_count_ = count_hook_ ? count : 0;
         count_hook_userdata_ = count_hook_ ? userdata : nullptr;
-        count_left_ = count_hook_count_;
+        restartCount();
         count_aborted_ = false;
     }
     // The host starts a script on this VM: take the state's setting.
     void armCountHookFromState() {
         armCountHook(state_->countHook(), state_->countHookCount(), state_->countHookUserdata());
     }
-    // The fiber waits: its count starts again.
-    void restartCount() { count_left_ = count_hook_count_; }
-    // A safepoint while counting: when the count reaches zero, call the
-    // hook (or, once it stopped the script, stop it again). Returns -1 if
-    // the script must stop, with the error set at `ip` (the position the
-    // script reached in the running frame).
-    int countSafepoint(uint32_t* ip);
+    // The count starts again (the host starts a script, the fiber waits):
+    // `count` instructions run, and the hook is due at the next one.
+    void restartCount() {
+        count_left_ = count_hook_count_ < UINT32_MAX ? count_hook_count_ + 1 : UINT32_MAX;
+        count_changed_ = true;
+    }
+    // run()'s count ran out: call the hook if one is set (or, once it
+    // stopped the script, stop it again). Returns the new count, or 0 if
+    // the script must stop, with the error set at `ip` (the dispatch
+    // position in the running frame).
+    uint32_t countRanOut(uint32_t* ip);
     // Drop the try blocks registered within the run at `base_depth`
     // (an error none of them may catch is leaving it).
     void discardTryBlocks(size_t base_depth);

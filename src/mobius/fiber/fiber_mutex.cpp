@@ -14,12 +14,15 @@ static const void* current_owner() {
 }
 
 // Let the lock holder run: yield this fiber if we are on one, otherwise
-// yield the thread.
+// yield the thread. Waiting for a lock is not one of the script's waits:
+// its instruction count (mobius_set_count_hook) goes on.
 static void wait_for_holder() {
     MobiusVM* vm = MobiusVM::current();
     JobSystem* js = vm ? vm->state_->jobSystem() : nullptr;
     if (js && js->currentFiber()) {
+        uint32_t count_left = vm->count_left_;
         js->yieldFiber();
+        vm->count_left_ = count_left;   // the fiber's VM, wherever it resumed
     } else {
         std::this_thread::yield();
     }

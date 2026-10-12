@@ -51,7 +51,7 @@ mobius.ExitRequested = code => UnloadMod(code);
 mobius.Sandbox();
 mobius.FileSystem = new ModFiles(modDirectory);   // implements IMobiusFileSystem
 mobius.AddScriptDirectory("scripts");             // import "util" -> scripts/util.mob
-// And a budget: each call from C# may run 10000 loop iterations and calls.
+// And a budget: each call from C# may run 10000 instructions.
 mobius.SetCountHook(10000, () => "over budget");
 
 // The game's API.
@@ -90,8 +90,8 @@ a registered function becomes a script error the script can catch.
 
 `SetCountHook(count, hook)` is `mobius_set_count_hook` (see the
 [Embedding Guide](../../docs/embedding/embedding-guide.md#instruction-budgets)):
-the hook runs after every `count` loop iterations and calls a script makes
-without waiting, counted per fiber from each call from C#, and returns null to
+the hook runs after every `count` instructions a script executes without
+waiting, counted per fiber from each call from C#, and returns null to
 let the script go on or a message to stop it with an `instruction limit:`
 error the script can't catch. A hook that throws stops the script with the
 exception's message.

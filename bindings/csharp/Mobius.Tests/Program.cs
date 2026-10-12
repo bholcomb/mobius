@@ -148,12 +148,14 @@ using (var m = new MobiusState(workerThreads: 3))
     Throws("endless loop", () => m.Execute("while (true) {}"), "instruction limit: too long");
     Throws("endless loop inside try", () => m.Execute("try { while (true) {} } catch e {}"), "instruction limit: too long");
 
+    // spin(99) runs 500 instructions (see tests/embed/test_count_hook.c).
     m.Execute("func spin(n) { for (var i = 0; i < n; i++) {} return n }");
-    m.SetCountHook(100, () => "over budget");
+    m.SetCountHook(500, () => "over budget");
     bool under = true;
     for (int i = 0; i < 200; i++) under &= m.Call("spin", 99L) is long n && n == 99;
-    Check("under the budget", under);
-    Throws("over the budget", () => m.Call("spin", 100L), "instruction limit: over budget");
+    Check("within the budget", under);
+    m.SetCountHook(499, () => "over budget");
+    Throws("over the budget", () => m.Call("spin", 99L), "instruction limit: over budget");
 
     m.Execute("func forever() { while (true) {} }");
     m.SetCountHook(100000, () => "fiber too long");
