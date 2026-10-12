@@ -18,6 +18,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -56,6 +57,10 @@ std::string platform_user_cache_dir();
 
 bool platform_is_regular_file(const std::string& path);
 bool platform_is_directory(const std::string& path);
+
+// fopen with a UTF-8 path (Windows' fopen reads paths in the ANSI code
+// page). Null on failure, with errno set.
+FILE* platform_fopen(const std::string& path, const char* mode);
 
 // ---------------------------------------------------------------------------
 // Shared libraries

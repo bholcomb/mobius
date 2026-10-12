@@ -1346,7 +1346,7 @@ bool MobiusState::readFile(const char* path, std::string& out, std::string& erro
         return true;
     }
     if (!host_call && !allowsDefault(MOBIUS_CAP_FILES)) { error = kFilesUnavailable; return false; }
-    FILE* f = fopen(path, "rb");
+    FILE* f = platform_fopen(path, "rb");
     if (!f) { error = "could not open file"; return false; }
     char chunk[65536];
     size_t n;
@@ -1370,7 +1370,7 @@ bool MobiusState::writeFile(const char* path, const char* data, size_t length, b
         return true;
     }
     if (!allowsDefault(MOBIUS_CAP_FILES)) { error = kFilesUnavailable; return false; }
-    FILE* f = fopen(path, append ? "ab" : "wb");
+    FILE* f = platform_fopen(path, append ? "ab" : "wb");
     if (!f) {
         error = append ? "could not open file for appending" : "could not open file for writing";
         return false;

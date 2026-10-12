@@ -50,6 +50,10 @@ bool platform_is_directory(const std::string& path) {
     return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+FILE* platform_fopen(const std::string& path, const char* mode) {
+    return fopen(path.c_str(), mode);
+}
+
 // ---------------------------------------------------------------------------
 // Shared libraries
 // ---------------------------------------------------------------------------
