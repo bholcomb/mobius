@@ -36,13 +36,16 @@ var modules_root = os.join(workspace, "modules")
 var archive_path = os.join(workspace, "sqlite.mz")
 var database_path = os.join(workspace, "test.db")
 var run_script = os.join(workspace, "run.mob")
+// The database path as a string literal in the script, its backslashes
+// (Windows) escaped: unescaped, the "\t" of "\test.db" is a tab.
+var database_literal = replace(database_path, "\\", "\\\\")
 
 assert_test("sqlite package staged", os.is_dir(package_source))
 assert_test("create workspace", os.mkdirp(workspace))
 assert_test("write run script", writefile(run_script,
     "import \"sqlite\"\n" +
     "func ensure(cond) { if (!cond) { exit(1) } }\n" +
-    "var db = sqlite.open(\"" + database_path + "\")\n" +
+    "var db = sqlite.open(\"" + database_literal + "\")\n" +
     "db:exec(\"create table items (id integer primary key, name text not null, score integer not null, active integer not null, note text, payload blob)\")\n" +
     "var insert_stmt = db:prepare(\"insert into items (name, score, active, note, payload) values (:name, :score, :active, :note, :payload)\")\n" +
     "ensure(insert_stmt:parameter_count() == 5)\n" +
