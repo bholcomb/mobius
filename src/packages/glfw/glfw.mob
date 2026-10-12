@@ -229,6 +229,27 @@ enum Hint {
 }
 __install_glfw_enum("Hint", Hint)
 
+enum InitHint {
+    JOYSTICK_HAT_BUTTONS = 0x00050001,
+    ANGLE_PLATFORM_TYPE = 0x00050002,
+    PLATFORM = 0x00050003,
+    COCOA_CHDIR_RESOURCES = 0x00051001,
+    COCOA_MENUBAR = 0x00051002,
+    X11_XCB_VULKAN_SURFACE = 0x00052001,
+    WAYLAND_LIBDECOR = 0x00053001
+}
+__install_glfw_enum("InitHint", InitHint)
+
+enum Platform {
+    ANY = 0x00060000,
+    WIN32 = 0x00060001,
+    COCOA = 0x00060002,
+    WAYLAND = 0x00060003,
+    X11 = 0x00060004,
+    NULL = 0x00060005
+}
+__install_glfw_enum("Platform", Platform)
+
 enum ClientApi {
     NO_API = 0,
     OPENGL = 0x00030001,

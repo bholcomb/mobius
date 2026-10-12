@@ -6,7 +6,7 @@ already wrapped in `glfw_plugin.cpp`.
 
 Already broadly covered:
 
-- init / terminate / error retrieval / version info
+- init / init hints / platform / terminate / error retrieval / version info
 - default window hints / integer window hints
 - timer APIs
 - clipboard text
@@ -26,7 +26,6 @@ These are the most useful remaining GLFW APIs for real applications.
 
 ### Init / Global State
 
-- [ ] `glfwInitHint`
 - [ ] `glfwSetErrorCallback`
 
 ### Window Hints / Creation

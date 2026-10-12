@@ -51,13 +51,15 @@ assert_test("write run script", writefile(run_script,
     "var vk = glfw.vulkan_supported()\n" +
     "if (!(vk == true || vk == false)) { exit(1) }\n" +
     "if (glfw.initialized()) { exit(1) }\n" +
+    // GLFW's null platform: windows and monitors that exist only in
+    // memory, so the test never opens a window or touches a display.
+    "glfw.init_hint(glfw.InitHint.PLATFORM, glfw.Platform.NULL)\n" +
     "if (!glfw.init()) {\n" +
-    "    var err = glfw.last_error()\n" +
-    "    if (err.code == glfw.Error.NO_ERROR) { exit(1) }\n" +
-    "    print(\"glfw init unavailable: \" + str(err.code))\n" +
-    "    exit(0)\n" +
+    "    print(\"glfw init failed: \" + str(glfw.last_error().description))\n" +
+    "    exit(1)\n" +
     "}\n" +
     "if (!glfw.initialized()) { exit(1) }\n" +
+    "if (glfw.platform() != glfw.Platform.NULL) { exit(1) }\n" +
     "if (glfw.get_time() < 0.0) { exit(1) }\n" +
     "glfw.set_time(1.25)\n" +
     "if (glfw.get_time() < 1.0) { exit(1) }\n" +
@@ -93,14 +95,11 @@ assert_test("write run script", writefile(run_script,
     "}\n" +
     "var window = glfw.create_window(64, 64, \"glfw package test\")\n" +
     "if (window == nil) {\n" +
-    "    var win_err = glfw.last_error()\n" +
-    "    if (win_err.code == 0) { exit(1) }\n" +
-    "    glfw.terminate()\n" +
-    "    print(\"glfw window unavailable: \" + str(win_err.code))\n" +
-    "    exit(0)\n" +
+    "    print(\"glfw window failed: \" + str(glfw.last_error().description))\n" +
+    "    exit(1)\n" +
     "}\n" +
-    "var size = window:get_size()\n" +
-    "if (size.width != 64 || size.height != 64) { exit(1) }\n" +
+    "var win_size = window:get_size()\n" +
+    "if (win_size.width != 64 || win_size.height != 64) { exit(1) }\n" +
     "window:set_title(\"glfw package test 2\")\n" +
     "window:set_size_limits(glfw.DONT_CARE, glfw.DONT_CARE, glfw.DONT_CARE, glfw.DONT_CARE)\n" +
     "window:set_aspect_ratio(glfw.DONT_CARE, glfw.DONT_CARE)\n" +

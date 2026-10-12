@@ -604,6 +604,27 @@ static int glfw_init(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
+// Sets an init hint for the next glfw.init(); glfw.InitHint.PLATFORM with
+// glfw.Platform.NULL, for one, makes a GLFW that never touches a display.
+static int glfw_init_hint(MobiusState* state, int arg_count, void* /*userdata*/) {
+    if (arg_count != 2) return mobius_error(state, "init_hint() expects 2 arguments (hint, value)");
+    int hint = (int)mobius_stack_asInt64(state, 0);
+    int value = (int)mobius_stack_asInt64(state, 1);
+    mobius_stack_pop(state, 2);
+    std::lock_guard<std::mutex> lock(g_glfw_mutex);
+    glfwInitHint(hint, value);
+    mobius_stack_pushBool(state, true);
+    return 1;
+}
+
+// The platform GLFW was initialized for (a glfw.Platform).
+static int glfw_platform(MobiusState* state, int arg_count, void* /*userdata*/) {
+    if (arg_count != 0) return mobius_error(state, "platform() expects no arguments");
+    if (!state_is_initialized(state)) return mobius_error(state, "glfw.init() must succeed before platform()");
+    if (!push_enum_value(state, "Platform", glfwGetPlatform())) return -1;
+    return 1;
+}
+
 static int glfw_terminate(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 0) return mobius_error(state, "terminate() expects no arguments");
 
@@ -1660,6 +1681,8 @@ static void cleanup_glfw_plugin(void) {
 
 static MobiusPluginFunction glfw_functions[] = {
     {"init", glfw_init, 0, MOBIUS_VAL_BOOL, "Initialize GLFW for this Mobius state"},
+    {"init_hint", glfw_init_hint, 2, MOBIUS_VAL_BOOL, "Set a GLFW init hint for the next init"},
+    {"platform", glfw_platform, 0, MOBIUS_VAL_INT64, "Return the platform GLFW was initialized for"},
     {"terminate", glfw_terminate, 0, MOBIUS_VAL_BOOL, "Terminate GLFW for this Mobius state"},
     {"initialized", glfw_initialized, 0, MOBIUS_VAL_BOOL, "Return whether GLFW has been initialized for this state"},
     {"last_error", glfw_last_error, 0, MOBIUS_VAL_TABLE, "Return the most recent GLFW error"},
