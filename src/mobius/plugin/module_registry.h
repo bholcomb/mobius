@@ -54,6 +54,7 @@ public:
     ModuleRegistry& operator=(const ModuleRegistry&) = delete;
 
     Table* resolveModule(const char* name, const char* caller_source, MobiusState* state);
+    // Takes over one reference to module_table.
     void registerBuiltinModule(const char* name, Table* module_table);
 
     // Release every Value held by cached module environments. The strings

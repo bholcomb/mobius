@@ -1220,8 +1220,10 @@ int mobius_register_module(MobiusState* state, const char* name) {
     if (!nctx || nctx->top <= nctx->base) return MOBIUS_ERROR_ARGUMENT;
     Value val = nctx->registers[--nctx->top];
     if (val.type != VAL_TABLE || !val.as.table) return MOBIUS_ERROR_TYPE;
-    // Rooted by the registry (the GC visits registered module tables).
-    state->registry()->registerBuiltinModule(name, val.as.table);
+    // The registry keeps its own reference: the popped slot's reference
+    // goes with the next push over it. (It is rooted there too: the GC
+    // visits registered module tables.)
+    state->registry()->registerBuiltinModule(name, val.as.table->retain());
     return MOBIUS_OK;
 }
 

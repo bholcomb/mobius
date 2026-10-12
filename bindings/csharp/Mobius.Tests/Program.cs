@@ -81,6 +81,16 @@ using (var m = new MobiusState())
     Check("module", (string?)m.GetGlobal("e") == "enemy:orc/3");
 }
 
+// Several modules of C# functions (importing the first of two crashed).
+foreach (int? workers in new int?[] { 0, null })
+{
+    using var m = new MobiusState(workerThreads: workers);
+    m.RegisterModule("one", new Dictionary<string, object?> { ["f"] = (Func<object?[], object?>)(_ => 1L) });
+    m.RegisterModule("two", new Dictionary<string, object?> { ["f"] = (Func<object?[], object?>)(_ => 2L) });
+    m.Execute("import \"one\"\nimport \"two\"\nvar both = one.f() * 10 + two.f()", "m.mob");
+    Check($"two modules (workers {workers})", m.GetGlobal("both") is long both && both == 12);
+}
+
 // Output, exit, sandbox and a game file system.
 using (var m = new MobiusState())
 {
