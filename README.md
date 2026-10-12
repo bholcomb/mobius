@@ -94,14 +94,15 @@ yet.
 
 ## Getting Mobius
 
-There is no release yet. Linux x64 comes first: a `mobius-linux-x64.tar.gz`
-holding `bin/` (the `mobius` interpreter, `libmobius-core`, and the bundled
-modules), `packages/`, the C headers in `include/`, and the C# binding in
-`dotnet/`. Windows and macOS are in CI but not released yet.
+Each [release](https://github.com/bholcomb/mobius/releases) has a
+`mobius-linux-x64.tar.gz` holding `bin/` (the `mobius` interpreter,
+`libmobius-core`, and the bundled modules), `packages/`, the C headers in
+`include/`, and the C# binding in `dotnet/`. Windows and macOS releases come
+later.
 
-Until then, build from source with [buildy](https://github.com/bholcomb/buildy)
-on your `PATH` (see [Getting Started](docs/guide/getting-started.md#building)).
-From the repository root:
+To build from source, put [buildy](https://github.com/bholcomb/buildy) on your
+`PATH` (see [Getting Started](docs/guide/getting-started.md#building)). From
+the repository root:
 
 ```bash
 buildy -r                   # build (release) into bin/
