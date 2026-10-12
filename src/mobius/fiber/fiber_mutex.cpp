@@ -20,9 +20,9 @@ static void wait_for_holder() {
     MobiusVM* vm = MobiusVM::current();
     JobSystem* js = vm ? vm->state_->jobSystem() : nullptr;
     if (js && js->currentFiber()) {
-        uintptr_t count_limit = vm->count_limit_;
+        uintptr_t count_limit = vm->countLimit();
         js->yieldFiber();
-        vm->count_limit_ = count_limit;   // the fiber's VM, wherever it resumed
+        vm->countLimit() = count_limit;   // the fiber's VM, wherever it resumed
     } else {
         std::this_thread::yield();
     }

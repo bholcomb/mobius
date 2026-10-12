@@ -313,14 +313,17 @@ public:
 
     // The count hook (mobius_set_count_hook), this VM's own copy: each
     // fiber has its own VM, so each counts for itself and no counter is
-    // shared between threads. count_limit_ is where the count runs out, as
-    // a code address in the running frame's code (in bytes: the hook is due
-    // once ip passes it); run() moves it with ip wherever ip jumps, calls
-    // or returns, so running straight on counts itself. While no run() is
-    // going on it is the count left, in bytes (an address in no code).
-    // count_run_ is the innermost run() going on, if any, and where the
-    // run enclosing it had got to (`outer`, in the enclosing run's code, or
-    // 0 for the host), which the limit moves back to when it ends.
+    // shared between threads. The count limit is where the count runs out,
+    // as a code address in the running frame's code (in bytes: the hook is
+    // due once ip passes it); run() moves it with ip wherever ip jumps,
+    // calls or returns, so running straight on counts itself.
+    // count_run_ is the innermost run() going on, if any: it is on that
+    // run()'s stack, holds the limit while the run goes on (`limit`), and
+    // where the run enclosing it had got to (`outer`, in the enclosing
+    // run's code, or 0 for the host), which the limit moves back to when
+    // it ends. While no run() is going on, the limit is count_limit_: the
+    // count left, in bytes (an address in no code). countLimit() is
+    // wherever it is now.
     static constexpr uintptr_t kCountUnlimited = (uintptr_t)1 << 62;   // no hook
     MobiusCountHook count_hook_ = nullptr;
     void* count_hook_userdata_ = nullptr;
@@ -329,8 +332,10 @@ public:
     struct CountRun {
         uintptr_t outer;
         CountRun* enclosing;
+        uintptr_t limit;
     };
     CountRun* count_run_ = nullptr;
+    uintptr_t& countLimit() { return count_run_ ? count_run_->limit : count_limit_; }
     // Set when the hook stopped the script: no try block catches errors
     // until the host gets the error back (and arms the VM again).
     bool count_aborted_ = false;
@@ -355,7 +360,7 @@ public:
     // run, from the running frame's ip, which the instruction that waits
     // saved.
     void restartCount() {
-        count_limit_ = (count_run_ ? (uintptr_t)callStackTop().ip : 0) + countBytes();
+        countLimit() = (count_run_ ? (uintptr_t)callStackTop().ip : 0) + countBytes();
     }
     // run()'s count ran out at `ip`: call the hook, or, once it stopped the
     // script, stop it again. Returns false if the script must stop, with

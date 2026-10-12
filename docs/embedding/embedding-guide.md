@@ -721,9 +721,9 @@ removes the hook for scripts started afterwards. Like other host callbacks,
 the hook may run on any worker thread, concurrently for different fibers;
 it must not run scripts.
 
-Counting costs about 2–3% on `benchmarks/benchmark_comprehensive.mob`
+Counting costs about 1% on `benchmarks/benchmark_comprehensive.mob`
 whether or not a hook is set, more in code that is mostly calls of tiny
-functions (recursive Fibonacci: about 10%). Memory limits are separate.
+functions (recursive Fibonacci: about 7%). Memory limits are separate.
 
 ---
 
