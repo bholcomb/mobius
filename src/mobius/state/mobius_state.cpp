@@ -598,6 +598,7 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
     }
 
     MobiusVM* vm = activeVM();
+    const bool from_host = !vm;
     if (!vm) {
         // The host calls into a script outside any running script: on the
         // main VM, counting from zero with the state's count hook.
@@ -710,7 +711,21 @@ int MobiusState::callValue(const Value& function, const Value* args, int nargs,
     }
 
     size_t depth = vm->callStackSize() - 1;
-    int rc = vm->run(depth);
+    int rc;
+    JobSystem* js = job_system_;
+    if (from_host && js && !js->currentFiber()) {
+        // Like a script the host executes, the call runs as the main fiber,
+        // so it can wait (await, yield, sleep, channels) while this thread
+        // runs the fibers it waits for: with no worker threads, nothing
+        // else would, and the wait never ended.
+        rc = js->executeAsMainFiber([vm, js, depth]() -> int {
+            ScopedCurrentVMOverride bind_fiber_vm(vm);   // on whichever thread runs the fiber
+            if (MobiusFiber* self = js->currentFiber()) self->vm = vm;
+            return vm->run(depth);
+        });
+    } else {
+        rc = vm->run(depth);
+    }
 
     nctx->registers = saved_registers;
     nctx->capacity = saved_capacity;

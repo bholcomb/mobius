@@ -148,6 +148,10 @@ using (var m = new MobiusState(workerThreads: 0))
     m.Register("where", args => { if (Environment.CurrentManagedThreadId != thread) other++; return null; });
     m.Execute("func w() { where() }\nvar fs = [spawn w(), spawn w()]\nfor (var f in fs) { await f }\nwhere()");
     Check("single-threaded", other == 0);
+
+    // A script function C# calls may spawn and wait (it used to wait forever).
+    m.Execute("func h() { return 3 }\nfunc f() {\n    var x = spawn h()\n    return await x\n}", "s.mob");
+    Check("spawn and await in a call", m.Call("f") is long r && r == 3);
 }
 
 // The count hook: endless loops stop, a budget per call, fibers on several

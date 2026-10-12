@@ -856,7 +856,8 @@ Threading model:
 - Each state maintains a pool of worker threads (`max_worker_threads`); the
   calling thread also participates as a worker: during `mobius_exec_string`
   it runs ready fibers (usually the main script fiber) until the script
-  finishes. With `max_worker_threads = 0` it is the only worker, and fibers
+  finishes, and the same during a `mobius_call_ref` from outside any running
+  script, whose function runs as the main fiber and may spawn and wait. With `max_worker_threads = 0` it is the only worker, and fibers
   the script spawned but never awaited continue during the next call into
   the state.
 - The **top-level script runs on a dedicated main fiber** with its own,

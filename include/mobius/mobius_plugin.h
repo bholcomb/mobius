@@ -281,6 +281,11 @@ MOBIUS_API int mobius_pcall(MobiusState* state, int nargs, int nresults);
  *
  * Results are pushed onto the current native stack (or the bound VM stack
  * when called outside a native function frame).
+ *
+ * Called from outside any running script, the function runs as the main
+ * fiber, as a script mobius_exec_string runs: it may spawn fibers and wait
+ * (await, yield, fiber.sleep, channels), and the calling thread runs ready
+ * fibers until it returns.
  */
 MOBIUS_API int mobius_call_ref(MobiusState* state, MobiusValueRef function_ref,
                                const MobiusValueRef* arg_refs, size_t nargs,
