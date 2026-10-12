@@ -54,6 +54,9 @@ targets:
       depends_on:
         targets: ["mobius-platform"]
 
+  # Both parse and compile scripts on the main thread, recursively: give it
+  # 8 MiB on Windows too (its default is 1 MiB; Linux's and macOS's is
+  # 8 MiB), so the parser's nesting limit is reached before the stack ends.
   executables:
     - name: mobius-launcher
       language: cpp
@@ -61,6 +64,9 @@ targets:
       include_dirs:
         - "${workspace}/include"
         - "${workspace}/src/mobius"
+      link:
+        flags:
+          - windows: ["/STACK:8388608"]
       lib_dirs: ["${workspace}/build/${platform}-${arch}-${config}/lib"]
       libs: ["mobius-platform", {linux: ["dl"]}, {windows: ["ws2_32"]}]
       depends_on:
@@ -73,6 +79,9 @@ targets:
         - "${workspace}/include"
         - "${workspace}/src"
         - "${workspace}/src/mobius"
+      link:
+        flags:
+          - windows: ["/STACK:8388608"]
       lib_dirs: ["${workspace}/build/${platform}-${arch}-${config}/lib"]
       libs: ["mobius-core", "mobius-platform", {linux: ["m", "dl", "pthread"]}, {windows: ["ws2_32"]}]
       depends_on:
