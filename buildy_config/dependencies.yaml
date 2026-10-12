@@ -1,13 +1,3 @@
 # Mobius external dependencies
-
-sqlite3:
-  file: dependencies/sqlite3.yaml
-
-glfw3:
-  file: dependencies/glfw3.yaml
-
-vulkease_lib:
-  file: dependencies/vulkease.yaml
-
-monstro_lib:
-  file: dependencies/monstro.yaml
+#
+# Each file in dependencies/ defines one; buildy loads them all.
