@@ -97,7 +97,7 @@ jobs:
 
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: Build
         run: buildy -c release -j "$JOBS"
@@ -120,7 +120,7 @@ jobs:
           mkdir -p "$stage/dotnet"
           cp -R dist/portable/bin dist/portable/packages include LICENSE README.md "$stage/"
           dotnet build bindings/csharp/Mobius -c Release -v q -nologo
-          cp bindings/csharp/Mobius/bin/Release/net8.0/Mobius.dll "$stage/dotnet/"
+          cp bindings/csharp/Mobius/bin/Release/net10.0/Mobius.dll "$stage/dotnet/"
           cd dist/release
           if [ "${{ matrix.archive }}" = "zip" ]; then
             7z a -tzip "$name.zip" "$name"

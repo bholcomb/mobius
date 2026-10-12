@@ -5,7 +5,7 @@
 //
 // The binding loads the core library by name (mobius-core), so bin/ goes on
 // the loader's search path: LD_LIBRARY_PATH on Linux, DYLD_LIBRARY_PATH on
-// macOS, PATH on Windows. Needs the .NET 8 SDK (dotnet on the PATH).
+// macOS, PATH on Windows. Needs the .NET 10 SDK (dotnet on the PATH).
 
 import "io"
 import "os"
@@ -40,6 +40,6 @@ if (previous != nil && previous != "") { search_path = bin + list_separator + pr
 var env = {}
 env[loader_var] = search_path
 
-var tests = os.join(here, "Mobius.Tests", "bin", "Release", "net8.0", "Mobius.Tests.dll")
+var tests = os.join(here, "Mobius.Tests", "bin", "Release", "net10.0", "Mobius.Tests.dll")
 var run = process.run(["dotnet", tests], {cwd: repo, stdin: "null", stdout: "inherit", stderr: "inherit", env: env})
 exit(run.exit_code)

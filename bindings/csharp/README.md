@@ -1,6 +1,8 @@
 # Mobius for C#
 
-A .NET 8 binding over the Mobius C API (`include/mobius/*.h`), in two layers:
+A .NET 10 binding over the Mobius C API (`include/mobius/*.h`). It needs .NET 9 or later:
+host functions and file-system callbacks run on Mobius fiber stacks, and .NET 8 crashes when
+a managed exception is thrown there, even one the callback catches. It comes in two layers:
 
 - `Native`: the whole C API, one to one, under the C names (`Native.mobius_stack_pushInt64`,
   ...), with its structs (`MobiusConfig`, `MobiusError`, `MobiusFileSystem`, ...),
