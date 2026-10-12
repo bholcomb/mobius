@@ -57,3 +57,10 @@ targets:
             - "dl"
             - "m"
             - "pthread"
+
+      # The sqlite plugin finds the library beside itself (its rpath is
+      # @loader_path), wherever the package is installed, instead of at the
+      # build directory's absolute path.
+      link:
+        flags:
+          - macos: ["-Wl,-install_name,@rpath/libsqlite3.dylib"]
