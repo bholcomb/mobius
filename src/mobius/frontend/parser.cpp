@@ -837,7 +837,10 @@ Expr* parse_call(Parser* parser) {
     // wrap a NULL operand (`spawn ++x` used to crash here).
     if (!expr) return NULL;
     
-    while (true) {
+    // Nor wrap anything once this statement has failed: past the nesting
+    // limit each of 100000 '(' or '[' became one more call or index, in a
+    // chain whose recursive release overflowed a 1 MiB stack.
+    while (!parser->panic_mode) {
         if (parser_match(parser, TOKEN_LEFT_PAREN)) {
             expr = finish_call(parser, expr);
         } else if (parser_match(parser, TOKEN_LEFT_BRACKET)) {
