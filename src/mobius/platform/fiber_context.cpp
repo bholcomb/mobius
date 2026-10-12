@@ -12,6 +12,14 @@
 // fiber_context_make writes a new fiber's first frame so that it looks
 // exactly like one the switch saved. Each CPU's SwitchFrame below is that
 // layout and must match the order of its pushes.
+//
+// x86 CET: the switch returns on another stack than it was called on,
+// which a shadow stack (SHSTK) rejects, so the Linux x86-64 build claims
+// IBT only (-fcf-protection=branch in the root buildy.yaml), and the
+// loader, which turns shadow stacks on only when every object claims
+// SHSTK, leaves them off. Indirect branch tracking holds: the switch
+// starts with endbr64, and the trampoline is reached by a return, which
+// IBT doesn't check.
 
 #include "platform/fiber_context.h"
 
@@ -59,6 +67,8 @@ extern "C" void mobius_fiber_trampoline();
 
 __asm__(
     ASM_FUNCTION(mobius_fiber_switch)        // rdi = from_sp, rsi = to_sp
+    "    endbr64\n"                          // a valid target of an indirect call
+                                             // under CET IBT (else a no-op)
     "    pushq  %rbp\n"
     "    pushq  %rbx\n"
     "    pushq  %r12\n"

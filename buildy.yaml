@@ -10,14 +10,22 @@ environment:
     # Fibers move between threads: /GT stops MSVC keeping a thread-local's
     # address across a call, which may switch fibers. GCC and Clang have no
     # such switch (see src/mobius/platform/fiber_tls.h).
+    # The fiber context switch (src/mobius/platform/fiber_context.cpp)
+    # returns on another stack than it was called on, which an x86 CET
+    # shadow stack (SHSTK) rejects, yet Ubuntu's GCC marks every object IBT
+    # and SHSTK compatible by default. Compiling (and, as -flto compiles
+    # again at link time, linking) with -fcf-protection=branch claims IBT
+    # only, so no binary or library Mobius builds claims SHSTK.
     flags:
       - windows: ["/GT"]
+      - linux: {x86_64: ["-fcf-protection=branch"]}
   # Every symbol a library uses must resolve when it links, as on Windows and
   # macOS: a plugin that uses a symbol the core doesn't export (anything but
   # the C API) fails to link here too, instead of only at load time.
   link:
     flags:
       - linux: ["-Wl,--no-undefined"]
+      - linux: {x86_64: ["-fcf-protection=branch"]}
 
   configurations:
     debug:
