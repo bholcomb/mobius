@@ -53,15 +53,19 @@ assert_test("write math wrapper", writefile(wrapper_path,
     "var wrapper_loaded = true\n"))
 assert_test("write runner", writefile(run_script,
     "import \"math\" as math\n" +
-    "if (typeof(math.factorial) != \"function\") { exit(1) }\n" +
-    "if (math.wrapper_loaded != true) { exit(1) }\n" +
-    "if (math.sin_zero() != 0.0) { exit(1) }\n" +
-    "if (math.cos_zero() != 1.0) { exit(1) }\n" +
+    "if (typeof(math.factorial) != \"function\") { exit(11) }\n" +
+    "if (math.wrapper_loaded != true) { exit(12) }\n" +
+    "if (math.sin_zero() != 0.0) { exit(13) }\n" +
+    "if (math.cos_zero() != 1.0) { exit(14) }\n" +
     "print(\"flat hybrid import ok\")\n"))
 
 var old_cwd = os.getcwd()
 assert_test("chdir into workspace", os.chdir(workspace))
 var import_rc = os.system(mobius_bin + " " + run_script)
+if (import_rc != 0) {
+    // 11-14: which of the runner's checks failed.
+    print("  the runner exited with " + str(import_rc))
+}
 assert_test("import flat hybrid module", import_rc == 0)
 assert_test("chdir back to repo root", os.chdir(old_cwd))
 

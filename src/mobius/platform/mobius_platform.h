@@ -64,6 +64,9 @@ void platform_binary_stdio();
 bool platform_is_regular_file(const std::string& path);
 bool platform_is_directory(const std::string& path);
 
+// Whether c separates path components: '/', and on Windows '\' too.
+bool platform_is_path_separator(char c);
+
 // fopen with a UTF-8 path (Windows' fopen reads paths in the ANSI code
 // page). Null on failure, with errno set.
 FILE* platform_fopen(const std::string& path, const char* mode);

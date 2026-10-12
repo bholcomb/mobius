@@ -125,6 +125,8 @@ bool platform_is_directory(const std::string& path) {
     return attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+bool platform_is_path_separator(char c) { return c == '/' || c == '\\'; }
+
 FILE* platform_fopen(const std::string& path, const char* mode) {
     return _wfopen(widen(path).c_str(), widen(mode).c_str());
 }

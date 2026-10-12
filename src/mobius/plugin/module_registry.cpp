@@ -99,11 +99,14 @@ struct PackageManifest {
 
 static bool is_regular_file_path(const std::string& path);
 
+// The directory part of a path ("" if none). Windows paths may use '\'.
 static std::string parent_path(std::string path) {
-    while (path.size() > 1 && path.back() == '/') path.pop_back();
-    size_t slash = path.find_last_of('/');
-    if (slash == std::string::npos) return "";
-    if (slash == 0) return "/";
+    while (path.size() > 1 && platform_is_path_separator(path.back())) path.pop_back();
+    size_t slash = path.size();
+    while (slash > 0 && !platform_is_path_separator(path[slash - 1])) slash--;
+    if (slash == 0) return "";
+    slash--;   // the separator
+    if (slash == 0) return path.substr(0, 1);
     return path.substr(0, slash);
 }
 
