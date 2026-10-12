@@ -27,12 +27,25 @@ static int SpawnEnemy(IntPtr state, int argc, IntPtr userdata)
     return 1;
 }
 
+// Does nothing: being called on each worker thread as it starts is enough.
+[UnmanagedCallersOnly]
+static void ThreadStart(IntPtr state, IntPtr userdata) { }
+
 IntPtr s = Native.mobius_new_state(null);
+Native.mobius_set_thread_start_handler(s, &ThreadStart, IntPtr.Zero);
 Native.mobius_init_stdlib(s);
 Native.mobius_register_function(s, "spawn_enemy", &SpawnEnemy, GCHandle.ToIntPtr(worldHandle));
 Native.mobius_exec_string(s, "spawn_enemy(3)");
 Native.mobius_free_state(s);
 ```
+
+Set a thread start handler, as above, before running code. Mobius runs scripts on fibers,
+and on Windows they are the OS's: .NET takes the first fiber a thread runs managed code on as
+the thread's "home", and when that fiber is deleted (Mobius deletes its fibers) it ends the
+thread's .NET state, after which the next managed code there fails fast ("Attempt to execute
+managed code after the .NET runtime thread state has been destroyed"). Called on each worker
+as it starts, before any fiber, the handler makes the thread's own fiber its home.
+`MobiusState` does this itself.
 
 The convenience layer:
 

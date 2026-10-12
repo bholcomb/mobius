@@ -160,6 +160,10 @@ static unsafe class RawApi
         return 1;
     }
 
+    // Introduces each worker thread to .NET (see mobius_set_thread_start_handler).
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    static void ThreadStart(IntPtr s, IntPtr userdata) { }
+
     [System.Runtime.InteropServices.UnmanagedCallersOnly]
     static void Destroy(void* ptr) => Interlocked.Increment(ref destroyed);
 
@@ -186,6 +190,7 @@ static unsafe class RawApi
 
         cfg.max_worker_threads = 1;
         IntPtr s = Native.mobius_new_state(&cfg);
+        Native.mobius_set_thread_start_handler(s, &ThreadStart, IntPtr.Zero);
         Native.mobius_init_stdlib(s);
 
         // A raw native with userdata.

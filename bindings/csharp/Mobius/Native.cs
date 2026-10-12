@@ -154,6 +154,7 @@ public static unsafe class Native
     [DllImport(Lib)] public static extern void mobius_clear_error(IntPtr state);
     [DllImport(Lib)] public static extern void mobius_set_output_handler(IntPtr state, delegate* unmanaged<IntPtr, int, byte*, nuint, IntPtr, void> handler, IntPtr userdata);
     [DllImport(Lib)] public static extern void mobius_set_exit_handler(IntPtr state, delegate* unmanaged<IntPtr, int, IntPtr, void> handler, IntPtr userdata);
+    [DllImport(Lib)] public static extern void mobius_set_thread_start_handler(IntPtr state, delegate* unmanaged<IntPtr, IntPtr, void> handler, IntPtr userdata);
     [DllImport(Lib)] public static extern void mobius_set_file_system(IntPtr state, MobiusFileSystem* fs, IntPtr userdata);
     [DllImport(Lib)] public static extern void mobius_file_set_data(IntPtr request, byte* data, nuint length);
     [DllImport(Lib)] public static extern void mobius_file_set_error(IntPtr request, [MarshalAs(UnmanagedType.LPUTF8Str)] string message);

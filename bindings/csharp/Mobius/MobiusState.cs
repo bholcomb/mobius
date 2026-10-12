@@ -77,6 +77,7 @@ public sealed unsafe class MobiusState : IDisposable
         if (workerThreads.HasValue) config.max_worker_threads = workerThreads.Value;
         _state = Native.mobius_new_state(&config);
         if (_state == IntPtr.Zero) throw new InvalidOperationException("Could not create a Mobius state");
+        Native.mobius_set_thread_start_handler(_state, &OnThreadStart, IntPtr.Zero);
         _self = GCHandle.Alloc(this);
         Native.mobius_init_stdlib(_state);
         Native.mobius_set_error_handler(_state, &OnError, GCHandle.ToIntPtr(_self));
@@ -122,6 +123,12 @@ public sealed unsafe class MobiusState : IDisposable
     {
         lock (_errorLock) { var e = _lastError; _lastError = null; return e; }
     }
+
+    // Calling into .NET from a worker as it starts makes the thread's own
+    // fiber its .NET home, not a Mobius fiber that is later deleted (see
+    // mobius_set_thread_start_handler).
+    [UnmanagedCallersOnly]
+    private static void OnThreadStart(IntPtr state, IntPtr userdata) { }
 
     [UnmanagedCallersOnly]
     private static void OnError(IntPtr state, MobiusError* error, IntPtr userdata)
