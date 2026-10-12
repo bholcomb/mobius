@@ -41,8 +41,10 @@ typedef int (*MobiusCFunction)(MobiusState* state, int arg_count, void* userdata
  * Report an error from a native function.
  *
  * Invokes the error handler registered with mobius_set_error_handler()
- * (or the default stderr handler).  Returns a negative value that the
- * native function should return immediately.
+ * (or the default stderr handler), unless the script catches the error.
+ * The error's file and line are those of the script's call of the native
+ * function. Returns a negative value that the native function should
+ * return immediately.
  *
  * Usage:
  *   return mobius_error(state, "bad argument to foo()");

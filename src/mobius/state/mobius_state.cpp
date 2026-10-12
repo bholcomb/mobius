@@ -1214,6 +1214,19 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
                           const char* filename) {
     clearErrorInternal();
 
+    // An error native code raises (a host or library function) comes with
+    // no location: it is where the running script called that function,
+    // which is the top frame's current instruction (natives push no frame,
+    // and calls sync the frame's ip).
+    if (!filename && line == 0) {
+        MobiusVM* running = activeVM();
+        if (running && running->callStackSize() > 1 && running->callStackTop().proto) {
+            line = running->currentLine();
+            const std::string& source = running->callStackTop().proto->source;
+            if (!source.empty()) filename = source.c_str();
+        }
+    }
+
     MobiusVM* vm = boundVM();
     if (vm) vm->error_value_ = Value();   // a new error carries no thrown value
     InternalError*& err_slot = vm ? vm->last_error_ : fallback_last_error_;

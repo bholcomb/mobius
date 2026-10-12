@@ -152,6 +152,12 @@ using (var m = new MobiusState(workerThreads: 0))
     // A script function C# calls may spawn and wait (it used to wait forever).
     m.Execute("func h() { return 3 }\nfunc f() {\n    var x = spawn h()\n    return await x\n}", "s.mob");
     Check("spawn and await in a call", m.Call("f") is long r && r == 3);
+
+    // An exception from C# reports the script line that called the function.
+    m.Register("fail", _ => throw new InvalidOperationException("no"));
+    m.Execute("func failing() {\n    var a = 1\n    fail()\n}", "script.mob");
+    var e = Assert(() => m.Call("failing"));
+    Check("host function error line", e?.File == "script.mob" && e.Line == 3 && e.Message == "script.mob:3: no");
 }
 
 // The count hook: endless loops stop, a budget per call, fibers on several

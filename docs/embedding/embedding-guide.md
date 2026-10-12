@@ -538,7 +538,8 @@ you need to keep them.
 
 After handling an error, call `mobius_clear_error(state)` so execution can
 continue. From inside a native function, report errors with
-`mobius_error(state, "message")` and return its result.
+`mobius_error(state, "message")` and return its result. The error's file and
+line are those of the script's call of the native function.
 
 ---
 
