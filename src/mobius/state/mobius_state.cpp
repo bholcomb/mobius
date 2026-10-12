@@ -3,6 +3,7 @@
 #include "platform/mobius_platform.h"
 #include "frontend/diagnostics.h"
 #include <chrono>
+#include <limits>
 #include <mobius/mobius_plugin.h>
 #include "state/mobius_state.h"
 #include "frontend/ast.h"
@@ -388,8 +389,8 @@ MobiusState::MobiusState(MobiusConfig* config)
     defineGlobal("nil", make_nil_value(), true);
     defineGlobal("true", make_bool_value(true), true);
     defineGlobal("false", make_bool_value(false), true);
-    defineGlobal("inf", make_float_value(1.0 / 0.0), true);
-    defineGlobal("nan", make_float_value(0.0 / 0.0), true);
+    defineGlobal("inf", make_float_value(std::numeric_limits<double>::infinity()), true);
+    defineGlobal("nan", make_float_value(std::numeric_limits<double>::quiet_NaN()), true);
 
     main_vm_ = new (std::nothrow) MobiusVM(this);
 }
