@@ -95,17 +95,23 @@ func validate_manifest(package_dir, expected_dir_name, manifest) {
 
     if (manifest.platforms != nil) {
         var platforms = expect_table(manifest.platforms, "module.yaml platforms")
-        var current_spec = platforms[os.platform]
+        // ARM is spelled both ways (aarch64, arm64), as the module loader
+        // accepts: macOS packages name macos-arm64.
+        var platform_key = os.platform
+        if (platforms[platform_key] == nil && endswith(platform_key, "-aarch64")) {
+            platform_key = replace(platform_key, "-aarch64", "-arm64")
+        }
+        var current_spec = platforms[platform_key]
         if (current_spec == nil) {
             fail("package does not support current platform: " + os.platform)
         }
-        current_spec = expect_table(current_spec, "platforms." + os.platform)
+        current_spec = expect_table(current_spec, "platforms." + platform_key)
         if (current_spec.module_library != nil) {
-            ensure_file(package_dir, expect_string(current_spec.module_library, "platforms." + os.platform + ".module_library"), "platform module_library")
+            ensure_file(package_dir, expect_string(current_spec.module_library, "platforms." + platform_key + ".module_library"), "platform module_library")
             has_entry = true
         }
         if (current_spec.runtime_libraries != nil) {
-            var libs = expect_array(current_spec.runtime_libraries, "platforms." + os.platform + ".runtime_libraries")
+            var libs = expect_array(current_spec.runtime_libraries, "platforms." + platform_key + ".runtime_libraries")
             for (var lib in libs) {
                 ensure_file(package_dir, expect_string(lib, "runtime library entry"), "runtime library")
             }
