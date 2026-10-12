@@ -9,10 +9,13 @@ through the stack, registering native functions, and handling errors.
 - `<mobius/mobius.h>` — core embedding API (lifecycle, config, execution, errors, metrics)
 - `<mobius/mobius_plugin.h>` — the stack API, native functions, value types, refs
 
-Link against `libmobius-core`:
+Link against `libmobius-core`. From the repository root after `buildy -r`
+(or the top directory of a release archive), the headers are in `include/` and
+the library is in `bin/`:
 
 ```bash
-g++ -o my_app my_app.cpp -lmobius-core -ldl
+g++ -Iinclude -o my_app my_app.cpp -Lbin -lmobius-core
+LD_LIBRARY_PATH=bin ./my_app
 ```
 
 > Integers live as `int64` in the VM. The stack API offers narrow helpers

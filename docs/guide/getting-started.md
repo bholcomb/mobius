@@ -45,6 +45,12 @@ The C/C++ examples under `examples/` and the bundled module plugins are part of
 the same Buildy workspace (see `buildy.yaml`), so a single `buildy -r`
 compiles everything.
 
+### Running the tests
+
+```bash
+bin/mobius tools/run_tests.mob    # any platform; ./test_simple.sh runs the same
+```
+
 ---
 
 ## Running a script
