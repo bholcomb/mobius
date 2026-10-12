@@ -121,7 +121,8 @@ check("cross bundle gets .exe", cross_bytes != nil && startswith(cross_bytes, "L
 check("cross bundle has the windows core", contains(cross_bytes, "mobius-core.dll"))
 check("cross bundle has windows natives", contains(cross_bytes, "WINDOWS NATIVE"))
 check("cross bundle leaves out linux natives", !contains(cross_bytes, "LINUX NATIVE"))
-made = process.run([mobius, bundler, os.join(work, "app", "cross.yaml"), "--platform", "windows-x86_64"])
+var other_platform = os.platform == "linux-x86_64" ? "windows-x86_64" : "linux-x86_64"
+made = process.run([mobius, bundler, os.join(work, "app", "cross.yaml"), "--platform", other_platform])
 check("other platform needs --runtime", made.exit_code != 0 && contains(made.stderr, "needs --runtime"))
 
 // The launcher alone is not a bundle.
