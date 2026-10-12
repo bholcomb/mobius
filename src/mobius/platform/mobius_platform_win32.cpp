@@ -21,6 +21,8 @@
 #include <climits>
 #include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
+#include <io.h>
 #include <mutex>
 #include <unordered_map>
 
@@ -96,6 +98,12 @@ const char* platform_core_library_name() { return "mobius-core.dll"; }
 char platform_path_list_separator() { return ';'; }
 
 uint64_t platform_process_id() { return (uint64_t)GetCurrentProcessId(); }
+
+void platform_binary_stdio() {
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+}
 
 std::string platform_user_cache_dir() {
     const wchar_t* local = _wgetenv(L"LOCALAPPDATA");

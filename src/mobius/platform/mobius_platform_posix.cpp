@@ -36,6 +36,8 @@ char platform_path_list_separator() { return ':'; }
 
 uint64_t platform_process_id() { return (uint64_t)getpid(); }
 
+void platform_binary_stdio() {}   // POSIX streams are bytes already
+
 // ---------------------------------------------------------------------------
 // Files
 // ---------------------------------------------------------------------------

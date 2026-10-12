@@ -171,6 +171,7 @@ void on_exit_call(void*, int code, void*) {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    platform_binary_stdio();   // for the core too: it shares this C runtime
     std::string exe = platform_executable_path();
     if (exe.empty()) die("cannot locate the executable");
     std::ifstream f(to_path(exe), std::ios::binary);

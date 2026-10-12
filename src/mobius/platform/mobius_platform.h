@@ -51,6 +51,12 @@ uint64_t platform_process_id();
 // The per-user cache directory ("" if unknown), e.g. ~/.cache on Linux.
 std::string platform_user_cache_dir();
 
+// Makes standard input, output and error carry bytes as written, as on
+// POSIX: no CRLF translation (Windows' C runtime translates by default). The
+// mobius and mobius-launcher programs call it first thing, so print's output
+// is the same whether or not a script imports io (which does the same).
+void platform_binary_stdio();
+
 // ---------------------------------------------------------------------------
 // Files
 // ---------------------------------------------------------------------------

@@ -67,6 +67,7 @@ static void register_cli_argv(MobiusState* state, int argc, char* argv[], int ar
 }
 
 int main(int argc, char *argv[]) {
+    platform_binary_stdio();
     const char* script_file = NULL;
     bool debug_mode = false;
     int script_arg_start = argc;
