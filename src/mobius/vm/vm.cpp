@@ -3392,23 +3392,16 @@ MOBIUS_FORCEINLINE static int vm_op_tailcall(MobiusVM* vm, VMFrame& f, uint32_t 
 
     Prototype* child = mf->proto;
 
-    Value arg_buf[256];
-    Value* args = (nargs <= 256) ? arg_buf : new (std::nothrow) Value[nargs];
-    if (!args) {
-        VM_ERROR(vm, f, "Failed to allocate argument buffer");
-        return -1;
-    }
-    int src_base = f.ci->base + a + 1;
-    for (int i = 0; i < nargs; i++) {
-        args[i] = prepare_param_value(child, i, vm->registers_[src_base + i]);
-    }
-
     if (MOBIUS_UNLIKELY(f.ci->upvalue_count > 0)) vm->closeUpvalues(*f.ci, 0);
 
+    // The arguments move down to the frame's base, in place: each source
+    // register lies above every destination written before it is read. (No
+    // buffer: this handler is inlined into run(), and every nested run() --
+    // a callback, a metamethod -- would carry one in its stack frame.)
+    int src_base = f.ci->base + a + 1;
     for (int i = 0; i < nargs; i++) {
-        vm->registers_[f.ci->base + i] = args[i];
+        vm->registers_[f.ci->base + i] = prepare_param_value(child, i, vm->registers_[src_base + i]);
     }
-    if (args != arg_buf) delete[] args;
 
     vm->ensureRegisters(f.ci->base + child->num_registers + 16);
     if (MOBIUS_UNLIKELY(child->has_type_locks)) {
