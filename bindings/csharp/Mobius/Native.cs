@@ -273,6 +273,7 @@ public static unsafe class Native
     [DllImport(Lib)] [return: MarshalAs(UnmanagedType.U1)] public static extern bool mobius_stack_enumAddMember(IntPtr state, int enum_idx, [MarshalAs(UnmanagedType.LPUTF8Str)] string member_name, long value);
     [DllImport(Lib)] [return: MarshalAs(UnmanagedType.U1)] public static extern bool mobius_stack_enumAddAutoMember(IntPtr state, int enum_idx, [MarshalAs(UnmanagedType.LPUTF8Str)] string member_name);
     [DllImport(Lib)] [return: MarshalAs(UnmanagedType.U1)] public static extern bool mobius_stack_getEnumMember(IntPtr state, int enum_idx, [MarshalAs(UnmanagedType.LPUTF8Str)] string member_name);
+    [DllImport(Lib)] [return: MarshalAs(UnmanagedType.U1)] public static extern bool mobius_stack_getEnumValue(IntPtr state, int enum_idx, long value);
 
     // ---- References (values kept alive by the host) -----------------------
 

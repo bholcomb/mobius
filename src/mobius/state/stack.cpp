@@ -1466,6 +1466,18 @@ bool mobius_stack_getEnumMember(MobiusState* state, int enum_idx,
     return true;
 }
 
+bool mobius_stack_getEnumValue(MobiusState* state, int enum_idx, int64_t value) {
+    if (value < INT32_MIN || value > INT32_MAX) {
+        state->setError(MOBIUS_ERROR_ARGUMENT, "Enum value does not fit in 32 bits",
+                        nullptr, 0, 0, nullptr);
+        return false;
+    }
+    EnumDefinition* definition = get_enum_definition_at(state, enum_idx, false);
+    if (!definition) return false;
+    stack_push(state, Value::makeEnum(definition, value));
+    return true;
+}
+
 bool mobius_stack_isUserdata(MobiusState* state, int idx) {
     Value* val = get_value_at(state, idx);
     return val && val->type == VAL_USERDATA;

@@ -215,6 +215,14 @@ static unsafe class RawApi
         check("enum members", Native.mobius_stack_enumAddMember(s, -1, "red", 1) && Native.mobius_stack_enumAddAutoMember(s, -1, "green"));
         Native.mobius_stack_setGlobal(s, "Color");
         check("enum in script", Native.mobius_exec_string(s, "var c = Color.green") == Native.MOBIUS_OK);
+        Native.mobius_stack_getGlobal(s, "Color");
+        check("enum value by number", Native.mobius_stack_getEnumValue(s, -1, 1));
+        Native.mobius_stack_setGlobal(s, "red");
+        Native.mobius_stack_pop(s, 1);
+        Native.mobius_exec_string(s, "var is_red = red == Color.red");
+        Native.mobius_stack_getGlobal(s, "is_red");
+        check("enum value is the member", Native.mobius_stack_asBool(s, -1));
+        Native.mobius_stack_pop(s, 1);
 
         // A buffer over C# memory.
         byte[] bytes = { 7, 8, 9 };

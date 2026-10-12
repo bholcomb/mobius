@@ -363,6 +363,25 @@ mobius_stack_pop(state, 1);
 To give a userdata type methods callable from scripts, register a
 [userdata type metatable](#type-metatables).
 
+### Enums
+
+Build an enum, or take one a script declared, and push its values: by member
+name, or by number, which also makes values no member has (a combination of
+flag members, an error code the enum doesn't list). Each pushes the value
+above the enum, which stays on the stack. Values are 32-bit.
+
+```c
+mobius_stack_pushNewEnum(state, "Mod");
+mobius_stack_enumAddMember(state, -1, "SHIFT", 1);
+mobius_stack_enumAddMember(state, -1, "CONTROL", 2);
+
+mobius_stack_getEnumMember(state, -1, "SHIFT");   // Mod.SHIFT
+mobius_stack_pop(state, 1);
+mobius_stack_getEnumValue(state, -1, 1 | 2);      // SHIFT and CONTROL
+mobius_stack_setGlobal(state, "both");
+mobius_stack_setGlobal(state, "Mod");
+```
+
 ---
 
 ## Registering native functions

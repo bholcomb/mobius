@@ -206,6 +206,15 @@ MOBIUS_API bool mobius_stack_enumAddAutoMember(MobiusState* state, int enum_idx,
 MOBIUS_API bool mobius_stack_getEnumMember(MobiusState* state, int enum_idx,
                                            const char* member_name);
 
+/**
+ * Push the value `value` of the enum at `enum_idx` (its definition, or any of
+ * its values): a member's value, or one no member has, such as a combination
+ * of flag members. Returns false and leaves the stack unchanged if the stack
+ * value is not an enum or `value` does not fit in 32 bits.
+ */
+MOBIUS_API bool mobius_stack_getEnumValue(MobiusState* state, int enum_idx,
+                                          int64_t value);
+
 /* ====================================================================== */
 /*  Rooted value handles                                                   */
 /* ====================================================================== */
