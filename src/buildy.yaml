@@ -10,8 +10,8 @@ targets:
     - name: mobius-platform
       language: cpp
       sources:
-        - linux: ["mobius/platform/mobius_platform_posix.cpp", "mobius/platform/mobius_platform_linux.cpp"]
-        - macos: ["mobius/platform/mobius_platform_posix.cpp", "mobius/platform/mobius_platform_macos.cpp"]
+        - linux: ["mobius/platform/mobius_platform_posix.cpp", "mobius/platform/mobius_platform_linux.cpp", "mobius/platform/fiber_context.cpp"]
+        - macos: ["mobius/platform/mobius_platform_posix.cpp", "mobius/platform/mobius_platform_macos.cpp", "mobius/platform/fiber_context.cpp"]
         - windows: ["mobius/platform/mobius_platform_win32.cpp"]
       include_dirs:
         - "${workspace}/include"

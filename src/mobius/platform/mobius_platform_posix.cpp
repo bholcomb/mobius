@@ -2,19 +2,11 @@
 // executable's path, names, the cache directory and the poller) is in
 // mobius_platform_linux.cpp and mobius_platform_macos.cpp.
 //
-// Fibers are ucontexts on mmap'd stacks with a guard page.
-
-// Before any system header: macOS keeps the (deprecated) ucontext routines
-// behind _XOPEN_SOURCE, and _DARWIN_C_SOURCE keeps the rest of its system
-// headers complete. Linux (glibc, with _GNU_SOURCE) is unaffected.
-#ifndef _XOPEN_SOURCE
-#define _XOPEN_SOURCE 700
-#endif
-#ifndef _DARWIN_C_SOURCE
-#define _DARWIN_C_SOURCE
-#endif
+// Fibers are mmap'd stacks with a guard page, switched by our own context
+// switch (fiber_context.cpp).
 
 #include "platform/mobius_platform.h"
+#include "platform/fiber_context.h"
 
 #include <cerrno>
 #include <climits>
@@ -27,10 +19,7 @@
 #include <poll.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <ucontext.h>
 #include <unistd.h>
-
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"   // ucontext on macOS
 
 // ---------------------------------------------------------------------------
 // System
@@ -89,7 +78,7 @@ void platform_library_close(void* library) {
 // ---------------------------------------------------------------------------
 
 struct PlatformFiber {
-    ucontext_t ctx;
+    void* sp = nullptr;         // saved stack pointer while not running
     void* mem = nullptr;        // mapping: guard page, then the stack
     size_t mem_size = 0;
     void (*entry)(void*) = nullptr;
@@ -108,9 +97,8 @@ size_t page_size() {
     return size;
 }
 
-// makecontext passes only int arguments: the fiber's address goes in two.
-void fiber_trampoline(unsigned int hi, unsigned int lo) {
-    PlatformFiber* f = reinterpret_cast<PlatformFiber*>(((uintptr_t)hi << 32) | (uintptr_t)lo);
+void fiber_main(void* fiber) {
+    PlatformFiber* f = static_cast<PlatformFiber*>(fiber);
     f->entry(f->arg);
     fprintf(stderr, "FATAL: fiber entry function returned\n");
     abort();
@@ -140,25 +128,19 @@ void platform_fiber_destroy(PlatformFiber* fiber) {
 void platform_fiber_start(PlatformFiber* fiber, void (*entry)(void*), void* arg) {
     fiber->entry = entry;
     fiber->arg = arg;
-    getcontext(&fiber->ctx);
-    size_t page = page_size();
-    fiber->ctx.uc_stack.ss_sp = (char*)fiber->mem + page;
-    fiber->ctx.uc_stack.ss_size = fiber->mem_size - page;
-    fiber->ctx.uc_link = nullptr;
-    uintptr_t addr = reinterpret_cast<uintptr_t>(fiber);
-    makecontext(&fiber->ctx, (void (*)())fiber_trampoline, 2,
-                (unsigned int)(addr >> 32), (unsigned int)(addr & 0xFFFFFFFFu));
+    fiber->sp = fiber_context_make((char*)fiber->mem + fiber->mem_size, fiber_main, fiber);
 }
 
 void platform_fiber_switch(PlatformFiber* from, PlatformFiber* to) {
     t_running = to;
-    swapcontext(&from->ctx, &to->ctx);
+    mobius_fiber_switch(&from->sp, to->sp);
 }
 
+// The thread's own context needs no stack: the first switch away from it
+// saves its stack pointer like any other.
 PlatformFiber* platform_thread_fiber() {
     if (t_thread_fiber_refs++ == 0) {
         t_thread_fiber = new PlatformFiber();
-        getcontext(&t_thread_fiber->ctx);
         t_running = t_thread_fiber;
     }
     return t_thread_fiber;

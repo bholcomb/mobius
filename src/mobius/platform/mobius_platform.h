@@ -9,7 +9,7 @@
 //   Windows  mobius_platform_win32.cpp
 //
 // The posix file holds what Linux and macOS share; their own files hold
-// only what differs.
+// only what differs. The posix fibers switch with fiber_context.cpp.
 //
 // No other Mobius code uses OS headers or tests which OS it is on. Paths are
 // UTF-8 everywhere; a platform converts them as its APIs require.
