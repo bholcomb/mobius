@@ -43,11 +43,12 @@ LD_LIBRARY_PATH=bin ./my_app
 12. [Output and exit](#output-and-exit)
 13. [Files](#files)
 14. [Sandboxing](#sandboxing)
-15. [Loading plugins](#loading-plugins)
-16. [Type metatables](#type-metatables)
-17. [Multiple interpreters](#multiple-interpreters)
-18. [Concurrency and fibers](#concurrency-and-fibers)
-19. [Metrics](#metrics)
+15. [Built-in modules](#built-in-modules)
+16. [Loading plugins](#loading-plugins)
+17. [Type metatables](#type-metatables)
+18. [Multiple interpreters](#multiple-interpreters)
+19. [Concurrency and fibers](#concurrency-and-fibers)
+20. [Metrics](#metrics)
 
 ---
 
@@ -634,12 +635,14 @@ before running them:
 MobiusState* state = mobius_new_state(NULL);
 mobius_init_stdlib(state);
 mobius_sandbox(state, 0);                       // nothing built in allowed
+mobius_allow_module(state, "math");             // mods may import "math"
 mobius_set_output_handler(state, on_output, NULL);
 mobius_set_file_system(state, &mod_fs, mod);
 ```
 
-In a sandbox, native plugins are never loaded, and everything a script
-could use to reach outside goes to the host's handlers. Where the host
+In a sandbox, native plugins are never loaded, [built-in
+modules](#built-in-modules) only once the host allows each one, and
+everything a script could use to reach outside goes to the host's handlers. Where the host
 installed none, the built-in behavior is used only if `allow` includes its
 flag:
 
@@ -650,8 +653,12 @@ flag:
 | Exit | `exit` | `mobius_set_exit_handler` | (none) | a warning |
 
 Modules the host registers with `mobius_register_module`, and `fiber`, can
-always be imported. In a sandbox, a module name with a `..` segment or an
-absolute path is rejected. Calling `mobius_sandbox` again changes `allow`.
+always be imported. A built-in module can be imported once the host allows
+it with `mobius_allow_module`; until then, importing it raises a catchable
+error, "Module 'math' is not allowed in this sandbox", wherever the import
+runs (the script, a module it imports, a spawned fiber). In a sandbox, a
+module name with a `..` segment or an absolute path is rejected. Calling
+`mobius_sandbox` again changes `allow`; allowed modules stay allowed.
 
 Registered modules are the way to hand a sandboxed script the game's API
 as `import "game"`:
@@ -735,6 +742,49 @@ functions (recursive Fibonacci: about 7%). Memory limits are separate.
 
 ---
 
+## Built-in modules
+
+Mobius follows Lua's model for its standard modules:
+
+- **Built-in modules** are small standard modules with no dependencies and
+  no effects outside the script. They are compiled into the core library,
+  so they need no files: `math` is one.
+- Every module with dependencies or outside effects (`json`, `os`, `io`,
+  `socket`, `http`, `sqlite`, ...) is a **native plugin**: a shared library
+  loaded on first import ([Loading plugins](#loading-plugins)).
+
+There is one build of the core, with every built-in module in it. The host
+chooses at run time which of them scripts may import:
+
+- without a sandbox, every built-in module can be imported, like
+  `import "math"` in the `mobius` command;
+- in a sandbox, none can until the host allows each by name:
+
+```c
+mobius_sandbox(state, 0);
+if (mobius_allow_module(state, "math") != MOBIUS_OK) {
+    // not a built-in module
+}
+```
+
+`mobius_allow_module` may be called before or after `mobius_sandbox`, and
+lasts for the state. It returns `MOBIUS_ERROR_ARGUMENT` for a name that is
+not a built-in module, a plugin's name included (plugins never load in a
+sandbox); `"fiber"` is always importable, so allowing it does nothing.
+
+A built-in module's name is taken: `import "math"` gives the built-in
+module even if a `math` plugin (say, from an older Mobius installation) or
+a `math.mob` is on the search path, and those are never loaded. A module
+the host registers with `mobius_register_module` under the same name
+replaces it, as the host's own choice.
+
+`math` is the only built-in module so far. Other modules with no
+dependencies or outside effects (`json`, `regex`, ...) move into the core
+the same way, one at a time, when something needs them in a sandbox; until
+then they are plugins.
+
+---
+
 ## Loading plugins
 
 Plugins are shared libraries (`.so`/`.dll`) that export `mobius_plugin_info()`.
@@ -749,11 +799,12 @@ mobius_clear_plugin_directories(state);   // reset all search paths
 ```
 
 The interpreter scans these directories when a script runs `import "name"`,
-loading the matching module lazily:
+loading the matching module lazily (a [built-in
+module](#built-in-modules) is never looked up there):
 
 ```mobius
-import "math"
-print(math.sin(3.14))
+import "json"
+print(json.stringify({hp: 3}))
 ```
 
 ---

@@ -39,7 +39,7 @@ buildy -r
 - `bin/mobius` — the command-line interpreter and REPL
 - `bin/libmobius-core.so` — the embeddable runtime library
 - `bin/modules/<name>/` — the bundled modules (`json`, `os`, `http`, …) as
-  loadable plugins
+  loadable plugins (built-in modules such as `math` are in the core library)
 
 The C/C++ examples under `examples/` and the bundled module plugins are part of
 the same Buildy workspace (see `buildy.yaml`), so a single `buildy -r`

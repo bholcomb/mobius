@@ -12,6 +12,12 @@ The `math` module provides extended functions and constants. Core numeric helper
 such as `abs`, `sqrt`, `pow`, `floor`, `ceil`, `round`, `min`, and `max` are
 available without importing this module.
 
+`math` is a built-in module: it is compiled into Mobius, not a plugin, so it
+needs no files, and `import "math"` gives it even if a `math` plugin or
+`math.mob` is on the search path. A sandboxed host makes it importable with
+`mobius_allow_module(state, "math")` (see the
+[Embedding Guide](../embedding/embedding-guide.md#built-in-modules)).
+
 Constants:
 
 - `math.pi`

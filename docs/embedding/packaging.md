@@ -116,7 +116,8 @@ modules: [json, process]  # installed modules it imports; dependencies are added
 module_paths: [vendor]  # optional: more directories holding installed modules
 ```
 
-Modules are looked up in the runtime's `modules/` directory, then the
+Built-in modules such as `math` are part of the core library: leave them
+out. Modules are looked up in the runtime's `modules/` directory, then the
 `packages/` directory beside it (where packages such as `sqlite` and `glfw`
 are staged), then `module_paths`. A package's own native dependencies (for
 `sqlite`, `libsqlite3.so`) are part of the package and travel with it.

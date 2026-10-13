@@ -54,8 +54,9 @@ print("processed", total, "bytes")
   registering native functions, exchanging values, and exposing application-defined types.
   A [.NET 10 binding](bindings/csharp/README.md) brings the same API to C# hosts.
   The core runtime ships as a single shared library—about 1.5 MB on disk, a few MB resident,
-  and typically starts in under 10 ms—with no unusual dependencies. Optional
-  modules stay separate, so you only ship what you use.
+  and typically starts in under 10 ms—with no unusual dependencies. Small pure
+  modules such as `math` are built in; modules with dependencies or outside
+  effects are separate plugins, so you only ship what you use.
 
 * **Real concurrency, without accidental races.** `spawn` and `await` fibers, channels,
   and `shared` data run across actual worker threads. Values passed between
@@ -157,7 +158,8 @@ LD_LIBRARY_PATH=bin ./app
 
 From there you can register C functions, expose your own userdata types with
 methods, and call Mobius functions back from C. For untrusted scripts (mods),
-`mobius_sandbox` limits what they can reach, and a count hook
+`mobius_sandbox` limits what they can reach (no plugins, and only the built-in
+modules the host allows with `mobius_allow_module`), and a count hook
 (`mobius_set_count_hook`) stops runaway loops and gives each call an
 instruction budget — see the
 [Embedding Guide](docs/embedding/embedding-guide.md).
@@ -196,7 +198,7 @@ Full documentation lives in [`docs/`](docs/index.md).
 | [Language Tour](docs/guide/language-tour.md)            | The whole language in one page |
 | [Language Guide](docs/index.md#guide)                   | Types, control flow, functions, collections, binary data, concurrency |
 | [Standard Library](docs/reference/standard-library.md)  | Built-in functions available without `import` |
-| [Module Reference](docs/modules/index.md)               | Built-in modules (`json`, `os`, `http`, `web`, …) and packages (`sqlite`, …) |
+| [Module Reference](docs/modules/index.md)               | Standard modules (`math` built in; `json`, `os`, `http`, `web`, … as plugins) and packages (`sqlite`, …) |
 | [Embedding Guide](docs/embedding/embedding-guide.md)    | Embed Mobius in a C/C++ application |
 | [Plugin Guide](docs/embedding/plugin-guide.md)          | Write native `.so`/`.dll` modules |
 | [C# binding](bindings/csharp/README.md)                 | Embed Mobius in a .NET 10 application |

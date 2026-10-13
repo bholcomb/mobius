@@ -34,14 +34,23 @@ print(m.sign(-16))   // -1
 
 A module is either:
 
-- a **builtin global** (`fiber`), always available with no `import` at all, or
+- a **builtin global** (`fiber`), always available with no `import` at all,
+- a **built-in module** (`math`), compiled into Mobius itself: small, with no
+  dependencies and no effects outside the script, or
 - a **plugin module** — a shared library (`.so`/`.dll`), optionally paired with a
-  `.mob` companion script that wraps it in a friendlier API.
+  `.mob` companion script that wraps it in a friendlier API. Every module with
+  dependencies or outside effects is a plugin.
+
+A built-in module is never looked up on disk, and its name is taken: `import
+"math"` gives the built-in `math` even if a `math` plugin or `math.mob` is on
+the search path. A host that embeds Mobius in a sandbox chooses which built-in
+modules its scripts may import (see the
+[Embedding Guide](../embedding/embedding-guide.md#built-in-modules)).
 
 The CLI searches for plugin modules:
 
 1. In a `modules/` directory next to the `mobius` executable (where the bundled
-   `math`, `os`, `json`, `http`, … modules ship).
+   `os`, `json`, `http`, … modules ship).
 2. In each directory in the `MOBIUS_MODULE_PATH` environment variable (a
    `:`-separated list, `;` on Windows).
 

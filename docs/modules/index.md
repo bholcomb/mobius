@@ -13,7 +13,16 @@ resolves modules and how packages are installed.
 
 ---
 
-## Built-in modules
+## Standard modules
+
+`math` is a **built-in module**: compiled into Mobius itself, it needs no
+files. The others are **native plugins** that ship in the runtime's `modules/`
+directory. A module is built in when it is small, has no dependencies and has
+no effects outside the script; anything with dependencies or outside effects
+stays a plugin. More pure modules (`json`, `regex`, ...) may move into the core
+later, by the same rule, when something needs them. A sandboxed host chooses
+which built-in modules its scripts may import, and loads no plugins (see the
+[Embedding Guide](../embedding/embedding-guide.md#built-in-modules)).
 
 | Module | Summary |
 |--------|---------|
@@ -25,7 +34,7 @@ resolves modules and how packages are installed.
 | [`http`](http.md)               | HTTP request/response parsing and building, plus a plain-TCP client |
 | [`io`](io.md)                   | File and standard-stream objects: incremental, binary-safe reads and writes |
 | [`json`](json.md)               | JSON parsing and serialization |
-| [`math`](math.md)               | Trigonometry, logarithms, and number-theory functions and constants |
+| [`math`](math.md)               | Trigonometry, logarithms, and number-theory functions and constants (built in) |
 | [`os`](os.md)                   | Filesystem, paths, environment, processes, and time conversion |
 | [`process`](process.md)         | Run programs directly: argument arrays, pipes, capture, timeouts, environment |
 | [`regex`](regex.md)             | Regular-expression match, search, find-all, replace, and split |
