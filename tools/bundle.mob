@@ -162,7 +162,8 @@ func find_module(m) {
         var candidate = os.join(d, m)
         if (os.is_file(os.join(candidate, "module.yaml"))) { return candidate }
     }
-    fail("module " + m + " is not installed in any of: " + join(module_dirs, ", "))
+    fail("module " + m + " is not installed in any of: " + join(module_dirs, ", ") +
+         " (built-in modules, such as math, are part of the core: leave them out of modules:)")
 }
 
 var mi = 0
