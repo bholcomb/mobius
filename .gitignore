@@ -43,3 +43,6 @@ build/
 
 benchmarks/__pycache__/
 dist/
+
+# packages/ is build output: buildy copies each package there from src/packages/
+/packages/*/
