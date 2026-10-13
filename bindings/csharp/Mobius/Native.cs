@@ -107,8 +107,8 @@ public static unsafe class Native
 
     // ---- Constants -------------------------------------------------------
 
-    public const int MOBIUS_VERSION_MAJOR = 0, MOBIUS_VERSION_MINOR = 2, MOBIUS_VERSION_PATCH = 2;
-    public const string MOBIUS_VERSION_STRING = "0.2.2";
+    public const int MOBIUS_VERSION_MAJOR = 0, MOBIUS_VERSION_MINOR = 2, MOBIUS_VERSION_PATCH = 3;
+    public const string MOBIUS_VERSION_STRING = "0.2.3";
 
     public const int MOBIUS_OK = 0;
     public const int MOBIUS_ERROR_SYNTAX = 1;
