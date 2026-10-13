@@ -299,6 +299,7 @@ void free_internal_error(InternalError* error) {
     free(error->suggestion);
     free(error->filename);
     free(error->function_name);
+    free(error->traceback);
     free(error);
 }
 
@@ -1200,6 +1201,7 @@ InternalError* MobiusState::getLastError() const {
     copy->line = err->line;
     copy->column = err->column;
     copy->function_name = err->function_name ? mobius_strdup(err->function_name) : NULL;
+    copy->traceback = err->traceback ? mobius_strdup(err->traceback) : NULL;
     copy->reported = err->reported;
 
     return copy;
@@ -1214,17 +1216,19 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
                           const char* filename) {
     clearErrorInternal();
 
+    // The script running on this thread, if any (not the host's own call).
+    MobiusVM* running = activeVM();
+    if (running && (running->callStackSize() <= 1 || !running->callStackTop().proto))
+        running = nullptr;
+
     // An error native code raises (a host or library function) comes with
     // no location: it is where the running script called that function,
     // which is the top frame's current instruction (natives push no frame,
     // and calls sync the frame's ip).
-    if (!filename && line == 0) {
-        MobiusVM* running = activeVM();
-        if (running && running->callStackSize() > 1 && running->callStackTop().proto) {
-            line = running->currentLine();
-            const std::string& source = running->callStackTop().proto->source;
-            if (!source.empty()) filename = source.c_str();
-        }
+    if (!filename && line == 0 && running) {
+        line = running->currentLine();
+        const std::string& source = running->callStackTop().proto->source;
+        if (!source.empty()) filename = source.c_str();
     }
 
     MobiusVM* vm = boundVM();
@@ -1241,6 +1245,7 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     err_slot->line = line;
     err_slot->column = column;
     err_slot->function_name = function_name ? mobius_strdup(function_name) : NULL;
+    err_slot->traceback = NULL;
     err_slot->reported = false;
 
     // Report only errors that will not be caught. While a try block is
@@ -1253,8 +1258,14 @@ int MobiusState::setError(int code, const char* message, const char* suggestion,
     // it if the awaiter doesn't catch it, and an unobserved future reports
     // it when freed (MobiusState::reportFiberError).
     // (Nothing catches an error once the count hook stopped the script.)
-    bool will_be_caught = vm && ((!vm->try_stack_.empty() && !vm->count_aborted_) ||
-                                 vm->future_ != nullptr);
+    bool caught_by_try = vm && !vm->try_stack_.empty() && !vm->count_aborted_;
+    bool will_be_caught = caught_by_try || (vm && vm->future_ != nullptr);
+    // The calls that led there, for an error a try block won't catch
+    // (reported now, or when it escapes a fiber).
+    if (running && !caught_by_try) {
+        std::string traceback = running->callerTraceback();
+        if (!traceback.empty()) err_slot->traceback = mobius_strdup(traceback.c_str());
+    }
     if (!will_be_caught) reportError(err_slot);
 
     return code;
@@ -1272,6 +1283,7 @@ void MobiusState::reportError(InternalError* err) {
     pub_err.line = err->line;
     pub_err.column = err->column;
     pub_err.function_name = err->function_name;
+    pub_err.traceback = err->traceback;
     JobSystem::callHost([&] { error_handler_(this, &pub_err, error_handler_userdata_); });
 }
 
@@ -1322,6 +1334,15 @@ static void default_error_handler(MobiusState* state, const MobiusError* error, 
     text += std::string(": ") + (error->message ? error->message : "Unknown error") + "\n";
     if (error->suggestion) {
         text += std::string("  suggestion: ") + error->suggestion + "\n";
+    }
+    if (error->traceback) {
+        // One caller per line, indented under the error.
+        text += "  ";
+        for (const char* c = error->traceback; *c; c++) {
+            text += *c;
+            if (*c == '\n') text += "  ";
+        }
+        text += "\n";
     }
     state->writeOutput(MOBIUS_STDERR, text.data(), text.size());
 }

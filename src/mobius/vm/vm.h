@@ -205,6 +205,10 @@ public:
 
     void runtimeError(const char* fmt, ...);
     int currentLine() const;
+    // The script calls that led to the running frame, innermost first,
+    // one per line: "called from <file>:<line> in <function>". Empty in
+    // the outermost frame.
+    std::string callerTraceback() const;
 
     int callMetamethod(const Value& table_val, MobiusString* mm_name,
                        const Value& lhs, const Value& rhs, Value& out);

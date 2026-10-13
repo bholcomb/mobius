@@ -158,6 +158,12 @@ using (var m = new MobiusState(workerThreads: 0))
     m.Execute("func failing() {\n    var a = 1\n    fail()\n}", "script.mob");
     var e = Assert(() => m.Call("failing"));
     Check("host function error line", e?.File == "script.mob" && e.Line == 3 && e.Message == "script.mob:3: no");
+
+    // An error in a metamethod: where it failed, and the statement that ran it.
+    m.Execute("func g() {\n    var t = {}\n    setmetatable(t, { __newindex: func(s, k, v) { throw \"no \" + k } })\n    t.x = 1\n}", "mm.mob");
+    e = Assert(() => m.Call("g"));
+    Check("metamethod error traceback", e?.File == "mm.mob" && e.Line == 3 && e.Traceback == "called from mm.mob:4 in g" &&
+                                        e.Message == "mm.mob:3: no x\n  called from mm.mob:4 in g");
 }
 
 // The count hook: endless loops stop, a budget per call, fibers on several

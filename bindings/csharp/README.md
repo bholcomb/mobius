@@ -85,8 +85,9 @@ Values convert both ways:
 | `MobiusFunction` | a script function held by C#, callable with `.Call(...)` |
 
 Errors (syntax, runtime, or a C# exception thrown by a registered function)
-come back as `MobiusException` with `File` and `Line`. A C# exception thrown in
-a registered function becomes a script error the script can catch.
+come back as `MobiusException` with `File` and `Line`, and a `Traceback` of the
+script calls that led there (also in the message, one per line). A C# exception
+thrown in a registered function becomes a script error the script can catch.
 
 `SetCountHook(count, hook)` is `mobius_set_count_hook` (see the
 [Embedding Guide](../../docs/embedding/embedding-guide.md#instruction-budgets)):

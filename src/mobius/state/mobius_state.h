@@ -61,6 +61,7 @@ typedef struct InternalError {
     int line;
     int column;
     char* function_name;
+    char* traceback;   // the script calls that led there, or NULL (see MobiusError)
     bool reported;   // passed to the error handler already
 } InternalError;
 

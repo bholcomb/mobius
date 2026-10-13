@@ -79,6 +79,7 @@ public unsafe struct MobiusError
     public int line;
     public int column;
     public byte* function_name;
+    public byte* traceback;
 }
 
 /// <summary>Host file system callbacks (mobius_set_file_system). Any member may be null.</summary>

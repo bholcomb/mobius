@@ -526,13 +526,20 @@ void my_error_handler(MobiusState* state, const MobiusError* error, void* userda
             error->line, error->column, error->message);
     if (error->suggestion)    fprintf(log, "  hint: %s\n", error->suggestion);
     if (error->function_name) fprintf(log, "  in: %s\n", error->function_name);
+    if (error->traceback)     fprintf(log, "  %s\n", error->traceback);
 }
 
 mobius_set_error_handler(state, my_error_handler, logfile);   // returns previous handler
 ```
 
 The `MobiusError` fields are `code`, `message`, `suggestion` (may be NULL),
-`filename` (may be NULL), `line`, `column`, and `function_name` (may be NULL).
+`filename` (may be NULL), `line`, `column`, `function_name` (may be NULL) and
+`traceback` (may be NULL). `filename` and `line` are where the error happened:
+the failing instruction, or the script's call of the native function that
+raised it. `traceback` lists the script calls that led there, innermost first,
+one per line (`called from script.mob:4 in g`): the call of a function that
+threw, or the statement that ran a metamethod. It is NULL when the error is in
+the outermost call (the script's top level, or the function the host called).
 **All pointers are valid only for the duration of the callback** — copy them if
 you need to keep them.
 

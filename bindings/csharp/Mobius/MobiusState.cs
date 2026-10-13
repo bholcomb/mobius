@@ -10,19 +10,31 @@ using System.Runtime.InteropServices;
 
 namespace Mobius;
 
-/// <summary>A script error: syntax, runtime, or a C# exception raised in a host function.</summary>
+/// <summary>
+/// A script error: syntax, runtime, or a C# exception raised in a host function.
+/// The message is "file:line: message", followed by the traceback's lines, indented.
+/// </summary>
 public sealed class MobiusException : Exception
 {
     public int Code { get; }
     public string? File { get; }
     public int Line { get; }
+    /// <summary>
+    /// The script calls that led to the error, innermost first, one per line
+    /// ("called from file:line in function"), such as the call of a function
+    /// that threw or the statement that ran a metamethod; null when the error
+    /// is in the outermost call.
+    /// </summary>
+    public string? Traceback { get; }
 
-    public MobiusException(int code, string message, string? file = null, int line = 0)
-        : base(file != null && line > 0 ? $"{file}:{line}: {message}" : message)
+    public MobiusException(int code, string message, string? file = null, int line = 0, string? traceback = null)
+        : base((file != null && line > 0 ? $"{file}:{line}: {message}" : message) +
+               (traceback != null ? "\n  " + traceback.Replace("\n", "\n  ") : ""))
     {
         Code = code;
         File = file;
         Line = line;
+        Traceback = traceback;
     }
 }
 
@@ -128,7 +140,7 @@ public sealed unsafe class MobiusState : IDisposable
     {
         var self = From(userdata);
         var e = new MobiusException(error->code, Native.Utf8(error->message) ?? "Unknown error",
-                                    Native.Utf8(error->filename), error->line);
+                                    Native.Utf8(error->filename), error->line, Native.Utf8(error->traceback));
         lock (self._errorLock) self._lastError = e;
     }
 

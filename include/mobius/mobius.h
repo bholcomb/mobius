@@ -193,6 +193,12 @@ typedef struct {
     int         line;
     int         column;
     const char* function_name; /* may be NULL */
+    const char* traceback;     /* may be NULL: the script calls that led to
+                                  the error, innermost first, one per line
+                                  ("called from <file>:<line> in <function>"),
+                                  such as the call of a function that threw,
+                                  or the statement that ran a metamethod. NULL
+                                  when the error is in the outermost call. */
 } MobiusError;
 
 /**

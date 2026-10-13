@@ -445,6 +445,32 @@ int MobiusVM::currentLine() const {
     return 0;
 }
 
+std::string MobiusVM::callerTraceback() const {
+    // Frame 0 is no call; the top frame is where the error is. A caller's
+    // ip was synced at its call (of a function, or of a metamethod or a
+    // native function that called back into a script).
+    static const size_t SHOWN = 10;   // callers at each end of a long chain
+    size_t callers = call_depth_ > 1 ? call_depth_ - 1 : 0;
+    std::string out;
+    for (size_t n = 0; n < callers; n++) {
+        if (callers > 2 * SHOWN && n == SHOWN) {
+            out += "... (" + std::to_string(callers - 2 * SHOWN) + " more calls)\n";
+            n = callers - SHOWN;
+        }
+        const CallInfo& ci = call_stack_[call_depth_ - 1 - n];
+        const Prototype* p = ci.proto;
+        if (!p) continue;
+        int pc = (int)(ci.ip - p->code.data()) - 1;
+        int line = pc >= 0 && pc < (int)p->line_info.size() ? p->line_info[pc] : 0;
+        out += "called from " + (p->source.empty() ? std::string("<string>") : p->source) +
+               ":" + std::to_string(line);
+        if (!p->name.empty() && p->name != p->source) out += " in " + p->name;
+        out += "\n";
+    }
+    if (!out.empty()) out.pop_back();
+    return out;
+}
+
 // ============================================================================
 // Public entry point
 // ============================================================================
@@ -738,10 +764,9 @@ int MobiusVM::callMetamethod(const Value& table_val, MobiusString* mm_name,
         native_ctx_.base = saved_base;
         native_ctx_.top  = saved_top;
 
-        if (rc < 0) {
-            runtimeError("Metamethod '%s' failed", mm_name->data);
-            return -1;
-        }
+        // A failed native raised its own error, as for a call (it was
+        // replaced with "Metamethod '...' failed", reported a second time).
+        if (rc < 0) return -1;
         if (rc > 0 && result_top > scratch) {
             out = registers_[scratch];
         } else {
@@ -1017,10 +1042,7 @@ int MobiusVM::callTernaryMetamethod(const Value& table_val, MobiusString* mm_nam
     native_ctx_.base = saved_base;
     native_ctx_.top = saved_top;
 
-    if (rc < 0) {
-        runtimeError("Metamethod '%s' failed", mm_name->data);
-        return -1;
-    }
+    if (rc < 0) return -1;   // the native raised its own error (see callMetamethod)
     return 1;
 }
 
