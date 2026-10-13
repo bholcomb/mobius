@@ -1,0 +1,82 @@
+// A built-in module wins over a module of the same name on the search path:
+// with a math.mob and a math plugin next to the importing script, and a
+// packaged math plugin in ./modules (an old installation's), import "math"
+// still gives the built-in one.
+import "os"
+
+var pass_count = 0
+var fail_count = 0
+
+func assert_test(name, cond) {
+    if (cond) {
+        pass_count = pass_count + 1
+        print("PASS: " + name)
+    } else {
+        fail_count = fail_count + 1
+        print("FAIL: " + name)
+    }
+}
+
+var repo_root = os.getcwd()
+var native_folder = replace(os.platform, "-aarch64", "-arm64")
+var lib_ext = ".so"
+if (startswith(os.platform, "windows")) {
+    lib_ext = ".dll"
+} else if (startswith(os.platform, "macos")) {
+    lib_ext = ".dylib"
+}
+var mobius_bin = os.join(repo_root, "bin", "mobius")
+// Any plugin stands in for an old math plugin: it would never be loaded.
+var plugin_src = os.join(repo_root, "bin", "modules", "url", "native", native_folder, "url" + lib_ext)
+
+var workspace = os.join(os.tmpdir(), "mobius_builtin_wins_" + str(os.getpid()))
+var package_dir = os.join(workspace, "modules", "math")
+var package_native = os.join(package_dir, "native", native_folder)
+var run_script = os.join(workspace, "run.mob")
+
+assert_test("plugin exists", os.is_file(plugin_src))
+assert_test("create workspace", os.mkdirp(package_native))
+assert_test("write math.mob", writefile(os.join(workspace, "math.mob"), "var shadow = true\n"))
+assert_test("copy flat math plugin", os.cp(plugin_src, os.join(workspace, "math" + lib_ext)))
+assert_test("copy packaged math plugin", os.cp(plugin_src, os.join(package_native, "math" + lib_ext)))
+assert_test("write module.yaml", writefile(os.join(package_dir, "module.yaml"),
+    "name: math\n" +
+    "version: 0.1.0\n" +
+    "platforms:\n" +
+    "  " + os.platform + ":\n" +
+    "    module_library: native/" + native_folder + "/math" + lib_ext + "\n"))
+assert_test("write runner", writefile(run_script,
+    "import \"math\"\n" +
+    "if (math.shadow != nil) { exit(11) }\n" +
+    "if (math.parse != nil) { exit(12) }\n" +
+    "if (math.sin(0) != 0.0 || math.pi != 3.141592653589793) { exit(13) }\n" +
+    "print(\"built-in math ok\")\n"))
+
+var old_cwd = os.getcwd()
+assert_test("chdir into workspace", os.chdir(workspace))
+var rc = os.system(mobius_bin + " " + run_script)
+if (rc != 0) {
+    // 11: math.mob was run; 12: a plugin was loaded; 13: no built-in math.
+    print("  the runner exited with " + str(rc))
+}
+assert_test("import gives the built-in math", rc == 0)
+assert_test("chdir back to repo root", os.chdir(old_cwd))
+
+os.remove(run_script)
+os.remove(os.join(workspace, "math.mob"))
+os.remove(os.join(workspace, "math" + lib_ext))
+os.remove(os.join(package_native, "math" + lib_ext))
+os.remove(os.join(package_dir, "module.yaml"))
+os.rmdir(package_native)
+os.rmdir(os.join(package_dir, "native"))
+os.rmdir(package_dir)
+os.rmdir(os.join(workspace, "modules"))
+os.rmdir(workspace)
+
+print("")
+print("Built-in Module Wins Tests: " + str(pass_count) + " passed, " + str(fail_count) + " failed")
+if (fail_count == 0) {
+    print("ALL TESTS PASSED")
+} else {
+    exit(1)
+}

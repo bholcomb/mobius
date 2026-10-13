@@ -9,6 +9,7 @@
 #include "internal/string_intern.h"
 #include "util/utility.h"
 #include "util/file_io.h"
+#include "library/math_module.h"
 
 #include <cstdio>
 #include <cctype>
@@ -458,6 +459,30 @@ static std::string format_import_cycle_error(const std::string& module_name) {
     return message;
 }
 
+// The built-in modules: standard modules with no dependencies and no
+// effects outside the script, compiled into the core. Anything with
+// dependencies or outside effects is a native plugin.
+struct BuiltinModule {
+    const char* name;
+    Table* (*create)(MobiusState* state);
+};
+
+static const BuiltinModule kBuiltinModules[] = {
+    {"math", create_math_module},
+};
+
+static const BuiltinModule* find_builtin_module(const char* name) {
+    for (const BuiltinModule& m : kBuiltinModules) {
+        if (strcmp(m.name, name) == 0) return &m;
+    }
+    return nullptr;
+}
+
+static std::string not_allowed_error(const char* name) {
+    return std::string("Module '") + name +
+           "' is not allowed in this sandbox (the host allows it with mobius_allow_module)";
+}
+
 static void run_plugin_post_init(Plugin* plugin, Table* mod_table, MobiusState* state) {
     if (!plugin || !plugin->post_init || !mod_table) return;
 
@@ -544,6 +569,16 @@ void ModuleRegistry::registerBuiltinModule(const char* name, Table* module_table
     record.table = module_table;
     record.state = ModuleLoadState::loaded;
     module_records_[name] = std::move(record);
+}
+
+bool ModuleRegistry::isBuiltinModule(const char* name) {
+    return name && find_builtin_module(name);
+}
+
+void ModuleRegistry::allowModule(const char* name) {
+    if (!isBuiltinModule(name)) return;
+    std::unique_lock<std::shared_mutex> lock(registry_mutex_);
+    allowed_modules_.insert(name);
 }
 
 // ============================================================================
@@ -707,6 +742,10 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
             if (it == module_records_.end()) break;
 
             ModuleRecord& record = it->second;
+            if (record.builtin && state->sandboxed() && !allowed_modules_.count(module_name)) {
+                last_error_ = not_allowed_error(name);
+                return nullptr;
+            }
             if (record.state == ModuleLoadState::loaded) {
                 last_error_.clear();
                 return record.table;
@@ -720,6 +759,23 @@ Table* ModuleRegistry::resolveModule(const char* name, const char* caller_source
                 return nullptr;
             }
             module_cv_.wait(lock);
+        }
+
+        // A built-in module: before the search path, so it wins over a
+        // plugin or script of the same name.
+        if (const BuiltinModule* builtin = find_builtin_module(name)) {
+            if (state->sandboxed() && !allowed_modules_.count(module_name)) {
+                last_error_ = not_allowed_error(name);
+                return nullptr;
+            }
+            ModuleRecord record;
+            record.table = builtin->create(state);
+            record.state = ModuleLoadState::loaded;
+            record.builtin = true;
+            Table* table = record.table;
+            module_records_[module_name] = std::move(record);
+            last_error_.clear();
+            return table;
         }
 
         ModulePaths paths = (state->sandboxed() || state->hasFileSystem())

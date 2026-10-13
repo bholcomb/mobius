@@ -325,18 +325,33 @@ MOBIUS_API void mobius_file_set_error(MobiusFileRequest* request,
 
 /**
  * Sandbox the state, before running untrusted scripts. Native plugins are
- * never loaded. Everything a script could use to reach outside goes to
- * the host's handlers (mobius_set_output_handler, mobius_set_exit_handler,
- * mobius_set_file_system); where the host set none, the built-in behavior
- * is used only if `allow` includes its MOBIUS_CAP_ flag. Otherwise:
+ * never loaded, and built-in modules (such as math) only once the host
+ * allows each one (mobius_allow_module). Everything a script could use to
+ * reach outside goes to the host's handlers (mobius_set_output_handler,
+ * mobius_set_exit_handler, mobius_set_file_system); where the host set
+ * none, the built-in behavior is used only if `allow` includes its
+ * MOBIUS_CAP_ flag. Otherwise:
  *   - file functions, load() and imports of .mob files raise a catchable
  *     "not available" error (modules the host registered, and fiber, can
  *     still be imported);
  *   - print output and error text are discarded;
  *   - exit() only warns (as without a sandbox).
- * Calling it again changes `allow`.
+ * Calling it again changes `allow`; the allowed modules stay allowed.
  */
 MOBIUS_API void mobius_sandbox(MobiusState* state, unsigned int allow);
+
+/**
+ * Let scripts in a sandboxed state import the built-in module `name`
+ * (e.g. "math"). Built-in modules are compiled into the core: they have
+ * no dependencies and reach nothing outside the script. Without a sandbox
+ * every one can be imported; in a sandbox, none until allowed here. It
+ * may be called before or after mobius_sandbox, and lasts for the state.
+ * fiber is always importable.
+ * @return MOBIUS_OK, or MOBIUS_ERROR_ARGUMENT if `name` is not a built-in
+ *         module (a plugin's name included: plugins never load in a
+ *         sandbox).
+ */
+MOBIUS_API int mobius_allow_module(MobiusState* state, const char* name);
 
 /* ====================================================================== */
 /*  Count hook: instruction budgets                                        */

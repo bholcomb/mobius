@@ -1494,6 +1494,14 @@ void mobius_sandbox(MobiusState* state, unsigned int allow) {
     if (state) state->setSandbox(allow);
 }
 
+int mobius_allow_module(MobiusState* state, const char* name) {
+    if (!state || !name || !state->registry()) return MOBIUS_ERROR_ARGUMENT;
+    if (strcmp(name, "fiber") == 0) return MOBIUS_OK;   // always importable
+    if (!ModuleRegistry::isBuiltinModule(name)) return MOBIUS_ERROR_ARGUMENT;
+    state->registry()->allowModule(name);
+    return MOBIUS_OK;
+}
+
 void mobius_set_count_hook(MobiusState* state, MobiusCountHook hook, uint32_t count,
                            void* userdata) {
     if (state) state->setCountHook(hook, count, userdata);

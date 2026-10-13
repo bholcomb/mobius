@@ -1,6 +1,6 @@
 project:
   name: mobius-modules
-  description: "Built-in Mobius plugin modules"
+  description: "The standard modules built as native plugins (built-in modules are in the core)"
 
 targets:
   shared_libraries:
@@ -51,18 +51,6 @@ targets:
         - "${workspace}/src/mobius"
         - "${workspace}/src/modules"
       libs: ["mobius-core", {linux: ["dl"]}]
-      depends_on:
-        targets: ["mobius-core"]
-
-    - name: math
-      language: cpp
-      output_prefix: ""
-      sources: ["math/math_plugin.cpp"]
-      include_dirs:
-        - "${workspace}/include"
-        - "${workspace}/src"
-        - "${workspace}/src/mobius"
-      libs: ["mobius-core", {linux: ["m", "dl"]}]
       depends_on:
         targets: ["mobius-core"]
 

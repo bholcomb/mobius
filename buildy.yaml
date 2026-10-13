@@ -124,14 +124,6 @@ staging:
       files:
         - "src/modules/cli/module.yaml"
         - "src/modules/cli/cli.mob"
-    - folder: "bin/modules/math"
-      files:
-        - "src/modules/math/module.yaml"
-    - folder: "bin/modules/math/native/${platform}-${arch}"
-      files:
-        - linux: ["${out_dir}/bin/math.so"]
-        - windows: ["${out_dir}/bin/math.dll"]
-        - macos: ["${out_dir}/bin/math.dylib"]
     - folder: "bin/modules/os"
       files:
         - "src/modules/os/module.yaml"

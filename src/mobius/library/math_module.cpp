@@ -1,7 +1,13 @@
+// The math module: a built-in module (library/math_module.h), imported
+// with `import "math"`.
+#include "library/math_module.h"
+#include "data/table.h"
+#include "data/value.h"
+#include "internal/string_intern.h"
+#include "state/mobius_state.h"
+
 #include <mobius/mobius_plugin.h>
 #include <math.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 // Define mathematical constants if not available
 #ifndef M_PI
@@ -16,7 +22,7 @@
 // TRIGONOMETRIC FUNCTIONS
 // ============================================================================
 
-int math_sin(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_sin(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "sin() expects exactly 1 argument");
     }
@@ -31,7 +37,7 @@ int math_sin(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_cos(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_cos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "cos() expects exactly 1 argument");
     }
@@ -46,7 +52,7 @@ int math_cos(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_tan(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_tan(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "tan() expects exactly 1 argument");
     }
@@ -61,7 +67,7 @@ int math_tan(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_asin(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_asin(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "asin() expects exactly 1 argument");
     }
@@ -79,7 +85,7 @@ int math_asin(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_acos(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_acos(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "acos() expects exactly 1 argument");
     }
@@ -97,7 +103,7 @@ int math_acos(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_atan(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_atan(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "atan() expects exactly 1 argument");
     }
@@ -112,7 +118,7 @@ int math_atan(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_atan2(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_atan2(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "atan2() expects exactly 2 arguments");
     }
@@ -132,7 +138,7 @@ int math_atan2(MobiusState* state, int arg_count, void* /*userdata*/) {
 // LOGARITHMIC AND EXPONENTIAL FUNCTIONS
 // ============================================================================
 
-int math_log(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_log(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log() expects exactly 1 argument");
     }
@@ -150,7 +156,7 @@ int math_log(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_log10(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_log10(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log10() expects exactly 1 argument");
     }
@@ -168,7 +174,7 @@ int math_log10(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_exp(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_exp(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "exp() expects exactly 1 argument");
     }
@@ -187,7 +193,7 @@ int math_exp(MobiusState* state, int arg_count, void* /*userdata*/) {
 // HYPERBOLIC FUNCTIONS
 // ============================================================================
 
-int math_sinh(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_sinh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "sinh() expects exactly 1 argument");
     }
@@ -202,7 +208,7 @@ int math_sinh(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_cosh(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_cosh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "cosh() expects exactly 1 argument");
     }
@@ -217,7 +223,7 @@ int math_cosh(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_tanh(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_tanh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "tanh() expects exactly 1 argument");
     }
@@ -236,7 +242,7 @@ int math_tanh(MobiusState* state, int arg_count, void* /*userdata*/) {
 // ADVANCED MATHEMATICAL FUNCTIONS
 // ============================================================================
 
-int math_factorial(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_factorial(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "factorial() expects exactly 1 argument");
     }
@@ -264,7 +270,7 @@ int math_factorial(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_gcd(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_gcd(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "gcd() expects exactly 2 arguments");
     }
@@ -287,7 +293,7 @@ int math_gcd(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_lcm(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_lcm(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "lcm() expects exactly 2 arguments");
     }
@@ -320,7 +326,7 @@ int math_lcm(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_hypot(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_hypot(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 2) {
         return mobius_error(state, "hypot() expects exactly 2 arguments");
     }
@@ -336,7 +342,7 @@ int math_hypot(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_cbrt(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_cbrt(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "cbrt() expects exactly 1 argument");
     }
@@ -351,7 +357,7 @@ int math_cbrt(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_trunc(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_trunc(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "trunc() expects exactly 1 argument");
     }
@@ -366,33 +372,15 @@ int math_trunc(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-// ============================================================================
-// MATHEMATICAL CONSTANTS (added to module table via post_init)
-// ============================================================================
-
 #ifndef M_TAU
 #define M_TAU (2.0 * M_PI)
 #endif
-
-int math_post_init(MobiusState* state) {
-    // Module table is at stack index 0
-    mobius_stack_pushFloat64(state, M_PI);
-    mobius_stack_setTableField(state, 0, "pi");
-
-    mobius_stack_pushFloat64(state, M_E);
-    mobius_stack_setTableField(state, 0, "e");
-
-    mobius_stack_pushFloat64(state, M_TAU);
-    mobius_stack_setTableField(state, 0, "tau");
-
-    return 0;
-}
 
 // ============================================================================
 // INVERSE HYPERBOLIC FUNCTIONS
 // ============================================================================
 
-int math_asinh(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_asinh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "asinh() expects exactly 1 argument");
     }
@@ -405,7 +393,7 @@ int math_asinh(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_acosh(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_acosh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "acosh() expects exactly 1 argument");
     }
@@ -421,7 +409,7 @@ int math_acosh(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_atanh(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_atanh(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "atanh() expects exactly 1 argument");
     }
@@ -441,7 +429,7 @@ int math_atanh(MobiusState* state, int arg_count, void* /*userdata*/) {
 // ADDITIONAL LOGARITHMIC/EXPONENTIAL FUNCTIONS
 // ============================================================================
 
-int math_log2(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_log2(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log2() expects exactly 1 argument");
     }
@@ -457,7 +445,7 @@ int math_log2(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_log1p(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_log1p(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "log1p() expects exactly 1 argument");
     }
@@ -473,7 +461,7 @@ int math_log1p(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_expm1(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_expm1(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "expm1() expects exactly 1 argument");
     }
@@ -486,7 +474,7 @@ int math_expm1(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_exp2(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_exp2(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "exp2() expects exactly 1 argument");
     }
@@ -503,7 +491,7 @@ int math_exp2(MobiusState* state, int arg_count, void* /*userdata*/) {
 // UTILITY FUNCTIONS
 // ============================================================================
 
-int math_deg2rad(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_deg2rad(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "deg2rad() expects exactly 1 argument");
     }
@@ -519,7 +507,7 @@ int math_deg2rad(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_rad2deg(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_rad2deg(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "rad2deg() expects exactly 1 argument");
     }
@@ -535,7 +523,7 @@ int math_rad2deg(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_sign(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_sign(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 1) {
         return mobius_error(state, "sign() expects exactly 1 argument");
     }
@@ -551,7 +539,7 @@ int math_sign(MobiusState* state, int arg_count, void* /*userdata*/) {
     return 1;
 }
 
-int math_clamp(MobiusState* state, int arg_count, void* /*userdata*/) {
+static int math_clamp(MobiusState* state, int arg_count, void* /*userdata*/) {
     if (arg_count != 3) {
         return mobius_error(state, "clamp() expects exactly 3 arguments");
     }
@@ -575,21 +563,9 @@ int math_clamp(MobiusState* state, int arg_count, void* /*userdata*/) {
 }
 
 // ============================================================================
-// PLUGIN DEFINITION
+// MODULE TABLE
 // ============================================================================
 
-// Plugin initialization
-int init_math_plugin(MobiusState* state) {
-    (void)state;
-    return 0;
-}
-
-// Plugin cleanup
-void cleanup_math_plugin(void) {
-    // Nothing to clean up
-}
-
-// Plugin function definitions
 static MobiusPluginFunction math_functions[] = {
     // Trigonometric — all return float64
     {"sin",       math_sin,       1,  MOBIUS_VAL_FLOAT64, "Sine"},
@@ -628,24 +604,14 @@ static MobiusPluginFunction math_functions[] = {
     {"lcm",       math_lcm,       2,  MOBIUS_VAL_INT64,   "Least common multiple"},
 };
 
-static MobiusPlugin math_plugin = {
-    {
-        "math" /* name */,
-        "1.0.0" /* version */,
-        "Extended Mathematical Functions" /* description */,
-        "Mobius Team" /* author */,
-        MOBIUS_PLUGIN_API_VERSION /* api_version */,
-        "MIT" /* license */,
-        nullptr /* depends_on */,
-        0 /* depends_on_count */
-    },
-    math_functions /* functions */,
-    sizeof(math_functions) / sizeof(math_functions[0]) /* function_count */,
-    init_math_plugin /* init_plugin */,
-    cleanup_math_plugin /* cleanup_plugin */,
-    math_post_init /* post_init */
-};
-
-extern "C" MOBIUS_PLUGIN_EXPORT MobiusPlugin* mobius_plugin_info(void) {
-    return &math_plugin;
+Table* create_math_module(MobiusState* state) {
+    StringInternPool* pool = state->stringPool();
+    Table* mod = new Table(state, 64);
+    for (const MobiusPluginFunction& f : math_functions) {
+        mod->setByString(pool->intern(f.name), make_native_function_value(f.function));
+    }
+    mod->setByString(pool->intern("pi"), make_float_value(M_PI));
+    mod->setByString(pool->intern("e"), make_float_value(M_E));
+    mod->setByString(pool->intern("tau"), make_float_value(M_TAU));
+    return mod;
 }

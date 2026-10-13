@@ -27,36 +27,36 @@ if (startswith(os.platform, "windows")) {
     lib_ext = ".dylib"
 }
 var mobius_bin = os.join(repo_root, "bin", "mobius")
-var math_so_src = os.join(repo_root, "bin", "modules", "math", "native", native_folder, "math" + lib_ext)
+var url_so_src = os.join(repo_root, "bin", "modules", "url", "native", native_folder, "url" + lib_ext)
 var core_so_src = os.join(repo_root, "bin", lib_prefix + "mobius-core" + lib_ext)
 
 var workspace = os.join(os.tmpdir(), "mobius_flat_hybrid_" + str(os.getpid()))
-var wrapper_path = os.join(workspace, "math.mob")
-var native_path = os.join(workspace, "math" + lib_ext)
+var wrapper_path = os.join(workspace, "url.mob")
+var native_path = os.join(workspace, "url" + lib_ext)
 var core_path = os.join(workspace, lib_prefix + "mobius-core" + lib_ext)
 var run_script = os.join(workspace, "run.mob")
 
-assert_test("math native exists", os.is_file(math_so_src))
+assert_test("url native exists", os.is_file(url_so_src))
 assert_test("mobius core exists", os.is_file(core_so_src))
 assert_test("create workspace", os.mkdirp(workspace))
-assert_test("copy math native", os.cp(math_so_src, native_path))
+assert_test("copy url native", os.cp(url_so_src, native_path))
 assert_test("copy mobius core", os.cp(core_so_src, core_path))
-assert_test("write math wrapper", writefile(wrapper_path,
-    "func sin_zero() {\n" +
-    "    return sin(0)\n" +
+assert_test("write url wrapper", writefile(wrapper_path,
+    "func decode_space() {\n" +
+    "    return decode(\"a%20b\")\n" +
     "}\n" +
     "\n" +
-    "func cos_zero() {\n" +
-    "    return cos(0)\n" +
+    "func decode_slash() {\n" +
+    "    return decode(\"%2F\")\n" +
     "}\n" +
     "\n" +
     "var wrapper_loaded = true\n"))
 assert_test("write runner", writefile(run_script,
-    "import \"math\" as math\n" +
-    "if (typeof(math.factorial) != \"function\") { exit(11) }\n" +
-    "if (math.wrapper_loaded != true) { exit(12) }\n" +
-    "if (math.sin_zero() != 0.0) { exit(13) }\n" +
-    "if (math.cos_zero() != 1.0) { exit(14) }\n" +
+    "import \"url\" as url\n" +
+    "if (typeof(url.parse) != \"function\") { exit(11) }\n" +
+    "if (url.wrapper_loaded != true) { exit(12) }\n" +
+    "if (url.decode_space() != \"a b\") { exit(13) }\n" +
+    "if (url.decode_slash() != \"/\") { exit(14) }\n" +
     "print(\"flat hybrid import ok\")\n"))
 
 var old_cwd = os.getcwd()
