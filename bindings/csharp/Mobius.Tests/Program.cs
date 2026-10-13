@@ -118,6 +118,42 @@ using (var m = new MobiusState())
     Check("no native plugins", (bool)m.GetGlobal("bad")!);
 }
 
+// Built-in modules: importable without a sandbox; in one, only once allowed,
+// from the script, a module of the game's file system and spawned fibers.
+const string usesMath =
+    "import \"math\"\nimport \"math\" as m\nimport \"geo\"\n" +
+    "func cos_on_fiber() {\n    import \"math\" as fm\n    return fm.cos(0)\n}\n" +
+    "var fs = [spawn cos_on_fiber(), spawn geo.diagonal(6, 8)]\n" +
+    "var results = [math.sin(0), m.factorial(5), geo.diagonal(3, 4), await fs[0], await fs[1]]";
+static bool MathResults(object? results) =>
+    results is object?[] r && r.Length == 5 && (double)r[0]! == 0.0 && (long)r[1]! == 120 &&
+    (double)r[2]! == 5.0 && (double)r[3]! == 1.0 && (double)r[4]! == 10.0;
+MobiusState WithGeo()
+{
+    var m = new MobiusState();
+    var pak = new MemoryFileSystem();
+    pak.Files["scripts/geo.mob"] = "import \"math\"\nfunc diagonal(x, y) { return math.hypot(x, y) }";
+    m.FileSystem = pak;
+    m.AddScriptDirectory("scripts");
+    return m;
+}
+using (var m = WithGeo())
+{
+    m.Execute(usesMath);
+    Check("built-in module without a sandbox", MathResults(m.GetGlobal("results")));
+}
+using (var m = WithGeo())
+{
+    m.Sandbox();
+    m.Execute("var msg = \"\"\ntry { import \"math\" } catch e { msg = str(e) }");
+    Check("built-in module refused in a sandbox", ((string?)m.GetGlobal("msg"))!.Contains("not allowed in this sandbox"));
+    Throws("allow an unknown module", () => m.AllowModule("nosuchmodule"), "Not a built-in module");
+    Throws("allow a plugin", () => m.AllowModule("json"), "Not a built-in module");
+    m.AllowModule("math");
+    m.Execute(usesMath);
+    Check("built-in module allowed in a sandbox", MathResults(m.GetGlobal("results")));
+}
+
 // Many C# calls from many fibers on every worker, with exceptions thrown and
 // caught and garbage collections (which walk every thread's stack) in them,
 // so trouble with where host code runs shows up here rather than now and then.

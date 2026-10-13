@@ -162,6 +162,8 @@ public static unsafe class Native
     // ---- Sandbox ------------------------------------------------------------
 
     [DllImport(Lib)] public static extern void mobius_sandbox(IntPtr state, uint allow);
+    /// <summary>MOBIUS_OK, or MOBIUS_ERROR_ARGUMENT if name is not a built-in module.</summary>
+    [DllImport(Lib)] public static extern int mobius_allow_module(IntPtr state, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
     // ---- Count hook ---------------------------------------------------------
 

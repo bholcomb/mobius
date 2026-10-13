@@ -47,8 +47,10 @@ using var mobius = new MobiusState();
 mobius.Output = (text, isError) => Log(text, isError);
 mobius.ExitRequested = code => UnloadMod(code);
 
-// For untrusted scripts: no native plugins, files only through the game.
+// For untrusted scripts: no native plugins, no built-in modules but those
+// allowed, files only through the game.
 mobius.Sandbox();
+mobius.AllowModule("math");                       // import "math" (built in)
 mobius.FileSystem = new ModFiles(modDirectory);   // implements IMobiusFileSystem
 mobius.AddScriptDirectory("scripts");             // import "util" -> scripts/util.mob
 // And a budget: each call from C# may run 10000 instructions.

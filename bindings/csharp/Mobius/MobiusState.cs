@@ -186,13 +186,30 @@ public sealed unsafe class MobiusState : IDisposable
     }
 
     /// <summary>
-    /// Sandbox the state: no native plugins; output, files and exit only through
-    /// the handlers set here, unless the built-in behavior is allowed.
+    /// Sandbox the state: no native plugins, built-in modules only once allowed
+    /// (<see cref="AllowModule"/>); output, files and exit only through the
+    /// handlers set here, unless the built-in behavior is allowed.
     /// </summary>
     public void Sandbox(bool allowConsoleOutput = false, bool allowRealFiles = false)
     {
         uint allow = (allowConsoleOutput ? Native.MOBIUS_CAP_OUTPUT : 0) | (allowRealFiles ? Native.MOBIUS_CAP_FILES : 0);
         Native.mobius_sandbox(S, allow);
+    }
+
+    /// <summary>
+    /// Let scripts in a sandboxed state import the built-in module
+    /// <paramref name="name"/>, such as "math" (mobius_allow_module). Without a
+    /// sandbox every built-in module can be imported; in a sandbox, none until
+    /// allowed. Lasts for the state, before or after <see cref="Sandbox"/>.
+    /// Throws if <paramref name="name"/> is not a built-in module (a plugin's
+    /// name included: plugins never load in a sandbox).
+    /// </summary>
+    public void AllowModule(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        int rc = Native.mobius_allow_module(S, name);
+        if (rc != Native.MOBIUS_OK)
+            throw new MobiusException(rc, $"Not a built-in module: '{name}' (only built-in modules can be allowed; plugins never load in a sandbox)");
     }
 
     /// <summary>
