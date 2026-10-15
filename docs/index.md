@@ -73,6 +73,9 @@ stand alone as references for a single topic.
 
 ## Project status
 
+See the [roadmap](roadmap.md) for proposed work that hasn't landed yet: file
+watching, a CSV module, bundles without extraction, TLS and a data package.
+
 Mobius is at version **0.2.3**. The language, VM, standard library, fiber
 runtime, embedding API, and the bundled modules are usable today. The package
 manager (`.mz` archives) and several modules (`http`, `socket`, `websocket`) are
